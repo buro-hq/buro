@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="8 8 24 24" role="img" aria-labelledby="title">
+  <title id="title">Buro mark</title>
+  <g color="#496d35"><g fill="none" stroke="#496d35" stroke-width="1.6">
+    <rect x="10" y="10" width="8" height="8" rx="3"/>
+    <rect x="22" y="10" width="8" height="8" rx="3"/>
+    <rect x="10" y="22" width="8" height="8" rx="3"/>
+    <rect x="22" y="22" width="8" height="8" rx="3"/>
+    <path d="M14 18v4m12-4v4M18 14h4m-4 12h4"/>
+  </g></g>
+</svg>
