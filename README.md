@@ -5,202 +5,98 @@
   <img src="branding/logo.svg" alt="Buro Links logo" width="240">
 </picture>
 
-A local office for coding agents, organized around your projects. Give a project a goal; a coordinator plans the work, selects reusable roles, runs workers, and sends the result through checks and independent review. The interface and CLI are clients of the same local service.
+Buro is a local app for running coding tasks with Codex CLI. Connect a Git repository, describe a change, and choose the checks it must pass. Each task keeps its goal, plan, agent sessions, commands, diff and review in one place.
 
-Buro is an early local MVP. It uses your installed Codex CLI and keeps project configuration next to the repository in `.buro/`.
+Work happens in a separate Git worktree. You can inspect the result, apply it to your branch, or have Buro open a draft PR. A coordinator plans the work and selects workers when needed; a separate reviewer checks the result.
 
-## Requirements
+Buro is still in development. It runs on your machine and uses your installed, signed-in Codex CLI.
 
-- Node.js **24 or newer**, with native TypeScript execution, and npm.
-- Git and a repository with at least one commit for each connected project.
-- An installed and authenticated **Codex CLI** for research and agent execution. Reading recordings and editing local drafts do not require a model session.
-- Optional: authenticated GitHub CLI (`gh`) and a GitHub remote for draft PR delivery.
+![Buro project office with the coordinator, developer, test author and reviewer](docs/images/office.png)
 
-## Install
+*Screenshots show the actual interface with a fictional project and sample run data.*
 
-Clone or copy the repository, then run:
+## Run locally
+
+You need Node.js **24+**, npm, Git, and an authenticated Codex CLI. Connected repositories must have at least one commit. Native command execution uses macOS `sandbox-exec` or Linux `bubblewrap`; a Docker provider is also available.
 
 ```sh
-cd /path/to/buro
+git clone https://github.com/buro-agents/buro.git
+cd buro
 npm ci
-```
-
-There is no global installer or packaged desktop application yet.
-
-## Run
-
-Start the service and React development server together from the repository root:
-
-```sh
 npm start
 ```
 
-Ctrl+C stops both processes. If either process exits, the other is stopped too.
+Open **http://127.0.0.1:4317**. `npm start` runs the local service and frontend together; Ctrl+C stops both. There is no packaged desktop app yet.
 
-To run them separately, open two terminals:
+Draft PRs also need an authenticated GitHub CLI (`gh`) and a GitHub remote for the connected repository.
 
-```sh
-# Terminal 1: core, persistence, Codex runtime and WebSocket API
-npm run daemon
-```
+## Your first task
 
-```sh
-# Terminal 2: React development server
-npm run dev
-```
+1. Open **Projects → Connect project** and select a Git repository.
+2. Let Buro suggest the project setup, or enter it yourself. Review the base branch, allowed paths, protected files and check commands before saving.
+3. Create a goal. Describe the change and how you will know it works. Attach relevant files or images if needed.
+4. Choose the checks and start the run.
+5. Read the diff, check results and review. Apply the result to your branch, keep it in the worktree, or use the configured PR or delivery action.
 
-Open **http://127.0.0.1:4317**. The service listens on **ws://127.0.0.1:4341**. It binds to loopback; no account or hosted Buro service is needed. Stop foreground processes with Ctrl+C.
+For example, a goal can ask for CSV export and specify which rows to include, how to escape values, and what to test:
 
-For a built interface:
+![Creating a goal with its context, acceptance criteria and local result selected](docs/images/goal.png)
 
-```sh
-npm run build
-npm run preview
-```
+Project setup research reads the repository and proposes settings. Saving a proposal does not install packages, start servers or deploy the project.
 
-Open **http://127.0.0.1:4327** and keep the daemon running. A build contains the frontend; it does not bundle the Node service or Codex CLI.
+## What to use it for
 
-Use `/?source=replay` to manage browser-local drafts without the service. This mode starts with an empty history. The service mode connects automatically when the daemon is available.
+- **Fix a bug with a known reproduction.** Attach the failing input or a short log. Ask for a regression test and keep the change within the affected module.
+- **Add a small feature.** For example: “Search the activity log by agent name or message. Ignore case, keep event order, and show all events for an empty query.”
+- **Refactor code with existing tests.** For example: “Move CSV parsing into a helper without changing the public API.” Run the existing checks against the result.
+- **Continue a stopped task.** Add clarification to the saved goal, repair the same worktree, or rerun checks without starting implementation again. A new goal can also build on a completed parent run.
 
-## Connect a project
+Keep a goal small enough to review as one change. The project settings control which paths agents may edit and which checks Buro runs.
 
-1. Open **Projects → Connect project**.
-2. Type a Git repository path or use the directory picker.
-3. Keep research enabled to let a read-only agent suggest components, checks and startup commands, or configure the project manually.
-4. Review the suggestions, allowed/protected paths and commands; save the profile.
-5. Create a goal, add acceptance criteria and optional materials, choose its outcome, then start it with selected checks.
+## Inspect the result
 
-Research does not install dependencies, start servers, run migrations or enable deployment. Suggested commands are proposals until they have been checked. Projects retain their own goals, roles and history.
+The run view shows the plan, timeline, changed files, check output and reviewer findings. You can replay the saved history or open an individual agent's commands and messages.
 
-## Goals, materials and results
+| Read the diff | Inspect checks and review |
+| --- | --- |
+| [![The Changes tab showing the activity-search diff](docs/images/changes.png)](docs/images/changes.png) | [![The Checks tab showing test results and independent acceptance criteria](docs/images/checks.png)](docs/images/checks.png) |
 
-Each new goal starts from the configured base branch. Choose a completed parent run to continue its commit instead. Work happens in an isolated Git worktree; uncommitted source edits stay in the original checkout. Agents do not change your source branch automatically.
+Applying a result is a separate action that checks the source branch and working tree. PR delivery and deployment follow the project settings. Deployment requires configured commands and verification; see [delivery setup](ONBOARDING-AND-DELIVERY.md).
 
-Project materials are shared context for future goals. Goal materials belong to that goal. Choose local files/directories or upload files through the system dialog. Supported formats: UTF-8 text/code, PNG/JPEG/WebP/GIF, PDF and DOCX. The limit is **8 MiB per file**, **32 goal attachments**, or **64 active project materials**. Filesystem imports accept up to 64 files/48 MiB in one batch.
+## Files and saved work
 
-Imported copies are stored privately. Runs freeze their selected materials and stage verified read-only copies for the coordinator, workers and reviewer. Removing an attachment does not delete the original or invalidate past runs. PDF text extraction uses PDFKit on macOS or `pdftotext` elsewhere; DOCX extraction currently uses macOS `textutil`. If extraction is unavailable, the original remains attached and a note explains the limitation. OCR is not included.
+Each connected repository stores its profile and local state in `.buro/`. Goals, roles, run history and worktrees survive closing the interface. The shared profile is `.buro/project.json`; runtime state, attachments and machine settings should stay out of Git.
 
-A goal is accepted after implementation, configured checks and independent review succeed. The result can then be:
+Project materials are available to future goals. Goal attachments belong to that goal. Runs keep a snapshot of the materials they used. Text, code, images, PDF and DOCX are supported, with an **8 MiB per-file limit**. PDF/DOCX text extraction depends on tools available on the host; OCR is not included.
 
-- **Inspected locally** using configured web/API/worker commands and readiness checks.
-- **Delivered as a draft PR** when enabled, using a separate branch and `gh`.
-- **Deployed to a configured environment** with an explicit command, verification URL and optional commit-specific confirmation.
-- **Applied to the source branch** through the separate apply action, which checks branch identity, cleanliness and ancestry.
+The interface supports **English and Russian**, five palettes, and light/dark/system modes. The default is **Cobalt light**. Appearance and language preferences are saved in the browser.
 
-Delivery errors do not undo implementation acceptance. Redeploy repeats delivery of the accepted commit; it preserves earlier delivery records and asks for fresh confirmation when required. Buro never automatically repeats an ambiguous deployment after restart. See [onboarding and delivery](ONBOARDING-AND-DELIVERY.md).
+## CLI
 
-## Language and appearance
-
-Click the user icon, then open **User settings**. Choose **English** or **Russian**, a light/dark/system color scheme, and a palette. Changes apply immediately and persist in this browser across projects. English is the default language; Cobalt with a light color scheme is the default appearance. User-authored goals, materials, role definitions and historical outputs retain their original language.
-
-The brand uses the Links mark with the Cobalt light palette. Logo files, the organization avatar and an interactive preview are in [branding](branding/README.md).
-
-UI messages live in `src/i18n/locales/en.json` and `ru.json`. Product source, service/CLI messages, agent instructions and current documentation use English.
-
-Managed goal runs prepare their execution environment before baseline and acceptance checks. The default native provider confines service command writes on macOS (Seatbelt) and Linux (bubblewrap); it is a filesystem boundary, not a VM. A read-only setup session discovers a language-independent recipe from project files. Recipes are cached, setup inputs are hashed, and readiness commands run again on every check/resume. Failed preparation has its own bounded repair loop and never changes the registered acceptance commands. Source changes still pass the same scope and manifest checks.
-
-Choose Docker in project settings for a container execution world. The selected image must contain `codex`, Git and a POSIX shell. Build the supplied agent image once with `node scripts/build-agent-image.mjs`, then set its printed tag in the profile. The Codex controller and service commands run inside the same container. The source checkout is mounted read-only; the run workspace, project artifact cache and private agent state have separate writable mounts. Containers stop after a run and retain files for continuation. No provider silently falls back to an unconfined host process.
-
-Private HOME directories keep installed project state separate. Download caches are reused within the same project/provider/platform. Environment configuration may include an explicit `recipe` with `inputs`, `setup`, `ready` and optional toolchain `variables`; otherwise the service discovers it. `${WORKSPACE}`, `${HOME}` and `${PATH}` placeholders expand without shell evaluation. Dependency/lockfile source edits still require the goal's environment-repair option.
-
-Small coherent goals may use an empty worker team: the coordinator implements directly, and independent checks and a fresh reviewer remain mandatory. `checkConcurrency` defaults to 1; increase it only for commands that do not share writable outputs. Prompts carry concise check summaries and changed-file inventories; complete logs remain in run history and reviewers inspect the actual diff.
-
-`npm run cli -- run timings <runId>` reports active phase time (excluding pauses between attempts) and measured model/startup/check operations. Operation timers may be nested and must not be summed as total run duration.
-
-## Develop
+The CLI uses the same local service as the interface:
 
 ```sh
-npm start             # daemon + Vite; Ctrl+C stops both
-npm run dev           # Vite HMR on port 4317
-npm run daemon        # Node service; restart after backend changes
-npm run typecheck     # frontend and server TypeScript checks
-npm test              # domain, adapters, transport and migration tests
-npm run build         # typecheck + production frontend build
-npm run format        # format frontend, clients and protocol
-npm run format:check
-```
-
-Browser verification requires a running dev server and Playwright Chromium. If the browser is missing, install it with `npx playwright install chromium`.
-
-```sh
-npm run check:ui          # offline drafts and interactions
-npm run check:service     # multiple clients against a test service
-npm run check:projects    # connect, execute, recover and apply in a fixture repo
-npm run check:setup       # research, configuration, preview and delivery
-npm run check:context     # filesystem selection, uploads and persistence
-npm run check:appearance  # theme behavior and responsive layout
-npm run check:localization # EN/RU switching, persistence and fixture screenshots
-```
-
-The integration scripts create isolated temporary repositories. Real model calls are not required for the deterministic fixture checks. Screenshots and verification reports go to ignored `artifacts/`. Browser checks use synthetic fixtures; captured local sessions are not distributed.
-
-## Architecture
-
-```text
-core/          goals, role versions, execution, acceptance and ports
-protocol/      shared DTOs, schemas and storage directory contract
-adapters/      files, Git workspaces, processes, dependencies and Codex
-plugins/       Cordis service composition and lifecycle
-daemon/       local entry point and WebSocket transport
-clients/       socket and replay clients
-cli/           independent CLI client
-src/           React/Mantine interface and localization
-checks/ tests/ scripts/
-.buro/         private runtime state, linked-project catalog and worktrees
-```
-
-Core has no React, Node, Cordis or transport imports. UI and clients do not import backend modules. Cordis composes trusted in-process plugins; it does not provide a security sandbox. The runtime and filesystem adapters remain replaceable.
-
-Commands have protocol version 1, a request ID and validated parameters. Metadata changes, durable receipts and events are committed atomically before publication. Retries reuse their receipts; conflicting payloads are rejected. Clients reconnect from sequence numbers. Git operations and external delivery are separate effects, not part of the metadata transaction.
-
-## Project files and migration
-
-Each connected repository owns:
-
-```text
-.buro/project.json          shared project profile
-.buro/control-state.json    private goals, role versions, runs, events and receipts
-.buro/worktrees/            isolated workspaces
-.buro/local/                machine settings, imported context and migration backups
-.buro/.gitignore            excludes private runtime data
-```
-
-The Buro checkout additionally stores the catalog of connected repository paths. User projects remain in their original folders.
-
-Existing legacy metadata is migrated when a project is opened. The migration checks for a live writer and conflicting directory names, backs up JSON files in `.buro/local/metadata-migration/original/`, relocates operational paths, moves nested workspace metadata and repairs Git worktree links. A pending manifest resumes an interrupted migration. User text and event sequences are preserved. If both directory names exist, opening stops with a conflict instead of merging them.
-
-Keep private state out of Git. Only the shared profile is intended for version control. Never add credentials to it. Local preview reads source project/component `.env` and `.env.local`, then private `.buro/local/` overrides, without copying source env files into workspaces. Deployment reads private environment files rather than inheriting development variables. Secret values are redacted from stored/displayed process output.
-
-## CLI and configuration
-
-```sh
-npm run cli -- status
 npm run cli -- projects
 npm run cli -- project connect /absolute/path/to/repository
-PROJECT_ID=p-ID npm run cli -- project info
-PROJECT_ID=p-ID npm run cli -- goal create "Add search" "Expected behavior" "Acceptance criteria"
+PROJECT_ID=p-ID npm run cli -- goal create "Add search" "Search agent names and messages" "Ignore case and preserve order"
 PROJECT_ID=p-ID npm run cli -- run start G-ID
-PROJECT_ID=p-ID npm run cli -- run show R-ID
 PROJECT_ID=p-ID npm run cli -- run watch R-ID
 ```
 
-Environment variables:
+Use the project and goal IDs returned by the preceding commands. See [development notes](docs/DEVELOPMENT.md) for service configuration and additional commands.
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `PROJECT_DAEMON_PORT` | Service listen port | `4341` |
-| `PROJECT_DATA_DIR` | Buro service data directory | checkout `.buro/` |
-| `PROJECT_DAEMON_URL` | CLI WebSocket endpoint | `ws://127.0.0.1:4341` |
-| `PROJECT_ID` | Selected CLI project ID | built-in Buro project |
+## Current limits
 
-To connect the UI to another local daemon, use `?daemon=ws%3A%2F%2F127.0.0.1%3APORT`. To open a project directly, use `?project=p-ID`.
+- Codex CLI is the only agent runtime included.
+- A run stops after 10 minutes without coordinator or child-agent progress. Checks, environment setup and delivery have their own timeouts.
+- Worktrees, past attachments and dependency caches are retained. Automatic cleanup only removes stale temporary writes.
+- This is a local tool. The service listens on loopback; it is not a hosted or shared team service.
 
-## Recovery and limits
+## Development
 
-Stopped runs preserve their worktree and history. Edit the goal, continue with clarification, or rerun checks without implementation. Continuing can reuse the saved coordinator session; old attempts remain inspectable. See [recovery](RECOVERY.md).
+```sh
+npm test
+npm run build
+```
 
-There is no total goal time limit. The service stops a stalled turn after **10 minutes without coordinator or child-agent progress**. Time-policy editing is a disabled TODO in settings. Command checks, environment setup, readiness and delivery have separate bounded timeouts.
-
-Event snapshots use deltas. Automatic garbage collection removes only owned atomic-write temporary files older than one day. Worktrees, historical material copies and dependency caches are retained until an explicit retention policy is implemented. See the [roadmap](ROADMAP.md).
-
-Further details: [UI architecture](UI-ARCHITECTURE.md), [user repositories](USER-PROJECTS.md), [execution PoC](GOAL-EXECUTION-POC.md).
+[Development and configuration](docs/DEVELOPMENT.md) · [Project setup](USER-PROJECTS.md) · [Execution flow](GOAL-EXECUTION-POC.md) · [Recovery](RECOVERY.md) · [UI architecture](UI-ARCHITECTURE.md) · [Roadmap](ROADMAP.md) · [Branding](branding/README.md)
