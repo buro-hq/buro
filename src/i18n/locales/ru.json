@@ -952,5 +952,7 @@
   "Use parallel checks only when their commands do not share writable outputs.": "Параллельный запуск подходит для команд, которые не записывают данные в общие файлы.",
   "Local user": "Локальный пользователь",
   "Offline drafts": "Локальные черновики",
-  "Drafts are saved in this browser. Connect to the service to execute goals.": "Черновики сохранены в этом браузере. Подключитесь к сервису для выполнения целей."
+  "Drafts are saved in this browser. Connect to the service to execute goals.": "Черновики сохранены в этом браузере. Подключитесь к сервису для выполнения целей.",
+  "Cobalt": "Кобальт",
+  "Cobalt blue accent": "Кобальтовый синий акцент"
 }

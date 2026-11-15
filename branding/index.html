@@ -120,7 +120,7 @@
         display: inline-block;
         height: 6px;
         width: 6px;
-        background: #c6b5e8;
+        background: #3e60b4;
         border-radius: 50%;
         margin-right: 7px;
       }
@@ -1184,6 +1184,143 @@
           white-space: nowrap;
         }
       }
+
+      .marks-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+      .mark-option {
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        padding: 0;
+        overflow: hidden;
+        text-align: left;
+        background: #191a20;
+        color: #eeeef2;
+        cursor: pointer;
+      }
+      .mark-option:hover {
+        border-color: #697fae;
+      }
+      .mark-option[aria-pressed='true'] {
+        border-color: #90a8e7;
+        box-shadow: 0 0 0 1px #90a8e7;
+      }
+      .mark-option-art {
+        height: 164px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 30px;
+        background: #f2f5ff;
+        color: #3e60b4;
+        padding: 24px;
+      }
+      .mark-option-art svg {
+        display: block;
+        width: 92px;
+        height: 92px;
+        flex-shrink: 0;
+      }
+      .mark-small {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-direction: column;
+      }
+      .mark-small svg {
+        width: 24px;
+        height: 24px;
+      }
+      .mark-small span {
+        font-size: 9px;
+        color: #687da3;
+      }
+      .mark-option-info {
+        padding: 17px 18px;
+        display: flex;
+        gap: 16px;
+        justify-content: space-between;
+      }
+      .mark-option-info b {
+        display: block;
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .mark-option-info p {
+        font-size: 11px;
+        line-height: 1.6;
+        margin-top: 7px;
+      }
+      .mark-option[aria-pressed='true'] .check {
+        background: #a6bbff;
+        border-color: #a6bbff;
+        color: #131a2b;
+      }
+      .mark-option-wordmark {
+        height: 54px;
+        padding: 8px 18px 15px;
+        color: #a6bbff;
+      }
+      .mark-option-wordmark svg {
+        height: 100%;
+        width: auto;
+        max-width: 100%;
+        display: block;
+      }
+      .selection {
+        flex-wrap: wrap;
+      }
+      .current {
+        white-space: normal;
+        max-width: 280px;
+        line-height: 1.6;
+      }
+      .selection select {
+        max-width: 160px;
+      }
+      @media (max-width: 850px) {
+        .marks-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .mark-option-art {
+          height: 145px;
+          gap: 20px;
+        }
+      }
+      @media (max-width: 480px) {
+        .mark-option-art {
+          height: 130px;
+          gap: 14px;
+          padding: 15px;
+        }
+        .mark-option-art > svg {
+          width: 72px;
+          height: 72px;
+        }
+        .mark-small svg {
+          width: 20px;
+          height: 20px;
+        }
+        .mark-small span {
+          font-size: 8px;
+        }
+        .mark-option-info {
+          padding: 13px 12px;
+          gap: 8px;
+        }
+        .mark-option-info p {
+          font-size: 10px;
+        }
+        .mark-option-wordmark {
+          padding: 8px 12px 15px;
+          height: 48px;
+        }
+        .mark-option-info .check {
+          flex-shrink: 0;
+        }
+      }
     </style>
   </head>
   <body>
@@ -1201,7 +1338,7 @@
             затем скачай выбранный вариант.
           </p>
         </div>
-        <span class="current"><i></i>В приложении по умолчанию — Iris</span>
+        <span class="current"><i></i>По умолчанию — Cobalt · однотонный · светлый</span>
       </section>
       <section class="studio" aria-label="Предпросмотр брендинга">
         <div class="toolbar">
@@ -1243,6 +1380,16 @@
         </div>
       </section>
       <div class="status" role="status" id="status"></div>
+      <section class="logo-exploration" aria-label="Варианты знака">
+        <div class="options-head">
+          <div>
+            <h2>Сам знак — шесть направлений</h2>
+            <p>Цвет уже выбран. Теперь сравни форму, пропорции и читаемость в маленьком размере.</p>
+          </div>
+          <span class="option-count">Нажми на знак, чтобы примерить его везде</span>
+        </div>
+        <div class="marks-grid" id="marks-grid"></div>
+      </section>
       <section aria-label="Предпросмотр интерфейса" class="interface-section">
         <div class="options-head">
           <div>
@@ -1280,28 +1427,122 @@
       </footer>
     </main>
     <script>
-      const paths = [
-        {
-          d: 'M13 9.2 L15 9.2 C17.0987 9.2 18.8 10.9013 18.8 13 L18.8 15 C18.8 17.0987 17.0987 18.8 15 18.8 L13 18.8 C10.9013 18.8 9.2 17.0987 9.2 15 L9.2 13 C9.2 10.9013 10.9013 9.2 13 9.2 Z M13 10.8 L15 10.8 C16.215 10.8 17.2 11.785 17.2 13 L17.2 15 C17.2 16.215 16.215 17.2 15 17.2 L13 17.2 C11.785 17.2 10.8 16.215 10.8 15 L10.8 13 C10.8 11.785 11.785 10.8 13 10.8 Z',
-          rule: 'evenodd',
+      const marks = {
+        links: {
+          name: 'Связи',
+          description: 'Четыре рабочих места, объединённых в команду.',
+          paths: [
+            {
+              d: 'M13 9.2 L15 9.2 C17.0987 9.2 18.8 10.9013 18.8 13 L18.8 15 C18.8 17.0987 17.0987 18.8 15 18.8 L13 18.8 C10.9013 18.8 9.2 17.0987 9.2 15 L9.2 13 C9.2 10.9013 10.9013 9.2 13 9.2 Z M13 10.8 L15 10.8 C16.215 10.8 17.2 11.785 17.2 13 L17.2 15 C17.2 16.215 16.215 17.2 15 17.2 L13 17.2 C11.785 17.2 10.8 16.215 10.8 15 L10.8 13 C10.8 11.785 11.785 10.8 13 10.8 Z',
+              rule: 'evenodd',
+            },
+            {
+              d: 'M25 9.2 L27 9.2 C29.0987 9.2 30.8 10.9013 30.8 13 L30.8 15 C30.8 17.0987 29.0987 18.8 27 18.8 L25 18.8 C22.9013 18.8 21.2 17.0987 21.2 15 L21.2 13 C21.2 10.9013 22.9013 9.2 25 9.2 Z M25 10.8 L27 10.8 C28.215 10.8 29.2 11.785 29.2 13 L29.2 15 C29.2 16.215 28.215 17.2 27 17.2 L25 17.2 C23.785 17.2 22.8 16.215 22.8 15 L22.8 13 C22.8 11.785 23.785 10.8 25 10.8 Z',
+              rule: 'evenodd',
+            },
+            {
+              d: 'M13 21.2 L15 21.2 C17.0987 21.2 18.8 22.9013 18.8 25 L18.8 27 C18.8 29.0987 17.0987 30.8 15 30.8 L13 30.8 C10.9013 30.8 9.2 29.0987 9.2 27 L9.2 25 C9.2 22.9013 10.9013 21.2 13 21.2 Z M13 22.8 L15 22.8 C16.215 22.8 17.2 23.785 17.2 25 L17.2 27 C17.2 28.215 16.215 29.2 15 29.2 L13 29.2 C11.785 29.2 10.8 28.215 10.8 27 L10.8 25 C10.8 23.785 11.785 22.8 13 22.8 Z',
+              rule: 'evenodd',
+            },
+            {
+              d: 'M25 21.2 L27 21.2 C29.0987 21.2 30.8 22.9013 30.8 25 L30.8 27 C30.8 29.0987 29.0987 30.8 27 30.8 L25 30.8 C22.9013 30.8 21.2 29.0987 21.2 27 L21.2 25 C21.2 22.9013 22.9013 21.2 25 21.2 Z M25 22.8 L27 22.8 C28.215 22.8 29.2 23.785 29.2 25 L29.2 27 C29.2 28.215 28.215 29.2 27 29.2 L25 29.2 C23.785 29.2 22.8 28.215 22.8 27 L22.8 25 C22.8 23.785 23.785 22.8 25 22.8 Z',
+              rule: 'evenodd',
+            },
+            {
+              d: 'M13.2 18 L14.8 18 L14.8 22 L13.2 22 Z M25.2 18 L26.8 18 L26.8 22 L25.2 22 Z M18 13.2 L22 13.2 L22 14.8 L18 14.8 Z M18 25.2 L22 25.2 L22 26.8 L18 26.8 Z',
+              rule: 'nonzero',
+            },
+          ],
         },
-        {
-          d: 'M25 9.2 L27 9.2 C29.0987 9.2 30.8 10.9013 30.8 13 L30.8 15 C30.8 17.0987 29.0987 18.8 27 18.8 L25 18.8 C22.9013 18.8 21.2 17.0987 21.2 15 L21.2 13 C21.2 10.9013 22.9013 9.2 25 9.2 Z M25 10.8 L27 10.8 C28.215 10.8 29.2 11.785 29.2 13 L29.2 15 C29.2 16.215 28.215 17.2 27 17.2 L25 17.2 C23.785 17.2 22.8 16.215 22.8 15 L22.8 13 C22.8 11.785 23.785 10.8 25 10.8 Z',
-          rule: 'evenodd',
+        monogram: {
+          name: 'Буква B',
+          description: 'Плотная монограмма с двумя рабочими модулями.',
+          paths: [
+            {
+              d: 'M9.2 9.2 L20.5 9.2 C27.2 9.2 30.1 11.5 30.1 15.1 C30.1 17.6 28.7 19.1 26.6 19.9 C29.4 20.7 30.8 22.5 30.8 25 C30.8 29 27.4 30.8 21 30.8 L9.2 30.8 Z M14.1 13.5 L14.1 18 L20.7 18 C23.7 18 25.1 17.3 25.1 15.7 C25.1 14.2 23.8 13.5 20.7 13.5 Z M14.1 22 L14.1 26.5 L21.5 26.5 C24.4 26.5 25.8 25.8 25.8 24.2 C25.8 22.6 24.4 22 21.5 22 Z',
+              rule: 'evenodd',
+            },
+          ],
         },
-        {
-          d: 'M13 21.2 L15 21.2 C17.0987 21.2 18.8 22.9013 18.8 25 L18.8 27 C18.8 29.0987 17.0987 30.8 15 30.8 L13 30.8 C10.9013 30.8 9.2 29.0987 9.2 27 L9.2 25 C9.2 22.9013 10.9013 21.2 13 21.2 Z M13 22.8 L15 22.8 C16.215 22.8 17.2 23.785 17.2 25 L17.2 27 C17.2 28.215 16.215 29.2 15 29.2 L13 29.2 C11.785 29.2 10.8 28.215 10.8 27 L10.8 25 C10.8 23.785 11.785 22.8 13 22.8 Z',
-          rule: 'evenodd',
+        modules: {
+          name: 'Модули',
+          description: 'Сетка рабочих мест с выделенным модулем.',
+          paths: [
+            {
+              d: 'M11.8 9.2 L16 9.2 C17.4359 9.2 18.6 10.3641 18.6 11.8 L18.6 16 C18.6 17.4359 17.4359 18.6 16 18.6 L11.8 18.6 C10.3641 18.6 9.2 17.4359 9.2 16 L9.2 11.8 C9.2 10.3641 10.3641 9.2 11.8 9.2 Z',
+              rule: 'nonzero',
+            },
+            {
+              d: 'M24 9.2 L28.2 9.2 C29.6359 9.2 30.8 10.3641 30.8 11.8 L30.8 16 C30.8 17.4359 29.6359 18.6 28.2 18.6 L24 18.6 C22.5641 18.6 21.4 17.4359 21.4 16 L21.4 11.8 C21.4 10.3641 22.5641 9.2 24 9.2 Z',
+              rule: 'nonzero',
+            },
+            {
+              d: 'M11.8 21.4 L16 21.4 C17.4359 21.4 18.6 22.5641 18.6 24 L18.6 28.2 C18.6 29.6359 17.4359 30.8 16 30.8 L11.8 30.8 C10.3641 30.8 9.2 29.6359 9.2 28.2 L9.2 24 C9.2 22.5641 10.3641 21.4 11.8 21.4 Z',
+              rule: 'nonzero',
+            },
+            {
+              d: 'M24 21.4 L28.2 21.4 C29.6359 21.4 30.8 22.5641 30.8 24 L30.8 28.2 C30.8 29.6359 29.6359 30.8 28.2 30.8 L24 30.8 C22.5641 30.8 21.4 29.6359 21.4 28.2 L21.4 24 C21.4 22.5641 22.5641 21.4 24 21.4 Z M25.2 24.1 L27 24.1 C27.6075 24.1 28.1 24.5925 28.1 25.2 L28.1 27 C28.1 27.6075 27.6075 28.1 27 28.1 L25.2 28.1 C24.5925 28.1 24.1 27.6075 24.1 27 L24.1 25.2 C24.1 24.5925 24.5925 24.1 25.2 24.1 Z',
+              rule: 'evenodd',
+            },
+          ],
         },
-        {
-          d: 'M25 21.2 L27 21.2 C29.0987 21.2 30.8 22.9013 30.8 25 L30.8 27 C30.8 29.0987 29.0987 30.8 27 30.8 L25 30.8 C22.9013 30.8 21.2 29.0987 21.2 27 L21.2 25 C21.2 22.9013 22.9013 21.2 25 21.2 Z M25 22.8 L27 22.8 C28.215 22.8 29.2 23.785 29.2 25 L29.2 27 C29.2 28.215 28.215 29.2 27 29.2 L25 29.2 C23.785 29.2 22.8 28.215 22.8 27 L22.8 25 C22.8 23.785 23.785 22.8 25 22.8 Z',
-          rule: 'evenodd',
+        orbit: {
+          name: 'Орбита',
+          description: 'Координатор и четыре участника вокруг него.',
+          paths: [
+            { d: 'M19.1 11.8 L20.9 11.8 L20.9 28.2 L19.1 28.2 Z', rule: 'nonzero' },
+            { d: 'M11.8 19.1 L28.2 19.1 L28.2 20.9 L11.8 20.9 Z', rule: 'nonzero' },
+            {
+              d: 'M20 16.3 L20 16.3 C22.0435 16.3 23.7 17.9565 23.7 20 L23.7 20 C23.7 22.0435 22.0435 23.7 20 23.7 L20 23.7 C17.9565 23.7 16.3 22.0435 16.3 20 L16.3 20 C16.3 17.9565 17.9565 16.3 20 16.3 Z',
+              rule: 'nonzero',
+            },
+            {
+              d: 'M20 9.2 L20 9.2 C21.5464 9.2 22.8 10.4536 22.8 12 L22.8 12 C22.8 13.5464 21.5464 14.8 20 14.8 L20 14.8 C18.4536 14.8 17.2 13.5464 17.2 12 L17.2 12 C17.2 10.4536 18.4536 9.2 20 9.2 Z',
+              rule: 'nonzero',
+            },
+            {
+              d: 'M28 17.2 L28 17.2 C29.5464 17.2 30.8 18.4536 30.8 20 L30.8 20 C30.8 21.5464 29.5464 22.8 28 22.8 L28 22.8 C26.4536 22.8 25.2 21.5464 25.2 20 L25.2 20 C25.2 18.4536 26.4536 17.2 28 17.2 Z',
+              rule: 'nonzero',
+            },
+            {
+              d: 'M20 25.2 L20 25.2 C21.5464 25.2 22.8 26.4536 22.8 28 L22.8 28 C22.8 29.5464 21.5464 30.8 20 30.8 L20 30.8 C18.4536 30.8 17.2 29.5464 17.2 28 L17.2 28 C17.2 26.4536 18.4536 25.2 20 25.2 Z',
+              rule: 'nonzero',
+            },
+            {
+              d: 'M12 17.2 L12 17.2 C13.5464 17.2 14.8 18.4536 14.8 20 L14.8 20 C14.8 21.5464 13.5464 22.8 12 22.8 L12 22.8 C10.4536 22.8 9.2 21.5464 9.2 20 L9.2 20 C9.2 18.4536 10.4536 17.2 12 17.2 Z',
+              rule: 'nonzero',
+            },
+          ],
         },
-        {
-          d: 'M13.2 18 L14.8 18 L14.8 22 L13.2 22 Z M25.2 18 L26.8 18 L26.8 22 L25.2 22 Z M18 13.2 L22 13.2 L22 14.8 L18 14.8 Z M18 25.2 L22 25.2 L22 26.8 L18 26.8 Z',
-          rule: 'nonzero',
+        handoff: {
+          name: 'Передача',
+          description: 'Два самостоятельных блока с общей связью.',
+          paths: [
+            {
+              d: 'M13.3 9.2 L18.1 9.2 C20.3644 9.2 22.2 11.0356 22.2 13.3 L22.2 18.1 C22.2 20.3644 20.3644 22.2 18.1 22.2 L13.3 22.2 C11.0356 22.2 9.2 20.3644 9.2 18.1 L9.2 13.3 C9.2 11.0356 11.0356 9.2 13.3 9.2 Z M13.5 12.2 L17.9 12.2 C18.618 12.2 19.2 12.782 19.2 13.5 L19.2 17.9 C19.2 18.618 18.618 19.2 17.9 19.2 L13.5 19.2 C12.782 19.2 12.2 18.618 12.2 17.9 L12.2 13.5 C12.2 12.782 12.782 12.2 13.5 12.2 Z',
+              rule: 'evenodd',
+            },
+            {
+              d: 'M21.9 17.8 L26.7 17.8 C28.9644 17.8 30.8 19.6356 30.8 21.9 L30.8 26.7 C30.8 28.9644 28.9644 30.8 26.7 30.8 L21.9 30.8 C19.6356 30.8 17.8 28.9644 17.8 26.7 L17.8 21.9 C17.8 19.6356 19.6356 17.8 21.9 17.8 Z M22.1 20.8 L26.5 20.8 C27.218 20.8 27.8 21.382 27.8 22.1 L27.8 26.5 C27.8 27.218 27.218 27.8 26.5 27.8 L22.1 27.8 C21.382 27.8 20.8 27.218 20.8 26.5 L20.8 22.1 C20.8 21.382 21.382 20.8 22.1 20.8 Z',
+              rule: 'evenodd',
+            },
+          ],
         },
-      ];
+        portal: {
+          name: 'Бюро',
+          description: 'Открытая рамка и рабочее место внутри.',
+          paths: [
+            {
+              d: 'M9.2 30.8 L9.2 16.2 C9.2 11.6 12.3 9.2 16.5 9.2 L23.5 9.2 C27.7 9.2 30.8 11.6 30.8 16.2 L30.8 30.8 L26.3 30.8 L26.3 16.5 C26.3 14.6 25.2 13.5 23.3 13.5 L16.7 13.5 C14.8 13.5 13.7 14.6 13.7 16.5 L13.7 30.8 Z',
+              rule: 'nonzero',
+            },
+            {
+              d: 'M18.6 19.4 L21.4 19.4 C22.1732 19.4 22.8 20.0268 22.8 20.8 L22.8 24.6 C22.8 25.3732 22.1732 26 21.4 26 L18.6 26 C17.8268 26 17.2 25.3732 17.2 24.6 L17.2 20.8 C17.2 20.0268 17.8268 19.4 18.6 19.4 Z',
+              rule: 'nonzero',
+            },
+          ],
+        },
+      };
       const wordmark =
         'M98.864 43.84 L111.92 43.84 Q114.8 43.84 116.72 42.208 Q118.64 40.576 118.64 37.504 Q118.64 34.048 116.912 32.64 Q115.184 31.232 111.92 31.232 L98.864 31.232 Z M90.864 24.704 L113.072 24.704 Q119.216 24.704 122.928 27.52 Q126.64 30.336 126.64 36.032 Q126.64 39.488 124.944 41.952 Q123.248 44.416 120.112 45.76 L120.112 45.888 Q124.336 46.784 126.512 49.888 Q128.688 52.992 128.688 57.664 Q128.688 60.352 127.728 62.688 Q126.768 65.024 124.72 66.72 Q122.672 68.416 119.472 69.408 Q116.272 70.4 111.856 70.4 L90.864 70.4 Z M98.864 63.872 L113.008 63.872 Q116.656 63.872 118.672 61.984 Q120.688 60.096 120.688 56.64 Q120.688 53.248 118.672 51.424 Q116.656 49.6 113.008 49.6 L98.864 49.6 Z M164.552 70.4 L157.384 70.4 L157.384 65.792 L157.256 65.792 Q155.912 68.288 153.256 69.792 Q150.6 71.296 147.848 71.296 Q141.32 71.296 138.408 68.064 Q135.496 64.832 135.496 58.304 L135.496 37.312 L142.792 37.312 L142.792 57.6 Q142.792 61.952 144.456 63.744 Q146.12 65.536 149.128 65.536 Q151.432 65.536 152.968 64.832 Q154.504 64.128 155.464 62.944 Q156.424 61.76 156.84 60.096 Q157.256 58.432 157.256 56.512 L157.256 37.312 L164.552 37.312 Z M172.832 37.312 L179.68 37.312 L179.68 43.712 L179.808 43.712 Q180.128 42.368 181.056 41.088 Q181.984 39.808 183.296 38.752 Q184.608 37.696 186.208 37.056 Q187.808 36.416 189.472 36.416 Q190.752 36.416 191.232 36.48 Q191.712 36.544 192.224 36.608 L192.224 43.648 Q191.456 43.52 190.656 43.424 Q189.856 43.328 189.088 43.328 Q187.232 43.328 185.6 44.064 Q183.968 44.8 182.752 46.24 Q181.536 47.68 180.832 49.792 Q180.128 51.904 180.128 54.656 L180.128 70.4 L172.832 70.4 Z M209.976 71.296 Q206.008 71.296 202.904 69.984 Q199.8 68.672 197.656 66.368 Q195.512 64.064 194.392 60.864 Q193.272 57.664 193.272 53.824 Q193.272 50.048 194.392 46.848 Q195.512 43.648 197.656 41.344 Q199.8 39.04 202.904 37.728 Q206.008 36.416 209.976 36.416 Q213.944 36.416 217.048 37.728 Q220.152 39.04 222.296 41.344 Q224.44 43.648 225.56 46.848 Q226.68 50.048 226.68 53.824 Q226.68 57.664 225.56 60.864 Q224.44 64.064 222.296 66.368 Q220.152 68.672 217.048 69.984 Q213.944 71.296 209.976 71.296 Z M209.976 65.536 Q212.408 65.536 214.2 64.512 Q215.992 63.488 217.144 61.824 Q218.296 60.16 218.84 58.08 Q219.384 56 219.384 53.824 Q219.384 51.712 218.84 49.6 Q218.296 47.488 217.144 45.856 Q215.992 44.224 214.2 43.2 Q212.408 42.176 209.976 42.176 Q207.544 42.176 205.752 43.2 Q203.96 44.224 202.808 45.856 Q201.656 47.488 201.112 49.6 Q200.568 51.712 200.568 53.824 Q200.568 56 201.112 58.08 Q201.656 60.16 202.808 61.824 Q203.96 63.488 205.752 64.512 Q207.544 65.536 209.976 65.536 Z';
       const palettes = {
@@ -1434,12 +1675,20 @@
           lightGradient: ['#9e8b65', '#806b43', '#687258'],
         },
       });
-      let state = { palette: 'iris', finish: 'gradient', surface: 'dark', shape: 'square' };
+      let state = {
+        palette: 'cobalt',
+        finish: 'solid',
+        surface: 'light',
+        shape: 'square',
+        mark: 'links',
+      };
       const initial = location.hash.slice(1).split('-');
       if (palettes[initial[0]] && ['solid', 'gradient'].includes(initial[1])) {
         state.palette = initial[0];
         state.finish = initial[1];
       }
+      if (marks[initial[2]]) state.mark = initial[2];
+      if (['light', 'dark'].includes(initial[3])) state.surface = initial[3];
       let serial = 0;
       const esc = (text) =>
         text.replace(
@@ -1453,8 +1702,8 @@
           return Number(v.toFixed(4));
         });
       }
-      function symbol(fill, scale = 1, tx = 0, ty = 0) {
-        return paths
+      function symbol(fill, scale = 1, tx = 0, ty = 0, markId = state.mark) {
+        return marks[markId].paths
           .map(
             (p) =>
               `<path fill="${fill}" fill-rule="${p.rule}" d="${transformPath(p.d, scale, tx, ty)}"/>`,
@@ -1472,6 +1721,7 @@
         palette = state.palette,
         finish = state.finish,
         surface = state.surface,
+        markId = state.mark,
       ) {
         const p = palettes[palette],
           id = 'buro-' + ++serial,
@@ -1479,50 +1729,62 @@
         let defs = grad
           ? linear(
               id + '-mark',
-              kind === 'logo' && surface === 'light' ? p.lightGradient : p.gradient,
+              surface === 'light' ? p.lightGradient : p.gradient,
               kind === 'logo' ? [24, 24, 72, 72] : [208, 208, 816, 816],
             )
           : '';
-        const fill = grad
-          ? `url(#${id}-mark)`
-          : kind === 'logo' && surface === 'light'
-            ? p.solid
-            : p.accent;
+        const fill = grad ? `url(#${id}-mark)` : surface === 'light' ? p.solid : p.accent;
         let body, width, height, viewbox;
         if (kind === 'avatar') {
           width = height = 1024;
           viewbox = '0 0 1024 1024';
           if (grad) {
-            defs += linear(id + '-bg', p.deep);
+            defs += linear(
+              id + '-bg',
+              surface === 'light' ? [p.light, '#ffffff', p.light] : p.deep,
+            );
             defs += `<radialGradient id="${id}-glow" cx=".22" cy=".1" r=".85"><stop stop-color="${p.accent}" stop-opacity=".14"/><stop offset="1" stop-color="${p.accent}" stop-opacity="0"/></radialGradient>`;
           }
           body =
-            `<rect width="1024" height="1024" fill="${grad ? `url(#${id}-bg)` : p.dark}"/>` +
+            `<rect width="1024" height="1024" fill="${grad ? `url(#${id}-bg)` : surface === 'light' ? p.light : p.dark}"/>` +
             (grad ? `<rect width="1024" height="1024" fill="url(#${id}-glow)"/>` : '') +
-            symbol(fill, 28.16, -51.2, -51.2);
+            symbol(fill, 28.16, -51.2, -51.2, markId);
         } else {
           width = 908;
           height = 384;
           viewbox = '12 0 227 96';
           body =
-            symbol(fill, 2.2, 4, 4) +
+            symbol(fill, 2.2, 4, 4, markId) +
             `<path fill="${surface === 'light' ? p.ink : p.text}" d="${wordmark}"/>`;
         }
-        return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${viewbox}" role="img" aria-label="Buro ${esc(p.name)} ${finish}"><title>Buro ${esc(p.name)} ${finish}</title>${defs ? `<defs>${defs}</defs>` : ''}${body}</svg>`;
+        return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${viewbox}" role="img" aria-label="Buro ${esc(p.name)} ${finish} ${esc(marks[markId].name)}"><title>Buro ${esc(p.name)} ${finish}</title>${defs ? `<defs>${defs}</defs>` : ''}${body}</svg>`;
       }
       const finishLabel = (finish) => (finish === 'gradient' ? 'Градиент' : 'Однотонный');
       function miniInterface(p, finish) {
+        const light = state.surface === 'light',
+          accent = light ? p.solid : p.accent;
         const primary =
-          finish === 'gradient' ? `linear-gradient(135deg,${p.gradient.join(',')})` : p.accent;
-        return `<div class="mini-window" style="--mini-bg:${p.dark};--mini-panel:${p.panel};--mini-accent:${p.accent};--mini-text:${p.text};--mini-primary:${primary}"><div class="mini-side"><i></i><i></i><i></i><i></i></div><div class="mini-content"><div class="mini-top"></div><div class="mini-tabs"></div><div class="mini-cards"><i></i><i></i><i></i></div><div class="mini-button"></div></div></div>`;
+          finish === 'gradient'
+            ? `linear-gradient(135deg,${(light ? p.lightGradient : p.gradient).join(',')})`
+            : accent;
+        return `<div class="mini-window" style="--mini-bg:${light ? p.light : p.dark};--mini-panel:${light ? '#ffffff' : p.panel};--mini-accent:${accent};--mini-text:${light ? p.ink : p.text};--mini-primary:${primary}"><div class="mini-side"><i></i><i></i><i></i><i></i></div><div class="mini-content"><div class="mini-top"></div><div class="mini-tabs"></div><div class="mini-cards"><i></i><i></i><i></i></div><div class="mini-button"></div></div></div>`;
       }
       function renderOptions() {
         document.getElementById('options').innerHTML = Object.entries(palettes)
           .flatMap(([key, p]) =>
             ['solid', 'gradient'].map(
               (finish) =>
-                `<button class="option" data-palette="${key}" data-finish="${finish}" aria-label="${p.name} — ${finishLabel(finish)}" aria-pressed="${state.palette === key && state.finish === finish}"><div class="option-art" style="background:${p.dark}">${miniInterface(p, finish)}<div class="option-avatar">${artwork('avatar', key, finish)}</div></div><div class="option-info"><div><strong>${p.name} / ${finishLabel(finish)}</strong><small>${p.description}</small></div><span class="check" aria-hidden="true">✓</span></div><div class="palette-dots">${[p.dark, p.solid, p.accent, p.text].map((c) => `<i style="background:${c}"></i>`).join('')}</div></button>`,
+                `<button class="option" data-palette="${key}" data-finish="${finish}" aria-label="${p.name} — ${finishLabel(finish)}" aria-pressed="${state.palette === key && state.finish === finish}"><div class="option-art" style="background:${state.surface === 'light' ? p.light : p.dark}">${miniInterface(p, finish)}<div class="option-avatar">${artwork('avatar', key, finish)}</div></div><div class="option-info"><div><strong>${p.name} / ${finishLabel(finish)}</strong><small>${p.description}</small></div><span class="check" aria-hidden="true">✓</span></div><div class="palette-dots">${[p.dark, p.solid, p.accent, p.text].map((c) => `<i style="background:${c}"></i>`).join('')}</div></button>`,
             ),
+          )
+          .join('');
+      }
+      function renderMarks() {
+        const p = palettes[state.palette];
+        document.getElementById('marks-grid').innerHTML = Object.entries(marks)
+          .map(
+            ([key, mark]) =>
+              `<button class="mark-option" data-mark="${key}" aria-pressed="${key === state.mark}" aria-label="Знак: ${mark.name}"><div class="mark-option-art" style="background:${p.light}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 24 24">${symbol(p.solid, 1, 0, 0, key)}</svg><div class="mark-small"><svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 24 24">${symbol(p.solid, 1, 0, 0, key)}</svg><span>24 px</span></div></div><div class="mark-option-info"><div><b>${mark.name}</b><p>${mark.description}</p></div><span class="check" aria-hidden="true">✓</span></div><div class="mark-option-wordmark">${artwork('logo', state.palette, 'solid', 'dark', key)}</div></button>`,
           )
           .join('');
       }
@@ -1601,7 +1863,7 @@
         const p = palettes[state.palette];
         document.documentElement.style.setProperty('--selected', p.accent);
         document.getElementById('selected-name').innerHTML =
-          p.name + `<span>${finishLabel(state.finish)}</span>`;
+          marks[state.mark].name + `<span>${finishLabel(state.finish)}</span>`;
         const panel = document.getElementById('logo-panel');
         panel.style.background = state.surface === 'dark' ? p.dark : p.light;
         panel.dataset.surface = state.surface;
@@ -1624,7 +1886,12 @@
         document.getElementById('status').textContent = '';
         renderOptions();
         renderInterface();
-        history.replaceState(null, '', '#' + state.palette + '-' + state.finish);
+        renderMarks();
+        history.replaceState(
+          null,
+          '',
+          '#' + [state.palette, state.finish, state.mark, state.surface].join('-'),
+        );
       }
       function download(blob, filename) {
         const url = URL.createObjectURL(blob),
@@ -1639,7 +1906,7 @@
       async function exportAsset(button) {
         const [kind, format] = button.dataset.export.split('-'),
           svg = artwork(kind),
-          filename = `buro-${kind}-${state.palette}-${state.finish}${kind === 'logo' ? '-' + state.surface : ''}`;
+          filename = `buro-${kind}-${state.mark}-${state.palette}-${state.finish}-${state.surface}`;
         button.disabled = true;
         try {
           if (format === 'svg')
@@ -1675,7 +1942,10 @@
       document.addEventListener('click', (event) => {
         const button = event.target.closest('button');
         if (!button) return;
-        if (button.dataset.palette) {
+        if (button.dataset.mark) {
+          state.mark = button.dataset.mark;
+          render();
+        } else if (button.dataset.palette) {
           state.palette = button.dataset.palette;
           state.finish = button.dataset.finish;
           render();
@@ -1694,8 +1964,18 @@
         state.palette = event.target.value;
         render();
       });
+      window.addEventListener('hashchange', () => {
+        const selection = location.hash.slice(1).split('-');
+        if (palettes[selection[0]] && ['solid', 'gradient'].includes(selection[1])) {
+          state.palette = selection[0];
+          state.finish = selection[1];
+        }
+        if (marks[selection[2]]) state.mark = selection[2];
+        if (['light', 'dark'].includes(selection[3])) state.surface = selection[3];
+        render();
+      });
       document.getElementById('header-mark').innerHTML =
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 24 24" aria-hidden="true">${symbol('#c6b5e8')}</svg>`;
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 24 24" aria-hidden="true">${symbol('#a6bbff', 1, 0, 0, 'links')}</svg>`;
       render();
     </script>
   </body>

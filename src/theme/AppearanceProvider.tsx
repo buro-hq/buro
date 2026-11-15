@@ -39,7 +39,7 @@ function variables(colors: ThemeColors, scheme: 'light' | 'dark') {
     '--accent': colors.accent,
     '--accent-text': colors.accentText,
     '--accent-soft': `color-mix(in srgb, ${colors.accent} ${dark ? '12%' : '10%'}, ${colors.panel})`,
-    '--on-accent': dark ? '#17201d' : '#ffffff',
+    '--on-accent': dark ? colors.bg : '#ffffff',
     '--orange': dark ? '#e7ba86' : '#936022',
     '--danger': dark ? '#eda79b' : '#b13d33',
     '--success': dark ? '#abd3b5' : '#39784c',
@@ -129,7 +129,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
         theme={theme}
         cssVariablesResolver={resolver}
         colorSchemeManager={manager}
-        defaultColorScheme="dark"
+        defaultColorScheme="light"
       >
         {children}
       </MantineProvider>
