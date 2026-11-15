@@ -1,5 +1,17 @@
 # Buro roadmap
 
+Buro currently runs tasks through Codex CLI. The next priority is support for other coding clients and model providers. The items below are planned; they are not available yet.
+
+## First: more clients and providers
+
+- [ ] Make runtime selection a project setting. Keep Codex working through the same adapter interface.
+- [ ] Add a Claude Code adapter: start, stop and resume sessions; show tool calls, output and errors in the run timeline.
+- [ ] Add support for Kimi, GLM and DeepSeek through suitable coding clients or provider APIs. Choose the integration route for each after checking its capabilities.
+- [ ] Configure the client, provider, model and endpoint locally. Keep API keys out of project profiles, exported settings and logs.
+- [ ] Choose different clients or models for the coordinator, workers and reviewer. Save those choices with each run.
+- [ ] Check client capabilities before starting a run, including structured output, tool execution, cancellation and session recovery. Explain unsupported operations in the UI.
+- [ ] Run the same task, check and recovery scenarios against each adapter before marking it supported.
+
 ## Delivered
 
 - [x] Local service with independent UI and CLI clients; pure core and Cordis composition.
@@ -17,7 +29,7 @@
 
 ## Execution and operator controls
 
-- [ ] TODO: configurable time policy and inactivity threshold. Default remains no total limit and 10 minutes without coordinator/child progress. The disabled selector in user settings marks future functionality.
+- [ ] Configurable time policy and inactivity threshold. Default remains no total limit and 10 minutes without coordinator/child progress. The disabled selector in user settings marks future functionality.
 - [ ] Queue of concrete operator questions/approvals with durable answers.
 - [ ] Broader project types and environment templates, preserving explicit migration/deployment boundaries.
 - [ ] More runtime compatibility checks and adapter observability.
