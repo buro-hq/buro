@@ -20,7 +20,7 @@ Buro is still in development. It runs on your machine and uses your installed, s
 You need Node.js **24+**, npm, Git, and an authenticated Codex CLI. Connected repositories must have at least one commit. Native command execution uses macOS `sandbox-exec` or Linux `bubblewrap`; a Docker provider is also available.
 
 ```sh
-git clone https://github.com/buro-agents/buro.git
+git clone https://github.com/buro-hq/buro.git
 cd buro
 npm ci
 npm start
