@@ -100,3 +100,7 @@ npm run build
 ```
 
 [Development and configuration](docs/DEVELOPMENT.md) · [Project setup](USER-PROJECTS.md) · [Execution flow](GOAL-EXECUTION-POC.md) · [Recovery](RECOVERY.md) · [UI architecture](UI-ARCHITECTURE.md) · [Roadmap](ROADMAP.md) · [Branding](branding/README.md)
+
+## License
+
+[MIT](LICENSE) © 2026 Evgenii Bykovskikh.
