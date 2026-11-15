@@ -1,0 +1,23 @@
+/node_modules/
+/dist/
+/.firecrawl/
+*.tsbuildinfo
+/artifacts/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+/.buro/
+
+# Local credentials and legacy runtime state.
+.codex/
+.npmrc
+.netrc
+.проект/
+*.pem
+*.p12
+*.pfx
+*.key
+id_rsa
+id_ed25519
