@@ -952,5 +952,7 @@
   "Use parallel checks only when their commands do not share writable outputs.": "Use parallel checks only when their commands do not share writable outputs.",
   "Local user": "Local user",
   "Offline drafts": "Offline drafts",
-  "Drafts are saved in this browser. Connect to the service to execute goals.": "Drafts are saved in this browser. Connect to the service to execute goals."
+  "Drafts are saved in this browser. Connect to the service to execute goals.": "Drafts are saved in this browser. Connect to the service to execute goals.",
+  "Cobalt": "Cobalt",
+  "Cobalt blue accent": "Cobalt blue accent"
 }

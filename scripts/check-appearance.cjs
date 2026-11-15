@@ -12,11 +12,12 @@ const fs = require('node:fs/promises');
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('http://127.0.0.1:4317/?source=replay');
     await page.locator('.office-canvas').waitFor();
+    assert.equal(await page.locator('html').getAttribute('data-mantine-color-scheme'), 'light');
     await page.getByRole('button', { name: 'Open user settings', exact: true }).click();
     await page.getByRole('heading', { name: 'User settings', exact: true }).waitFor();
     assert.equal(
       await page
-        .getByRole('button', { name: 'Theme Iris', exact: true })
+        .getByRole('button', { name: 'Theme Cobalt', exact: true })
         .getAttribute('aria-pressed'),
       'true',
     );
@@ -27,11 +28,11 @@ const fs = require('node:fs/promises');
     await page.getByRole('button', { name: 'User settings', exact: true }).click();
     assert.equal(
       await page
-        .getByRole('button', { name: 'Theme Iris', exact: true })
+        .getByRole('button', { name: 'Theme Cobalt', exact: true })
         .getAttribute('aria-pressed'),
       'true',
     );
-    assert.equal(await page.locator('.theme-preview').count(), 4);
+    assert.equal(await page.locator('.theme-preview').count(), 5);
     assert.equal(
       await page.getByRole('textbox', { name: 'Time policy · TODO', exact: true }).isDisabled(),
       true,
@@ -50,7 +51,7 @@ const fs = require('node:fs/promises');
         .reduce((n, c, i) => n + c * [0.2126, 0.7152, 0.0722][i], 0);
     for (const scheme of ['Dark', 'Light']) {
       await page.getByRole('button', { name: scheme, exact: true }).click();
-      for (const name of ['Sage', 'Graphite', 'Ocean', 'Iris']) {
+      for (const name of ['Sage', 'Graphite', 'Ocean', 'Iris', 'Cobalt']) {
         const button = page.getByRole('button', { name: 'Theme ' + name, exact: true });
         await button.click();
         await page.waitForFunction(
@@ -101,8 +102,9 @@ const fs = require('node:fs/promises');
         observed.push({ scheme, name, ...colors, contrast });
       }
     }
-    assert.equal(new Set(observed.map((c) => c.accent)).size, 8);
+    assert.equal(new Set(observed.map((c) => c.accent)).size, 10);
     await page.screenshot({ path: 'artifacts/themes-light.png' });
+    await page.getByRole('button', { name: 'Theme Iris', exact: true }).click();
     await page.reload();
     await page.getByRole('button', { name: 'User settings', exact: true }).click();
     assert.equal(
@@ -135,7 +137,7 @@ const fs = require('node:fs/promises');
     await page.waitForFunction(
       () => document.documentElement.dataset.mantineColorScheme === 'dark',
     );
-    await page.getByRole('button', { name: 'Theme Iris', exact: true }).click();
+    await page.getByRole('button', { name: 'Theme Cobalt', exact: true }).click();
     await page.getByRole('button', { name: 'Dark', exact: true }).click();
     await page.screenshot({ path: 'artifacts/themes-dark.png' });
     await page.locator('.sidebar').getByRole('button', { name: 'Office', exact: true }).click();
@@ -166,10 +168,10 @@ const fs = require('node:fs/promises');
     assert.deepEqual(errors, []);
     const result = {
       passed: [
-        'Iris is the default palette and the fallback for an unknown saved theme',
+        'Cobalt light is the default; unknown palettes fall back to Cobalt',
         'avatar opens appearance settings',
-        'four palette previews',
-        'eight palette/scheme combinations have readable panel text',
+        'five palette previews',
+        'ten palette/scheme combinations have readable panel text',
         'choice survives reload',
         'settings fit 320px–1512px',
         'auto scheme follows the system',

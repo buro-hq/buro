@@ -1,6 +1,6 @@
 # Buro branding
 
-Open [the brand explorer](index.html) to compare nine palettes, solid and gradient variants, interface mockups, background colors and avatar crops. The page works offline and exports SVG/PNG directly. Iris, Ocean, Graphite and Sage match application palettes; Amber, Coral, Cobalt, Rose and Sand are additional proposals.
+Open [the brand explorer](index.html) to compare six logo shapes, nine palettes, solid and gradient variants, interface mockups, background colors and avatar crops. The page works offline and exports SVG/PNG directly. Cobalt, Iris, Ocean, Graphite and Sage match application palettes; Amber, Coral, Rose and Sand are additional proposals.
 
 The mark uses four connected workspaces, adapted from `public/icon.svg`. The name stays **Buro** across GitHub, the application and documentation.
 
@@ -13,8 +13,10 @@ The mark uses four connected workspaces, adapted from `public/icon.svg`. The nam
 | `github-avatar-512.png` | Smaller avatar, 512 × 512 |
 | `github-avatar.svg` | Editable vector source for the avatar |
 
-Upload `github-avatar.png` as the organization picture. Its solid background and centered mark also work with a circular crop. Use SVG for scalable layouts and PNG for upload forms. All artwork uses filled vector paths without external fonts, styles or linked assets.
+Upload `github-avatar.png` as the organization picture. Its light background and centered blue mark also work with a circular crop. Use SVG for scalable layouts and PNG for upload forms. All artwork uses filled vector paths without external fonts, styles or linked assets.
 
-The branding uses the application’s default **Iris** palette: dark plum `#1a1720`, lavender `#c6b5e8`, ink `#30243f`, purple `#755199`, off-white `#ede7f5`.
+The default is **Cobalt / solid / light**: pale blue `#f2f5ff`, cobalt `#3e60b4`, ink `#233357`, white `#ffffff`. The inverse logo uses `#a6bbff` and `#e7edff` for dark backgrounds.
+
+The `variants/` folder contains standalone SVGs for Links, B monogram, Modules, Orbit, Handoff and Bureau. Selecting a candidate in the explorer updates the logo, avatar and interface mockup; downloads include the selected shape. The current application mark stays Links until a final shape is chosen.
 
 Keep the proportions and leave clear space around the mark. Do not stretch or add effects.

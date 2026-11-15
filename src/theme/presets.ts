@@ -18,7 +18,7 @@ export type ThemePreset = {
   dark: ThemeColors;
   light: ThemeColors;
 };
-export const defaultThemeId = 'iris';
+export const defaultThemeId = 'cobalt';
 export const themePresets: ThemePreset[] = [
   {
     id: 'sage',
@@ -150,6 +150,39 @@ export const themePresets: ThemePreset[] = [
       subtle: '#7c6a8e',
       accent: '#755199',
       accentText: '#654188',
+    },
+  },
+  {
+    id: 'cobalt',
+    get name() {
+      return t('Cobalt');
+    },
+    get description() {
+      return t('Cobalt blue accent');
+    },
+    dark: {
+      bg: '#131a2b',
+      sidebar: '#0f1423',
+      panel: '#1b2540',
+      hover: '#243153',
+      line: '#354568',
+      text: '#e7edff',
+      muted: '#a6b3d2',
+      subtle: '#8497bb',
+      accent: '#a6bbff',
+      accentText: '#c4d1ff',
+    },
+    light: {
+      bg: '#f2f5ff',
+      sidebar: '#e7edfc',
+      panel: '#ffffff',
+      hover: '#e7edfc',
+      line: '#cdd7ef',
+      text: '#233357',
+      muted: '#52678e',
+      subtle: '#687da3',
+      accent: '#3e60b4',
+      accentText: '#34549f',
     },
   },
 ];
