@@ -6,9 +6,9 @@ import {
 } from '@mantine/core';
 import { useLocalStorage } from '@mantine/hooks';
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { getThemePreset, type ThemeColors } from './presets';
+import { defaultThemeId, getThemePreset, type ThemeColors } from './presets';
 const AppearanceContext = createContext<{ themeId: string; setThemeId: (value: string) => void }>({
-  themeId: 'sage',
+  themeId: defaultThemeId,
   setThemeId: () => {},
 });
 const mix = (color: string, ratio: number) => {
@@ -69,7 +69,7 @@ function variables(colors: ThemeColors, scheme: 'light' | 'dark') {
 export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [savedTheme, setTheme] = useLocalStorage<string>({
       key: 'project-panel-theme',
-      defaultValue: 'sage',
+      defaultValue: defaultThemeId,
     }),
     preset = getThemePreset(savedTheme);
   const theme = useMemo(

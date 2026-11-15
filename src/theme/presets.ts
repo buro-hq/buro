@@ -18,6 +18,7 @@ export type ThemePreset = {
   dark: ThemeColors;
   light: ThemeColors;
 };
+export const defaultThemeId = 'iris';
 export const themePresets: ThemePreset[] = [
   {
     id: 'sage',
@@ -153,4 +154,5 @@ export const themePresets: ThemePreset[] = [
   },
 ];
 export const getThemePreset = (id: string) =>
-  themePresets.find((theme) => theme.id === id) || themePresets[0];
+  themePresets.find((theme) => theme.id === id) ||
+  themePresets.find((theme) => theme.id === defaultThemeId)!;

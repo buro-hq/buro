@@ -86,7 +86,7 @@ Delivery errors do not undo implementation acceptance. Redeploy repeats delivery
 
 ## Language and appearance
 
-Click the user icon, then open **User settings**. Choose **English** or **Russian**, a light/dark/system color scheme, and a palette. Changes apply immediately and persist in this browser across projects. English is the default. User-authored goals, materials, role definitions and historical outputs retain their original language.
+Click the user icon, then open **User settings**. Choose **English** or **Russian**, a light/dark/system color scheme, and a palette. Changes apply immediately and persist in this browser across projects. English is the default language; Iris is the default palette. User-authored goals, materials, role definitions and historical outputs retain their original language.
 
 UI messages live in `src/i18n/locales/en.json` and `ru.json`. Product source, service/CLI messages, agent instructions and current documentation use English.
 
