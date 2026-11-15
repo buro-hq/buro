@@ -1,0 +1,9 @@
+node_modules
+dist
+.buro
+.firecrawl
+artifacts
+public
+package-lock.json
+
+archive

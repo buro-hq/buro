@@ -1,0 +1,9 @@
+# The image supplies the agent transport. Project-specific tools are installed by its environment recipe.
+FROM node:24-bookworm
+ARG CODEX_VERSION
+RUN test -n "$CODEX_VERSION" \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends git ripgrep python3 python3-venv build-essential ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global "@openai/codex@$CODEX_VERSION" \
+    && npm cache clean --force
