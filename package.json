@@ -22,7 +22,8 @@
     "format": "prettier --write src clients protocol tsconfig.json tsconfig.server.json",
     "format:check": "prettier --check src clients protocol tsconfig.json tsconfig.server.json",
     "check:context": "node scripts/check-context-materials.cjs",
-    "check:localization": "node scripts/check-localization.cjs"
+    "check:localization": "node scripts/check-localization.cjs",
+    "docs:screenshots": "node scripts/screenshot-docs.cjs"
   },
   "dependencies": {
     "@mantine/core": "8.3.8",
