@@ -1,5 +1,10 @@
 # Buro
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="branding/logo-light.svg">
+  <img src="branding/logo.svg" alt="Buro Links logo" width="240">
+</picture>
+
 A local office for coding agents, organized around your projects. Give a project a goal; a coordinator plans the work, selects reusable roles, runs workers, and sends the result through checks and independent review. The interface and CLI are clients of the same local service.
 
 Buro is an early local MVP. It uses your installed Codex CLI and keeps project configuration next to the repository in `.buro/`.
@@ -87,6 +92,8 @@ Delivery errors do not undo implementation acceptance. Redeploy repeats delivery
 ## Language and appearance
 
 Click the user icon, then open **User settings**. Choose **English** or **Russian**, a light/dark/system color scheme, and a palette. Changes apply immediately and persist in this browser across projects. English is the default language; Cobalt with a light color scheme is the default appearance. User-authored goals, materials, role definitions and historical outputs retain their original language.
+
+The brand uses the Links mark with the Cobalt light palette. Logo files, the organization avatar and an interactive preview are in [branding](branding/README.md).
 
 UI messages live in `src/i18n/locales/en.json` and `ru.json`. Product source, service/CLI messages, agent instructions and current documentation use English.
 

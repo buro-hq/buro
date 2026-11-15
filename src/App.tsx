@@ -22,6 +22,7 @@ import { TimelinePanel } from './components/organisms/TimelinePanel';
 import { ProjectLayout, type ProjectPage } from './components/templates/ProjectLayout';
 import { ProjectResearchPanel } from './components/organisms/ProjectResearchPanel';
 import { Notice } from './components/atoms/Notice';
+import { BrandMark } from './components/atoms/BrandMark';
 import { useProject } from './data/provider';
 import { useRunPlayback } from './hooks/useRunPlayback';
 import { roleViewsForRun, type Milestone } from './model';
@@ -35,7 +36,10 @@ export default function App() {
   if (!data.snapshot || !data.client)
     return (
       <div className="startup">
-        <span className="startup-logo">Buro</span>
+        <span className="startup-logo">
+          <BrandMark size={32} />
+          Buro
+        </span>
         <p>{data.error || t('Connecting to the project office…')}</p>
         <Button variant="default" onClick={() => void data.switchMode('service')}>
           {t('Reconnect')}

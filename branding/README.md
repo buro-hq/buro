@@ -2,7 +2,7 @@
 
 Open [the brand explorer](index.html) to compare six logo shapes, nine palettes, solid and gradient variants, interface mockups, background colors and avatar crops. The page works offline and exports SVG/PNG directly. Cobalt, Iris, Ocean, Graphite and Sage match application palettes; Amber, Coral, Rose and Sand are additional proposals.
 
-The mark uses four connected workspaces, adapted from `public/icon.svg`. The name stays **Buro** across GitHub, the application and documentation.
+The approved mark is **Links** (Связи): four connected workspaces. The name stays **Buro** across GitHub, the application and documentation.
 
 | Asset | Use |
 | --- | --- |
@@ -17,6 +17,6 @@ Upload `github-avatar.png` as the organization picture. Its light background and
 
 The default is **Cobalt / solid / light**: pale blue `#f2f5ff`, cobalt `#3e60b4`, ink `#233357`, white `#ffffff`. The inverse logo uses `#a6bbff` and `#e7edff` for dark backgrounds.
 
-The `variants/` folder contains standalone SVGs for Links, B monogram, Modules, Orbit, Handoff and Bureau. Selecting a candidate in the explorer updates the logo, avatar and interface mockup; downloads include the selected shape. The current application mark stays Links until a final shape is chosen.
+The `variants/` folder contains standalone SVGs for Links, B monogram, Modules, Orbit, Handoff and Bureau. Selecting a candidate in the explorer updates the logo, avatar and interface mockup; downloads include the selected shape. Links is the approved application mark; the other shapes are retained for comparison.
 
 Keep the proportions and leave clear space around the mark. Do not stretch or add effects.

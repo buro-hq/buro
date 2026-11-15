@@ -212,12 +212,10 @@ code,
 .brand-mark {
   width: 33px;
   height: 33px;
-  border: 1px solid var(--subtle);
-  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent-text);
+  color: var(--accent);
 }
 .brand-version {
   display: block;
@@ -4121,10 +4119,16 @@ code,
   color: var(--muted);
 }
 .startup-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   font-size: 27px;
   letter-spacing: -1px;
   font-weight: 550;
-  color: var(--accent-text);
+  color: var(--text);
+}
+.startup-logo svg {
+  color: var(--accent);
 }
 .startup p {
   font-size: 12px;
