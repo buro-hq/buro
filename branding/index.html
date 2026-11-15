@@ -1,0 +1,1702 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Buro — варианты брендинга</title>
+    <style>
+      :root {
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        color: #eeeef2;
+        background: #111216;
+        font-synthesis: none;
+        --line: #2c2d34;
+        --muted: #9698a5;
+        --selected: #c6b5e8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      button,
+      a {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 2px solid #d6c6f3;
+        outline-offset: 5px;
+      }
+      button {
+        color: inherit;
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.55;
+      }
+      a {
+        color: inherit;
+      }
+      header {
+        height: 82px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+      header,
+      .wrap {
+        width: min(1304px, calc(100% - 80px));
+        margin: auto;
+      }
+      .brand {
+        display: flex;
+        gap: 13px;
+        align-items: center;
+        font-size: 23px;
+        font-weight: 650;
+        letter-spacing: -0.9px;
+      }
+      .brand svg {
+        width: 28px;
+        height: 28px;
+      }
+      .edition {
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+      }
+      .intro {
+        padding: 62px 0 35px;
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 28px;
+      }
+      .eyebrow {
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #a9a6b4;
+        margin: 0 0 16px;
+      }
+      h1 {
+        font-size: clamp(32px, 4vw, 50px);
+        font-weight: 550;
+        line-height: 1.08;
+        letter-spacing: -2px;
+        margin: 0 0 19px;
+      }
+      p {
+        margin: 0;
+        line-height: 1.7;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .intro p {
+        max-width: 590px;
+      }
+      .current {
+        border: 1px solid var(--line);
+        border-radius: 30px;
+        padding: 9px 14px;
+        white-space: nowrap;
+        font-size: 11px;
+        color: #c8c9d1;
+      }
+      .current i {
+        display: inline-block;
+        height: 6px;
+        width: 6px;
+        background: #c6b5e8;
+        border-radius: 50%;
+        margin-right: 7px;
+      }
+      .studio {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        overflow: hidden;
+        background: #17181d;
+      }
+      .toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+        padding: 17px 22px;
+        border-bottom: 1px solid var(--line);
+      }
+      .selected-name {
+        font-size: 13px;
+        font-weight: 550;
+      }
+      .selected-name span {
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 400;
+        margin-left: 10px;
+      }
+      .toolbar-actions {
+        display: flex;
+        gap: 13px;
+        align-items: center;
+      }
+      .segmented {
+        display: flex;
+        padding: 3px;
+        gap: 2px;
+        background: #111216;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+      }
+      .segmented button {
+        border: 0;
+        background: none;
+        border-radius: 6px;
+        padding: 7px 11px;
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .segmented button[aria-pressed='true'] {
+        background: #30313b;
+        color: #f8f7fb;
+        box-shadow: 0 1px 4px #0003;
+      }
+      .stage {
+        display: grid;
+        grid-template-columns: minmax(0, 1.65fr) minmax(260px, 1fr);
+      }
+      .logo-panel {
+        position: relative;
+        min-height: 372px;
+        padding: 56px 46px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+      }
+      .stage-label {
+        position: absolute;
+        left: 24px;
+        top: 21px;
+        font-size: 9px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        opacity: 0.65;
+      }
+      .large-logo {
+        width: min(100%, 550px);
+      }
+      .large-logo svg {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .avatar-panel {
+        border-left: 1px solid var(--line);
+        background: #191a20;
+        padding: 34px;
+        display: flex;
+        gap: 25px;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+      .large-avatar {
+        width: 198px;
+        height: 198px;
+        border-radius: 30px;
+        overflow: hidden;
+        box-shadow: 0 14px 36px #0003;
+        transition: border-radius 0.25s;
+      }
+      .large-avatar.circle {
+        border-radius: 50%;
+      }
+      .large-avatar svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .tiny-row {
+        display: flex;
+        gap: 24px;
+        align-items: end;
+      }
+      .tiny-example {
+        display: grid;
+        gap: 8px;
+        justify-items: center;
+      }
+      .tiny-example small {
+        font-size: 9px;
+        color: #7f8190;
+        font-variant-numeric: tabular-nums;
+      }
+      .tiny-example svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .tiny-example .tiny-image {
+        overflow: hidden;
+        border-radius: 22%;
+      }
+      .round .tiny-image {
+        border-radius: 50%;
+      }
+      .downloads {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 17px 22px;
+        border-top: 1px solid var(--line);
+      }
+      .download-note {
+        font-size: 11px;
+        color: var(--muted);
+        max-width: 340px;
+      }
+      .download-buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .download-buttons button {
+        background: #24252d;
+        border: 1px solid #383944;
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-size: 11px;
+      }
+      .download-buttons button:hover {
+        background: #30313b;
+      }
+      .download-buttons button.primary {
+        background: #eeeaf5;
+        color: #26212e;
+        border-color: #eeeaf5;
+      }
+      .options-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        margin: 44px 0 20px;
+        gap: 16px;
+      }
+      h2 {
+        font-size: 21px;
+        font-weight: 500;
+        letter-spacing: -0.5px;
+        margin: 0 0 7px;
+      }
+      .options-head p {
+        font-size: 12px;
+      }
+      .option-count {
+        font-size: 11px;
+        color: #838592;
+        white-space: nowrap;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+      }
+      .option {
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        overflow: hidden;
+        background: #191a20;
+        padding: 0;
+        text-align: left;
+        transition:
+          border-color 0.16s,
+          transform 0.16s;
+        position: relative;
+      }
+      .option:hover {
+        transform: translateY(-3px);
+        border-color: #6d687b;
+      }
+      .option[aria-pressed='true'] {
+        border-color: var(--selected);
+        box-shadow: 0 0 0 1px var(--selected);
+      }
+      .option-art {
+        height: 166px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .option-avatar {
+        width: 102px;
+        height: 102px;
+        border-radius: 22px;
+        overflow: hidden;
+        box-shadow: 0 7px 20px #0002;
+      }
+      .option-avatar svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .option-info {
+        padding: 15px 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+      .option-info strong {
+        display: block;
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .option-info small {
+        display: block;
+        font-size: 10px;
+        color: #9a9ba7;
+        margin-top: 5px;
+      }
+      .check {
+        height: 19px;
+        width: 19px;
+        border: 1px solid #444550;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: transparent;
+        font-size: 10px;
+      }
+      .option[aria-pressed='true'] .check {
+        color: #17141e;
+        border-color: var(--selected);
+        background: var(--selected);
+      }
+      .palette-dots {
+        display: flex;
+        gap: 4px;
+        padding: 0 16px 15px;
+      }
+      .palette-dots i {
+        height: 6px;
+        width: 22px;
+        border-radius: 3px;
+      }
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 22px;
+        border-top: 1px solid var(--line);
+        padding: 23px 0 35px;
+        margin-top: 42px;
+        color: #777986;
+        font-size: 11px;
+      }
+      .footer a {
+        text-decoration: none;
+      }
+      .footer a:hover {
+        color: #eeeaf5;
+      }
+      .status {
+        min-height: 19px;
+        padding-top: 10px;
+        font-size: 11px;
+        color: #d6c6f3;
+      }
+      .logo-panel[data-surface='light'] .stage-label {
+        color: #30243f;
+      }
+      .logo-panel[data-surface='dark'] .stage-label {
+        color: #ede7f5;
+      }
+      @media (min-width: 1450px) {
+        .option-art {
+          height: 190px;
+        }
+      }
+      @media (max-width: 1050px) {
+        header,
+        .wrap {
+          width: calc(100% - 48px);
+        }
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .toolbar {
+          align-items: start;
+        }
+        .toolbar-actions {
+          flex-wrap: wrap;
+          justify-content: end;
+        }
+        .large-logo {
+          max-width: 480px;
+        }
+        .logo-panel {
+          padding: 42px 24px;
+        }
+        .avatar-panel {
+          padding: 28px 20px;
+        }
+        .downloads {
+          align-items: start;
+          flex-direction: column;
+        }
+        .download-note {
+          max-width: none;
+        }
+      }
+      @media (max-width: 650px) {
+        header,
+        .wrap {
+          width: calc(100% - 32px);
+        }
+        header {
+          height: 68px;
+        }
+        .edition {
+          font-size: 10px;
+        }
+        .intro {
+          padding: 38px 0 26px;
+          display: block;
+        }
+        h1 {
+          letter-spacing: -1.3px;
+        }
+        .current {
+          display: inline-block;
+          margin-top: 20px;
+        }
+        .toolbar {
+          padding: 16px;
+          flex-direction: column;
+          gap: 14px;
+        }
+        .toolbar-actions {
+          justify-content: start;
+          gap: 8px;
+        }
+        .segmented button {
+          padding: 7px 10px;
+        }
+        .stage {
+          grid-template-columns: 1fr;
+        }
+        .logo-panel {
+          min-height: 210px;
+          padding: 55px 25px 34px;
+        }
+        .avatar-panel {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+          padding: 28px 22px;
+          flex-direction: row;
+          gap: 24px;
+        }
+        .large-avatar {
+          width: 145px;
+          height: 145px;
+          border-radius: 25px;
+          flex-shrink: 0;
+        }
+        .tiny-row {
+          gap: 17px;
+          flex-direction: column;
+          align-items: center;
+        }
+        .tiny-example {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+        }
+        .tiny-example .tiny-image {
+          max-width: 40px;
+          max-height: 40px;
+        }
+        .tiny-example small {
+          width: 17px;
+        }
+        .downloads {
+          padding: 16px;
+        }
+        .download-buttons {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          width: 100%;
+        }
+        .download-buttons button {
+          padding: 11px 8px;
+        }
+        .grid {
+          gap: 12px;
+        }
+        .option-art {
+          height: 135px;
+        }
+        .option-avatar {
+          width: 86px;
+          height: 86px;
+          border-radius: 18px;
+        }
+        .option-info {
+          padding: 12px;
+        }
+        .palette-dots {
+          padding: 0 12px 13px;
+        }
+        .options-head {
+          align-items: start;
+          margin-top: 33px;
+        }
+        .option-count {
+          display: none;
+        }
+        .footer {
+          flex-direction: column;
+          gap: 12px;
+          line-height: 1.6;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
+
+      .selection {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .selection select {
+        background: #22232b;
+        color: #f0edf6;
+        border: 1px solid #393943;
+        border-radius: 8px;
+        padding: 8px 28px 8px 10px;
+        font: inherit;
+        font-size: 12px;
+      }
+      .selected-name {
+        font-size: 11px;
+        color: #c9c5d2;
+      }
+      .selected-name span {
+        margin-left: 8px;
+      }
+      .interface-section {
+        margin-top: 4px;
+      }
+      .interface-section .options-head {
+        align-items: center;
+      }
+      .preview-swatches {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 17px;
+      }
+      .preview-swatches button {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 8px 11px;
+        background: #18191e;
+        color: #aaaab7;
+        font-size: 11px;
+      }
+      .preview-swatches button[aria-pressed='true'] {
+        border-color: var(--selected);
+        color: #faf8ff;
+        background: #27252e;
+      }
+      .preview-swatches i {
+        height: 8px;
+        width: 8px;
+        border-radius: 50%;
+        display: block;
+      }
+      .ui-frame {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        background: var(--ui-bg);
+        color: var(--ui-text);
+        font-size: 11px;
+      }
+      .demo-ui {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr);
+        min-height: 526px;
+      }
+      .demo-sidebar {
+        padding: 22px 16px;
+        background: var(--ui-sidebar);
+        border-right: 1px solid var(--ui-line);
+        display: flex;
+        flex-direction: column;
+        gap: 25px;
+      }
+      .demo-brand {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.5px;
+      }
+      .demo-brand svg {
+        width: 24px;
+        height: 24px;
+      }
+      .demo-project {
+        border: 1px solid var(--ui-line);
+        border-radius: 8px;
+        padding: 12px 10px;
+        display: flex;
+        gap: 9px;
+        align-items: center;
+      }
+      .demo-project .project-symbol {
+        background: var(--ui-soft);
+        color: var(--ui-accent);
+        padding: 7px;
+        border-radius: 6px;
+      }
+      .demo-project b {
+        display: block;
+        font-size: 10px;
+      }
+      .demo-project small {
+        display: block;
+        font-size: 9px;
+        margin-top: 5px;
+        color: var(--ui-muted);
+      }
+      .demo-nav {
+        display: grid;
+        gap: 5px;
+      }
+      .demo-nav div {
+        padding: 10px;
+        border-radius: 6px;
+        color: var(--ui-muted);
+        font-size: 10px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .demo-nav div.active {
+        background: var(--ui-soft);
+        color: var(--ui-accent);
+      }
+      .demo-sidebar-label {
+        font-size: 8px;
+        letter-spacing: 0.13em;
+        color: var(--ui-muted);
+        margin-bottom: 11px;
+      }
+      .demo-goal {
+        font-size: 10px;
+        line-height: 1.6;
+        color: var(--ui-muted);
+        padding: 9px;
+        border: 1px solid var(--ui-line);
+        border-radius: 6px;
+      }
+      .demo-profile {
+        margin-top: auto;
+        border-top: 1px solid var(--ui-line);
+        padding-top: 16px;
+        font-size: 9px;
+        color: var(--ui-muted);
+      }
+      .demo-main {
+        min-width: 0;
+      }
+      .demo-top {
+        border-bottom: 1px solid var(--ui-line);
+        height: 53px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+        color: var(--ui-muted);
+        font-size: 9px;
+      }
+      .demo-connected {
+        border: 1px solid var(--ui-line);
+        padding: 6px 9px;
+        border-radius: 5px;
+        color: var(--ui-accent);
+      }
+      .demo-content {
+        padding: 24px;
+      }
+      .demo-title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .demo-kicker {
+        font-size: 8px;
+        letter-spacing: 0.14em;
+        color: var(--ui-muted);
+        margin-bottom: 9px;
+      }
+      .demo-title {
+        font-size: 26px;
+        letter-spacing: -0.9px;
+        font-weight: 550;
+      }
+      .demo-subtitle {
+        font-size: 10px;
+        color: var(--ui-muted);
+        margin-top: 7px;
+      }
+      .demo-primary {
+        display: inline-block;
+        background: var(--ui-primary);
+        color: var(--ui-on-accent);
+        padding: 10px 13px;
+        border-radius: 6px;
+        font-size: 9px;
+        white-space: nowrap;
+        font-weight: 550;
+      }
+      .demo-tabs {
+        display: flex;
+        gap: 24px;
+        border-bottom: 1px solid var(--ui-line);
+        margin-top: 24px;
+        font-size: 9px;
+        color: var(--ui-muted);
+      }
+      .demo-tabs span {
+        padding-bottom: 12px;
+      }
+      .demo-tabs .active {
+        color: var(--ui-accent);
+        border-bottom: 2px solid var(--ui-accent);
+      }
+      .demo-run {
+        margin: 18px 0;
+        padding: 13px 15px;
+        border-radius: 8px;
+        background: var(--ui-panel);
+        border: 1px solid var(--ui-line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .demo-run b {
+        font-size: 10px;
+        font-weight: 500;
+      }
+      .demo-run small {
+        color: var(--ui-muted);
+        font-size: 8px;
+        display: block;
+        margin-bottom: 5px;
+      }
+      .demo-pill {
+        background: var(--ui-soft);
+        color: var(--ui-accent);
+        border-radius: 20px;
+        padding: 5px 9px;
+        font-size: 8px;
+        white-space: nowrap;
+      }
+      .demo-office {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 158px;
+        gap: 20px;
+      }
+      .demo-room {
+        min-height: 224px;
+        border: 1px solid var(--ui-line);
+        border-radius: 9px;
+        background: var(--ui-panel);
+        padding: 15px;
+      }
+      .demo-room-label {
+        font-size: 7px;
+        letter-spacing: 0.13em;
+        color: var(--ui-muted);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .demo-room-label i {
+        width: 4px;
+        height: 4px;
+        background: var(--ui-accent);
+      }
+      .demo-desks {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        padding: 33px 2px 19px;
+        position: relative;
+      }
+      .demo-desks:before {
+        content: '';
+        height: 1px;
+        background: var(--ui-line);
+        position: absolute;
+        left: 15%;
+        right: 15%;
+        top: 80px;
+      }
+      .demo-desk {
+        background: var(--ui-bg);
+        border: 1px solid var(--ui-line);
+        border-radius: 8px;
+        padding: 13px 11px;
+        width: 128px;
+        z-index: 1;
+      }
+      .demo-desk-icon {
+        background: var(--ui-soft);
+        border: 1px solid var(--ui-line);
+        color: var(--ui-accent);
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+        margin-bottom: 10px;
+      }
+      .demo-desk b {
+        font-size: 9px;
+        font-weight: 500;
+        display: block;
+      }
+      .demo-desk small {
+        font-size: 7px;
+        color: var(--ui-muted);
+        display: block;
+        margin-top: 5px;
+      }
+      .demo-desk-state {
+        font-size: 7px;
+        color: var(--ui-accent);
+        margin-top: 12px;
+      }
+      .demo-progress {
+        background: var(--ui-line);
+        height: 2px;
+        border-radius: 2px;
+        margin-top: 20px;
+      }
+      .demo-progress i {
+        width: 68%;
+        height: 2px;
+        display: block;
+        background: var(--ui-primary);
+      }
+      .demo-rail {
+        display: grid;
+        align-content: start;
+        gap: 9px;
+      }
+      .demo-rail h3 {
+        font-size: 10px;
+        font-weight: 500;
+        margin: 0 0 3px;
+      }
+      .demo-role {
+        border: 1px solid var(--ui-line);
+        border-radius: 6px;
+        background: var(--ui-panel);
+        padding: 10px;
+        display: flex;
+        gap: 8px;
+      }
+      .demo-role-icon {
+        color: var(--ui-accent);
+        font-size: 13px;
+      }
+      .demo-role b {
+        font-size: 8px;
+        font-weight: 500;
+        display: block;
+      }
+      .demo-role small {
+        display: block;
+        font-size: 7px;
+        color: var(--ui-muted);
+        margin-top: 4px;
+      }
+      .demo-note {
+        font-size: 8px;
+        color: var(--ui-muted);
+        margin-top: 4px;
+        line-height: 1.7;
+      }
+      .demo-caption {
+        display: flex;
+        justify-content: space-between;
+        padding: 13px 17px;
+        border-top: 1px solid var(--ui-line);
+        font-size: 9px;
+        color: var(--ui-muted);
+      }
+      .option-art {
+        position: relative;
+      }
+      .option-avatar {
+        position: absolute;
+        right: 17px;
+        bottom: 16px;
+        width: 55px;
+        height: 55px;
+        border-radius: 12px;
+        box-shadow: 0 6px 18px #0004;
+        border: 1px solid #ffffff17;
+      }
+      .mini-window {
+        width: calc(100% - 40px);
+        height: 116px;
+        border: 1px solid color-mix(in srgb, var(--mini-accent) 20%, transparent);
+        border-radius: 7px;
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        overflow: hidden;
+        background: var(--mini-bg);
+        box-shadow: 0 10px 20px #0002;
+      }
+      .mini-side {
+        background: var(--mini-panel);
+        padding: 10px 7px;
+        border-right: 1px solid color-mix(in srgb, var(--mini-accent) 10%, transparent);
+      }
+      .mini-side i {
+        display: block;
+        width: 10px;
+        height: 3px;
+        background: var(--mini-accent);
+        opacity: 0.3;
+        margin: 7px 0;
+        border-radius: 1px;
+      }
+      .mini-side i:first-child {
+        height: 9px;
+        margin-top: 0;
+        opacity: 1;
+      }
+      .mini-content {
+        padding: 11px;
+      }
+      .mini-top {
+        height: 4px;
+        width: 42%;
+        background: var(--mini-text);
+        border-radius: 1px;
+        opacity: 0.8;
+        margin-bottom: 9px;
+      }
+      .mini-tabs {
+        height: 2px;
+        background: var(--mini-accent);
+        width: 25%;
+        margin-bottom: 10px;
+      }
+      .mini-cards {
+        display: flex;
+        gap: 6px;
+      }
+      .mini-cards i {
+        display: block;
+        width: 29%;
+        height: 37px;
+        border-radius: 4px;
+        background: var(--mini-panel);
+        border: 1px solid color-mix(in srgb, var(--mini-accent) 17%, transparent);
+      }
+      .mini-cards i:before {
+        content: '';
+        display: block;
+        height: 6px;
+        width: 6px;
+        background: var(--mini-primary);
+        border-radius: 2px;
+        margin: 6px;
+      }
+      .mini-button {
+        width: 34px;
+        height: 7px;
+        border-radius: 2px;
+        background: var(--mini-primary);
+        margin-top: 8px;
+      }
+      .option-count {
+        font-variant-numeric: tabular-nums;
+      }
+      @media (max-width: 1050px) {
+        .demo-ui {
+          grid-template-columns: 150px minmax(0, 1fr);
+        }
+        .demo-sidebar {
+          padding: 20px 12px;
+        }
+        .demo-office {
+          grid-template-columns: 1fr;
+        }
+        .demo-rail {
+          display: none;
+        }
+        .demo-content {
+          padding: 20px;
+        }
+        .demo-desks {
+          padding-top: 28px;
+        }
+        .demo-title {
+          font-size: 23px;
+        }
+        .selection {
+          gap: 10px;
+        }
+      }
+      @media (max-width: 650px) {
+        .demo-ui {
+          grid-template-columns: 1fr;
+          min-height: auto;
+        }
+        .demo-sidebar {
+          display: none;
+        }
+        .demo-content {
+          padding: 16px;
+        }
+        .demo-top {
+          padding: 0 16px;
+        }
+        .demo-title {
+          font-size: 20px;
+        }
+        .demo-subtitle {
+          font-size: 9px;
+        }
+        .demo-tabs {
+          gap: 22px;
+        }
+        .demo-desks {
+          gap: 8px;
+          padding: 28px 0 14px;
+        }
+        .demo-desk {
+          padding: 10px 8px;
+          width: 32%;
+        }
+        .demo-desk b {
+          font-size: 8px;
+        }
+        .demo-desk small {
+          font-size: 6px;
+        }
+        .demo-room {
+          padding: 12px;
+        }
+        .demo-run {
+          padding: 11px;
+        }
+        .demo-run b {
+          font-size: 9px;
+        }
+        .demo-primary {
+          font-size: 8px;
+          padding: 9px;
+        }
+        .demo-caption {
+          font-size: 8px;
+          gap: 10px;
+        }
+        .interface-section .options-head {
+          align-items: start;
+          flex-direction: column;
+        }
+        .preview-swatches {
+          gap: 6px;
+        }
+        .preview-swatches button {
+          padding: 7px 9px;
+          font-size: 10px;
+        }
+        .option-art {
+          height: 142px;
+        }
+        .mini-window {
+          width: calc(100% - 20px);
+          height: 101px;
+          grid-template-columns: 21px 1fr;
+        }
+        .mini-side {
+          padding: 8px 5px;
+        }
+        .mini-content {
+          padding: 9px;
+        }
+        .mini-cards {
+          gap: 4px;
+        }
+        .mini-cards i {
+          height: 30px;
+        }
+        .option-avatar {
+          width: 40px;
+          height: 40px;
+          right: 11px;
+          bottom: 12px;
+          border-radius: 9px;
+        }
+        .selection select {
+          min-width: 100px;
+        }
+        .demo-caption span:last-child {
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand"><span id="header-mark"></span>Buro</div>
+      <span class="edition">BRAND EXPLORER / 01</span>
+    </header>
+    <main class="wrap">
+      <section class="intro">
+        <div>
+          <div class="eyebrow">Цвет и характер</div>
+          <h1>Выбираем образ Buro.</h1>
+          <p>
+            Логотип, аватар и макет интерфейса в девяти палитрах. Сравни цвета, фон и градиент,
+            затем скачай выбранный вариант.
+          </p>
+        </div>
+        <span class="current"><i></i>В приложении по умолчанию — Iris</span>
+      </section>
+      <section class="studio" aria-label="Предпросмотр брендинга">
+        <div class="toolbar">
+          <div class="selection">
+            <select id="palette-picker" aria-label="Палитра"></select>
+            <div class="selected-name" id="selected-name"></div>
+          </div>
+          <div class="toolbar-actions">
+            <div class="segmented" aria-label="Фон логотипа">
+              <button data-surface="dark" aria-pressed="true">Тёмный фон</button
+              ><button data-surface="light" aria-pressed="false">Светлый фон</button>
+            </div>
+            <div class="segmented" aria-label="Обрезка аватара">
+              <button data-shape="square" aria-pressed="true">Квадрат</button
+              ><button data-shape="circle" aria-pressed="false">Круг</button>
+            </div>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="logo-panel" id="logo-panel" data-surface="dark">
+            <span class="stage-label">Логотип / прозрачный фон</span>
+            <div class="large-logo" id="large-logo"></div>
+          </div>
+          <div class="avatar-panel">
+            <div class="large-avatar" id="large-avatar"></div>
+            <div class="tiny-row" id="tiny-row"></div>
+          </div>
+        </div>
+        <div class="downloads">
+          <div class="download-note">
+            Аватар скачивается квадратным: GitHub сам обрежет его. PNG — 1024 × 1024.
+          </div>
+          <div class="download-buttons">
+            <button data-export="logo-svg">Логотип SVG ↓</button
+            ><button data-export="logo-png">Логотип PNG ↓</button
+            ><button data-export="avatar-svg">Аватар SVG ↓</button
+            ><button data-export="avatar-png" class="primary">Аватар PNG ↓</button>
+          </div>
+        </div>
+      </section>
+      <div class="status" role="status" id="status"></div>
+      <section aria-label="Предпросмотр интерфейса" class="interface-section">
+        <div class="options-head">
+          <div>
+            <h2>Как выглядит интерфейс</h2>
+            <p>
+              Макет рабочего экрана с демонстрационными данными. Выбранная палитра применяется ко
+              всем панелям.
+            </p>
+          </div>
+          <div class="segmented">
+            <button data-preview-finish="solid">Однотонный</button
+            ><button data-preview-finish="gradient">Градиент</button>
+          </div>
+        </div>
+        <div
+          class="preview-swatches"
+          id="preview-swatches"
+          aria-label="Быстрый выбор палитры"
+        ></div>
+        <div class="ui-frame" id="ui-frame"></div>
+      </section>
+      <section aria-label="Варианты цветов">
+        <div class="options-head">
+          <div>
+            <h2>Палитры и градиенты</h2>
+            <p>Нажми на вариант, чтобы рассмотреть его крупнее.</p>
+          </div>
+          <span class="option-count">9 палитр · 18 вариантов</span>
+        </div>
+        <div class="grid" id="options"></div>
+      </section>
+      <footer class="footer">
+        <span>Один знак во всех вариантах. Настройки этой страницы не меняют тему приложения.</span
+        ><a href="./README.md">Файлы брендинга ↗</a>
+      </footer>
+    </main>
+    <script>
+      const paths = [
+        {
+          d: 'M13 9.2 L15 9.2 C17.0987 9.2 18.8 10.9013 18.8 13 L18.8 15 C18.8 17.0987 17.0987 18.8 15 18.8 L13 18.8 C10.9013 18.8 9.2 17.0987 9.2 15 L9.2 13 C9.2 10.9013 10.9013 9.2 13 9.2 Z M13 10.8 L15 10.8 C16.215 10.8 17.2 11.785 17.2 13 L17.2 15 C17.2 16.215 16.215 17.2 15 17.2 L13 17.2 C11.785 17.2 10.8 16.215 10.8 15 L10.8 13 C10.8 11.785 11.785 10.8 13 10.8 Z',
+          rule: 'evenodd',
+        },
+        {
+          d: 'M25 9.2 L27 9.2 C29.0987 9.2 30.8 10.9013 30.8 13 L30.8 15 C30.8 17.0987 29.0987 18.8 27 18.8 L25 18.8 C22.9013 18.8 21.2 17.0987 21.2 15 L21.2 13 C21.2 10.9013 22.9013 9.2 25 9.2 Z M25 10.8 L27 10.8 C28.215 10.8 29.2 11.785 29.2 13 L29.2 15 C29.2 16.215 28.215 17.2 27 17.2 L25 17.2 C23.785 17.2 22.8 16.215 22.8 15 L22.8 13 C22.8 11.785 23.785 10.8 25 10.8 Z',
+          rule: 'evenodd',
+        },
+        {
+          d: 'M13 21.2 L15 21.2 C17.0987 21.2 18.8 22.9013 18.8 25 L18.8 27 C18.8 29.0987 17.0987 30.8 15 30.8 L13 30.8 C10.9013 30.8 9.2 29.0987 9.2 27 L9.2 25 C9.2 22.9013 10.9013 21.2 13 21.2 Z M13 22.8 L15 22.8 C16.215 22.8 17.2 23.785 17.2 25 L17.2 27 C17.2 28.215 16.215 29.2 15 29.2 L13 29.2 C11.785 29.2 10.8 28.215 10.8 27 L10.8 25 C10.8 23.785 11.785 22.8 13 22.8 Z',
+          rule: 'evenodd',
+        },
+        {
+          d: 'M25 21.2 L27 21.2 C29.0987 21.2 30.8 22.9013 30.8 25 L30.8 27 C30.8 29.0987 29.0987 30.8 27 30.8 L25 30.8 C22.9013 30.8 21.2 29.0987 21.2 27 L21.2 25 C21.2 22.9013 22.9013 21.2 25 21.2 Z M25 22.8 L27 22.8 C28.215 22.8 29.2 23.785 29.2 25 L29.2 27 C29.2 28.215 28.215 29.2 27 29.2 L25 29.2 C23.785 29.2 22.8 28.215 22.8 27 L22.8 25 C22.8 23.785 23.785 22.8 25 22.8 Z',
+          rule: 'evenodd',
+        },
+        {
+          d: 'M13.2 18 L14.8 18 L14.8 22 L13.2 22 Z M25.2 18 L26.8 18 L26.8 22 L25.2 22 Z M18 13.2 L22 13.2 L22 14.8 L18 14.8 Z M18 25.2 L22 25.2 L22 26.8 L18 26.8 Z',
+          rule: 'nonzero',
+        },
+      ];
+      const wordmark =
+        'M98.864 43.84 L111.92 43.84 Q114.8 43.84 116.72 42.208 Q118.64 40.576 118.64 37.504 Q118.64 34.048 116.912 32.64 Q115.184 31.232 111.92 31.232 L98.864 31.232 Z M90.864 24.704 L113.072 24.704 Q119.216 24.704 122.928 27.52 Q126.64 30.336 126.64 36.032 Q126.64 39.488 124.944 41.952 Q123.248 44.416 120.112 45.76 L120.112 45.888 Q124.336 46.784 126.512 49.888 Q128.688 52.992 128.688 57.664 Q128.688 60.352 127.728 62.688 Q126.768 65.024 124.72 66.72 Q122.672 68.416 119.472 69.408 Q116.272 70.4 111.856 70.4 L90.864 70.4 Z M98.864 63.872 L113.008 63.872 Q116.656 63.872 118.672 61.984 Q120.688 60.096 120.688 56.64 Q120.688 53.248 118.672 51.424 Q116.656 49.6 113.008 49.6 L98.864 49.6 Z M164.552 70.4 L157.384 70.4 L157.384 65.792 L157.256 65.792 Q155.912 68.288 153.256 69.792 Q150.6 71.296 147.848 71.296 Q141.32 71.296 138.408 68.064 Q135.496 64.832 135.496 58.304 L135.496 37.312 L142.792 37.312 L142.792 57.6 Q142.792 61.952 144.456 63.744 Q146.12 65.536 149.128 65.536 Q151.432 65.536 152.968 64.832 Q154.504 64.128 155.464 62.944 Q156.424 61.76 156.84 60.096 Q157.256 58.432 157.256 56.512 L157.256 37.312 L164.552 37.312 Z M172.832 37.312 L179.68 37.312 L179.68 43.712 L179.808 43.712 Q180.128 42.368 181.056 41.088 Q181.984 39.808 183.296 38.752 Q184.608 37.696 186.208 37.056 Q187.808 36.416 189.472 36.416 Q190.752 36.416 191.232 36.48 Q191.712 36.544 192.224 36.608 L192.224 43.648 Q191.456 43.52 190.656 43.424 Q189.856 43.328 189.088 43.328 Q187.232 43.328 185.6 44.064 Q183.968 44.8 182.752 46.24 Q181.536 47.68 180.832 49.792 Q180.128 51.904 180.128 54.656 L180.128 70.4 L172.832 70.4 Z M209.976 71.296 Q206.008 71.296 202.904 69.984 Q199.8 68.672 197.656 66.368 Q195.512 64.064 194.392 60.864 Q193.272 57.664 193.272 53.824 Q193.272 50.048 194.392 46.848 Q195.512 43.648 197.656 41.344 Q199.8 39.04 202.904 37.728 Q206.008 36.416 209.976 36.416 Q213.944 36.416 217.048 37.728 Q220.152 39.04 222.296 41.344 Q224.44 43.648 225.56 46.848 Q226.68 50.048 226.68 53.824 Q226.68 57.664 225.56 60.864 Q224.44 64.064 222.296 66.368 Q220.152 68.672 217.048 69.984 Q213.944 71.296 209.976 71.296 Z M209.976 65.536 Q212.408 65.536 214.2 64.512 Q215.992 63.488 217.144 61.824 Q218.296 60.16 218.84 58.08 Q219.384 56 219.384 53.824 Q219.384 51.712 218.84 49.6 Q218.296 47.488 217.144 45.856 Q215.992 44.224 214.2 43.2 Q212.408 42.176 209.976 42.176 Q207.544 42.176 205.752 43.2 Q203.96 44.224 202.808 45.856 Q201.656 47.488 201.112 49.6 Q200.568 51.712 200.568 53.824 Q200.568 56 201.112 58.08 Q201.656 60.16 202.808 61.824 Q203.96 63.488 205.752 64.512 Q207.544 65.536 209.976 65.536 Z';
+      const palettes = {
+        iris: {
+          name: 'Iris',
+          description: 'Лаванда и слива',
+          dark: '#1a1720',
+          panel: '#24212d',
+          light: '#f7f4fb',
+          ink: '#30243f',
+          text: '#ede7f5',
+          accent: '#c6b5e8',
+          solid: '#755199',
+          gradient: ['#e6d9ff', '#bda4ee', '#a6b9f6'],
+          deep: ['#3b285b', '#241c36', '#14131f'],
+          lightGradient: ['#9361c2', '#755199', '#465da3'],
+        },
+        ocean: {
+          name: 'Ocean',
+          description: 'Голубой и глубокий синий',
+          dark: '#111b22',
+          panel: '#192731',
+          light: '#f1f7fa',
+          ink: '#193544',
+          text: '#e1edf5',
+          accent: '#99cddd',
+          solid: '#286d87',
+          gradient: ['#c7eff1', '#8bcada', '#a5b8f0'],
+          deep: ['#173e51', '#152b3c', '#111722'],
+          lightGradient: ['#348b9d', '#286d87', '#4b5aa4'],
+        },
+        graphite: {
+          name: 'Graphite',
+          description: 'Серебро и графит',
+          dark: '#15181d',
+          panel: '#1d222a',
+          light: '#f2f5f8',
+          ink: '#202c3b',
+          text: '#e7edf5',
+          accent: '#becddd',
+          solid: '#4b6582',
+          gradient: ['#eef3f9', '#b7c8dc', '#8fa5c6'],
+          deep: ['#364354', '#202936', '#13171e'],
+          lightGradient: ['#6b819d', '#4b6582', '#3b4d69'],
+        },
+        sage: {
+          name: 'Sage',
+          description: 'Шалфей и хвоя',
+          dark: '#14191a',
+          panel: '#1b2222',
+          light: '#f3f6f1',
+          ink: '#202c22',
+          text: '#e8eee7',
+          accent: '#bad3a2',
+          solid: '#496d35',
+          gradient: ['#dbe9b8', '#afd0a0', '#88c5b5'],
+          deep: ['#304b3b', '#1e302a', '#111b1c'],
+          lightGradient: ['#739542', '#496d35', '#33796b'],
+        },
+      };
+      Object.assign(palettes, {
+        amber: {
+          name: 'Amber',
+          description: 'Янтарь и тёплое дерево',
+          dark: '#211a12',
+          panel: '#2d2419',
+          light: '#fbf6ed',
+          ink: '#42311e',
+          text: '#f4eadb',
+          accent: '#e7bf82',
+          solid: '#a06b25',
+          gradient: ['#ffe3ae', '#e8b66f', '#df9266'],
+          deep: ['#513b20', '#30271b', '#1a1713'],
+          lightGradient: ['#b17928', '#a06b25', '#a35538'],
+        },
+        coral: {
+          name: 'Coral',
+          description: 'Коралл и тёмная глина',
+          dark: '#211718',
+          panel: '#2e2022',
+          light: '#fcf4f1',
+          ink: '#44292a',
+          text: '#f5e7e2',
+          accent: '#eead9d',
+          solid: '#a74e46',
+          gradient: ['#ffd6b9', '#eead9d', '#df8da7'],
+          deep: ['#503137', '#302025', '#1c151c'],
+          lightGradient: ['#be6b4e', '#a74e46', '#a04470'],
+        },
+        cobalt: {
+          name: 'Cobalt',
+          description: 'Кобальт и ночной синий',
+          dark: '#131a2b',
+          panel: '#1b2540',
+          light: '#f2f5ff',
+          ink: '#233357',
+          text: '#e7edff',
+          accent: '#a6bbff',
+          solid: '#3e60b4',
+          gradient: ['#d1dfff', '#9aaeff', '#8a97e9'],
+          deep: ['#263d6d', '#1b294a', '#101725'],
+          lightGradient: ['#527fd3', '#3e60b4', '#6251a9'],
+        },
+        rose: {
+          name: 'Rose',
+          description: 'Пыльная роза и вино',
+          dark: '#21151e',
+          panel: '#30202b',
+          light: '#fbf2f7',
+          ink: '#452b3d',
+          text: '#f4e6ef',
+          accent: '#e4aeca',
+          solid: '#9c4d78',
+          gradient: ['#f9d4e5', '#dea6c9', '#b8a0d8'],
+          deep: ['#503048', '#321e30', '#1b1420'],
+          lightGradient: ['#b9618b', '#9c4d78', '#75599b'],
+        },
+        sand: {
+          name: 'Sand',
+          description: 'Песок и тёплый графит',
+          dark: '#201d18',
+          panel: '#2d2922',
+          light: '#faf7f1',
+          ink: '#3d352a',
+          text: '#eee9dd',
+          accent: '#d3c2a0',
+          solid: '#806b43',
+          gradient: ['#f0e7ce', '#cdbb98', '#b4b298'],
+          deep: ['#484035', '#2c2922', '#1b1a16'],
+          lightGradient: ['#9e8b65', '#806b43', '#687258'],
+        },
+      });
+      let state = { palette: 'iris', finish: 'gradient', surface: 'dark', shape: 'square' };
+      const initial = location.hash.slice(1).split('-');
+      if (palettes[initial[0]] && ['solid', 'gradient'].includes(initial[1])) {
+        state.palette = initial[0];
+        state.finish = initial[1];
+      }
+      let serial = 0;
+      const esc = (text) =>
+        text.replace(
+          /[&<>"']/g,
+          (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c],
+        );
+      function transformPath(d, scale = 1, tx = 0, ty = 0) {
+        let i = 0;
+        return d.replace(/-?\d+(?:\.\d+)?/g, (n) => {
+          const v = Number(n) * scale + (i++ % 2 ? ty : tx);
+          return Number(v.toFixed(4));
+        });
+      }
+      function symbol(fill, scale = 1, tx = 0, ty = 0) {
+        return paths
+          .map(
+            (p) =>
+              `<path fill="${fill}" fill-rule="${p.rule}" d="${transformPath(p.d, scale, tx, ty)}"/>`,
+          )
+          .join('');
+      }
+      function linear(id, colors, bounds) {
+        const coordinates = bounds
+          ? `gradientUnits="userSpaceOnUse" x1="${bounds[0]}" y1="${bounds[1]}" x2="${bounds[2]}" y2="${bounds[3]}"`
+          : 'x1="0" y1="0" x2="1" y2="1"';
+        return `<linearGradient id="${id}" ${coordinates}>${colors.map((color, i) => `<stop offset="${i / (colors.length - 1)}" stop-color="${color}"/>`).join('')}</linearGradient>`;
+      }
+      function artwork(
+        kind,
+        palette = state.palette,
+        finish = state.finish,
+        surface = state.surface,
+      ) {
+        const p = palettes[palette],
+          id = 'buro-' + ++serial,
+          grad = finish === 'gradient';
+        let defs = grad
+          ? linear(
+              id + '-mark',
+              kind === 'logo' && surface === 'light' ? p.lightGradient : p.gradient,
+              kind === 'logo' ? [24, 24, 72, 72] : [208, 208, 816, 816],
+            )
+          : '';
+        const fill = grad
+          ? `url(#${id}-mark)`
+          : kind === 'logo' && surface === 'light'
+            ? p.solid
+            : p.accent;
+        let body, width, height, viewbox;
+        if (kind === 'avatar') {
+          width = height = 1024;
+          viewbox = '0 0 1024 1024';
+          if (grad) {
+            defs += linear(id + '-bg', p.deep);
+            defs += `<radialGradient id="${id}-glow" cx=".22" cy=".1" r=".85"><stop stop-color="${p.accent}" stop-opacity=".14"/><stop offset="1" stop-color="${p.accent}" stop-opacity="0"/></radialGradient>`;
+          }
+          body =
+            `<rect width="1024" height="1024" fill="${grad ? `url(#${id}-bg)` : p.dark}"/>` +
+            (grad ? `<rect width="1024" height="1024" fill="url(#${id}-glow)"/>` : '') +
+            symbol(fill, 28.16, -51.2, -51.2);
+        } else {
+          width = 908;
+          height = 384;
+          viewbox = '12 0 227 96';
+          body =
+            symbol(fill, 2.2, 4, 4) +
+            `<path fill="${surface === 'light' ? p.ink : p.text}" d="${wordmark}"/>`;
+        }
+        return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${viewbox}" role="img" aria-label="Buro ${esc(p.name)} ${finish}"><title>Buro ${esc(p.name)} ${finish}</title>${defs ? `<defs>${defs}</defs>` : ''}${body}</svg>`;
+      }
+      const finishLabel = (finish) => (finish === 'gradient' ? 'Градиент' : 'Однотонный');
+      function miniInterface(p, finish) {
+        const primary =
+          finish === 'gradient' ? `linear-gradient(135deg,${p.gradient.join(',')})` : p.accent;
+        return `<div class="mini-window" style="--mini-bg:${p.dark};--mini-panel:${p.panel};--mini-accent:${p.accent};--mini-text:${p.text};--mini-primary:${primary}"><div class="mini-side"><i></i><i></i><i></i><i></i></div><div class="mini-content"><div class="mini-top"></div><div class="mini-tabs"></div><div class="mini-cards"><i></i><i></i><i></i></div><div class="mini-button"></div></div></div>`;
+      }
+      function renderOptions() {
+        document.getElementById('options').innerHTML = Object.entries(palettes)
+          .flatMap(([key, p]) =>
+            ['solid', 'gradient'].map(
+              (finish) =>
+                `<button class="option" data-palette="${key}" data-finish="${finish}" aria-label="${p.name} — ${finishLabel(finish)}" aria-pressed="${state.palette === key && state.finish === finish}"><div class="option-art" style="background:${p.dark}">${miniInterface(p, finish)}<div class="option-avatar">${artwork('avatar', key, finish)}</div></div><div class="option-info"><div><strong>${p.name} / ${finishLabel(finish)}</strong><small>${p.description}</small></div><span class="check" aria-hidden="true">✓</span></div><div class="palette-dots">${[p.dark, p.solid, p.accent, p.text].map((c) => `<i style="background:${c}"></i>`).join('')}</div></button>`,
+            ),
+          )
+          .join('');
+      }
+      function renderInterface() {
+        const p = palettes[state.palette],
+          light = state.surface === 'light';
+        const primary =
+          state.finish === 'gradient'
+            ? `linear-gradient(135deg,${(light ? p.lightGradient : p.gradient).join(',')})`
+            : light
+              ? p.solid
+              : p.accent;
+        const frame = document.getElementById('ui-frame');
+        const vars = {
+          bg: light ? p.light : p.dark,
+          panel: light ? '#ffffff' : p.panel,
+          sidebar: light
+            ? `color-mix(in srgb,${p.solid} 7%,${p.light})`
+            : `color-mix(in srgb,${p.dark} 85%,black)`,
+          text: light ? p.ink : p.text,
+          muted: light
+            ? `color-mix(in srgb,${p.ink} 68%,${p.light})`
+            : `color-mix(in srgb,${p.text} 60%,${p.dark})`,
+          line: light
+            ? `color-mix(in srgb,${p.solid} 20%,${p.light})`
+            : `color-mix(in srgb,${p.accent} 20%,${p.dark})`,
+          accent: light ? p.solid : p.accent,
+          soft: `color-mix(in srgb,${light ? p.solid : p.accent} 10%,${light ? p.light : p.dark})`,
+          primary: primary,
+          'on-accent': light ? '#ffffff' : p.dark,
+        };
+        for (const [key, value] of Object.entries(vars))
+          frame.style.setProperty('--ui-' + key, value);
+        frame.innerHTML = `<div class="demo-ui"><aside class="demo-sidebar"><div class="demo-brand"><svg viewBox="8 8 24 24">${symbol(light ? p.solid : p.accent)}</svg>Buro</div><div class="demo-project"><span class="project-symbol">◇</span><div><b>Пример проекта</b><small>Локальный проект</small></div></div><div><div class="demo-sidebar-label">ПРОЕКТ</div><div class="demo-nav"><div class="active">◈ <span>Офис</span></div><div>◎ <span>Цели</span></div><div>◷ <span>Запуски</span></div><div>♧ <span>Команда</span></div></div></div><div><div class="demo-sidebar-label">ТЕКУЩАЯ ЦЕЛЬ</div><div class="demo-goal">Поиск в журнале событий</div></div><div class="demo-profile">Настройки проекта<br><br>Локальный пользователь</div></aside><div class="demo-main"><div class="demo-top"><span>Проекты　›　Пример проекта　›　Офис</span><span class="demo-connected">● Сервис подключён</span></div><div class="demo-content"><div class="demo-title-row"><div><div class="demo-kicker">РАБОЧЕЕ ПРОСТРАНСТВО</div><div class="demo-title">Пример проекта.</div><div class="demo-subtitle">Твой проект. Его цели. Команда агентов.</div></div><span class="demo-primary">＋ Новая цель</span></div><div class="demo-tabs"><span class="active">Офис</span><span>Цели</span><span>Запуски</span><span>Команда</span></div><div class="demo-run"><div><small>КОНТЕКСТ ОФИСА · GOAL-001</small><b>Поиск в журнале событий</b></div><span class="demo-pill">В работе</span></div><div class="demo-office"><div class="demo-room"><div class="demo-room-label"><i></i>ПРИМЕР ПРОЕКТА · РАБОЧИЕ МЕСТА</div><div class="demo-desks">${[
+          ['⌘', 'Разработчик', 'Реализация'],
+          ['✓', 'Тестировщик', 'Проверки'],
+          ['◇', 'Ревьюер', 'Ревью'],
+        ]
+          .map(
+            ([icon, name, task], i) =>
+              `<div class="demo-desk"><div class="demo-desk-icon">${icon}</div><b>${name}</b><small>${task}</small><div class="demo-desk-state">${i === 2 ? '○ Ожидает' : '● Работает'}</div></div>`,
+          )
+          .join(
+            '',
+          )}</div><div class="demo-progress"><i></i></div></div><div class="demo-rail"><h3>Команда проекта</h3>${[
+          ['⌘', 'Разработчик', 'implementer'],
+          ['✓', 'Тестировщик', 'test_author'],
+          ['◇', 'Ревьюер', 'reviewer'],
+        ]
+          .map(
+            ([icon, name, id]) =>
+              `<div class="demo-role"><span class="demo-role-icon">${icon}</span><div><b>${name}</b><small>${id}</small></div></div>`,
+          )
+          .join(
+            '',
+          )}<div class="demo-note">Координатор объединяет<br>результаты команды.</div></div></div></div></div></div><div class="demo-caption"><span>Макет · демонстрационные данные</span><span>${p.name} / ${finishLabel(state.finish)}</span></div>`;
+        document.getElementById('preview-swatches').innerHTML = Object.entries(palettes)
+          .map(
+            ([key, p]) =>
+              `<button data-palette="${key}" data-finish="${state.finish}" aria-pressed="${key === state.palette}"><i style="background:${p.accent}"></i>${p.name}</button>`,
+          )
+          .join('');
+        document.getElementById('palette-picker').innerHTML = Object.entries(palettes)
+          .map(
+            ([key, p]) =>
+              `<option value="${key}" ${key === state.palette ? 'selected' : ''}>${p.name}</option>`,
+          )
+          .join('');
+        for (const button of document.querySelectorAll('[data-preview-finish]'))
+          button.setAttribute(
+            'aria-pressed',
+            String(button.dataset.previewFinish === state.finish),
+          );
+      }
+      function render() {
+        const p = palettes[state.palette];
+        document.documentElement.style.setProperty('--selected', p.accent);
+        document.getElementById('selected-name').innerHTML =
+          p.name + `<span>${finishLabel(state.finish)}</span>`;
+        const panel = document.getElementById('logo-panel');
+        panel.style.background = state.surface === 'dark' ? p.dark : p.light;
+        panel.dataset.surface = state.surface;
+        document.getElementById('large-logo').innerHTML = artwork('logo');
+        const avatar = document.getElementById('large-avatar');
+        avatar.innerHTML = artwork('avatar');
+        avatar.classList.toggle('circle', state.shape === 'circle');
+        document.getElementById('tiny-row').classList.toggle('round', state.shape === 'circle');
+        document.getElementById('tiny-row').innerHTML = [64, 40, 24]
+          .map(
+            (size) =>
+              `<div class="tiny-example"><div class="tiny-image" style="width:${size}px;height:${size}px">${artwork('avatar')}</div><small>${size}px</small></div>`,
+          )
+          .join('');
+        for (const button of document.querySelectorAll('[data-surface]'))
+          if (button.tagName === 'BUTTON')
+            button.setAttribute('aria-pressed', String(button.dataset.surface === state.surface));
+        for (const button of document.querySelectorAll('[data-shape]'))
+          button.setAttribute('aria-pressed', String(button.dataset.shape === state.shape));
+        document.getElementById('status').textContent = '';
+        renderOptions();
+        renderInterface();
+        history.replaceState(null, '', '#' + state.palette + '-' + state.finish);
+      }
+      function download(blob, filename) {
+        const url = URL.createObjectURL(blob),
+          a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.append(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
+      async function exportAsset(button) {
+        const [kind, format] = button.dataset.export.split('-'),
+          svg = artwork(kind),
+          filename = `buro-${kind}-${state.palette}-${state.finish}${kind === 'logo' ? '-' + state.surface : ''}`;
+        button.disabled = true;
+        try {
+          if (format === 'svg')
+            download(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), filename + '.svg');
+          else {
+            const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }),
+              url = URL.createObjectURL(blob),
+              image = new Image();
+            try {
+              await new Promise((resolve, reject) => {
+                image.onload = resolve;
+                image.onerror = () => reject(new Error('Не удалось отрисовать SVG.'));
+                image.src = url;
+              });
+              const canvas = document.createElement('canvas');
+              canvas.width = kind === 'avatar' ? 1024 : 1816;
+              canvas.height = kind === 'avatar' ? 1024 : 768;
+              canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+              const png = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+              if (!png) throw new Error('Не удалось создать PNG.');
+              download(png, filename + '.png');
+            } finally {
+              URL.revokeObjectURL(url);
+            }
+          }
+          document.getElementById('status').textContent = 'Скачан ' + filename + '.' + format;
+        } catch (error) {
+          document.getElementById('status').textContent = error.message;
+        } finally {
+          button.disabled = false;
+        }
+      }
+      document.addEventListener('click', (event) => {
+        const button = event.target.closest('button');
+        if (!button) return;
+        if (button.dataset.palette) {
+          state.palette = button.dataset.palette;
+          state.finish = button.dataset.finish;
+          render();
+        } else if (button.dataset.previewFinish) {
+          state.finish = button.dataset.previewFinish;
+          render();
+        } else if (button.dataset.surface) {
+          state.surface = button.dataset.surface;
+          render();
+        } else if (button.dataset.shape) {
+          state.shape = button.dataset.shape;
+          render();
+        } else if (button.dataset.export) void exportAsset(button);
+      });
+      document.getElementById('palette-picker').addEventListener('change', (event) => {
+        state.palette = event.target.value;
+        render();
+      });
+      document.getElementById('header-mark').innerHTML =
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 24 24" aria-hidden="true">${symbol('#c6b5e8')}</svg>`;
+      render();
+    </script>
+  </body>
+</html>

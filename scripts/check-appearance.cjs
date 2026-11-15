@@ -14,6 +14,23 @@ const fs = require('node:fs/promises');
     await page.locator('.office-canvas').waitFor();
     await page.getByRole('button', { name: 'Open user settings', exact: true }).click();
     await page.getByRole('heading', { name: 'User settings', exact: true }).waitFor();
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Theme Iris', exact: true })
+        .getAttribute('aria-pressed'),
+      'true',
+    );
+    await page.evaluate(() =>
+      localStorage.setItem('project-panel-theme', JSON.stringify('unknown')),
+    );
+    await page.reload();
+    await page.getByRole('button', { name: 'User settings', exact: true }).click();
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Theme Iris', exact: true })
+        .getAttribute('aria-pressed'),
+      'true',
+    );
     assert.equal(await page.locator('.theme-preview').count(), 4);
     assert.equal(
       await page.getByRole('textbox', { name: 'Time policy · TODO', exact: true }).isDisabled(),
@@ -118,7 +135,7 @@ const fs = require('node:fs/promises');
     await page.waitForFunction(
       () => document.documentElement.dataset.mantineColorScheme === 'dark',
     );
-    await page.getByRole('button', { name: 'Theme Sage', exact: true }).click();
+    await page.getByRole('button', { name: 'Theme Iris', exact: true }).click();
     await page.getByRole('button', { name: 'Dark', exact: true }).click();
     await page.screenshot({ path: 'artifacts/themes-dark.png' });
     await page.locator('.sidebar').getByRole('button', { name: 'Office', exact: true }).click();
@@ -149,6 +166,7 @@ const fs = require('node:fs/promises');
     assert.deepEqual(errors, []);
     const result = {
       passed: [
+        'Iris is the default palette and the fallback for an unknown saved theme',
         'avatar opens appearance settings',
         'four palette previews',
         'eight palette/scheme combinations have readable panel text',
