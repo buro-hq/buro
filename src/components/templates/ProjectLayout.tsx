@@ -7,7 +7,6 @@ import {
   Circle,
   CircleCheck,
   Clock3,
-  Command,
   Folder,
   FolderGit2,
   GitBranch,
@@ -25,6 +24,7 @@ import { useProject } from '../../data/provider';
 import { isTerminal } from '../../model';
 import { compactKey } from '../../ui/format';
 import { ProjectPicker } from '../organisms/ProjectPicker';
+import { BrandMark } from '../atoms/BrandMark';
 export type ProjectPage =
   | 'office'
   | 'goals'
@@ -100,7 +100,7 @@ export function ProjectLayout({
     <>
       <button className="brand" onClick={() => go('office')}>
         <span className="brand-mark">
-          <Command size={21} />
+          <BrandMark size={28} />
         </span>
         <span>
           Buro<span className="brand-version">LOCAL WORKSPACE</span>
@@ -323,7 +323,7 @@ export function ProjectLayout({
             {children}
             <footer className="workspace-footer">
               <span>
-                <Command size={12} />
+                <BrandMark size={12} />
                 Buro <span className="muted">{t('/ local agent office')}</span>
               </span>
               <span>{t('React · Mantine · local agent office')}</span>
