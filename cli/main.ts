@@ -2,6 +2,7 @@ import { runPerformance } from '../protocol/performance.ts';
 import { readFile } from 'node:fs/promises';
 import type { Project, ProjectProfile, RepositoryInfo } from '../protocol/domain.ts';
 import { ProjectProfileSchema } from '../protocol/projects.ts';
+import { ResourceConnectionSchema } from '../protocol/resources.ts';
 import { SocketProjectClient } from '../clients/socket-client.ts';
 const [command = 'status', ...args] = process.argv.slice(2);
 const client = new SocketProjectClient(
@@ -49,7 +50,18 @@ try {
       result = await client.command({ method: 'resources.probe', params: { runtimeId: args[1] } });
     else if (subcommand === 'use' && args[1])
       result = await client.command({ method: 'resources.use', params: { profileId: args[1] } });
-    else throw Error('Use resources list|init|models CONNECTION|probe RUNTIME|use PROFILE.');
+    else if (subcommand === 'connection-save' && args[1]) {
+      const connection = ResourceConnectionSchema.parse(
+        JSON.parse(await readFile(args[1], 'utf8')),
+      );
+      result = await client.command({
+        method: 'resources.connection.save',
+        params: { connection, expectedRevision: args[2] || null },
+      });
+    } else
+      throw Error(
+        'Use resources list|init|models CONNECTION|probe RUNTIME|use PROFILE|connection-save FILE [REVISION].',
+      );
     console.log(JSON.stringify(result, null, 2));
   } else if (command === 'projects')
     console.log(
@@ -333,7 +345,7 @@ try {
     );
   } else
     throw Error(
-      'Commands: status | resources list/init/models <connection>/probe <runtime>/use <profile> | projects | project inspect/connect <path> [profile.json] | project research [status|cancel] | project info/configure <profile.json>/verify [checks] | run apply <runId> | run preview <runId> [stop|restart] | run deliver <runId> [--confirm] [--redeploy] | goals | roles | runs | goal create <title> <body> [criteria] [--repair-environment] [--parent=R-ID] [--result=pr|local|deploy:environment] | run start <goalId> [check1,check2] | run cancel/show/watch/timings <runId>',
+      'Commands: status | resources list/init/models <connection>/probe <runtime>/use <profile>/connection-save <file.json> [revision] | projects | project inspect/connect <path> [profile.json] | project research [status|cancel] | project info/configure <profile.json>/verify [checks] | run apply <runId> | run preview <runId> [stop|restart] | run deliver <runId> [--confirm] [--redeploy] | goals | roles | runs | goal create <title> <body> [criteria] [--repair-environment] [--parent=R-ID] [--result=pr|local|deploy:environment] | run start <goalId> [check1,check2] | run cancel/show/watch/timings <runId>',
     );
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

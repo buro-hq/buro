@@ -21,14 +21,27 @@ const { chromium, expect } = require('@playwright/test');
     generations = 0,
     port = 0;
   let failNextCatalog = false;
+  let failConnectionSave = false;
   const errors = [];
   try {
     await privateFiles.save('resources', {
       version: 1,
       defaultProfile: 'codex',
       connections: [
-        { id: 'ollama', kind: 'ollama', endpoint: 'http://127.0.0.1:11434' },
-        { id: 'deepseek', kind: 'deepseek', apiKeyEnv: 'BURO_UI_FAKE_MISSING_KEY' },
+        {
+          id: 'ollama',
+          kind: 'ollama',
+          endpoint: 'http://127.0.0.1:11434',
+          think: 'high',
+          capacity: 2,
+        },
+        {
+          id: 'deepseek',
+          kind: 'deepseek',
+          apiKeyEnv: 'BURO_UI_FAKE_MISSING_KEY',
+          thinking: 'enabled',
+          capacity: 3,
+        },
       ],
       runtimes: [
         { id: 'codex', client: 'codex' },
@@ -153,6 +166,12 @@ const { chromium, expect } = require('@playwright/test');
       },
     });
     const catalogHandler = host.ctx.commands.bus.handlers.get('resources.list');
+    const saveConnectionHandler = host.ctx.commands.bus.handlers.get('resources.connection.save');
+    host.ctx.commands.bus.handlers.set('resources.connection.save', (...args) => {
+      if (failConnectionSave)
+        throw new DomainError('FIXTURE_SAVE_UNAVAILABLE', 'Fixture connection save unavailable');
+      return saveConnectionHandler(...args);
+    });
     host.ctx.commands.bus.handlers.set('resources.list', (...args) => {
       if (failNextCatalog) {
         throw new DomainError('FIXTURE_CATALOG_UNAVAILABLE', 'Fixture catalog unavailable');
@@ -191,9 +210,7 @@ const { chromium, expect } = require('@playwright/test');
     assert.equal((await privateFiles.load('resources')).defaultProfile, 'local');
     assert.equal(generations, 0, 'Changing the default never starts model inference');
     await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
-    const ollama = page
-      .locator('.mantine-Paper-root')
-      .filter({ has: page.getByText('Ollama', { exact: true }) });
+    const ollama = page.locator('[data-connection-id="ollama"]');
     await ollama.getByRole('button', { name: 'Available models', exact: true }).click();
     await page.getByText('fixture-coder · fixture-helper', { exact: true }).waitFor();
     assert.equal(modelsRequested, 1);
@@ -447,6 +464,184 @@ const { chromium, expect } = require('@playwright/test');
     await dialog.locator('.mantine-Modal-close').click();
     assert.equal(modelsRequested, 1, 'Role editing never discovers provider models');
     assert.equal(generations, 2, 'Role editing, model selection and role.save never run inference');
+    // API settings only persist a pending configuration. They never contact a provider.
+    const beforeConnections = await privateFiles.load('resources');
+    const activeWorker = structuredClone(
+      host.ctx.agentRuntime.selection.forProject('codex-panel').worker,
+    );
+    await page.getByRole('button', { name: 'User settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await page.getByRole('button', { name: 'Add API connection', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Connection ID', exact: true }).fill('rtx-fixture');
+    await dialog
+      .getByRole('textbox', { name: 'API base URL', exact: true })
+      .fill('file:///tmp/model');
+    await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
+    await dialog.getByRole('alert').filter({ hasText: 'Enter an HTTP or HTTPS API URL' }).waitFor();
+    assert.deepEqual(
+      (await privateFiles.load('resources')).connections,
+      beforeConnections.connections,
+    );
+    await dialog
+      .getByRole('textbox', { name: 'API base URL', exact: true })
+      .fill('http://192.168.1.10:11434');
+    await dialog.getByRole('textbox', { name: 'Server location', exact: true }).click();
+    await page.getByRole('option', { name: 'My server · private network', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Advanced connection settings', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Concurrent model requests', exact: true }).fill('2');
+    await dialog.getByRole('textbox', { name: 'Model reasoning', exact: true }).click();
+    await page.getByRole('option', { name: 'Disabled', exact: true }).click();
+    failConnectionSave = true;
+    await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
+    await dialog.getByText('Fixture connection save unavailable', { exact: true }).waitFor();
+    await expect(dialog.getByRole('textbox', { name: 'Connection ID', exact: true })).toHaveValue(
+      'rtx-fixture',
+    );
+    failConnectionSave = false;
+    await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    const newConnection = page.locator('[data-connection-id="rtx-fixture"]');
+    await newConnection.getByText('Restart required', { exact: true }).waitFor();
+    await expect(
+      newConnection.getByRole('button', { name: 'Available models', exact: true }),
+    ).toBeDisabled();
+    const persistedNew = (await privateFiles.load('resources')).connections.find(
+      (connection) => connection.id === 'rtx-fixture',
+    );
+    assert.equal(persistedNew.endpoint, 'http://192.168.1.10:11434');
+    assert.equal(persistedNew.trust, 'private-network');
+    assert.equal(persistedNew.capacity, 2);
+    assert.equal(persistedNew.think, false);
+    await expect(
+      ollama.getByRole('button', { name: 'Available models', exact: true }),
+    ).toBeEnabled();
+    // Keep the revision from opening the form, even if another writer saves while it is open.
+    await page.getByRole('button', { name: 'Edit connection ollama', exact: true }).click();
+    await expect(
+      dialog.getByRole('textbox', { name: 'Connection ID', exact: true }),
+    ).toBeDisabled();
+    await expect(dialog.getByRole('textbox', { name: 'API provider', exact: true })).toBeDisabled();
+    await dialog
+      .getByRole('textbox', { name: 'API base URL', exact: true })
+      .fill('http://192.168.1.20:11434');
+    const catalogBeforeConcurrentEdit = await catalogHandler({});
+    const originalOllama = (await privateFiles.load('resources')).connections.find(
+      (connection) => connection.id === 'ollama',
+    );
+    await host.ctx.commands.bus.execute(
+      {
+        method: 'resources.connection.save',
+        params: {
+          connection: { ...originalOllama, capacity: 3 },
+          expectedRevision: catalogBeforeConcurrentEdit.connections.find(
+            (connection) => connection.id === 'ollama',
+          ).revision,
+        },
+      },
+      { id: 'ui-concurrent-save', fingerprint: 'ui-concurrent-save' },
+    );
+    await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
+    await dialog
+      .getByText(
+        'This connection changed elsewhere. Cancel, refresh, then edit the latest settings.',
+        { exact: true },
+      )
+      .waitFor();
+    assert.equal(
+      (await privateFiles.load('resources')).connections.find(
+        (connection) => connection.id === 'ollama',
+      ).endpoint,
+      originalOllama.endpoint,
+    );
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await ollama.getByText('Restart required', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Edit connection ollama', exact: true }).click();
+    await dialog
+      .getByRole('textbox', { name: 'API base URL', exact: true })
+      .fill('http://192.168.1.20:11434');
+    await dialog.getByRole('textbox', { name: 'Server location', exact: true }).click();
+    await page.getByRole('option', { name: 'My server · private network', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Advanced connection settings', exact: true }).click();
+    await expect(
+      dialog.getByRole('textbox', { name: 'Concurrent model requests', exact: true }),
+    ).toHaveValue('3');
+    await expect(dialog.getByRole('textbox', { name: 'Reasoning value', exact: true })).toHaveValue(
+      'high',
+    );
+    const saveButtonBox = await dialog
+      .getByRole('button', { name: 'Save connection', exact: true })
+      .boundingBox();
+    assert.ok(saveButtonBox.height >= 44, 'Connection actions must have usable hit targets');
+    await page.screenshot({ path: 'artifacts/api-connection-editor.png', fullPage: true });
+    await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    await ollama.getByText('Active API: http://127.0.0.1:11434', { exact: true }).waitFor();
+    await expect(
+      ollama.getByRole('button', { name: 'Available models', exact: true }),
+    ).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Check model', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Edit connection deepseek', exact: true }).click();
+    await dialog
+      .getByRole('textbox', { name: 'API base URL', exact: true })
+      .fill('http://models.example.org');
+    await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
+    await dialog.getByText('Remote DeepSeek endpoints require HTTPS.', { exact: true }).waitFor();
+    assert.equal(
+      (await privateFiles.load('resources')).connections.find(
+        (connection) => connection.id === 'deepseek',
+      ).endpoint,
+      'https://api.deepseek.com',
+    );
+    await dialog
+      .getByRole('textbox', { name: 'API base URL', exact: true })
+      .fill('https://api.deepseek.com');
+    await expect(
+      dialog.getByRole('textbox', { name: 'API key environment variable', exact: true }),
+    ).toHaveValue('BURO_UI_FAKE_MISSING_KEY');
+    assert.equal(
+      await dialog.locator('input[type="password"]').count(),
+      0,
+      'API setup never accepts plaintext keys',
+    );
+    await dialog
+      .getByRole('textbox', { name: 'API key environment variable', exact: true })
+      .fill('BURO_UI_OTHER_KEY');
+    await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    const afterConnections = await privateFiles.load('resources');
+    const savedOllama = afterConnections.connections.find(
+      (connection) => connection.id === 'ollama',
+    );
+    assert.equal(savedOllama.endpoint, 'http://192.168.1.20:11434');
+    assert.equal(savedOllama.trust, 'private-network');
+    assert.equal(savedOllama.capacity, 3);
+    assert.equal(savedOllama.think, 'high');
+    const savedDeepSeek = afterConnections.connections.find(
+      (connection) => connection.id === 'deepseek',
+    );
+    assert.equal(savedDeepSeek.apiKeyEnv, 'BURO_UI_OTHER_KEY');
+    assert.equal(savedDeepSeek.capacity, 3);
+    assert.equal(savedDeepSeek.thinking, 'enabled');
+    assert.deepEqual(afterConnections.runtimes, beforeConnections.runtimes);
+    assert.deepEqual(afterConnections.profiles, beforeConnections.profiles);
+    assert.equal(afterConnections.defaultProfile, beforeConnections.defaultProfile);
+    assert.deepEqual(
+      (await catalogHandler({})).runtimes.find((runtime) => runtime.id === activeWorker.id),
+      activeWorker,
+      'Saving connections cannot hot-swap active resources',
+    );
+    await page.reload();
+    await page.getByRole('button', { name: 'User settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await ollama.getByText('http://192.168.1.20:11434', { exact: true }).waitFor();
+    await ollama.getByText('Restart required', { exact: true }).waitFor();
+    await expect(
+      ollama.getByRole('button', { name: 'Available models', exact: true }),
+    ).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Check model', exact: true })).toBeDisabled();
+    assert.equal(modelsRequested, 1, 'Connection edits never perform model discovery');
+    assert.equal(generations, 2, 'Connection edits never perform inference');
     assert.deepEqual(errors, []);
     await fs.writeFile(
       'artifacts/resources-ui-verification.json',
@@ -467,6 +662,12 @@ const { chromium, expect } = require('@playwright/test');
           instructionsPreserved: true,
           unavailableRuntimeVisible: true,
           reservedRoleUsesProfile: true,
+          apiConnectionsPersisted: true,
+          pendingConnectionsDisabled: true,
+          invalidEndpointRejected: true,
+          remoteDeepSeekHttpRejected: true,
+          staleConnectionEditRejected: true,
+          activeResourcesUnchanged: true,
           errors,
         },
         null,

@@ -1,5 +1,77 @@
 import { z } from 'zod';
+import { endpointIsPrivate, modelEndpointURL } from './endpoint-trust.ts';
 export const ResourceIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
+const modelEndpoint = z
+  .string()
+  .min(1)
+  .max(1000)
+  .refine((value) => {
+    try {
+      modelEndpointURL(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'Use an HTTP(S) endpoint without credentials, query or fragment.');
+export const ResourceConnectionSchema = z
+  .discriminatedUnion('kind', [
+    z.strictObject({
+      id: ResourceIdSchema,
+      kind: z.literal('ollama'),
+      endpoint: modelEndpoint.default('http://127.0.0.1:11434'),
+      capacity: z.number().int().min(1).max(8).default(1),
+      trust: z.enum(['auto', 'private-network', 'external']).default('auto'),
+      think: z.union([z.boolean(), z.string().max(40)]).optional(),
+    }),
+    z.strictObject({
+      id: ResourceIdSchema,
+      kind: z.literal('deepseek'),
+      endpoint: modelEndpoint.default('https://api.deepseek.com'),
+      capacity: z.number().int().min(1).max(8).default(2),
+      apiKeyEnv: z
+        .string()
+        .regex(/^[A-Z][A-Z0-9_]{0,99}$/)
+        .default('DEEPSEEK_API_KEY'),
+      thinking: z.enum(['enabled', 'disabled']).default('disabled'),
+    }),
+  ])
+  .superRefine((connection, ctx) => {
+    if (connection.kind === 'deepseek') {
+      try {
+        const endpoint = modelEndpointURL(connection.endpoint);
+        if (
+          endpoint.protocol !== 'https:' &&
+          !['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname)
+        )
+          ctx.addIssue({
+            code: 'custom',
+            path: ['endpoint'],
+            message: 'Remote DeepSeek endpoints require HTTPS.',
+          });
+      } catch {
+        // The endpoint field reports malformed URLs.
+      }
+      return;
+    }
+    if (connection.kind !== 'ollama' || connection.trust !== 'private-network') return;
+    try {
+      if (endpointIsPrivate(modelEndpointURL(connection.endpoint))) return;
+    } catch {
+      return; // The endpoint field already reports malformed URLs.
+    }
+    ctx.addIssue({
+      code: 'custom',
+      path: ['trust'],
+      message: 'Private network trust requires a literal private or loopback IP address.',
+    });
+  });
+export type ResourceConnection = z.infer<typeof ResourceConnectionSchema>;
+export type ResourceConnectionCatalogEntry = ResourceConnection & {
+  revision: string;
+  credentialConfigured: boolean;
+  activeEndpoint?: string;
+  restartRequired?: boolean;
+};
 export const RuntimeResourceSchema = z.object({
   id: ResourceIdSchema,
   client: z.enum(['codex', 'managed']),
@@ -87,13 +159,7 @@ export type ResourceCatalog = {
   defaultProfile: string;
   profiles: ResourceProfile[];
   runtimes: RuntimeResource[];
-  connections: {
-    id: string;
-    kind: 'ollama' | 'deepseek';
-    endpoint: string;
-    credentialConfigured?: boolean;
-    apiKeyEnv?: string;
-  }[];
+  connections: ResourceConnectionCatalogEntry[];
   selected?: ResourceSnapshot;
   probes: {
     runtimeId: string;

@@ -62,12 +62,18 @@ export const resourcesPlugin: Plugin.Object<{
         resources.configuration.use(meta.id, meta.fingerprint, params.profileId),
       ),
     );
+    ctx.effect(() =>
+      ctx.commands.bus.register('resources.connection.save', (params, meta) =>
+        resources.saveConnection(params.connection, params.expectedRevision, meta),
+      ),
+    );
     ctx.on('project/snapshot', (snapshot) => {
       snapshot.capabilities.push(
         'resources.list',
         'resources.models',
         'resources.probe',
         'resources.use',
+        'resources.connection.save',
       );
     });
   },

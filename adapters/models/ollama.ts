@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
 import { DomainError } from '../../core/ports.ts';
+import {
+  endpointIsLocal,
+  modelEndpointURL,
+  type EndpointTrust,
+} from '../../protocol/endpoint-trust.ts';
 import type {
   ModelContext,
   ModelMessage,
@@ -8,7 +13,6 @@ import type {
 } from '../../core/model-ports.ts';
 import {
   RequestGate,
-  endpointURL,
   json,
   lines,
   object,
@@ -18,7 +22,7 @@ import {
   type HttpOptions,
 } from './http.ts';
 
-type Options = HttpOptions & { id: string; think?: boolean | string };
+type Options = HttpOptions & { id: string; think?: boolean | string; trust?: EndpointTrust };
 export class OllamaProvider implements ModelProvider {
   readonly structuredToolMode = 'separate-turn' as const;
   readonly id: string;
@@ -27,12 +31,27 @@ export class OllamaProvider implements ModelProvider {
   private options: Options;
   private gate: RequestGate;
   constructor(options: Options) {
-    const url = endpointURL(options.endpoint);
-    this.options = options;
+    let url: URL;
+    try {
+      url = modelEndpointURL(options.endpoint);
+      this.local = endpointIsLocal(url, options.trust);
+    } catch (error) {
+      throw new DomainError(
+        'INVALID_ENDPOINT',
+        error instanceof Error ? error.message : 'Invalid model endpoint.',
+      );
+    }
+    this.options = { ...options, endpoint: url.href };
     this.id = options.id;
-    this.local = ['localhost', '[::1]'].includes(url.hostname) || /^127\./.test(url.hostname);
     this.revision = createHash('sha256')
-      .update(JSON.stringify(['ollama-native-v2', url.href, options.think ?? 'model-default']))
+      .update(
+        JSON.stringify([
+          'ollama-native-v2',
+          url.href,
+          options.think ?? 'model-default',
+          ...(options.trust && options.trust !== 'auto' ? [options.trust] : []),
+        ]),
+      )
       .digest('hex');
     this.gate = options.gate || new RequestGate(1);
   }

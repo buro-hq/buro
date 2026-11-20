@@ -1,22 +1,56 @@
 import { useState } from 'react';
 import { Accordion, Badge, Button, Group, Paper, Select, Stack, Text } from '@mantine/core';
+import type { ResourceCatalog, ResourceConnection } from '../../../protocol/resources.ts';
 import { useResourceCatalog } from '../../features/resources/useResourceCatalog';
 import { t } from '../../i18n/index.ts';
+import { ApiConnectionForm } from './ApiConnectionForm';
 
 export function ExecutionResources() {
-  const { client, supported, catalog, error, loading, refresh } = useResourceCatalog();
+  const { client, supported, canConfigure, catalog, error, loading, refresh } =
+    useResourceCatalog();
   const [busy, setBusy] = useState('');
   const [actionError, setActionError] = useState('');
   const [models, setModels] = useState<Record<string, string[]>>({});
+  const [editing, setEditing] = useState<ResourceCatalog['connections'][number] | 'new' | null>(
+    null,
+  );
+  const [saved, setSaved] = useState(false);
+  const [catalogStale, setCatalogStale] = useState(false);
   if (!supported) return null;
   const profile = catalog?.profiles.find((item) => item.id === catalog.defaultProfile);
   const selected = new Set(profile ? [profile.coordinator, profile.worker, profile.reviewer] : []);
+  const editedConnection = typeof editing === 'object' ? editing || undefined : undefined;
+  async function reload() {
+    const result = await refresh();
+    if (result) setCatalogStale(false);
+    return result;
+  }
+  async function saveConnection(connection: ResourceConnection) {
+    setBusy('save-connection');
+    setActionError('');
+    try {
+      await client!.command({
+        method: 'resources.connection.save',
+        params: { connection, expectedRevision: editedConnection?.revision || null },
+      });
+      setModels((current) => {
+        const next = { ...current };
+        delete next[connection.id];
+        return next;
+      });
+      setSaved(true);
+      setCatalogStale(!(await reload()));
+      setEditing(null);
+    } finally {
+      setBusy('');
+    }
+  }
   async function useProfile(profileId: string) {
     setBusy('profile');
     setActionError('');
     try {
       await client!.command({ method: 'resources.use', params: { profileId } });
-      await refresh();
+      await reload();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -31,7 +65,7 @@ export function ExecutionResources() {
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
-      await refresh();
+      await reload();
       setBusy('');
     }
   }
@@ -54,7 +88,7 @@ export function ExecutionResources() {
     <section className="appearance-section">
       <Group justify="space-between" mb="xs">
         <h3>{t('Execution resources')}</h3>
-        <Button variant="subtle" size="xs" onClick={() => void refresh()} loading={loading}>
+        <Button variant="subtle" size="xs" mih={44} onClick={() => void reload()} loading={loading}>
           {t('Refresh')}
         </Button>
       </Group>
@@ -98,18 +132,52 @@ export function ExecutionResources() {
             <Accordion.Control>{t('Models and connections')}</Accordion.Control>
             <Accordion.Panel>
               <Stack gap="sm">
+                {canConfigure && (
+                  <Group justify="space-between" gap="sm">
+                    <Text size="xs" c="dimmed" style={{ flex: '1 1 200px' }}>
+                      {t('Connect Ollama on your computer or a server, or use DeepSeek API.')}
+                    </Text>
+                    <Button
+                      variant="light"
+                      size="xs"
+                      mih={44}
+                      disabled={!!busy || !catalog}
+                      onClick={() => setEditing('new')}
+                    >
+                      {t('Add API connection')}
+                    </Button>
+                  </Group>
+                )}
+                {saved && (
+                  <Text role="status" size="sm" c="dimmed">
+                    {catalogStale ||
+                    catalog?.connections.some((connection) => connection.restartRequired)
+                      ? t('Connection saved. Restart the Buro service to apply it.')
+                      : t('Connection saved.')}
+                  </Text>
+                )}
                 {catalog?.connections.map((connection) => (
-                  <Paper key={connection.id} withBorder p="sm">
+                  <Paper key={connection.id} withBorder p="sm" data-connection-id={connection.id}>
                     <Group justify="space-between" wrap="wrap">
-                      <div>
-                        <Text size="sm" fw={600}>
-                          {connection.kind === 'ollama' ? 'Ollama' : 'DeepSeek'}
+                      <div style={{ minWidth: 0, flex: '1 1 180px' }}>
+                        <Text size="sm" fw={600} style={{ overflowWrap: 'anywhere' }}>
+                          {connection.id} · {connection.kind === 'ollama' ? 'Ollama' : 'DeepSeek'}
                         </Text>
-                        <Text size="xs" c="dimmed">
+                        <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
                           {connection.endpoint}
                         </Text>
+                        {connection.restartRequired && connection.activeEndpoint && (
+                          <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
+                            {t('Active API: {p0}', { p0: connection.activeEndpoint })}
+                          </Text>
+                        )}
                       </div>
                       <Group gap="xs">
+                        {(connection.restartRequired || catalogStale) && (
+                          <Badge variant="light" color="orange">
+                            {t('Restart required')}
+                          </Badge>
+                        )}
                         {connection.kind === 'deepseek' && !connection.credentialConfigured && (
                           <Badge variant="light" color="orange">
                             {t('Key required')}
@@ -117,19 +185,34 @@ export function ExecutionResources() {
                         )}
                         <Button
                           size="xs"
+                          mih={44}
                           variant="light"
                           loading={busy === connection.id}
                           disabled={
                             !!busy ||
+                            catalogStale ||
+                            !!connection.restartRequired ||
                             (connection.kind === 'deepseek' && !connection.credentialConfigured)
                           }
                           onClick={() => void discover(connection.id)}
                         >
                           {t('Available models')}
                         </Button>
+                        {canConfigure && (
+                          <Button
+                            size="xs"
+                            mih={44}
+                            variant="default"
+                            aria-label={t('Edit connection {p0}', { p0: connection.id })}
+                            disabled={!!busy}
+                            onClick={() => setEditing(connection)}
+                          >
+                            {t('Edit')}
+                          </Button>
+                        )}
                       </Group>
                     </Group>
-                    {models[connection.id] && (
+                    {models[connection.id] && !connection.restartRequired && !catalogStale && (
                       <Text size="xs" mt="xs" style={{ overflowWrap: 'anywhere' }}>
                         {models[connection.id].length
                           ? models[connection.id].join(' · ')
@@ -157,19 +240,24 @@ export function ExecutionResources() {
                           </Text>
                           <Text size="xs" c="dimmed">
                             {runtime.providerId} ·{' '}
-                            {probe?.status === 'passed'
-                              ? t('Connection checked')
-                              : probe?.status === 'failed'
-                                ? t('Check failed')
-                                : t('Not checked')}
+                            {connection?.restartRequired || catalogStale
+                              ? t('Awaiting restart')
+                              : probe?.status === 'passed'
+                                ? t('Connection checked')
+                                : probe?.status === 'failed'
+                                  ? t('Check failed')
+                                  : t('Not checked')}
                           </Text>
                         </div>
                         <Button
                           size="xs"
+                          mih={44}
                           variant="default"
                           loading={busy === runtime.id}
                           disabled={
                             !!busy ||
+                            catalogStale ||
+                            !!connection?.restartRequired ||
                             (connection?.kind === 'deepseek' && !connection.credentialConfigured)
                           }
                           onClick={() => void check(runtime.id)}
@@ -192,6 +280,16 @@ export function ExecutionResources() {
           </Text>
         )}
       </Stack>
+      {editing !== null && (
+        <ApiConnectionForm
+          key={editedConnection?.id || 'new'}
+          opened
+          connection={editedConnection}
+          saving={busy === 'save-connection'}
+          onClose={() => setEditing(null)}
+          onSave={saveConnection}
+        />
+      )}
     </section>
   );
 }

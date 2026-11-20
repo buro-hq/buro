@@ -15,6 +15,7 @@ import {
   RuntimePreferenceSchema,
   AssignmentResourceSchema,
   AssignmentSelectionSchema,
+  ResourceConnectionSchema,
 } from './resources.ts';
 
 const id = z
@@ -60,6 +61,16 @@ export const CommandSchema = z.discriminatedUnion('method', [
     params: z.strictObject({ runtimeId: id }),
   }),
   z.strictObject({ method: z.literal('resources.use'), params: z.strictObject({ profileId: id }) }),
+  z.strictObject({
+    method: z.literal('resources.connection.save'),
+    params: z.strictObject({
+      connection: ResourceConnectionSchema,
+      expectedRevision: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .nullable(),
+    }),
+  }),
   z.strictObject({
     method: z.literal('filesystem.list'),
     params: z.strictObject({

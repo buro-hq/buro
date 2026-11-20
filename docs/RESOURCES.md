@@ -2,7 +2,7 @@
 
 Buro supports the native Codex client and managed sessions through Ollama or the DeepSeek model API. Managed sessions use Buro's repository tools, checkpoints, worker dispatch and independent acceptance. They do not require Codex to be installed.
 
-A tested self-hosted GPU route uses an authenticated SSH forward to Ollama on a Windows RTX host. The Mac retains repositories, tools and checks. See [remote Ollama setup and measured evidence](REMOTE-OLLAMA.md). The local machine has optional `rtx-local` / `rtx-hybrid` profiles; their definitions load on the next daemon startup. The original machine default is preserved.
+The self-hosted GPU route uses the Ollama HTTP API directly on a Windows RTX host, with an explicitly trusted private-network endpoint; Buro does not manage or require SSH tunnels. The Mac retains repositories, tools and checks. See [remote Ollama setup and measured evidence](REMOTE-OLLAMA.md). The local machine has optional `rtx-local` / `rtx-hybrid` profiles; model connections and runtimes load at daemon startup. The original machine default is preserved.
 
 The default remains Codex until a resource profile is selected. Connections and model settings live in the daemon's private data directory, normally `.buro/local/resources.json`. A connected project's shared profile can contain `resourceProfile`, referencing one of those private profiles. It never contains an API key.
 
@@ -10,7 +10,21 @@ Managed model calls within a goal also share a durable budget, independent of pe
 
 ## Configure a connection
 
-Start the service, then inspect or create its configuration:
+In **Settings → Execution resources → Models and connections**, use **Add API connection** or **Edit**. The Mantine form supports Ollama and DeepSeek endpoints, connection capacity, provider thinking settings and an Ollama trust choice. DeepSeek takes an environment-variable reference, not the API key itself. Existing connection IDs and provider kinds are fixed in the form; add another connection to represent a different provider.
+
+API endpoints must use HTTP(S), with no embedded credentials, query or fragment. DeepSeek requires HTTPS except for exact `localhost`, `127.0.0.1` or `[::1]` development endpoints. Ollama trust is explicit:
+
+- `auto` (the compatible default): only loopback endpoints are local; a LAN endpoint remains remote.
+- `private-network`: the user declares a self-hosted service at a literal RFC1918/loopback IPv4 or IPv6 ULA/loopback address. DNS names and public IPs are rejected. This permits the service in `local-only` profiles.
+- `external`: treat the endpoint as remote, including a loopback address.
+
+Trust describes the configured service boundary. It does not download a model, test connectivity or authorize cloud-backed Ollama models.
+
+Saving a connection requires a Buro service restart to apply it. The interface shows the saved address, active API address and **Restart required** badge. New work using a changed connection, model discovery and diagnostics are blocked until restart; work already owned by the current service retains its active provider. Saving never silently replaces a provider under a running conversation. After restart, an old run whose frozen resource revision no longer matches stops with a configuration error rather than moving to the new endpoint.
+
+Every saved connection has its own revision. Edits must submit that revision; creating an ID requires a null revision. A stale edit asks the user to reload settings, and repeated command IDs reuse their saved receipt. External changes to the private configuration are rejected until the service reloads them. Adding a connection configures only its API settings: installed models, runtimes and execution profiles are separate steps.
+
+For CLI setup, inspect or create the private configuration:
 
 ```sh
 npm run cli -- resources init
@@ -20,7 +34,27 @@ npm run cli -- resources models ollama
 
 `init` returns the actual configuration path and preserves an existing file. With a custom `PROJECT_DATA_DIR`, the file is under that directory's `local/` folder. Ollama discovery lists already installed models and does not download any.
 
-For local execution, add a managed runtime and profile to that file. This complete example keeps the existing Codex route available while selecting a local model for new work:
+The CLI can save the same connection contract from a JSON file:
+
+```sh
+npm run cli -- resources connection-save /path/to/connection.json
+npm run cli -- resources connection-save /path/to/connection.json REVISION_FROM_RESOURCES_LIST
+```
+
+Omit the revision only for a new ID; editing uses that connection's `revision` from `resources list`. The file contains one connection, not the entire configuration. For example, an RTX connection can use:
+
+```json
+{
+  "id": "ollama-rtx",
+  "kind": "ollama",
+  "endpoint": "http://192.168.50.10:11434",
+  "trust": "private-network",
+  "capacity": 1,
+  "think": false
+}
+```
+
+For local execution, add a managed runtime and profile to the private configuration file. This complete example keeps the existing Codex route available while selecting a local model for new work:
 
 ```json
 {
@@ -31,6 +65,7 @@ For local execution, add a managed runtime and profile to that file. This comple
       "id": "ollama",
       "kind": "ollama",
       "endpoint": "http://127.0.0.1:11434",
+      "trust": "auto",
       "capacity": 1,
       "think": false
     },
@@ -48,7 +83,7 @@ For local execution, add a managed runtime and profile to that file. This comple
       "id": "local-coder",
       "client": "managed",
       "connectionId": "ollama",
-      "model": "qwen3:4b",
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
       "limits": {
         "contextTokens": 16384,
         "maxOutputTokens": 4096,
@@ -79,7 +114,7 @@ For local execution, add a managed runtime and profile to that file. This comple
 }
 ```
 
-Use an installed model ID returned by discovery. The model must support tool calling; its advertised context and thinking settings are checked. The Qwen3 example is an available tools/thinking model, not a guarantee of accepted coding quality. [Ollama model details](https://docs.ollama.com/api-reference/show-model-details), [Qwen3 4B](https://ollama.com/library/qwen3:4b).
+Use an installed model ID returned by discovery. The model must support tool calling; its advertised context and thinking settings are checked. The explicit 4B Instruct example avoids relying on the mutable `qwen3:4b` thinking-model alias. Its bounded mixed synthetic trial passed with DeepSeek coordination/review; this is not a guarantee of accepted project changes. [Ollama model details](https://docs.ollama.com/api-reference/show-model-details), [Qwen3 variants](https://ollama.com/library/qwen3/tags).
 
 Restart the daemon after changing connection or runtime definitions. This deliberately avoids replacing a client under an active session. Changing only the default through `resources use` takes effect for future runs without a restart:
 
@@ -90,7 +125,7 @@ npm run cli -- resources use local
 
 The probe performs at most two small model generations with a diagnostic tool and no repository content. It checks tool/JSON mechanics, not coding quality. Retried command IDs reuse saved evidence; an interrupted probe is not silently repeated. Live probes are explicit and absent from `npm test`.
 
-Qwen3 4B's initial live evaluation is not yet accepted for coding: one diagnostic passed, a planning response exhausted 2048 output tokens, and a later diagnostic produced duplicate tool requests. The 4096-token example is a configuration budget, not evidence that this model completes a verified goal. Buro reports these outcomes as failures and does not substitute a cloud model. See [implementation evidence](IMPLEMENTATION.md).
+[Private-project evaluation details removed.]
 
 ## Add DeepSeek and a mixed team
 
@@ -143,7 +178,7 @@ Each accepted plan saves the canonical resource, configuration revision, role ve
 
 ## Interface and inheritance
 
-User settings show the default profile, its coordinator/worker/reviewer models, connection metadata, model discovery and explicit diagnostics. Project settings can pin a profile or inherit the machine default. The agent inspector displays the saved runtime/model identity rather than labelling every session Codex.
+User settings show the default profile, its coordinator/worker/reviewer models, editable API connections, restart state, model discovery and explicit diagnostics. Project settings can pin a profile or inherit the machine default. The agent inspector displays the saved runtime/model identity rather than labelling every session Codex.
 
 Each run freezes its profile, data policy and runtime configuration revisions. Buro handles identify sessions independently of native thread IDs. Restart or repair follows the saved route; changing the default does not move an existing session to another provider. If that runtime configuration has changed or disappeared, continuation stops with a configuration error. Restore it or start a new run. Historical Codex runs without resource snapshots require an explicitly remote-permitted profile for legacy continuation.
 

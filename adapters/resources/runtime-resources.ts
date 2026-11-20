@@ -1,18 +1,21 @@
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentRuntime, ProjectRegistry } from '../../core/ports.ts';
+import type { AgentRuntime, ProjectRegistry, RuntimeSelection } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
 import { ManagedAgentRuntime } from '../../core/managed-runtime.ts';
 import { conservativeRequestPolicy, type ManagedRequestPolicy } from '../../core/request-policy.ts';
 import { ResourceSelection } from '../../core/resource-selection.ts';
 import { CapabilityProbeService, type ProbeReceipt } from '../../core/capability-probe.ts';
-import type { RuntimeResource } from '../../protocol/resources.ts';
+import type { ResourceConnection, RuntimeResource } from '../../protocol/resources.ts';
 import { CodexRuntime } from '../codex/runtime.ts';
 import { OllamaProvider } from '../models/ollama.ts';
 import { DeepSeekProvider } from '../models/deepseek.ts';
 import { RequestGate, endpointURL } from '../models/http.ts';
 import { FileManagedSessions } from '../files/managed-sessions.ts';
-import { FileResourceConfiguration } from '../files/resource-configuration.ts';
+import {
+  FileResourceConfiguration,
+  connectionConfigurationRevision,
+} from '../files/resource-configuration.ts';
 import { PrivateJSONFiles } from '../files/private-json.ts';
 import { loadModelCredentials } from '../files/model-credentials.ts';
 import { RepositoryTools } from '../tools/repository-tools.ts';
@@ -66,7 +69,7 @@ export async function createRuntimeResources(options: {
     providers.set(
       connection.id,
       connection.kind === 'ollama'
-        ? new OllamaProvider({ ...common, think: connection.think })
+        ? new OllamaProvider({ ...common, think: connection.think, trust: connection.trust })
         : new DeepSeekProvider({
             ...common,
             apiKey: () => credentials(connection.apiKeyEnv),
@@ -128,31 +131,58 @@ export async function createRuntimeResources(options: {
       });
     }
   }
-  const selection = new ResourceSelection({
+  const activeSelection = new ResourceSelection({
     projects: options.projects,
     profiles: config.profiles,
     runtimes: resources,
     defaultProfile: () => configuration.snapshot().defaultProfile,
   });
+  // Editing a connection never retargets an active provider or a frozen run.
+  const pending = (connectionId: string) => {
+    const saved = configuration.snapshot().connections.find((item) => item.id === connectionId);
+    const active = config.connections.find((item) => item.id === connectionId);
+    return (
+      !!saved &&
+      (!active ||
+        connectionConfigurationRevision(saved) !== connectionConfigurationRevision(active))
+    );
+  };
+  const assertActive = (connectionId: string) => {
+    if (pending(connectionId))
+      throw new DomainError(
+        'CONNECTION_RESTART_REQUIRED',
+        'Restart the service to apply this model connection before starting new work.',
+      );
+  };
+  const selection: RuntimeSelection = {
+    forProject(projectId) {
+      const selected = activeSelection.forProject(projectId);
+      for (const resource of [
+        selected.coordinator,
+        selected.worker,
+        selected.reviewer,
+        ...(selected.workerPool || []),
+      ])
+        if (resource.providerId) assertActive(resource.providerId);
+      return selected;
+    },
+  };
   const list = async (projectId?: string) => ({
     defaultProfile: configuration.snapshot().defaultProfile,
     profiles: config.profiles,
     runtimes: resources,
-    connections: config.connections.map((connection) => ({
-      id: connection.id,
-      kind: connection.kind,
-      endpoint: connection.endpoint,
-      ...(connection.kind === 'deepseek'
-        ? {
-            credentialConfigured: !!credentials(connection.apiKeyEnv),
-            apiKeyEnv: connection.apiKeyEnv,
-          }
-        : {}),
+    connections: configuration.snapshot().connections.map((connection) => ({
+      ...connection,
+      revision: connectionConfigurationRevision(connection),
+      credentialConfigured: connection.kind !== 'deepseek' || !!credentials(connection.apiKeyEnv),
+      activeEndpoint: config.connections.find((item) => item.id === connection.id)?.endpoint,
+      restartRequired: pending(connection.id),
     })),
-    ...(projectId ? { selected: selection.forProject(projectId) } : {}),
+    ...(projectId ? { selected: activeSelection.forProject(projectId) } : {}),
     probes: (
       await Promise.all(
         resources.map(async (resource) => {
+          if (resource.providerId && pending(resource.providerId)) return undefined;
           const result = (await probes.load(resource.id)) as
             | { configurationRevision?: string }
             | undefined;
@@ -164,6 +194,7 @@ export async function createRuntimeResources(options: {
     ).filter(Boolean),
   });
   const models = async (connectionId: string) => {
+    assertActive(connectionId);
     const provider = providers.get(connectionId);
     if (!provider) throw new DomainError('CONNECTION_UNAVAILABLE', 'Model connection unavailable.');
     return provider.listModels(AbortSignal.timeout(15000));
@@ -193,8 +224,16 @@ export async function createRuntimeResources(options: {
     now: () => new Date().toISOString(),
     id: randomUUID,
   });
-  const probe = (runtimeId: string, meta: { id: string; fingerprint: string }) =>
-    probeService.probe(meta.id, meta.fingerprint, runtimeId);
+  const probe = async (runtimeId: string, meta: { id: string; fingerprint: string }) => {
+    const runtime = config.runtimes.find((item) => item.id === runtimeId);
+    if (runtime?.client === 'managed') assertActive(runtime.connectionId);
+    return probeService.probe(meta.id, meta.fingerprint, runtimeId);
+  };
+  const saveConnection = (
+    connection: ResourceConnection,
+    expectedRevision: string | null,
+    meta: { id: string; fingerprint: string },
+  ) => configuration.save(meta.id, meta.fingerprint, connection, expectedRevision);
   return {
     configuration,
     runtimes,
@@ -203,6 +242,7 @@ export async function createRuntimeResources(options: {
     list,
     models,
     probe,
+    saveConnection,
     dispose: () => probeService.dispose(),
   };
 }

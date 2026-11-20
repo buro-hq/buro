@@ -100,6 +100,8 @@ The first model-selection increment gives each run a frozen worker pool. The coo
 
 Support local-only and configured hybrid operation. Endpoint credentials and private settings belong to machine configuration; shared project profiles contain references and constraints. A provider fallback cannot cross the project's data boundary without prior authorization.
 
+A remote GPU supplies a model HTTP API; repositories, tools, orchestration and acceptance stay on the Buro host. SSH tunnels are not part of the runtime contract. An Ollama connection at a literal private IP can be explicitly trusted as self-hosted for local-only work; cloud-backed models remain excluded. API connection edits use the shared application commands and become active after a service restart. A pending edit blocks new work using that connection while existing owned runs retain the active configuration. After restart, a historical route with a different configuration fails closed instead of silently moving to the new endpoint.
+
 Project materials, goal inputs, session briefs and run outputs keep separate provenance. Use token budgets appropriate to the selected model, leaving space for tool results and completion. Provider-native continuation needed for correctness must be preserved privately even when it is not part of the human-readable brief.
 
 ## Parallelism and workspaces
