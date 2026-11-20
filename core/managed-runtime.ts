@@ -9,7 +9,10 @@ import type {
   ManagedSessionStore,
   ModelProvider,
   ToolBroker,
+  ToolScope,
 } from './model-ports.ts';
+import { inScope } from './execution-ports.ts';
+import { withEnvironmentRepair } from './environment-repair.ts';
 type EventBody<T = RuntimeEvent> = T extends RuntimeEvent
   ? Omit<T, 'id' | 'threadId' | 'runId'>
   : never;
@@ -42,6 +45,8 @@ export class ManagedAgentRuntime implements AgentRuntime {
     { turnId: string; controller: AbortController; done: Promise<unknown> }
   >();
   private closed = false;
+  private resuming = new Map<string, Promise<{ threadId: string }>>();
+  private disposal?: Promise<void>;
 
   constructor(options: ManagedRuntimeOptions) {
     const limits = options.limits;
@@ -61,11 +66,19 @@ export class ManagedAgentRuntime implements AgentRuntime {
     this.assertOpen();
     const id = 'M-' + this.options.idGenerator();
     const snapshot = this.options.projects.get(input.projectId).snapshot();
-    const run = snapshot.runs.find((r) => r.id === input.runId);
+    const ownerRunId = input.ownerRunId || input.runId;
+    const run = snapshot.runs.find((r) => r.id === ownerRunId);
+    if (input.ownerRunId && !run)
+      throw new DomainError('SESSION_MISMATCH', 'The owning run was not found.');
     const workspace = input.workspace || snapshot.project.root;
-    const materials =
-      run?.contextMaterials ||
-      (snapshot.contextMaterials || []).filter((m) => m.active && m.scope === 'project');
+    if (run?.workspace && run.workspace !== workspace)
+      throw new DomainError('SESSION_MISMATCH', 'The owning run uses another workspace.');
+    const materials = run
+      ? run.contextMaterials || []
+      : (snapshot.contextMaterials || []).filter((m) => m.active && m.scope === 'project');
+    const policy = run?.executionPolicySnapshot
+      ? withEnvironmentRepair(run.executionPolicySnapshot, !!run.repairEnvironment)
+      : undefined;
     const session: ManagedSession = {
       version: 1,
       id,
@@ -77,13 +90,12 @@ export class ManagedAgentRuntime implements AgentRuntime {
       scope: {
         projectId: input.projectId,
         runId: input.runId,
+        ownerRunId: run?.id || input.ownerRunId,
         sessionId: input.assignment?.sessionId || id,
         workspace,
         readOnly: !!input.readOnly,
-        allowedPaths:
-          input.assignment?.allowedPaths || run?.executionPolicySnapshot?.allowedPaths || [],
-        protectedPaths:
-          input.assignment?.protectedPaths || run?.executionPolicySnapshot?.protectedPaths || [],
+        allowedPaths: [...(input.assignment?.allowedPaths || policy?.allowedPaths || [])],
+        protectedPaths: [...(input.assignment?.protectedPaths || policy?.protectedPaths || [])],
         materials: materials
           .flatMap((m) => [m.relativePath, ...(m.textPath ? [m.textPath] : [])])
           .map(
@@ -91,7 +103,9 @@ export class ManagedAgentRuntime implements AgentRuntime {
               '.buro/' +
               (workspace === snapshot.project.root ? file : file.replace(/^local\//, '')),
           ),
-        commands: (run?.executionPolicySnapshot?.profile || snapshot.profile)?.checks || [],
+        commands: structuredClone(
+          (run?.executionPolicySnapshot?.profile || snapshot.profile)?.checks || [],
+        ),
         baseCommit: run?.baseCommit,
       },
       messages: [{ role: 'system', content: input.instructions }],
@@ -99,35 +113,122 @@ export class ManagedAgentRuntime implements AgentRuntime {
       requests: 0,
       usage: { requestsWithUsage: 0, inputTokens: 0, outputTokens: 0 },
       actions: [],
+      ...(input.assignment
+        ? {
+            assignment: {
+              roleId: input.assignment.roleId,
+              allowedPaths: [...input.assignment.allowedPaths],
+              protectedPaths: [...input.assignment.protectedPaths],
+            },
+          }
+        : {}),
     };
+    session.scopeRevisions = [
+      { revision: 1, scope: structuredClone(session.scope), instructions: input.instructions },
+    ];
     await this.options.sessions.save(session);
+    this.assertOpen();
     this.loaded.set(id, session);
     return { threadId: id };
   }
 
   async resume(input: Parameters<NonNullable<AgentRuntime['resume']>>[0]) {
     this.assertOpen();
-    if (this.active.has(input.threadId))
+    if (this.active.has(input.threadId) || this.resuming.has(input.threadId))
       throw new DomainError('SESSION_BUSY', 'The session is already running.');
+    const done = Promise.resolve().then(() => this.resumeSession(input));
+    this.resuming.set(input.threadId, done);
+    try {
+      return await done;
+    } finally {
+      this.resuming.delete(input.threadId);
+    }
+  }
+
+  private async resumeSession(input: Parameters<NonNullable<AgentRuntime['resume']>>[0]) {
     const session = await this.session(input.threadId);
+    this.assertOpen();
     if (
       session.scope.projectId !== input.projectId ||
       session.scope.workspace !== input.workspace ||
-      session.scope.runId !== input.runId
+      session.scope.runId !== input.runId ||
+      (session.scope.ownerRunId || session.scope.runId) !== (input.ownerRunId || input.runId)
     )
       throw new DomainError(
         'SESSION_MISMATCH',
         'The checkpoint belongs to another project, run or workspace.',
       );
     this.assertReconciled(session);
-    session.messages.push({
+    const next = structuredClone(session);
+    const snapshot = this.options.projects.get(input.projectId).snapshot();
+    const ownerRunId = input.ownerRunId || session.scope.ownerRunId || input.runId;
+    const run = snapshot.runs.find((r) => r.id === ownerRunId);
+    if ((session.scope.ownerRunId || input.ownerRunId) && !run)
+      throw new DomainError('SESSION_MISMATCH', 'The owning run was not found.');
+    if (run?.workspace && run.workspace !== session.scope.workspace)
+      throw new DomainError('SESSION_MISMATCH', 'The owning run uses another workspace.');
+    if (run?.baseCommit && session.scope.baseCommit && run.baseCommit !== session.scope.baseCommit)
+      throw new DomainError('SESSION_MISMATCH', 'The owning run uses another Git base.');
+    const scope: ToolScope = structuredClone(session.scope);
+    const policy = run?.executionPolicySnapshot
+      ? withEnvironmentRepair(run.executionPolicySnapshot, !!run.repairEnvironment)
+      : undefined;
+    const assignmentBound = !!session.assignment || session.scope.sessionId !== session.id;
+    if (policy) {
+      // A role assignment never inherits the entire project's write scope on continuation.
+      scope.allowedPaths = assignmentBound
+        ? session.scope.allowedPaths.filter((path) =>
+            inScope(path, policy.allowedPaths, policy.protectedPaths),
+          )
+        : [...policy.allowedPaths];
+      scope.protectedPaths = [
+        ...new Set([
+          ...(policy.protectedPaths || []),
+          ...(assignmentBound
+            ? session.assignment?.protectedPaths || session.scope.protectedPaths
+            : []),
+        ]),
+      ];
+      scope.commands = structuredClone(policy.profile?.checks || []);
+    }
+    const materials = run
+      ? run.contextMaterials || []
+      : (snapshot.contextMaterials || []).filter((m) => m.active && m.scope === 'project');
+    scope.materials = materials
+      .flatMap((material) => [
+        material.relativePath,
+        ...(material.textPath ? [material.textPath] : []),
+      ])
+      .map(
+        (file) =>
+          '.buro/' +
+          (scope.workspace === snapshot.project.root ? file : file.replace(/^local\//, '')),
+      );
+    scope.ownerRunId = run?.id || session.scope.ownerRunId;
+    scope.baseCommit = run?.baseCommit || session.scope.baseCommit;
+    next.scopeRevisions ||= [
+      {
+        revision: 1,
+        scope: structuredClone(session.scope),
+        instructions: session.messages.find((message) => message.role === 'system')?.content || '',
+      },
+    ];
+    next.scopeRevisions.push({
+      revision: next.scopeRevisions.length + 1,
+      scope: structuredClone(scope),
+      instructions: input.instructions,
+    });
+    next.scope = scope;
+    next.messages.push({
       role: 'system',
       content: 'Updated instructions for continuing saved work:\n' + input.instructions,
     });
-    session.cancelRequested = false;
-    session.status = 'ready';
-    await this.options.sessions.save(session);
-    return { threadId: session.id };
+    next.cancelRequested = false;
+    next.status = 'ready';
+    await this.options.sessions.save(next);
+    this.assertOpen();
+    this.loaded.set(next.id, next);
+    return { threadId: next.id };
   }
 
   async submit(threadId: string, text: string) {
@@ -145,7 +246,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
     options: { schema: unknown; signal: AbortSignal; timeoutMs: number },
   ) {
     this.assertOpen();
-    if (this.active.has(threadId))
+    if (this.active.has(threadId) || this.resuming.has(threadId))
       throw new DomainError('SESSION_BUSY', 'The session is already running.');
     const turnId = 'T-' + this.options.idGenerator();
     const controller = new AbortController();
@@ -177,6 +278,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
     const { provider, sessions, tools } = this.options;
     const limits = session.limits;
     const signal = controller.signal;
+    let finalizing = false;
     let sequence = 0,
       calls = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -222,10 +324,10 @@ export class ManagedAgentRuntime implements AgentRuntime {
             'The session request budget is exhausted.',
           );
         // UTF-8 bytes plus message overhead are a conservative token upper estimate, not metered usage.
+        const definitions = finalizing ? [] : tools.definitions(session.scope);
         const estimatedInput =
-          new TextEncoder().encode(
-            JSON.stringify([session.messages, tools.definitions(session.scope), options.schema]),
-          ).length +
+          new TextEncoder().encode(JSON.stringify([session.messages, definitions, options.schema]))
+            .length +
           session.messages.length * 16;
         if (estimatedInput + limits.maxOutputTokens > limits.contextTokens)
           throw new DomainError(
@@ -238,7 +340,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
           requestId: `${turnId}:${round}`,
           model: session.requestedModel,
           messages: session.messages,
-          tools: tools.definitions(session.scope),
+          tools: definitions,
           schema: options.schema,
           maxOutputTokens: limits.maxOutputTokens,
           contextTokens: limits.contextTokens,
@@ -257,6 +359,11 @@ export class ManagedAgentRuntime implements AgentRuntime {
         if (response.message.role !== 'assistant')
           throw new DomainError('MODEL_INVALID_RESPONSE', 'Expected an assistant message.');
         const requested = response.message.toolCalls || [];
+        if (finalizing && requested.length)
+          throw new DomainError(
+            'MODEL_INVALID_RESPONSE',
+            'Tools cannot be dispatched during final serialization.',
+          );
         if (requested.length && response.finish !== 'tools')
           throw new DomainError(
             'MODEL_INVALID_RESPONSE',
@@ -331,11 +438,21 @@ export class ManagedAgentRuntime implements AgentRuntime {
           touch();
         }
         if (!requested.length) {
+          if (!finalizing && provider.structuredToolMode === 'separate-turn') {
+            finalizing = true;
+            session.messages.push({
+              role: 'user',
+              content:
+                'Return only the final JSON for the preceding task. No tools are available in this final response.',
+            });
+            await sessions.save(session);
+            continue;
+          }
           session.status = 'ready';
           await sessions.save(session);
           emit({ type: 'message.completed', text: response.message.content.slice(0, 12000) });
           emit({ type: 'turn.completed', turnId, status: 'completed' });
-          return { turnId, text: response.message.content };
+          return { turnId, text: response.message.content, model: session.reportedModel };
         }
       }
       throw new DomainError('MODEL_BUDGET_EXHAUSTED', 'The turn request budget is exhausted.');
@@ -366,6 +483,8 @@ export class ManagedAgentRuntime implements AgentRuntime {
     if (!session) {
       session = await this.options.sessions.load(id);
       if (!session) throw new DomainError('THREAD_NOT_FOUND', 'Managed session not found.');
+      const cached = this.loaded.get(id);
+      if (cached) return cached;
       if (
         session.runtimeId !== this.id ||
         session.providerId !== this.options.provider.id ||
@@ -391,22 +510,42 @@ export class ManagedAgentRuntime implements AgentRuntime {
     if (!active || active.turnId !== turnId) return;
     const session = await this.session(threadId);
     session.cancelRequested = true;
-    await this.options.sessions.save(session);
-    active.controller.abort();
+    try {
+      await this.options.sessions.save(session);
+    } finally {
+      active.controller.abort();
+    }
   }
   async release(threadId: string) {
+    await this.resuming.get(threadId)?.catch(() => {});
     const active = this.active.get(threadId);
+    let failure: unknown;
     if (active) {
-      await this.interrupt(threadId, active.turnId);
+      try {
+        await this.interrupt(threadId, active.turnId);
+      } catch (error) {
+        failure = error;
+      }
       await active.done.catch(() => {});
     }
     this.loaded.delete(threadId);
+    if (failure) throw failure;
   }
-  async dispose() {
-    if (this.closed) return;
+  dispose(): Promise<void> {
+    if (this.disposal) return this.disposal;
     this.closed = true;
-    await Promise.all([...this.active.keys()].map((id) => this.release(id)));
-    this.loaded.clear();
-    this.listeners.clear();
+    this.disposal = (async () => {
+      await Promise.allSettled([...this.resuming.values()]);
+      const results = await Promise.allSettled(
+        [...this.active.keys()].map((id) => this.release(id)),
+      );
+      this.loaded.clear();
+      this.listeners.clear();
+      const errors = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (errors.length) throw new AggregateError(errors, 'Managed runtime cleanup failed.');
+    })();
+    return this.disposal;
   }
 }

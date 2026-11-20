@@ -113,7 +113,9 @@ export class ResultService {
       projectId,
       workspace: run.workspace,
       readOnly: true,
+      purpose: 'delivery',
       runId: 'result-' + run.id,
+      ownerRunId: run.id,
       instructions:
         role.instructions +
         '\nThis prepares a result after acceptance. Read only. Do not run delivery/launch commands, mutate Git, use the network, install packages or run migrations. The service performs these operations. Do not read secrets or local/. Verify the saved commit and configuration; do not invent settings.' +

@@ -4,6 +4,7 @@ import { EnvelopeSchema, envelopeOutputSchema } from '../protocol/execution.ts';
 import { DomainError, type AgentRuntime } from './ports.ts';
 import { inScope, type ExecutionPolicy, type WorkspacePort } from './execution-ports.ts';
 import { checkContext } from './agent-context.ts';
+import { sessionResource } from '../protocol/resources.ts';
 
 /** Compare observed edits, including a worker reverting an earlier worker's change. */
 export function assignmentScopePreserved(
@@ -55,7 +56,7 @@ export async function runWorkerAssignments(options: {
       id: 'S-' + options.id(),
       roleId: role.id,
       roleVersion: role.version,
-      runtimeId: runtime.id,
+      ...sessionResource(run.resources, 'implementation', runtime.id),
       parentId: run.coordinatorSession?.id,
     };
     // Persist dispatch intent before opening a client. An unknown outcome is never replayed on restart.
@@ -86,6 +87,7 @@ export async function runWorkerAssignments(options: {
       const started = await runtime.start({
         projectId,
         runId: run.id,
+        purpose: 'implementation',
         workspace: workspace.path,
         assignment: {
           sessionId: session.id,

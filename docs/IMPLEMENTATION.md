@@ -35,7 +35,7 @@ Expand bounded delegation into Task/Attempt/AgentSession history and replanning.
 
 ## Current baseline
 
-Before this refactor, module import boundaries and Cordis composition are in place. Execution still uses a single Codex adapter, consumes native event payloads in core, asks Codex to create workers, and rejects concurrent project runs. Ollama and DeepSeek are not implemented. The audit passed 37 focused boundary/execution/recovery/storage tests; this is baseline evidence, not provider acceptance.
+Before this refactor, module import boundaries and Cordis composition were in place. Execution used a single Codex adapter, consumed native event payloads in core, asked Codex to create workers, and rejected concurrent project runs. Ollama and DeepSeek were not implemented. The audit passed 37 focused boundary/execution/recovery/storage tests; this is historical baseline evidence, not provider acceptance.
 
 ## Refactor progress
 
@@ -59,4 +59,20 @@ Both provider transports are implemented in `adapters/models/`. Ollama uses nati
 
 Validation after the transport increment: 138 default tests passed, including chunk boundaries/UTF-8, continuation across tool rounds, missing credentials, malformed/truncated responses, remote-model rejection and queued cancellation. Type checking and the production build passed; subsequent endpoint/thinking validation changes passed focused provider contracts and type checking. These are deterministic HTTP fixtures, not live-provider acceptance.
 
-Next: per-session resource profiles, durable routing and daemon/CLI integration for research, environment setup and goal execution. Preserve the configured profile and data policy for each run, use Buro handles for client thread references, and never change an existing session's provider by following a newly selected default. Add end-to-end HTTP-fixture goals for each route and a mixed team before opt-in live probes.
+## Resource routing and isolation increment
+
+Private machine configuration now defines connections, managed/native runtimes and local-only or hybrid profiles. Projects can inherit or pin a profile. Each run freezes its role routes, policy and configuration revisions. The runtime router persists Buro session handles and client-start intents separately from native references, rejects mismatched continuations and never substitutes the current default for an existing session. Research, environment preparation, workers, integration, review and result preparation use this routing; owner-run identity is explicit for derived activities.
+
+Daemon and CLI commands expose metadata, configuration initialization, model discovery, explicit bounded probes and default-profile selection. Credentials remain environment references. Capability probes are a core application service with durable receipts; neither opening settings nor selecting a profile starts inference. The minimal Mantine settings interface adds machine defaults and per-project inheritance, and the inspector displays saved requested/reported model identity.
+
+Manual managed repair saves new scope revisions while retaining historical criteria/materials. Workers retain assignment boundaries. Unknown tool or client-start outcomes stop continuation. Managed commands are restricted from private client/daemon data and network access; explicit service-owned environment setup can use the network. Managed Docker execution fails closed until equivalent private-data isolation exists.
+
+Independent reviews also required hardening host-side Git operations: configured hooks, filters, diff drivers and network helpers must not be activated by generated files during workspace inspection, checkpointing or local apply. Regression cases use hostile attributes and synthetic repositories. These protections supplement the tool executor because the service also reads and commits changes after model work.
+
+Deterministic HTTP-fixture goals cover Ollama, DeepSeek and a mixed team through real repository tools, service checks and fresh review without Codex. Live evidence remains separate. Initial Qwen3 4B probing showed that combining Ollama tools and JSON format can suppress native tool calls; the managed route now uses a tool phase followed by a bounded tools-free JSON turn. A passing capability probe does not establish coding acceptance.
+
+Validation after resource routing and isolation: 193 default tests passed, including hostile Git configuration, symlink ancestors, local-only policy, saved-route recovery, revised material scope, endpoint cancellation and HTTP-backed mixed-team acceptance. Type checking, production build, frontend/backend formatting and local documentation links passed. Five delegated implementation/review tasks covered routing, recovery, live validation, interface checks and isolation; findings were fixed before commit.
+
+Opt-in live evidence on the user's 16 GB Mac: Qwen3 4B was downloaded, and one native tool-to-JSON diagnostic passed after separating the phases. A tiny synthetic coding goal then exhausted its 2048-token planning output before edits or review. The final bounded attempt stopped at the probe because the model requested the diagnostic tool twice rather than once; it never reached the goal's increased 4096-token limit. Across three attempts there were five local generations, no cloud calls and no changes to the user's default or original project source. The live coding gate remains open. DeepSeek's live gate also remains open because no API credential is configured. Sanitized local reports are under ignored `artifacts/live-ollama-*.json`; `scripts/check-live-ollama.cjs` reproduces the opt-in check against a temporary repository.
+
+The next orchestration increment is bounded coordinator decisions and reusable/proposed specialists. A general task graph, parallel project runs and SQLite remain separately tracked work; the resource increment does not claim those capabilities.

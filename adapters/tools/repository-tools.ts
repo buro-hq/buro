@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { constants } from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -144,10 +145,38 @@ export class RepositoryTools implements ToolBroker {
     const stat = await fs.stat(filename);
     if (!stat.isFile() || stat.size > 256000)
       throw new DomainError('TOOL_LIMIT', 'Read a smaller text file (at most 256 KB).');
-    const text = await fs.readFile(filename, 'utf8');
+    const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
+    let text: string;
+    try {
+      text = await handle.readFile('utf8');
+    } finally {
+      await handle.close();
+    }
     if (text.includes('\0'))
       throw new DomainError('TOOL_LIMIT', 'This tool reads text files only.');
     return text;
+  }
+
+  private async git(scope: ToolScope, args: string[], signal: AbortSignal) {
+    await this.filename(scope, '');
+    const launch = this.executors.launchReadOnly(scope.workspace, ['git', ...args]);
+    return exec(launch.executable, launch.args, {
+      cwd: launch.cwd,
+      signal,
+      timeout: 15000,
+      maxBuffer: 1024 * 1024,
+      // Do not inherit recipe-proposed loader, Git config, or credential variables.
+      env: {
+        PATH: process.env.PATH,
+        CI: '1',
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_SYSTEM: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_CONFIG_COUNT: '0',
+        GIT_NO_LAZY_FETCH: '1',
+        GIT_TERMINAL_PROMPT: '0',
+      },
+    });
   }
 
   private async files(scope: ToolScope, relative: string, signal: AbortSignal) {
@@ -273,7 +302,9 @@ export class RepositoryTools implements ToolBroker {
         const command = scope.commands.find((c) => c.command === input.command);
         if (!command)
           throw new DomainError('TOOL_SCOPE', 'Only exact configured project checks may run.');
-        const launch = this.executors.launch(scope.workspace, ['/bin/sh', '-c', command.command]);
+        const launch = this.executors.launch(scope.workspace, ['/bin/sh', '-c', command.command], {
+          privateDataIsolation: true,
+        });
         options.onCommandStart?.(command.command);
         const result = await runProjectCommand(
           { ...command, title: command.id },
@@ -295,41 +326,60 @@ export class RepositoryTools implements ToolBroker {
       const base = scope.baseCommit || 'HEAD';
       if (!/^(HEAD|[a-f0-9]{7,64})$/.test(base))
         throw new DomainError('TOOL_SCOPE', 'Invalid saved Git base.');
-      const args = [
+      const global = [
         '--no-optional-locks',
+        '--no-pager',
+        '--work-tree=' + scope.workspace,
         '-c',
         'core.hooksPath=/dev/null',
-        '--no-pager',
-        'diff',
-        '--no-ext-diff',
-        '--no-textconv',
+        '-c',
+        'core.fsmonitor=false',
+        '-c',
+        'core.untrackedCache=false',
+        '-c',
+        'core.attributesFile=/dev/null',
       ];
-      const config = {
-        cwd: scope.workspace,
-        signal: options.signal,
-        timeout: 15000,
-        maxBuffer: 1024 * 1024,
-        env: {
-          PATH: process.env.PATH,
-          GIT_CONFIG_GLOBAL: '/dev/null',
-          GIT_CONFIG_SYSTEM: '/dev/null',
-          GIT_CONFIG_NOSYSTEM: '1',
-        },
-      };
-      const names = (await exec('git', [...args, '--name-only', '-z', base], config)).stdout
+      let filterKeys = '';
+      try {
+        filterKeys = (
+          await this.git(
+            scope,
+            [
+              ...global,
+              'config',
+              '--includes',
+              '--name-only',
+              '--null',
+              '--get-regexp',
+              '^filter\..*\.(clean|process|smudge|required)$',
+            ],
+            options.signal,
+          )
+        ).stdout;
+      } catch (error) {
+        if ((error as { code?: unknown }).code !== 1) throw error;
+      }
+      for (const key of filterKeys.split('\0').filter(Boolean)) {
+        if (!/^filter\..+\.(clean|process|smudge|required)$/s.test(key))
+          throw new DomainError('TOOL_SCOPE', 'Unsafe repository filter configuration.');
+        global.push('-c', key + (key.endsWith('.required') ? '=false' : '='));
+      }
+      const args = [...global, 'diff', '--no-ext-diff', '--no-textconv'];
+      const names = (
+        await this.git(scope, [...args, '--name-only', '-z', base], options.signal)
+      ).stdout
         .split('\0')
         .filter((name) => name && !blocked(name, scope));
       let content = names.length
-        ? (await exec('git', [...args, base, '--', ...names.slice(0, 300)], config)).stdout.slice(
-            0,
-            24000,
-          )
+        ? (
+            await this.git(scope, [...args, base, '--', ...names.slice(0, 300)], options.signal)
+          ).stdout.slice(0, 24000)
         : '';
       const untracked = (
-        await exec(
-          'git',
-          ['--no-optional-locks', 'ls-files', '--others', '--exclude-standard', '-z'],
-          config,
+        await this.git(
+          scope,
+          [...global, 'ls-files', '--others', '--exclude-standard', '-z'],
+          options.signal,
         )
       ).stdout
         .split('\0')

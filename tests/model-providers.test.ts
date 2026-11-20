@@ -153,7 +153,7 @@ test('Ollama discovers installed models and preserves native tools/thinking with
       assert.equal(body.options.num_ctx, 16000);
       assert.equal(body.options.num_predict, 1024);
       assert.equal(body.think, true);
-      assert.deepEqual(body.format, { type: 'object' });
+      assert.deepEqual(body.format, body.tools?.length ? undefined : { type: 'object' });
       return bodies.length === 1
         ? streamed(
             [
@@ -213,6 +213,8 @@ test('Ollama discovers installed models and preserves native tools/thinking with
   assert.deepEqual(bodies[1].messages[1].tool_calls[0].function.arguments, { path: 'src/a.ts' });
   assert.equal(second.message.content, '{"ok":"да"}');
   assert.equal(second.usage, undefined);
+  await p.complete({ ...input(), tools: [] });
+  assert.deepEqual(bodies[2].format, { type: 'object' });
 });
 
 test('unfinished streams, invalid arguments and provider errors never become success or expose credentials', async () => {

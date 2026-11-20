@@ -1,6 +1,6 @@
 # First provider integrations
 
-Status: implementation contract for the next milestone. The production daemon still selects Codex CLI. The shared managed runtime and Ollama/DeepSeek HTTP adapters are implemented and covered by deterministic contracts; resource-profile wiring and live-provider acceptance remain pending. [Implementation progress](IMPLEMENTATION.md), [product vision](../VISION.md), [architecture](../ARCHITECTURE.md) and [roadmap](../ROADMAP.md) share this scope.
+Status: implementation contract and acceptance criteria. The daemon supports native Codex and configured managed Ollama/DeepSeek routes, including mixed profiles. Deterministic contracts cover real temporary worktrees, tools, independent checks and review through both HTTP adapters; live acceptance is tracked separately. [Configuration](RESOURCES.md), [implementation progress](IMPLEMENTATION.md), [product vision](../VISION.md), [architecture](../ARCHITECTURE.md) and [roadmap](../ROADMAP.md) share this scope.
 
 ## Supported routes in the first milestone
 
@@ -29,7 +29,7 @@ Conceptual project profiles:
 - **Hybrid:** local workers and permitted DeepSeek or Codex sessions can cooperate. Routing follows the project's data scope and cost limits.
 - **Codex:** keep the existing client behavior while using the same Buro task and evidence model.
 
-These are design concepts, not current `.buro/project.json` fields or working connection commands. Select concrete defaults after connection probes. Do not silently add a remote provider as a local model's fallback.
+Private resource profiles implement these routes; `.buro/project.json` can reference a profile through `resourceProfile`. See [execution resources](RESOURCES.md) for the actual schema and commands. Broader adaptive routing remains future work. Do not silently add a remote provider as a local model's fallback.
 
 ## Shared managed execution
 
@@ -47,6 +47,8 @@ The initial tools cover repository read/search, bounded edit/patch, scoped comma
 ## Provider specific behavior
 
 Ollama has its own native message, tool and completion representation. Structured outputs and tool calling are separate capabilities; verify the actual combination needed by a role. Limit concurrent inference according to endpoint capacity and available memory, independently of the number of logical agent sessions. [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs), [Ollama concurrency](https://docs.ollama.com/faq#how-does-ollama-handle-concurrent-requests).
+
+Buro's Ollama route submits tools without `format`, then requests the final JSON in a separate turn with no tools. Both phases consume the same saved request budget; final serialization cannot dispatch tools. This follows observed Qwen3 4B behavior during opt-in probing, where combining the two request features suppressed native tool calls. Truncated output remains a failure and is never accepted as a result envelope.
 
 For DeepSeek, reconstruct streamed function calls and correlate results with the correct call IDs. Thinking/tool conversations require preserving the provider's required continuation fields: current documentation requires returning prior `reasoning_content` when requests carry tools. Keep this as private provider state, not coordinator decisions, UI messages or ordinary event exports. Normalized visible progress should summarize actions and outcomes. [DeepSeek thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/).
 

@@ -2,7 +2,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type { ExecutionEnvironmentPort } from '../../core/environment-ports.ts';
-import { DomainError, type AgentRuntime, type ProjectRegistry } from '../../core/ports.ts';
+import {
+  DomainError,
+  type AgentRuntime,
+  type ProjectRegistry,
+  type RuntimeSelection,
+} from '../../core/ports.ts';
 import type { Check } from '../../protocol/domain.ts';
 import {
   EnvironmentRecipeSchema,
@@ -19,18 +24,37 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
   readonly projects: ProjectRegistry;
   readonly runtime: AgentRuntime;
   readonly executors: EnvironmentExecutors;
-  constructor(projects: ProjectRegistry, runtime: AgentRuntime, executors: EnvironmentExecutors) {
+  readonly selection?: RuntimeSelection;
+  constructor(
+    projects: ProjectRegistry,
+    runtime: AgentRuntime,
+    executors: EnvironmentExecutors,
+    selection?: RuntimeSelection,
+  ) {
     this.projects = projects;
     this.runtime = runtime;
     this.executors = executors;
+    this.selection = selection;
   }
   async prepare(input: Input): Promise<Check> {
     const started = performance.now();
     const root = this.projects.get(input.projectId).snapshot().project.root;
     const config = input.profile.environment || { provider: 'native' as const };
+    const owner = this.projects
+      .get(input.projectId)
+      .snapshot()
+      .runs.find((run) => run.id === input.runId);
+    const resources = owner?.resources || this.selection?.forProject(input.projectId);
+    const privateDataIsolation =
+      !!resources &&
+      [resources.coordinator, resources.worker, resources.reviewer].some(
+        (resource) => resource.client === 'managed',
+      );
     let world;
     try {
-      world = await this.executors.register(input.workspace, root, config, input.signal);
+      world = await this.executors.register(input.workspace, root, config, input.signal, {
+        privateDataIsolation,
+      });
     } catch (error) {
       input.signal.throwIfAborted();
       if (error instanceof DomainError) throw error;
@@ -182,6 +206,7 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
     for (const command of commands) {
       input.signal.throwIfAborted();
       const launch = this.executors.launch(input.workspace, ['/bin/sh', '-c', command.command], {
+        allowNetwork: true,
         variables: {
           CI: '1',
           PROJECT_ROOT: this.projects.get(input.projectId).snapshot().project.root,
@@ -216,7 +241,14 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
       projectId: input.projectId,
       workspace: input.workspace,
       runId: 'environment-' + input.runId,
+      ownerRunId: this.projects
+        .get(input.projectId)
+        .snapshot()
+        .runs.some((run) => run.id === input.runId)
+        ? input.runId
+        : undefined,
       readOnly: true,
+      purpose: 'environment',
       instructions:
         'Inspect the project and return an environment recipe. Read only: do not execute setup, edit files, start child agents, access secrets, or change acceptance commands. Use existing documentation, CI, manifests and toolchain configuration as evidence. The service executes setup separately in the selected environment.',
     });

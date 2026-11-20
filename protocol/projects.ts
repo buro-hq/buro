@@ -14,6 +14,10 @@ export const ProjectProfileSchema = z
   .strictObject({
     version: z.literal(1),
     revision: z.number().int().nonnegative(),
+    resourceProfile: z
+      .string()
+      .regex(/^[a-z][a-z0-9_-]{0,63}$/)
+      .optional(),
     context: z.string().max(16000),
     allowedPaths: z.array(RelativePathSchema).min(1).max(40),
     protectedPaths: z.array(RelativePathSchema).max(40),

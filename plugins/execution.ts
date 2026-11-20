@@ -28,6 +28,7 @@ export const executionPlugin: Plugin.Object<{
       ...options,
       projects: ctx.projects.registry,
       runtime: ctx.agentRuntime.adapter,
+      selection: ctx.agentRuntime.selection,
       now: () => new Date().toISOString(),
       id: randomUUID,
       onCompleted: (projectId, runId) => ctx.emit('run/completed', projectId, runId),

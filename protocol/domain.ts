@@ -26,6 +26,7 @@ export type Project = {
 };
 export type ProjectCommand = { id: string; title: string; command: string; timeoutMs: number };
 export type ProjectProfile = {
+  resourceProfile?: string;
   version: 1;
   revision: number;
   context: string;
@@ -118,6 +119,10 @@ export type AgentSession = {
   roleId: string;
   roleVersion: number;
   runtimeId: string;
+  providerId?: string;
+  model?: string;
+  reportedModel?: string;
+  configurationRevision?: string;
   parentId?: string;
   result?: {
     status: 'success' | 'fail';
@@ -157,6 +162,7 @@ export type RunIssue = {
   checks: string[];
 };
 export type Run = {
+  resources?: import('./resources.ts').ResourceSnapshot;
   delegation?: 'buro';
   coordinatorSession?: AgentSession;
   contextMaterials?: ContextMaterial[];

@@ -15,6 +15,7 @@ import {
 
 type Options = HttpOptions & { id: string; think?: boolean | string };
 export class OllamaProvider implements ModelProvider {
+  readonly structuredToolMode = 'separate-turn' as const;
   readonly id: string;
   readonly revision: string;
   readonly local: boolean;
@@ -26,7 +27,7 @@ export class OllamaProvider implements ModelProvider {
     this.id = options.id;
     this.local = ['localhost', '[::1]'].includes(url.hostname) || /^127\./.test(url.hostname);
     this.revision = createHash('sha256')
-      .update(JSON.stringify([url.href, options.think ?? 'model-default']))
+      .update(JSON.stringify(['ollama-native-v1', url.href, options.think ?? 'model-default']))
       .digest('hex');
     this.gate = options.gate || new RequestGate(1);
   }
@@ -125,7 +126,7 @@ export class OllamaProvider implements ModelProvider {
           model: input.model,
           messages,
           tools: input.tools.map((tool) => ({ type: 'function', function: tool })),
-          format: input.schema,
+          ...(!input.tools.length ? { format: input.schema } : {}),
           stream: true,
           ...(this.options.think !== undefined ? { think: this.options.think } : {}),
           options: { num_ctx: input.contextTokens, num_predict: input.maxOutputTokens },
@@ -203,6 +204,11 @@ export class OllamaProvider implements ModelProvider {
             arguments: call.fragments ? parseJSON(call.fragments) : (call.args ?? {}),
           };
         });
+      if (!toolCalls.length && reason === 'stop' && !content.trim())
+        throw new DomainError(
+          'MODEL_INVALID_RESPONSE',
+          'Ollama completed without an assistant answer.',
+        );
       return {
         model: reportedModel,
         finish:

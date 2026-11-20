@@ -8,7 +8,7 @@ The product should make smaller models and different coding clients useful throu
 
 ## Current product and next milestone
 
-The current production runtime is Codex CLI. The next implementation milestone includes **Ollama and the DeepSeek model API**, alongside the existing Codex adapter. Both providers are part of that milestone's acceptance criteria. DeepSeek Harness is a reference architecture, not a required runtime or dependency.
+The service includes Codex CLI and opt-in managed routes for **Ollama and the DeepSeek model API**. Both providers remain part of the milestone's live acceptance criteria; implemented transports and deterministic fixtures alone do not complete that gate. DeepSeek Harness is a reference architecture, not a required runtime or dependency.
 
 Ollama and DeepSeek use a Buro-managed agent runtime: Buro owns the tool loop, sessions, delegation and checkpoints. Codex remains a separate client adapter. A project can use one provider throughout or combine available clients and models under its selected policy. A managed-runtime project must be usable without Codex installed.
 
@@ -67,4 +67,4 @@ The project team presents reusable role definitions and their sessions compactly
 
 [Private-project evaluation details removed.]
 
-The first provider slice does not wait for a general task graph, automatic crash replay or SQLite migration. Those extensions follow through the same contracts. These criteria define the next implementation milestone, not capabilities already shipped by the current Codex-only runtime.
+The first provider slice does not wait for a general task graph, automatic crash replay or SQLite migration. Those extensions follow through the same contracts. These criteria define the acceptance milestone; implemented provider routes and deterministic fixtures do not establish live coding quality.

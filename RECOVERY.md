@@ -2,7 +2,7 @@
 
 A stopped run preserves its workspace, coordinator thread ID, policy, role definitions, checks and timeline. Restarting the service marks unfinished work interrupted; it does not automatically replay implementation, installs or delivery.
 
-This is current Codex behavior. The target in [ARCHITECTURE.md](ARCHITECTURE.md) adds per-task action reconciliation and private Buro-managed checkpoints for Ollama and the DeepSeek API. Native client resume and checkpoint continuation are distinct; neither permits blindly replaying a tool action whose external result is unknown. Provider-specific recovery criteria are in [providers](docs/PROVIDERS.md).
+Native Codex resumes its client thread; Ollama/DeepSeek use private Buro-managed checkpoints and tool action IDs. Durable routing preserves the original runtime/configuration, independently of a newly selected default. A managed repair records revised instructions, material manifests and scope while keeping prior revisions and actions. Neither resume form permits blindly replaying an action with an unknown outcome. Automatic per-action reconciliation remains future work in [ARCHITECTURE.md](ARCHITECTURE.md). Provider-specific criteria are in [providers](docs/PROVIDERS.md).
 
 ## Operator flow
 

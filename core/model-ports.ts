@@ -18,6 +18,7 @@ export interface ModelProvider {
   readonly id: string;
   readonly revision: string;
   readonly local: boolean;
+  readonly structuredToolMode?: 'combined' | 'separate-turn';
   complete(input: {
     requestId: string;
     model: string;
@@ -38,6 +39,7 @@ export interface ModelProvider {
 export type ToolScope = {
   projectId: string;
   runId?: string;
+  ownerRunId?: string;
   sessionId: string;
   workspace: string;
   readOnly: boolean;
@@ -72,6 +74,8 @@ export type ManagedSession = {
   requestedModel: string;
   reportedModel?: string;
   scope: ToolScope;
+  assignment?: { roleId: string; allowedPaths: string[]; protectedPaths: string[] };
+  scopeRevisions?: { revision: number; scope: ToolScope; instructions: string }[];
   messages: ModelMessage[];
   status: 'ready' | 'running' | 'interrupted' | 'failed';
   cancelRequested?: boolean;

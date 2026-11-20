@@ -34,7 +34,7 @@ export class DeepSeekProvider implements ModelProvider {
     this.options = options;
     this.id = options.id;
     this.revision = createHash('sha256')
-      .update(JSON.stringify([endpoint.href, options.thinking ?? 'disabled']))
+      .update(JSON.stringify(['deepseek-chat-v1', endpoint.href, options.thinking ?? 'disabled']))
       .digest('hex');
     this.gate = options.gate || new RequestGate(2);
   }
@@ -116,7 +116,7 @@ export class DeepSeekProvider implements ModelProvider {
         inputTokens = tokenCount(usage.prompt_tokens) ?? inputTokens;
         outputTokens = tokenCount(usage.completion_tokens) ?? outputTokens;
         const choices = Array.isArray(chunk.choices) ? chunk.choices.map(object) : [];
-        const choice = choices.find((item) => item.index === 0) || choices[0];
+        const choice = choices.find((item) => item.index === 0);
         if (!choice) continue;
         const delta = object(choice.delta);
         if (typeof delta.content === 'string') content += delta.content;
@@ -161,6 +161,11 @@ export class DeepSeekProvider implements ModelProvider {
             );
           return { id: call.id, name: call.name, arguments: parseJSON(call.arguments || '{}') };
         });
+      if (!toolCalls.length && finish === 'stop' && !content.trim())
+        throw new DomainError(
+          'MODEL_INVALID_RESPONSE',
+          'DeepSeek completed without an assistant answer.',
+        );
       return {
         model: reportedModel,
         finish:

@@ -46,7 +46,15 @@ export class RequestGate {
 
 export type HttpOptions = { endpoint: string; fetch?: typeof fetch; gate?: RequestGate };
 export function endpointURL(endpoint: string) {
-  const url = new URL(endpoint.endsWith('/') ? endpoint : endpoint + '/');
+  let url: URL;
+  try {
+    url = new URL(endpoint.endsWith('/') ? endpoint : endpoint + '/');
+  } catch {
+    throw new DomainError(
+      'INVALID_ENDPOINT',
+      'Use a valid HTTP(S) endpoint without embedded credentials.',
+    );
+  }
   if (
     !['http:', 'https:'].includes(url.protocol) ||
     url.username ||
@@ -104,7 +112,14 @@ export async function* lines(response: Response, onProgress: () => void) {
   if (!response.body)
     throw new DomainError('MODEL_INVALID_RESPONSE', 'The model response has no body.');
   const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const decode = (value?: Uint8Array, streaming = false) => {
+    try {
+      return decoder.decode(value, { stream: streaming });
+    } catch {
+      throw new DomainError('MODEL_INVALID_RESPONSE', 'The endpoint returned invalid UTF-8.');
+    }
+  };
   let buffer = '',
     size = 0,
     finished = false;
@@ -113,14 +128,14 @@ export async function* lines(response: Response, onProgress: () => void) {
       const chunk = await reader.read();
       if (chunk.done) {
         finished = true;
-        buffer += decoder.decode();
+        buffer += decode();
         break;
       }
       size += chunk.value.byteLength;
       if (size > 4 * 1024 * 1024)
         throw new DomainError('MODEL_RESPONSE_LIMIT', 'The model response exceeds 4 MB.');
       onProgress();
-      buffer += decoder.decode(chunk.value, { stream: true });
+      buffer += decode(chunk.value, true);
       let newline: number;
       while ((newline = buffer.indexOf('\n')) >= 0) {
         yield buffer.slice(0, newline).replace(/\r$/, '');

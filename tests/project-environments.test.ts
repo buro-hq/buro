@@ -83,7 +83,7 @@ async function fixture(t: any) {
     },
   } as unknown as AgentRuntime;
   const projects = {
-    get: () => ({ snapshot: () => ({ project: { root } }) }),
+    get: () => ({ snapshot: () => ({ project: { root }, runs: [] }) }),
   } as unknown as ProjectRegistry;
   const executors = new FixtureExecutors();
   const manager = new ProjectEnvironments(projects, runtime, executors);

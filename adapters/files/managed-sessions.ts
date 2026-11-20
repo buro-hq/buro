@@ -11,6 +11,19 @@ const result = z.object({
   isError: z.boolean().optional(),
   exitCode: z.number().nullable().optional(),
 });
+const scope = z.object({
+  projectId: z.string(),
+  runId: z.string().optional(),
+  ownerRunId: z.string().optional(),
+  sessionId: z.string(),
+  workspace: z.string(),
+  readOnly: z.boolean(),
+  allowedPaths: z.array(z.string()),
+  protectedPaths: z.array(z.string()),
+  materials: z.array(z.string()),
+  commands: z.array(z.object({ id: z.string(), command: z.string(), timeoutMs: z.number() })),
+  baseCommit: z.string().optional(),
+});
 const schema = z.object({
   version: z.literal(1),
   id: z.string(),
@@ -26,18 +39,17 @@ const schema = z.object({
   providerRevision: z.string(),
   requestedModel: z.string(),
   reportedModel: z.string().optional(),
-  scope: z.object({
-    projectId: z.string(),
-    runId: z.string().optional(),
-    sessionId: z.string(),
-    workspace: z.string(),
-    readOnly: z.boolean(),
-    allowedPaths: z.array(z.string()),
-    protectedPaths: z.array(z.string()),
-    materials: z.array(z.string()),
-    commands: z.array(z.object({ id: z.string(), command: z.string(), timeoutMs: z.number() })),
-    baseCommit: z.string().optional(),
-  }),
+  scope,
+  assignment: z
+    .object({
+      roleId: z.string(),
+      allowedPaths: z.array(z.string()),
+      protectedPaths: z.array(z.string()),
+    })
+    .optional(),
+  scopeRevisions: z
+    .array(z.object({ revision: z.number().int().positive(), scope, instructions: z.string() }))
+    .optional(),
   messages: z.array(
     z.object({
       role: z.enum(['system', 'user', 'assistant', 'tool']),

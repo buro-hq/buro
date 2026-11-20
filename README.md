@@ -9,9 +9,9 @@ Buro is a local workspace for automating coding goals with a coordinator, focuse
 
 Work happens in a separate Git worktree. You can inspect the result, apply it to your branch, or have Buro open a draft PR. A coordinator plans the work and selects workers when needed; a separate reviewer checks the result.
 
-Buro is still in development. The current production runtime uses your installed, signed-in Codex CLI. The first multi-provider milestone adds **Ollama and the DeepSeek model API** through a Buro-managed agent runtime; these integrations are planned, not available in the current release.
+Buro is still in development. It supports your installed Codex CLI and opt-in **Ollama and DeepSeek model API** connections through a Buro-managed runtime. The default remains Codex; configure [execution resources](docs/RESOURCES.md) to use direct model connections or a mixed team.
 
-The [product vision](VISION.md), [target architecture](ARCHITECTURE.md) and [provider integration contract](docs/PROVIDERS.md) define that milestone: Buro manages the team, tools and verification across selected clients and models. The instructions below describe the currently shipped Codex route.
+The [product vision](VISION.md), [target architecture](ARCHITECTURE.md) and [provider integration contract](docs/PROVIDERS.md) define the full direction. Buro owns worker dispatch, tools and verification; richer replanning and concurrent runs remain on the roadmap.
 
 The [implementation sequence](docs/IMPLEMENTATION.md) tracks the transition from the existing route to that vision.
 
@@ -21,7 +21,7 @@ The [implementation sequence](docs/IMPLEMENTATION.md) tracks the transition from
 
 ## Run locally
 
-You need Node.js **24+**, npm, Git, and an authenticated Codex CLI. Connected repositories must have at least one commit. Native command execution uses macOS `sandbox-exec` or Linux `bubblewrap`; a Docker provider is also available.
+You need Node.js **24+**, npm, Git, and a configured execution route: authenticated Codex CLI, installed Ollama model, or DeepSeek API credentials. The default route requires Codex until changed. Connected repositories must have at least one commit. Native command execution uses macOS `sandbox-exec` or Linux `bubblewrap`; Docker is currently available for the native Codex route.
 
 ```sh
 git clone https://github.com/buro-hq/buro.git
@@ -91,7 +91,7 @@ Use the project and goal IDs returned by the preceding commands. See [developmen
 
 ## Current limits
 
-- Codex CLI is the only agent runtime included. Ollama and DeepSeek API support are required in the next milestone; a configured model name alone does not add those capabilities today.
+- Managed routes require a configured tool-capable model and native execution environment. Connection diagnostics are not proof of coding quality. Live-provider acceptance is tracked separately from deterministic tests.
 - A run stops after 10 minutes without coordinator or child-agent progress. Checks, environment setup and delivery have their own timeouts.
 - Worktrees, past attachments and dependency caches are retained. Automatic cleanup only removes stale temporary writes.
 - This is a local tool. The service listens on loopback; it is not a hosted or shared team service.
@@ -103,7 +103,7 @@ npm test
 npm run build
 ```
 
-[Product vision](VISION.md) · [Target architecture](ARCHITECTURE.md) · [Providers](docs/PROVIDERS.md) · [Development and configuration](docs/DEVELOPMENT.md) · [Project setup](USER-PROJECTS.md) · [Current execution flow](GOAL-EXECUTION-POC.md) · [Recovery](RECOVERY.md) · [UI architecture](UI-ARCHITECTURE.md) · [Roadmap](ROADMAP.md) · [Branding](branding/README.md)
+[Product vision](VISION.md) · [Target architecture](ARCHITECTURE.md) · [Execution resources](docs/RESOURCES.md) · [Providers](docs/PROVIDERS.md) · [Development and configuration](docs/DEVELOPMENT.md) · [Project setup](USER-PROJECTS.md) · [Current execution flow](GOAL-EXECUTION-POC.md) · [Recovery](RECOVERY.md) · [UI architecture](UI-ARCHITECTURE.md) · [Roadmap](ROADMAP.md) · [Branding](branding/README.md)
 
 ## License
 

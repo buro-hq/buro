@@ -4,7 +4,7 @@
 
 [Implementation sequence](docs/IMPLEMENTATION.md) records the agreed order: refactor the current route, add Ollama and DeepSeek, then expand orchestration and the production interface.
 
-The current production runtime is Codex CLI. The first multi-provider milestone includes **Ollama and the DeepSeek model API**, a shared Buro-managed runtime, and delegation controlled by Buro. DeepSeek Harness is a reference and possible later runtime, not a prerequisite.
+The service supports Codex CLI and opt-in **Ollama and DeepSeek model API** routes through a shared Buro-managed runtime. Buro controls worker dispatch and resource routing. DeepSeek Harness is a reference and possible later runtime, not a prerequisite. Live acceptance and the broader orchestration model remain distinct gates.
 
 ## First milestone
 

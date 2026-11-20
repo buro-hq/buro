@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
+import { constants } from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { safeGit } from '../processes/safe-git.ts';
 import type { WorkspacePort } from '../../core/execution-ports.ts';
 import type { ProjectRegistry } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
@@ -9,7 +9,62 @@ import { runProjectCommand } from '../checks/project-commands.ts';
 import type { ProjectProfile, ContextMaterial } from '../../protocol/domain.ts';
 import { stageContextMaterials } from './context-materials.ts';
 import { NodeEnvironment } from '../dependencies/node-environment.ts';
-const exec = promisify(execFile);
+
+async function inspectWorkspacePath(workspace: string, expectedRoot: string, file: string) {
+  const parts = file.split('/');
+  if (
+    !file ||
+    path.isAbsolute(file) ||
+    parts.some((part) => !part || part === '..' || part === '.')
+  )
+    throw Error('Invalid workspace file path.');
+  if (
+    (await fs.lstat(workspace)).isSymbolicLink() ||
+    (await fs.realpath(workspace)) !== expectedRoot
+  )
+    throw Error('The workspace path changed.');
+  let target = expectedRoot;
+  for (let index = 0; index < parts.length; index++) {
+    target = path.join(target, parts[index]);
+    const stat = await fs.lstat(target);
+    if (index === parts.length - 1) return { target, stat };
+    if (stat.isSymbolicLink() || !stat.isDirectory())
+      throw Error('Unsafe workspace ancestor: ' + file);
+  }
+  throw Error('Invalid workspace file path.');
+}
+
+async function readWorkspaceFile(
+  workspace: string,
+  expectedRoot: string,
+  file: string,
+  limit: number,
+) {
+  const { target, stat } = await inspectWorkspacePath(workspace, expectedRoot, file);
+  if (!stat.isFile()) throw Error('Not a regular workspace file: ' + file);
+  const handle = await fs.open(
+    target,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  try {
+    const opened = await handle.stat();
+    const current = await inspectWorkspacePath(workspace, expectedRoot, file);
+    if (
+      !opened.isFile() ||
+      opened.dev !== stat.dev ||
+      opened.ino !== stat.ino ||
+      current.stat.dev !== opened.dev ||
+      current.stat.ino !== opened.ino ||
+      (await fs.realpath(target)) !== target
+    )
+      throw Error('The workspace file changed while opening: ' + file);
+    if (opened.size > limit) throw Error('File diff exceeds size limit: ' + file);
+    return await handle.readFile('utf8');
+  } finally {
+    await handle.close();
+  }
+}
+
 export class GitWorkspaces implements WorkspacePort {
   projects: ProjectRegistry;
   records = new Map<
@@ -17,6 +72,8 @@ export class GitWorkspaces implements WorkspacePort {
     {
       base: string;
       gitPointer: string;
+      gitDirectory: string;
+      realWorkspace: string;
       dependencyLink?: string;
       environment?: NodeEnvironment;
       contextRoot: string;
@@ -58,12 +115,12 @@ export class GitWorkspaces implements WorkspacePort {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
     }
     const sha = (
-      await exec('git', ['rev-parse', '--verify', '--end-of-options', `${base}^{commit}`], {
+      await safeGit(['rev-parse', '--verify', '--end-of-options', `${base}^{commit}`], {
         cwd: root,
       })
     ).stdout.trim();
     await fs.mkdir(path.dirname(workspace), { recursive: true });
-    await exec('git', ['worktree', 'add', '--detach', workspace, sha], { cwd: root });
+    await safeGit(['worktree', 'add', '--detach', workspace, sha], { cwd: root });
     let dependencyLink: string | undefined;
     if (
       !options?.managedEnvironment &&
@@ -91,9 +148,14 @@ export class GitWorkspaces implements WorkspacePort {
         options?.profile?.dependencies === 'link-node-modules',
         options?.signal,
       );
+    const realWorkspace = await fs.realpath(workspace);
     this.records.set(workspace, {
       base: sha,
-      gitPointer: await fs.readFile(path.join(workspace, '.git'), 'utf8'),
+      gitPointer: await readWorkspaceFile(workspace, realWorkspace, '.git', 64 * 1024),
+      realWorkspace,
+      gitDirectory: (
+        await safeGit(['rev-parse', '--absolute-git-dir'], { cwd: workspace })
+      ).stdout.trim(),
       dependencyLink,
       environment,
       contextRoot: root,
@@ -141,28 +203,27 @@ export class GitWorkspaces implements WorkspacePort {
     const actual = await fs.realpath(workspace);
     if (actual !== expected)
       throw new DomainError('INVALID_WORKSPACE', 'The workspace was replaced with a symlink.');
-    const top = (
-      await exec('git', ['rev-parse', '--show-toplevel'], { cwd: workspace })
-    ).stdout.trim();
+    const gitPointer = await readWorkspaceFile(workspace, actual, '.git', 64 * 1024);
+    const top = (await safeGit(['rev-parse', '--show-toplevel'], { cwd: workspace })).stdout.trim();
     if ((await fs.realpath(top)) !== actual)
       throw new DomainError('INVALID_WORKSPACE', 'The workspace is not a Git root.');
     const sourceCommon = await fs.realpath(
         (
-          await exec('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+          await safeGit(['rev-parse', '--path-format=absolute', '--git-common-dir'], {
             cwd: root,
           })
         ).stdout.trim(),
       ),
       workCommon = await fs.realpath(
         (
-          await exec('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+          await safeGit(['rev-parse', '--path-format=absolute', '--git-common-dir'], {
             cwd: workspace,
           })
         ).stdout.trim(),
       );
     if (
       sourceCommon !== workCommon ||
-      (await exec('git', ['rev-parse', 'HEAD'], { cwd: workspace })).stdout.trim() !== base
+      (await safeGit(['rev-parse', 'HEAD'], { cwd: workspace })).stdout.trim() !== base
     )
       throw new DomainError(
         'WORKSPACE_CHANGED',
@@ -212,7 +273,11 @@ export class GitWorkspaces implements WorkspacePort {
     }
     this.records.set(workspace, {
       base,
-      gitPointer: await fs.readFile(path.join(workspace, '.git'), 'utf8'),
+      gitPointer,
+      realWorkspace: actual,
+      gitDirectory: (
+        await safeGit(['rev-parse', '--absolute-git-dir'], { cwd: workspace })
+      ).stdout.trim(),
       dependencyLink,
       environment,
       contextRoot: root,
@@ -224,7 +289,10 @@ export class GitWorkspaces implements WorkspacePort {
   async validate(workspace: string) {
     const entry = this.records.get(workspace);
     if (!entry) throw Error('The workspace is not registered.');
-    if ((await fs.readFile(path.join(workspace, '.git'), 'utf8')) !== entry.gitPointer)
+    if (
+      (await readWorkspaceFile(workspace, entry.realWorkspace, '.git', 64 * 1024)) !==
+      entry.gitPointer
+    )
       throw Error('Git control data changed.');
     if (
       entry.dependencyLink &&
@@ -247,15 +315,18 @@ export class GitWorkspaces implements WorkspacePort {
   async changes(workspace: string, base: string) {
     const entry = await this.validate(workspace);
     if (entry.base !== base) throw Error('The workspace base changed.');
-    const opts = { cwd: workspace, maxBuffer: 32 * 1024 * 1024 };
+    const opts = { cwd: workspace, gitDirectory: entry.gitDirectory, maxBuffer: 32 * 1024 * 1024 };
     const tracked = (
-        await exec('git', ['diff', '--name-only', '-z', base, '--'], opts)
+        await safeGit(
+          ['diff', '--no-ext-diff', '--no-textconv', '--name-only', '-z', base, '--'],
+          opts,
+        )
       ).stdout.split('\0'),
       untracked = (
-        await exec('git', ['ls-files', '--others', '--exclude-standard', '-z'], opts)
+        await safeGit(['ls-files', '--others', '--exclude-standard', '-z'], opts)
       ).stdout.split('\0');
     const oldFiles = new Set(
-      (await exec('git', ['ls-tree', '-r', '--name-only', '-z', base], opts)).stdout.split('\0'),
+      (await safeGit(['ls-tree', '-r', '--name-only', '-z', base], opts)).stdout.split('\0'),
     );
     const files = [...new Set([...tracked, ...untracked])].filter(
       (f) =>
@@ -271,19 +342,18 @@ export class GitWorkspaces implements WorkspacePort {
         after = '';
       try {
         before = (
-          await exec('git', ['show', `${base}:${file}`], { ...opts, maxBuffer: 2 * 1024 * 1024 })
+          await safeGit(['show', '--no-ext-diff', '--no-textconv', `${base}:${file}`], {
+            ...opts,
+            maxBuffer: 2 * 1024 * 1024,
+          })
         ).stdout;
       } catch {
         if (oldFiles.has(file)) throw Error('Could not read source file: ' + file);
       }
       try {
-        const stat = await fs.lstat(path.join(workspace, file));
-        if (stat.isSymbolicLink())
-          after = '[symlink ' + (await fs.readlink(path.join(workspace, file))) + ']';
-        else {
-          if (stat.size > 1024 * 1024) throw Error('File diff exceeds 1 MB: ' + file);
-          after = await fs.readFile(path.join(workspace, file), 'utf8');
-        }
+        const { target, stat } = await inspectWorkspacePath(workspace, entry.realWorkspace, file);
+        if (stat.isSymbolicLink()) after = '[symlink ' + (await fs.readlink(target)) + ']';
+        else after = await readWorkspaceFile(workspace, entry.realWorkspace, file, 1024 * 1024);
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
       }
@@ -295,13 +365,16 @@ export class GitWorkspaces implements WorkspacePort {
     const entry = await this.validate(workspace);
     const files = (await this.changes(workspace, entry.base)).map((file) => file.path);
     if (files.length)
-      await exec('git', ['--literal-pathspecs', 'add', '--all', '--', ...files], {
+      await safeGit(['add', '--all', '--', ...files], {
         cwd: workspace,
+        gitDirectory: entry.gitDirectory,
       });
-    const diff = await exec('git', ['diff', '--cached', '--name-only'], { cwd: workspace });
+    const diff = await safeGit(
+      ['diff', '--no-ext-diff', '--no-textconv', '--cached', '--name-only'],
+      { cwd: workspace, gitDirectory: entry.gitDirectory },
+    );
     if (diff.stdout.trim())
-      await exec(
-        'git',
+      await safeGit(
         [
           '-c',
           'core.hooksPath=/dev/null',
@@ -311,8 +384,10 @@ export class GitWorkspaces implements WorkspacePort {
           '-m',
           `goal: ${runId}`,
         ],
-        { cwd: workspace },
+        { cwd: workspace, gitDirectory: entry.gitDirectory },
       );
-    return (await exec('git', ['rev-parse', 'HEAD'], { cwd: workspace })).stdout.trim();
+    return (
+      await safeGit(['rev-parse', 'HEAD'], { cwd: workspace, gitDirectory: entry.gitDirectory })
+    ).stdout.trim();
   }
 }

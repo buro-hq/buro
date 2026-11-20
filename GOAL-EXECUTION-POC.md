@@ -1,6 +1,6 @@
 # Goal execution: architecture and evidence
 
-This document describes the current Codex implementation. [ARCHITECTURE.md](ARCHITECTURE.md) defines the next execution model with Buro-owned delegation and direct Ollama/DeepSeek providers; [VISION.md](VISION.md) defines the product behavior.
+This document describes current execution through native Codex or managed Ollama/DeepSeek sessions. [ARCHITECTURE.md](ARCHITECTURE.md) defines the complete target; [VISION.md](VISION.md) defines product behavior. See [resource configuration](docs/RESOURCES.md) for supported routes and limits.
 
 Buro executes project goals through isolated workspaces, configured checks and independent review. Integration checks use synthetic fixtures rather than recorded local sessions.
 
@@ -25,11 +25,13 @@ flowchart TD
 
 The coordinator is not the acceptance authority. Saved Buro-owned worker assignments and results, scope preservation, protected instructions, configured check results and reviewer approval are required. A successful message alone cannot accept a result. Coordinator/reviewer are supplied by the service; proposed worker roles have validated stable IDs and nonoverlapping paths. New reusable role definitions are saved only after acceptance.
 
-Buro records each worker's dispatch intent and session ID before starting the client. Sessions snapshot the role version and runtime. Workers execute sequentially in one run worktree; observed edits are compared before and after each assignment. Scope violations and worker failures preserve the workspace and stop acceptance. This is post-execution observation for the native client, not a per-worker filesystem sandbox. The managed ToolBroker will additionally validate writes before dispatch. The coordinator integrates worker results and handles bounded repairs. Native child tools are disabled; undeclared child activity cannot claim a planned role by name, path or prompt.
+Buro records each worker's dispatch intent and session ID before starting the client. Sessions snapshot the role version and runtime. Workers execute sequentially in one run worktree; observed edits are compared before and after each assignment. Scope violations and worker failures preserve the workspace and stop acceptance. This is post-execution observation for the native client, not a per-worker filesystem sandbox. The managed ToolBroker additionally validates edits before dispatch and confines commands away from private machine state. The coordinator integrates worker results and handles bounded repairs. Native child tools are disabled; undeclared child activity cannot claim a planned role by name, path or prompt.
 
 The Codex adapter uses isolated stdio JSON-RPC sessions, completed-turn structured outputs and real lifecycle events. It normalizes native payloads before publishing typed activity to core. Execution and project research consume this contract; run projection is separate from execution decisions. A generic Cordis runtime plugin composes a process-local registry with an explicitly selected default route. Trusted checks run outside editable agent scope. Runtime, checks and workspace ports are replaceable. Deterministic fixture tests verify integration without billing model calls; native adapter contract tests separately verify CLI behavior.
 
-Current limits include one unfinished run per project, a plan schema capped at two workers and a team chosen before implementation. The registry currently selects one default runtime; per-session client/provider/model routing is not implemented. The next steps introduce managed provider sessions and richer coordinator decisions. See [implementation progress](docs/IMPLEMENTATION.md).
+Runs freeze their resource profile and coordinator/worker/reviewer routes. Buro handles keep native thread references private and scoped to a runtime configuration. Environment/result preparation explicitly references its owning run. Managed continuation saves a new scope/material revision without rewriting earlier evidence or widening worker assignments.
+
+Current limits include one unfinished run per project, a plan schema capped at two workers and a team chosen before implementation. Richer coordinator decisions and a general task graph are subsequent work. Live-provider validation is separate from deterministic HTTP fixture workflows. See [implementation progress](docs/IMPLEMENTATION.md).
 
 Workspace policies, roles and materials are snapshots. Independent goals start from the base branch; explicit parents start from an accepted commit. Source branches and uncommitted changes are preserved until an explicit apply action. Saved threads/worktrees support repair and check-only recovery.
 

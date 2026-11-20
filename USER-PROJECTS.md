@@ -2,7 +2,7 @@
 
 Buro connects existing Git repository roots; it does not copy the source project into its own checkout. Every connected repository owns `.buro/` metadata and isolated worktrees. The service checkout stores a catalog of linked paths.
 
-This guide describes current behavior. The next milestone adds resource profiles for Ollama, the DeepSeek API and native clients, as defined in [VISION.md](VISION.md), [ARCHITECTURE.md](ARCHITECTURE.md) and [providers](docs/PROVIDERS.md). API credentials and endpoint details will remain private machine settings; project profiles will reference resources and data constraints rather than embed credentials. These target fields are not yet accepted by the current profile schema.
+This guide describes current behavior. [Execution resources](docs/RESOURCES.md) configure Ollama, the DeepSeek API and native clients. Credentials and endpoint details remain private machine settings; a shared project profile can reference a private resource profile through `resourceProfile`. Runs freeze the selected resources. [VISION.md](VISION.md), [ARCHITECTURE.md](ARCHITECTURE.md) and [providers](docs/PROVIDERS.md) distinguish implemented routes from the broader product target.
 
 ## Connect and configure
 
@@ -20,6 +20,7 @@ Existing legacy metadata is detected read-only during inspection and migrated wh
 - Context, allowed/protected relative paths and base branch.
 - Check definitions/default selections, setup commands and dependency strategy.
 - Worker/repair limits.
+- Optional execution resource profile; otherwise the machine default is inherited.
 - Components with working directory, launch command, readiness path/port and verification instructions.
 - PR configuration and explicit staging/production environment definitions.
 

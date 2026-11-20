@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHost } from '../plugins/host.ts';
 import { websocketPlugin } from './websocket.ts';
-import { codexPlugin } from '../plugins/codex.ts';
+import { resourcesPlugin } from '../plugins/resources.ts';
 import { executionPlugin } from '../plugins/execution.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { ProjectChecks } from '../adapters/checks/project-commands.ts';
@@ -56,11 +56,12 @@ const workspaces = new GitWorkspaces(host.ctx.projects.registry),
     executors,
   );
 try {
-  await host.ctx.plugin(codexPlugin, { executors });
+  await host.ctx.plugin(resourcesPlugin, { directory, executors });
   const environments = new ProjectEnvironments(
     host.ctx.projects.registry,
     host.ctx.agentRuntime.adapter,
     executors,
+    host.ctx.agentRuntime.selection,
   );
   await host.ctx.plugin(projectManagementPlugin, {
     environments,

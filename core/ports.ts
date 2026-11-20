@@ -12,6 +12,7 @@ import type {
   ContextMaterial,
 } from '../protocol/domain.ts';
 import type { RuntimeEvent } from './runtime-events.ts';
+import type { ResourceSnapshot, RuntimePurpose } from '../protocol/resources.ts';
 export type { RuntimeEvent } from './runtime-events.ts';
 export type Receipt = { fingerprint: string; result: unknown };
 export type ProjectDocument = {
@@ -62,6 +63,8 @@ export interface AgentRuntime {
     workspace?: string;
     readOnly?: boolean;
     runId?: string;
+    ownerRunId?: string;
+    purpose?: RuntimePurpose;
     assignment?: {
       sessionId: string;
       roleId: string;
@@ -75,6 +78,7 @@ export interface AgentRuntime {
     instructions: string;
     workspace: string;
     runId: string;
+    ownerRunId?: string;
   }): Promise<{ threadId: string }>;
   submit(threadId: string, text: string): Promise<{ turnId: string }>;
   interrupt(threadId: string, turnId: string): Promise<void>;
@@ -82,7 +86,7 @@ export interface AgentRuntime {
     threadId: string,
     text: string,
     options: { schema: unknown; signal: AbortSignal; timeoutMs: number },
-  ): Promise<{ turnId: string; text: string }>;
+  ): Promise<{ turnId: string; text: string; model?: string }>;
   subscribe?(listener: (event: RuntimeEvent) => void): () => void;
   release?(threadId: string): Promise<void>;
   dispose(): Promise<void>;
@@ -91,4 +95,7 @@ export interface AgentRuntime {
 export interface RuntimeRegistry {
   list(): string[];
   get(id: string): AgentRuntime;
+}
+export interface RuntimeSelection {
+  forProject(projectId: string): ResourceSnapshot;
 }

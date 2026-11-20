@@ -171,11 +171,15 @@ export class SocketProjectClient implements ProjectClient {
         },
         command.method === 'project.verify'
           ? 4 * 60 * 60 * 1000
-          : command.method === 'context.import'
-            ? 180000
-            : command.method === 'run.apply'
-              ? 60000
-              : 15000,
+          : command.method === 'resources.probe'
+            ? 135000
+            : command.method === 'resources.models'
+              ? 20000
+              : command.method === 'context.import'
+                ? 180000
+                : command.method === 'run.apply'
+                  ? 60000
+                  : 15000,
       );
       this.pending.set(id, { request, resolve, reject, timer });
       if ((this.ready || handshake) && this.ws?.readyState === WebSocket.OPEN)

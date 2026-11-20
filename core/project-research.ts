@@ -96,6 +96,7 @@ export class ProjectResearchService {
         projectId,
         workspace: snapshot.project.root,
         readOnly: true,
+        purpose: 'research',
         runId: researchId,
         instructions:
           'You are the project setup engineer. Inspect the repository only. Do not edit files, start servers, install dependencies, run migrations, mutate Git or deploy. Do not use the network. Do not traverse .buro/, .git/, node_modules/, dist/, build/ or caches, including nested directories. The current profile is supplied in the request. Do not open secrets (.env, keys, local/); .env.example without secret values is allowed. Follow AGENTS.md. Suggest launch commands only, with evidence from actual files; never invent them. Do not start child agents.' +

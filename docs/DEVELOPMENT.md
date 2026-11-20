@@ -2,7 +2,7 @@
 
 Run commands from the Buro checkout. The frontend and CLI connect to the same Node service.
 
-This guide documents the current Codex-backed service. [Product vision](../VISION.md), [target architecture](../ARCHITECTURE.md) and [provider integration](PROVIDERS.md) define the next milestone, including Ollama and the DeepSeek API. They are design contracts, not current configuration instructions. Provider API keys alone do not enable those routes in the existing daemon.
+This guide documents the service and development workflow. [Execution resources](RESOURCES.md) configures native Codex or managed Ollama/DeepSeek routes; API keys alone do not select a route. [Product vision](../VISION.md), [target architecture](../ARCHITECTURE.md) and [provider integration](PROVIDERS.md) define the complete target and acceptance criteria.
 
 ## Local processes
 
@@ -124,7 +124,9 @@ checks/ tests/ scripts/
 
 Core has no React, Node, Cordis or transport imports. UI and clients do not import backend modules. Cordis composes trusted plugins; it does not sandbox them.
 
-Runtime activity is typed in `core/runtime-events.ts`. The Codex adapter normalizes native notifications before publishing them; `core/runtime-projection.ts` applies public activity to saved runs. `core/runtimes.ts` holds available adapters, while `plugins/runtime.ts` owns generic composition and cleanup. Production still selects Codex as its only default route. `core/worker-assignments.ts` records and dispatches independent workers; native child tools are disabled and native activity cannot establish role identity. See [implementation progress](IMPLEMENTATION.md).
+Runtime activity is typed in `core/runtime-events.ts`. Adapters normalize notifications before publishing them; `core/runtime-projection.ts` applies public activity to saved runs. `core/runtimes.ts` holds adapters, `core/runtime-router.ts` binds durable Buro handles, and `core/resource-selection.ts` enforces profile/data policy. `plugins/runtime.ts` and `plugins/resources.ts` compose their ports and cleanup. Codex remains the default until configured otherwise. `core/worker-assignments.ts` dispatches independent workers; native activity cannot establish role identity. `core/capability-probe.ts` owns bounded diagnostics and durable receipts. See [implementation progress](IMPLEMENTATION.md).
+
+Managed commands use additional private-file/read/network restrictions. Managed Docker execution is currently unsupported and fails before credentials or containers are created; existing native Codex Docker execution is separate. Browser resource settings can be checked with `node scripts/check-resources.cjs`. Opt-in live Ollama checks use `BURO_LIVE_OLLAMA=1 node scripts/check-live-ollama.cjs`; the default unit suite does not make live model requests.
 
 The protocol uses versioned requests, IDs and validated parameters. Metadata, receipts and events are written before publication. Retries reuse receipts; conflicting payloads are rejected. Reconnecting clients catch up from a sequence number. Git operations and delivery are separate from metadata transactions.
 

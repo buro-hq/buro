@@ -1,4 +1,5 @@
 import { runWorkerAssignments } from './worker-assignments.ts';
+import { sessionResource } from '../protocol/resources.ts';
 import { recordableRuntimeEvent } from './runtime-events.ts';
 import { applyRuntimeEvent } from './runtime-projection.ts';
 import { checkContext, changeContext, roleContext } from './agent-context.ts';
@@ -12,6 +13,7 @@ import {
   type AgentRuntime,
   type ProjectRegistry,
   type RuntimeEvent,
+  type RuntimeSelection,
   type ProjectDocument,
 } from './ports.ts';
 import {
@@ -43,6 +45,7 @@ type Environment = {
   environments?: ExecutionEnvironmentPort;
   projects: ProjectRegistry;
   runtime: AgentRuntime;
+  selection?: RuntimeSelection;
   workspaces: WorkspacePort;
   checks: CheckPort;
   policies: Record<string, ExecutionPolicy>;
@@ -195,6 +198,29 @@ ${installation.output || installation.error || ''}`,
       this.env.runtime.start(input),
     );
   }
+  async completedTurn(
+    projectId: string,
+    runId: string,
+    threadId: string,
+    text: string,
+    schema: unknown,
+    signal: AbortSignal,
+    timeoutMs: number,
+  ) {
+    if (signal.aborted) throw new DOMException('Interrupted', 'AbortError');
+    if (!this.env.runtime.turn) throw Error('The runtime does not support completed phases.');
+    const answer = await this.measure(projectId, runId, 'agent.turn', () =>
+      this.env.runtime.turn!(threadId, text, { schema, signal, timeoutMs }),
+    );
+    if (answer.model)
+      await this.update(projectId, runId, (r) => {
+        if (r.threadId === threadId && r.coordinatorSession)
+          r.coordinatorSession.reportedModel = answer.model;
+        const session = r.agents.find((agent) => agent.threadId === threadId)?.session;
+        if (session) session.reportedModel = answer.model;
+      });
+    return JSON.parse(answer.text);
+  }
   async measure<T>(
     projectId: string,
     runId: string,
@@ -245,6 +271,7 @@ ${installation.output || installation.error || ''}`,
             status: 'queued',
             phase: 'queued',
             delegation: 'buro',
+            resources: this.env.selection?.forProject(input.projectId),
             goalId: goal.id,
             contextMaterials: goalMaterials(doc, goal),
             parentRunId: goal.parentRunId,
@@ -421,21 +448,16 @@ ${installation.output || installation.error || ''}`,
         (role) =>
           team.origins[role.id] === 'created' && !initial.roles.some((r) => r.id === role.id),
       );
-    const ask = async (threadId: string, text: string, schema: unknown) => {
-      if (signal.aborted) throw new DOMException('Interrupted', 'AbortError');
-      if (!this.env.runtime.turn) throw Error('The runtime does not support completed phases.');
-      return JSON.parse(
-        (
-          await this.measure(projectId, runId, 'agent.turn', () =>
-            this.env.runtime.turn!(threadId, text, {
-              schema,
-              signal,
-              timeoutMs: run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-            }),
-          )
-        ).text,
+    const ask = (threadId: string, text: string, schema: unknown) =>
+      this.completedTurn(
+        projectId,
+        runId,
+        threadId,
+        text,
+        schema,
+        signal,
+        run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       );
-    };
     let root = { threadId: run.threadId },
       envelope: ReturnType<typeof EnvelopeSchema.parse> = {
         status: 'success',
@@ -469,6 +491,7 @@ ${installation.output || installation.error || ''}`,
         root = await this.startRuntime({
           projectId,
           runId,
+          purpose: 'coordination',
           workspace: workspace.path,
           instructions,
         });
@@ -741,6 +764,7 @@ ${installation.output || installation.error || ''}`,
     const input = {
       projectId,
       runId,
+      purpose: 'coordination' as const,
       workspace: workspace.path,
       instructions:
         (coordinator?.instructions || 'Coordinate work on the goal.') +
@@ -755,7 +779,7 @@ ${installation.output || installation.error || ''}`,
         id: 'S-' + this.env.id(),
         roleId: 'coordinator',
         roleVersion: coordinator?.version || 0,
-        runtimeId: this.env.runtime.id,
+        ...sessionResource(r.resources, 'coordination', this.env.runtime.id),
       };
     });
     const root =
@@ -775,21 +799,16 @@ ${installation.output || installation.error || ''}`,
     await this.update(projectId, runId, (r) => {
       r.threadId = root.threadId;
     });
-    const ask = async (threadId: string, text: string, schema: unknown) => {
-      if (signal.aborted) throw new DOMException('Interrupted', 'AbortError');
-      if (!this.env.runtime.turn) throw Error('The runtime does not support completed phases.');
-      return JSON.parse(
-        (
-          await this.measure(projectId, runId, 'agent.turn', () =>
-            this.env.runtime.turn!(threadId, text, {
-              schema,
-              signal,
-              timeoutMs: run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-            }),
-          )
-        ).text,
+    const ask = (threadId: string, text: string, schema: unknown) =>
+      this.completedTurn(
+        projectId,
+        runId,
+        threadId,
+        text,
+        schema,
+        signal,
+        run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       );
-    };
     let plan: TeamPlan | undefined,
       team: ReturnType<typeof resolveTeam> | undefined,
       correction = '';
@@ -1011,7 +1030,7 @@ Use relevant user materials at their staged paths. Return the formal execution r
         id: 'S-' + this.env.id(),
         roleId: 'reviewer',
         roleVersion: reviewerRole?.version || 0,
-        runtimeId: this.env.runtime.id,
+        ...sessionResource(this.get(projectId, runId).resources, 'review', this.env.runtime.id),
         parentId: this.get(projectId, runId).coordinatorSession?.id,
       };
       await this.update(projectId, runId, (r) => {
@@ -1038,6 +1057,7 @@ Use relevant user materials at their staged paths. Return the formal execution r
         runId,
         workspace: workspace.path,
         readOnly: true,
+        purpose: 'review',
         instructions:
           (reviewerRole?.instructions ||
             'Independently verify the goal and correctness of the changes.') +

@@ -30,7 +30,28 @@ try {
         2,
       ),
     );
-  else if (command === 'projects')
+  else if (command === 'resources') {
+    const subcommand = args[0] || 'list';
+    let result: unknown;
+    if (subcommand === 'list')
+      result = await client.command({
+        method: 'resources.list',
+        params: { projectId: state.project.id },
+      });
+    else if (subcommand === 'init')
+      result = await client.command({ method: 'resources.init', params: {} });
+    else if (subcommand === 'models' && args[1])
+      result = await client.command({
+        method: 'resources.models',
+        params: { connectionId: args[1] },
+      });
+    else if (subcommand === 'probe' && args[1])
+      result = await client.command({ method: 'resources.probe', params: { runtimeId: args[1] } });
+    else if (subcommand === 'use' && args[1])
+      result = await client.command({ method: 'resources.use', params: { profileId: args[1] } });
+    else throw Error('Use resources list|init|models CONNECTION|probe RUNTIME|use PROFILE.');
+    console.log(JSON.stringify(result, null, 2));
+  } else if (command === 'projects')
     console.log(
       JSON.stringify(await client.command({ method: 'project.list', params: {} }), null, 2),
     );
@@ -312,7 +333,7 @@ try {
     );
   } else
     throw Error(
-      'Commands: status | projects | project inspect/connect <path> [profile.json] | project research [status|cancel] | project info/configure <profile.json>/verify [checks] | run apply <runId> | run preview <runId> [stop|restart] | run deliver <runId> [--confirm] [--redeploy] | goals | roles | runs | goal create <title> <body> [criteria] [--repair-environment] [--parent=R-ID] [--result=pr|local|deploy:environment] | run start <goalId> [check1,check2] | run cancel/show/watch/timings <runId>',
+      'Commands: status | resources list/init/models <connection>/probe <runtime>/use <profile> | projects | project inspect/connect <path> [profile.json] | project research [status|cancel] | project info/configure <profile.json>/verify [checks] | run apply <runId> | run preview <runId> [stop|restart] | run deliver <runId> [--confirm] [--redeploy] | goals | roles | runs | goal create <title> <body> [criteria] [--repair-environment] [--parent=R-ID] [--result=pr|local|deploy:environment] | run start <goalId> [check1,check2] | run cancel/show/watch/timings <runId>',
     );
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

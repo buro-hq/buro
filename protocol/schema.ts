@@ -3,6 +3,7 @@ import { roleIdPattern, type DomainEvent, type Snapshot } from './domain.ts';
 import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
 import { DeliverySchema, PreviewSchema, ResearchSchema, GoalOutcomeSchema } from './operations.ts';
 import { ContextMaterialSchema } from './context.ts';
+import { ResourceSnapshotSchema } from './resources.ts';
 
 const id = z
   .string()
@@ -32,6 +33,20 @@ export const GoalInputSchema = z.strictObject({
   materialIds: z.array(id).max(32).optional(),
 });
 export const CommandSchema = z.discriminatedUnion('method', [
+  z.strictObject({
+    method: z.literal('resources.list'),
+    params: z.strictObject({ projectId: id.optional() }),
+  }),
+  z.strictObject({ method: z.literal('resources.init'), params: z.strictObject({}) }),
+  z.strictObject({
+    method: z.literal('resources.models'),
+    params: z.strictObject({ connectionId: id }),
+  }),
+  z.strictObject({
+    method: z.literal('resources.probe'),
+    params: z.strictObject({ runtimeId: id }),
+  }),
+  z.strictObject({ method: z.literal('resources.use'), params: z.strictObject({ profileId: id }) }),
   z.strictObject({
     method: z.literal('filesystem.list'),
     params: z.strictObject({
@@ -248,6 +263,10 @@ const agentSession = z.object({
   roleId: z.string(),
   roleVersion: z.number().int().nonnegative(),
   runtimeId: z.string(),
+  providerId: z.string().optional(),
+  model: z.string().optional(),
+  reportedModel: z.string().optional(),
+  configurationRevision: z.string().optional(),
   parentId: z.string().optional(),
   result: z
     .object({
@@ -259,6 +278,7 @@ const agentSession = z.object({
     .optional(),
 });
 const run = z.object({
+  resources: ResourceSnapshotSchema.optional(),
   delegation: z.literal('buro').optional(),
   coordinatorSession: agentSession.optional(),
   contextMaterials: z.array(ContextMaterialSchema).optional(),

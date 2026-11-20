@@ -382,6 +382,59 @@ test('duplicate tool IDs and exhausted token budgets stop before dispatch', asyn
   assert.equal(requests, 1);
 });
 
+test('separate structured output uses a final-only request without repeating tool actions', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  const p: ModelProvider = {
+    ...provider(async (input) => {
+      requests++;
+      if (requests === 1)
+        return response([{ id: 'read', name: 'read_file', arguments: { path: 'src/value.mjs' } }]);
+      if (requests === 2) return response([], 'Observed the file. Ready to return JSON.');
+      assert.deepEqual(input.tools, []);
+      assert.equal(input.messages.at(-1)?.role, 'user');
+      return response([], '{"ok":true}');
+    }),
+    structuredToolMode: 'separate-turn',
+  };
+  const runtime = f.make(p),
+    started = await f.start(runtime);
+  const answer = await runtime.turn(started.threadId, 'Inspect and report', turnOptions());
+  assert.equal(answer.text, '{"ok":true}');
+  assert.equal(requests, 3);
+  const saved = await f.sessions.load(started.threadId);
+  assert.equal(saved?.actions.length, 1);
+  assert.equal(saved?.actions[0].status, 'completed');
+});
+
+test('final serialization cannot dispatch tools and still consumes the request budget', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  const p: ModelProvider = {
+    ...provider(async () => {
+      requests++;
+      return requests === 1
+        ? response([], 'Candidate')
+        : response([{ id: 'unexpected', name: 'edit_file', arguments: {} }]);
+    }),
+    structuredToolMode: 'separate-turn',
+  };
+  const runtime = f.make(p),
+    started = await f.start(runtime);
+  await assert.rejects(runtime.turn(started.threadId, 'Inspect', turnOptions()), {
+    code: 'MODEL_INVALID_RESPONSE',
+  });
+  assert.equal((await f.sessions.load(started.threadId))?.actions.length, 0);
+  const bounded = f.make(
+    { ...p, complete: async () => response([], 'Candidate') },
+    { limits: { ...limits, maxRequestsPerTurn: 1 } },
+  );
+  const second = await f.start(bounded);
+  await assert.rejects(bounded.turn(second.threadId, 'Inspect', turnOptions()), {
+    code: 'MODEL_BUDGET_EXHAUSTED',
+  });
+});
+
 test('interrupt intent survives cancellation and concurrent turns cannot share a session', async (t) => {
   const f = await fixture(t);
   let entered!: () => void;

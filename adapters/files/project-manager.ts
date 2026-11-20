@@ -4,8 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { safeGit } from '../processes/safe-git.ts';
 import { DomainError } from '../../core/ports.ts';
 import {
   terminal,
@@ -26,7 +25,6 @@ import { ProjectFileSchema, ProjectProfileSchema } from '../../protocol/projects
 import { FileProjectStore } from './project-store.ts';
 import { FileProjectRegistry } from './registry.ts';
 import { findProjectDirectory, migrateProjectDirectory } from './project-directory.ts';
-const exec = promisify(execFile);
 const ignoredMetadata = ['.', ':(exclude).buro', ':(exclude)' + LEGACY_PROJECT_DIRECTORY];
 export function executionPolicy(profile: ProjectProfile): ExecutionPolicy {
   return {
@@ -136,9 +134,9 @@ export class ProjectManager {
     let top: string, head: string;
     try {
       top = await fs.realpath(
-        (await exec('git', ['rev-parse', '--show-toplevel'], { cwd: root })).stdout.trim(),
+        (await safeGit(['rev-parse', '--show-toplevel'], { cwd: root })).stdout.trim(),
       );
-      head = (await exec('git', ['rev-parse', '--verify', 'HEAD'], { cwd: root })).stdout.trim();
+      head = (await safeGit(['rev-parse', '--verify', 'HEAD'], { cwd: root })).stdout.trim();
     } catch {
       throw new DomainError(
         'INVALID_REPOSITORY',
@@ -150,15 +148,12 @@ export class ProjectManager {
     const directory = await safeMetadata(root);
     let branch = '';
     try {
-      branch = (
-        await exec('git', ['symbolic-ref', '--short', 'HEAD'], { cwd: root })
-      ).stdout.trim();
+      branch = (await safeGit(['symbolic-ref', '--short', 'HEAD'], { cwd: root })).stdout.trim();
     } catch {}
     const status = (
-      await exec(
-        'git',
+      await safeGit(
         ['status', '--porcelain', '--untracked-files=normal', '--', ...ignoredMetadata],
-        { cwd: root },
+        { cwd: root, literalPathspecs: false },
       )
     ).stdout;
     let stored: ReturnType<typeof ProjectFileSchema.parse> | undefined;
@@ -224,7 +219,7 @@ export class ProjectManager {
     if (!stored) {
       try {
         profile.baseBranch = (
-          await exec('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: root })
+          await safeGit(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: root })
         ).stdout
           .trim()
           .replace(/^origin\//, '');
@@ -465,7 +460,7 @@ export class ProjectManager {
         if (!research || research.id !== input.researchId || research.status !== 'ready')
           throw new DomainError('RESEARCH_STALE', 'Research changed. Refresh the suggestions.');
         const head = (
-          await exec('git', ['rev-parse', 'HEAD'], { cwd: snapshot.project.root })
+          await safeGit(['rev-parse', 'HEAD'], { cwd: snapshot.project.root })
         ).stdout.trim();
         if (head !== research.sourceHead)
           throw new DomainError(
@@ -682,7 +677,7 @@ export class ProjectManager {
           'The source directory has changes. Commit them to Git first.',
         );
       try {
-        await exec('git', ['merge-base', '--is-ancestor', info.head, run.commit], {
+        await safeGit(['merge-base', '--is-ancestor', info.head, run.commit], {
           cwd: info.root,
         });
       } catch {
@@ -692,11 +687,7 @@ export class ProjectManager {
         );
       }
       if (info.head !== run.commit)
-        await exec(
-          'git',
-          ['-c', 'core.hooksPath=/dev/null', 'merge', '--ff-only', '--no-verify', run.commit],
-          { cwd: info.root },
-        );
+        await safeGit(['merge', '--ff-only', '--no-verify', run.commit], { cwd: info.root });
       return store.transact(requestId, fingerprint, (doc) => {
         const live = doc.runs.find((r) => r.id === input.runId)!;
         live.appliedAt = live.appliedAt || new Date().toISOString();
