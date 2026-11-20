@@ -123,18 +123,13 @@ async function fixture(
         for (const kind of ['started', 'completed'])
           for (const listener of events)
             listener({
+              id: 'agent-' + id + '-' + kind,
               runId,
-              method: 'item/completed',
-              params: {
-                threadId: id,
-                item: {
-                  id: 'agent-' + id + '-' + kind,
-                  type: 'subAgentActivity',
-                  kind,
-                  agentThreadId: 'child-' + id,
-                  agentPath: '/root/builder',
-                },
-              },
+              type: 'agent.activity',
+              threadId: 'child-' + id,
+              parentThreadId: id,
+              completed: kind === 'completed',
+              legacyAssignment: { path: '/root/builder' },
             });
       return {
         turnId: 't',
@@ -341,6 +336,8 @@ test('native JSONL completed-turn contract captures final structured answer and 
       args: [path.resolve('tests/fixtures/fake-codex.mjs')],
     });
   t.after(() => runtime.dispose());
+  const observed: RuntimeEvent[] = [];
+  runtime.subscribe((event) => observed.push(event));
   for (const readOnly of [false, true]) {
     const { threadId } = await runtime.start({ projectId: 'p', instructions: 'fixture', readOnly });
     const answer = await runtime.turn(threadId, 'test', {
@@ -351,6 +348,46 @@ test('native JSONL completed-turn contract captures final structured answer and 
     assert.equal(JSON.parse(answer.text).sandbox, readOnly ? 'readOnly' : 'workspaceWrite');
     await runtime.release(threadId);
   }
+  assert.ok(observed.some((event) => event.type === 'turn.started'));
+  assert.ok(observed.some((event) => event.type === 'message.completed'));
+  assert.ok(observed.some((event) => event.type === 'turn.completed'));
+  assert.ok(observed.every((event) => !('method' in event) && !('params' in event)));
+});
+
+test('runtime events persist once, and failed persistence permits redelivery', async (t) => {
+  const f = await fixture(t, { pause: true });
+  const started = await f.start();
+  while (!f.turns.length) await new Promise((resolve) => setTimeout(resolve, 5));
+  const event: RuntimeEvent = {
+    id: 'command-result',
+    runId: started.runId,
+    threadId: 'thread-1',
+    type: 'command.completed',
+    commandId: 'cmd',
+    command: 'check',
+    exitCode: 1,
+    output: 'failure',
+  };
+  const persist = f.store.persist.bind(f.store);
+  let fail = true;
+  f.store.persist = async (doc) => {
+    if (fail) {
+      fail = false;
+      throw Error('disk unavailable');
+    }
+    return persist(doc);
+  };
+  await assert.rejects(f.engine.observe(event), /disk unavailable/);
+  assert.equal(f.engine.get('p', started.runId).commands.length, 0);
+  await f.engine.observe(event);
+  const revision = f.store.snapshot().revision;
+  await f.engine.observe(event);
+  const run = f.engine.get('p', started.runId);
+  assert.equal(f.store.snapshot().revision, revision);
+  assert.equal(run.commands.length, 1);
+  assert.equal(run.commands[0].output, 'failure');
+  assert.equal(run.events.filter((event) => event.type === 'command.started').length, 1);
+  assert.equal(run.events.filter((event) => event.type === 'command.completed').length, 1);
 });
 test('Git checkpoints preserve original branch and next worktree begins at accepted commit', async (t) => {
   const f = await fixture(t),

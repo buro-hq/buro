@@ -92,18 +92,13 @@ const exec = promisify(execFile);
           send = (kind) => {
             for (const listener of listeners)
               listener({
+                id: kind + '-' + threadId,
                 runId: input.runId,
-                method: 'item/completed',
-                params: {
-                  threadId,
-                  item: {
-                    id: kind + '-' + threadId,
-                    type: 'subAgentActivity',
-                    kind,
-                    agentThreadId: 'worker-' + threadId,
-                    agentPath: '/root/js_developer',
-                  },
-                },
+                type: 'agent.activity',
+                threadId: 'worker-' + threadId,
+                parentThreadId: threadId,
+                completed: kind === 'completed',
+                legacyAssignment: { path: '/root/js_developer' },
               });
           };
         if (text.startsWith('First,'))

@@ -125,18 +125,13 @@ async function fixture(t: any, enabled = true, tamper = false) {
       for (const kind of ['started', 'completed'])
         for (const listener of listeners)
           listener({
+            id: `${kind}-${prompts.length}`,
             runId: input.runId,
-            method: 'item/completed',
-            params: {
-              threadId,
-              item: {
-                type: 'subAgentActivity',
-                kind,
-                id: `${kind}-${prompts.length}`,
-                agentThreadId: 'worker',
-                agentPath: '/root/builder',
-              },
-            },
+            type: 'agent.activity',
+            threadId: 'worker',
+            parentThreadId: threadId,
+            completed: kind === 'completed',
+            legacyAssignment: { path: '/root/builder' },
           });
       return {
         turnId: 'work',

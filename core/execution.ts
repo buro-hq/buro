@@ -1,3 +1,5 @@
+import { recordableRuntimeEvent } from './runtime-events.ts';
+import { applyRuntimeEvent } from './runtime-projection.ts';
 import { checkContext, changeContext, roleContext } from './agent-context.ts';
 import type { ExecutionEnvironmentPort } from './environment-ports.ts';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../protocol/domain.ts';
@@ -59,7 +61,7 @@ export class ExecutionService {
     this.env = env;
     this.unsubscribe =
       env.runtime.subscribe?.((event) => {
-        if (!recordable(event)) return;
+        if (!recordableRuntimeEvent(event)) return;
         this.eventQueue = this.eventQueue.then(() => this.observe(event)).catch(() => {});
       }) || (() => {});
   }
@@ -1110,7 +1112,7 @@ Do not modify checks or instructions, and do not commit. Return a new formal res
     }
   }
   async observe(event: RuntimeEvent) {
-    if (!recordable(event)) return;
+    if (!recordableRuntimeEvent(event)) return;
     const project = this.env.projects.list().find((p) =>
       this.env.projects
         .get(p.id)
@@ -1120,132 +1122,15 @@ Do not modify checks or instructions, and do not commit. Return a new formal res
     if (!project) return;
     const run = this.get(project.id, event.runId);
     if (terminal(run)) return;
-    const p = event.params || {},
-      item = p.item;
-    if (
-      ![
-        'item/started',
-        'item/completed',
-        'thread/started',
-        'turn/started',
-        'turn/completed',
-      ].includes(event.method)
-    )
-      return;
-    if (!item && !['turn/started', 'turn/completed'].includes(event.method)) return;
-    if (
-      item &&
-      !['subAgentActivity', 'collabAgentToolCall', 'agentMessage', 'commandExecution'].includes(
-        item.type,
-      )
-    )
-      return;
-    const key =
-      event.runId + ':' + event.method + ':' + (item?.id || p.turn?.id || '') + ':' + p.threadId;
+    const key = JSON.stringify([event.runId, event.id]);
     if (this.seen.has(key)) return;
-    this.seen.add(key);
-    const now = this.env.now();
     await this.update(project.id, event.runId, (r) => {
-      const tid = p.threadId || r.threadId;
-      if (item?.type === 'subAgentActivity' || item?.type === 'collabAgentToolCall') {
-        for (const child of item.type === 'subAgentActivity'
-          ? [item.agentThreadId]
-          : item.receiverThreadIds || []) {
-          if (child === r.threadId) continue;
-          if (!r.agents.some((a) => a.threadId === child)) {
-            const candidates =
-              r.roleSnapshots?.filter((role) => !['coordinator', 'reviewer'].includes(role.id)) ||
-              [];
-            const name =
-              candidates.find(
-                (role) => item.agentPath?.endsWith('/' + role.id) || item.prompt?.includes(role.id),
-              )?.id ||
-              candidates.find((role) => !r.agents.some((a) => a.name === role.id))?.id ||
-              item.agentNickname ||
-              'worker';
-            r.agents.push({
-              threadId: child,
-              name,
-              agentPath: item.agentPath || '/root/' + name,
-              startedAt: now,
-              completedAt: '',
-              messages: [],
-              commands: 0,
-              status: 'running',
-              ...(r.roleAssignments?.[name]
-                ? { assignment: { paths: r.roleAssignments[name] } }
-                : {}),
-            });
-            r.events.push({
-              at: now,
-              type: 'agent.started',
-              threadId: child,
-              text: item.prompt?.slice(0, 4000) || name,
-            });
-          }
-          const a = r.agents.find((a) => a.threadId === child),
-            state = item.agentsStates?.[child];
-          if (
-            a &&
-            a.status !== 'completed' &&
-            (item.kind === 'completed' || state?.status === 'completed')
-          ) {
-            a.status = 'completed';
-            a.completedAt = now;
-            r.events.push({
-              at: now,
-              type: 'agent.completed',
-              threadId: child,
-              text: state?.message?.slice(0, 12000) || 'Child agent completed work',
-            });
-          }
-        }
-      }
-      const agent = r.agents.find((a) => a.threadId === tid);
-      if (item?.type === 'agentMessage' && event.method === 'item/completed') {
-        const text = String(item.text || '').slice(0, 12000);
-        agent?.messages.push(text);
-        r.events.push({ at: now, type: 'message', threadId: tid, text });
-      }
-      if (item?.type === 'commandExecution') {
-        let command = r.commands.find((c) => c.id === item.id);
-        if (!command) {
-          command = { id: item.id, threadId: tid, command: item.command || '', startedAt: now };
-          r.commands.push(command);
-          if (agent) agent.commands++;
-          r.events.push({
-            at: now,
-            type: 'command.started',
-            threadId: tid,
-            commandId: item.id,
-            text: command.command,
-          });
-        }
-        if (event.method === 'item/completed') {
-          command.completedAt = now;
-          command.exitCode = item.exitCode;
-          command.output = String(item.aggregatedOutput || '').slice(-30000);
-          r.events.push({
-            at: now,
-            type: 'command.completed',
-            threadId: tid,
-            commandId: item.id,
-            text: command.command,
-          });
-        }
-      }
-      if (event.method === 'turn/started' && agent && agent.name !== 'reviewer') {
-        agent.status = 'running';
-        agent.completedAt = '';
-        r.events.push({ at: now, type: 'agent.turn-started', threadId: tid });
-      }
-      if (event.method === 'turn/completed' && agent && agent.name !== 'reviewer') {
-        agent.status = p.turn?.status || 'completed';
-        agent.completedAt = now;
-        r.events.push({ at: now, type: 'agent.turn-completed', threadId: tid, text: agent.status });
-      }
+      applyRuntimeEvent(r, event, this.env.now());
     });
+    // A failed transaction must not suppress a later delivery of the same event.
+    this.seen.add(key);
   }
+
   async dispose() {
     this.closing = true;
     for (const job of this.jobs.values()) job.controller.abort();
@@ -1253,25 +1138,4 @@ Do not modify checks or instructions, and do not commit. Return a new formal res
     await this.eventQueue;
     this.unsubscribe();
   }
-}
-
-/** Token deltas are UI transport activity, not durable domain mutations. Filter before copying project state. */
-function recordable(event: RuntimeEvent) {
-  if (!event.runId || /^(setup-|result-|environment-)/.test(event.runId)) return false;
-  if (
-    ![
-      'item/started',
-      'item/completed',
-      'thread/started',
-      'turn/started',
-      'turn/completed',
-    ].includes(event.method)
-  )
-    return false;
-  const item = event.params?.item;
-  return item
-    ? ['subAgentActivity', 'collabAgentToolCall', 'agentMessage', 'commandExecution'].includes(
-        item.type,
-      )
-    : ['turn/started', 'turn/completed'].includes(event.method);
 }

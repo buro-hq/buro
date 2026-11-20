@@ -78,10 +78,8 @@ export class ProjectResearchService {
     let threadId: string | undefined;
     let events = Promise.resolve();
     const unsubscribe = this.runtime.subscribe?.((event) => {
-      if (event.runId !== researchId || event.method !== 'item/started') return;
-      const item = event.params?.item;
-      if (item?.type !== 'commandExecution') return;
-      const text = String(item.command || 'Reading files').slice(0, 500);
+      if (event.runId !== researchId || event.type !== 'command.started') return;
+      const text = (event.command || 'Reading files').slice(0, 500);
       events = events
         .then(() =>
           this.update(projectId, researchId, (r) => {

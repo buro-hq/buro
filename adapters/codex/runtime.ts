@@ -5,6 +5,7 @@ const exec = promisify(execFile);
 import readline from 'node:readline';
 import type { AgentRuntime, ProjectRegistry, RuntimeEvent } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
+import { normalizeCodexEvent } from './events.ts';
 
 type RuntimeOptions = {
   projects: ProjectRegistry;
@@ -21,6 +22,7 @@ export class CodexRuntime implements AgentRuntime {
   active = new Set<Connection>();
   disposed = false;
   listeners = new Set<(event: RuntimeEvent) => void>();
+  eventSequence = 0;
   constructor(options: RuntimeOptions) {
     this.options = options;
   }
@@ -56,11 +58,16 @@ export class CodexRuntime implements AgentRuntime {
       root,
       (event) => {
         this.options.onEvent?.(event);
-        for (const listener of this.listeners) {
-          try {
-            listener({ runId: input.runId || '', ...event });
-          } catch {}
-        }
+        for (const normalized of normalizeCodexEvent(
+          event,
+          input.runId || '',
+          ++this.eventSequence,
+        ))
+          for (const listener of this.listeners) {
+            try {
+              listener(normalized);
+            } catch {}
+          }
       },
       !!input.readOnly,
       world ? [world.cacheRoot] : [],

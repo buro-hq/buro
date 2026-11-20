@@ -89,10 +89,10 @@ test('streaming deltas never copy project snapshots or enter the persistence que
     id: () => '',
   });
   for (let i = 0; i < 10000; i++)
-    subscriber({ runId: 'r', method: 'item/agentMessage/delta', params: { delta: 'token' } });
+    subscriber({ id: String(i), runId: 'r', threadId: 't', type: 'progress' });
   await service.eventQueue;
   assert.equal(lookups, 0);
-  subscriber({ runId: 'r', method: 'turn/started', params: {} });
+  subscriber({ id: 'turn', runId: 'r', threadId: 't', type: 'turn.started' });
   await service.eventQueue;
   assert.equal(lookups, 1);
 });

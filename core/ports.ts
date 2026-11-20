@@ -11,6 +11,8 @@ import type {
   ProjectResearch,
   ContextMaterial,
 } from '../protocol/domain.ts';
+import type { RuntimeEvent } from './runtime-events.ts';
+export type { RuntimeEvent } from './runtime-events.ts';
 export type Receipt = { fingerprint: string; result: unknown };
 export type ProjectDocument = {
   contextMaterials?: ContextMaterial[];
@@ -79,4 +81,8 @@ export interface AgentRuntime {
   release?(threadId: string): Promise<void>;
   dispose(): Promise<void>;
 }
-export type RuntimeEvent = { runId: string; method: string; params: any };
+/** Explicit selection only: an unavailable runtime never falls back to another route. */
+export interface RuntimeRegistry {
+  list(): string[];
+  get(id: string): AgentRuntime;
+}

@@ -96,18 +96,13 @@ async function fixture(t: any) {
       for (const kind of ['started', 'completed'])
         for (const listener of listeners)
           listener({
+            id: 'child-' + kind + '-' + turns.length,
             runId: input.runId,
-            method: 'item/completed',
-            params: {
-              threadId: id,
-              item: {
-                type: 'subAgentActivity',
-                kind,
-                id: 'child-' + kind + '-' + turns.length,
-                agentThreadId: 'child-' + id,
-                agentPath: '/root/builder',
-              },
-            },
+            type: 'agent.activity',
+            threadId: 'child-' + id,
+            parentThreadId: id,
+            completed: kind === 'completed',
+            legacyAssignment: { path: '/root/builder' },
           });
       await fs.writeFile(path.join(input.workspace, 'src/code.mjs'), 'export const value=2;');
       return {
