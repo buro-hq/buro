@@ -22,8 +22,16 @@ const { runLiveProviderEvaluation } = require('./lib/live-provider-runner.cjs');
           process.env.BURO_LIVE_CASE,
         )
       : undefined,
-    budgets: process.env.BURO_LIVE_CONTEXT_TOKENS
-      ? { contextTokens: Number(process.env.BURO_LIVE_CONTEXT_TOKENS) }
+    budgets: {
+      ...(process.env.BURO_LIVE_CONTEXT_TOKENS
+        ? { contextTokens: Number(process.env.BURO_LIVE_CONTEXT_TOKENS) }
+        : {}),
+      ...(process.env.BURO_LIVE_MAX_OUTPUT_TOKENS
+        ? { maxOutputTokens: Number(process.env.BURO_LIVE_MAX_OUTPUT_TOKENS) }
+        : {}),
+    },
+    contextTokensByProvider: process.env.BURO_LIVE_OLLAMA_CONTEXT_TOKENS
+      ? { ollama: Number(process.env.BURO_LIVE_OLLAMA_CONTEXT_TOKENS) }
       : undefined,
     reportPath: process.env.BURO_LIVE_REPORT || `artifacts/live-${mode}-verification.json`,
   });

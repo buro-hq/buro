@@ -2,6 +2,8 @@
 
 Buro supports the native Codex client and managed sessions through Ollama or the DeepSeek model API. Managed sessions use Buro's repository tools, checkpoints, worker dispatch and independent acceptance. They do not require Codex to be installed.
 
+A tested self-hosted GPU route uses an authenticated SSH forward to Ollama on a Windows RTX host. The Mac retains repositories, tools and checks. See [remote Ollama setup and measured evidence](REMOTE-OLLAMA.md). The local machine has optional `rtx-local` / `rtx-hybrid` profiles; their definitions load on the next daemon startup. The original machine default is preserved.
+
 The default remains Codex until a resource profile is selected. Connections and model settings live in the daemon's private data directory, normally `.buro/local/resources.json`. A connected project's shared profile can contain `resourceProfile`, referencing one of those private profiles. It never contains an API key.
 
 ## Configure a connection

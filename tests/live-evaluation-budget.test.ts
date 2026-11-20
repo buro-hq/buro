@@ -108,6 +108,10 @@ test('mixed evaluation does not increase local model memory when the cloud conte
     ollama: 8192,
     deepseek: 32768,
   });
+  assert.deepEqual(contextBudgets(endpoints, limits, { ollama: 32768 }), {
+    ollama: 32768,
+    deepseek: 32768,
+  });
   for (const overrides of [
     { ollama: 65536 },
     { deepseek: 4096 },

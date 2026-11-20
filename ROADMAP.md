@@ -19,6 +19,7 @@ Full automatic crash reconciliation, a general task graph and concurrent project
 The immediate bounded-assignment and plugin boundary proposal is in [next orchestration slice](docs/ORCHESTRATION-NEXT.md). It preserves core ownership of budgets, authorization, dispatch and acceptance.
 
 - [ ] Expand the delegation protocol into a versioned task graph with bounded replanning and targeted evidence invalidation.
+- [ ] Add a durable aggregate run budget with reserved review capacity, then safe managed work segments through a core-validated `WorkSegmentPolicy`. Preserve logical identity, action receipts and cumulative limits across fresh conversation windows.
 - [ ] Replace PROJECT_BUSY and the fixed two-worker plan schema with queued runs, multiple runs per goal, resource budgets and one writer per run worktree initially.
 - [ ] Add durable operator questions and clarifications that block only dependent work.
 - [ ] Add full per-action dispatch reconciliation and resource leases for automatic recovery where the outcome can be established.

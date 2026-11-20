@@ -32,3 +32,20 @@ The evaluation runner's separate source-transfer opt-in is a narrow harness guar
 Connection readiness, tool/JSON mechanics and successful performance as coordinator/coder/reviewer are separate observations. Evidence is scoped to model, adapter revision, configuration, hardware and task class. A single successful goal is not a general quality score.
 
 [Private-project evaluation details removed.]
+
+## Short work segments inside one agent
+
+[Private-project evaluation details removed.]
+
+Use one logical worker/session identity and stable Router `B → M` mapping. Managed model APIs are stateless, so a fresh conversation window can be a new segment within the same managed session. Preserve its role/model/scope, cumulative request count and complete action journal. Keep earlier messages and required provider continuation in private archived segments; do not expose private reasoning in a handoff.
+
+Add a pure `WorkSegmentPolicy` implementation through Cordis. The plugin proposes a bounded next task and context references; core validates and executes transitions. A typical feedback path is a small edit, trusted check, then a fresh focused segment for a specific failure. Avoid imposing a fixed number of steps when the work is already complete.
+
+Core builds each handoff from frozen objective/criteria, the proposed next task, a verified current diff hash, completed action receipts and references to actual check evidence. Model summaries alone prove none of these facts. An action with `pending` or unknown outcome, cancellation, failed scope inspection or failed persistence prohibits automatic rollover. Required tool-result/continuation chains must finish before a conversation window is retired.
+
+Two implementation gates:
+
+1. Add a durable shared production-run ledger and segment protocol. Coordinator, workers, refinements and review share request/output/tool/time ceilings. Reserve enough for mandatory final verification/review before coding consumes it. Do not reset `session.requests`; conservatively reserve before HTTP and retain unknown usage. Smaller per-step output caps improve allocation without increasing the total ceiling.
+2. Add managed conversation windows with an atomic archive/handoff checkpoint before the next HTTP request. Separate step completion from logical agent completion in runtime events and UI projection. Start with managed providers; native-client session rotation requires a distinct capability/contract and remains unsupported initially.
+
+Deterministic checks must cover stable routing/identity, criteria and scope preservation, no replay after unknown outcomes or restart, cumulative budgets, reserved review capacity, failed checkpoint preventing dispatch and step events not completing the logical worker. Compare identical synthetic and source cases under identical total ceilings; more short sessions can increase input overhead and request count.
