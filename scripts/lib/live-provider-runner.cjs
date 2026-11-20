@@ -162,6 +162,18 @@ function safeEndpoint(value) {
   return url;
 }
 
+/** Native thread IDs must never be interpreted as private managed checkpoint IDs. */
+async function loadManagedCheckpoints(handles, routes, sessions) {
+  const saved = [];
+  for (const handle of handles) {
+    const route = await routes.load(handle);
+    if (route?.resource?.client !== 'managed' || !route.externalThreadId) continue;
+    const session = await sessions.load(route.externalThreadId);
+    if (session) saved.push(session);
+  }
+  return saved;
+}
+
 function contextBudgets(endpoints, limits, overrides = {}) {
   if (Object.keys(overrides).some((name) => !['ollama', 'deepseek'].includes(name)))
     throw new LiveEvaluationError('LIVE_INVALID_CONTEXT_BUDGET');
@@ -187,15 +199,29 @@ function contextBudgets(endpoints, limits, overrides = {}) {
 function preflight(options = {}) {
   const env = options.env || process.env,
     mode = options.mode;
-  if (!['ollama', 'deepseek', 'mixed'].includes(mode))
+  if (!['ollama', 'deepseek', 'mixed', 'codex'].includes(mode))
     return { ok: false, code: 'LIVE_INVALID_MODE' };
-  const usesDeepSeek = mode !== 'ollama',
-    usesOllama = mode !== 'deepseek';
-  if ((usesDeepSeek ? env.BURO_LIVE_DEEPSEEK : env.BURO_LIVE_OLLAMA) !== '1')
+  const usesDeepSeek = ['deepseek', 'mixed'].includes(mode),
+    usesOllama = ['ollama', 'mixed'].includes(mode),
+    usesCodex = mode === 'codex';
+  if (
+    (usesCodex
+      ? env.BURO_LIVE_CODEX
+      : usesDeepSeek
+        ? env.BURO_LIVE_DEEPSEEK
+        : env.BURO_LIVE_OLLAMA) !== '1'
+  )
     return { ok: false, code: 'LIVE_OPT_IN_REQUIRED' };
-  if (usesDeepSeek && options.sourceCase && env.BURO_LIVE_SOURCE_TRANSFER !== '1')
+  if ((usesDeepSeek || usesCodex) && options.sourceCase && env.BURO_LIVE_SOURCE_TRANSFER !== '1')
     return { ok: false, code: 'LIVE_SOURCE_TRANSFER_NOT_AUTHORIZED' };
+  if (
+    usesCodex &&
+    (!options.codex?.model ||
+      !['low', 'medium', 'high', 'xhigh'].includes(options.codex?.reasoningEffort))
+  )
+    return { ok: false, code: 'LIVE_CODEX_PIN_REQUIRED' };
   const models = {
+    ...(usesCodex ? { codex: options.codex.model } : {}),
     ollama: options.models?.ollama || env.BURO_OLLAMA_MODEL,
     deepseek: options.models?.deepseek || env.BURO_DEEPSEEK_MODEL,
   };
@@ -207,9 +233,11 @@ function preflight(options = {}) {
   }
   if ((usesDeepSeek && !models.deepseek) || (usesOllama && !models.ollama))
     return { ok: false, code: 'LIVE_MODEL_REQUIRED' };
-  for (const model of [usesOllama && models.ollama, usesDeepSeek && models.deepseek].filter(
-    Boolean,
-  ))
+  for (const model of [
+    usesOllama && models.ollama,
+    usesDeepSeek && models.deepseek,
+    usesCodex && models.codex,
+  ].filter(Boolean))
     if (typeof model !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(model))
       return { ok: false, code: 'LIVE_INVALID_MODEL' };
   try {
@@ -779,7 +807,7 @@ async function runLiveProviderEvaluation(options = {}) {
   }
   const limits = checked.limits;
   report.models = Object.fromEntries(
-    Object.entries(checked.models).filter(([name]) => checked.endpoints[name]),
+    Object.entries(checked.models).filter(([name]) => checked.endpoints[name] || name === 'codex'),
   );
   report.contextTokensByProvider = checked.contexts;
   const observedFetch = createBudgetedFetch({
@@ -793,6 +821,23 @@ async function runLiveProviderEvaluation(options = {}) {
           ? 'coding'
           : 'forbidden',
   });
+  const nativeUsage = new Map();
+  const recordNativeUsage = ({ method, params }) => {
+    if (method !== 'thread/tokenUsage/updated') return;
+    const total = object(object(params).tokenUsage).total;
+    const threadId = object(params).threadId;
+    if (
+      typeof threadId === 'string' &&
+      Number.isSafeInteger(total?.inputTokens) &&
+      total.inputTokens >= 0 &&
+      Number.isSafeInteger(total?.outputTokens) &&
+      total.outputTokens >= 0
+    )
+      nativeUsage.set(threadId, {
+        inputTokens: total.inputTokens,
+        outputTokens: total.outputTokens,
+      });
+  };
   let host, runId, codingTimer, diagnosticTimer, fixture, original, unsubscribe;
   const temporaryDirectory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-provider-evaluation-')),
@@ -834,8 +879,9 @@ async function runLiveProviderEvaluation(options = {}) {
       '../../adapters/files/resource-configuration.ts'
     );
     const { ProjectProfileSchema } = await import('../../protocol/projects.ts');
-    const usesOllama = checked.mode !== 'deepseek',
-      usesDeepSeek = checked.mode !== 'ollama';
+    const usesOllama = ['ollama', 'mixed'].includes(checked.mode),
+      usesDeepSeek = ['deepseek', 'mixed'].includes(checked.mode),
+      usesCodex = checked.mode === 'codex';
     const runtimeLimits = {
       contextTokens: limits.contextTokens,
       maxOutputTokens: limits.maxOutputTokens,
@@ -872,6 +918,7 @@ async function runLiveProviderEvaluation(options = {}) {
           : []),
       ],
       runtimes: [
+        ...(usesCodex ? [{ id: 'codex', client: 'codex' }] : []),
         ...(usesOllama
           ? [
               {
@@ -899,10 +946,10 @@ async function runLiveProviderEvaluation(options = {}) {
         {
           id: 'evaluation',
           name: 'Bounded provider evaluation',
-          policy: usesDeepSeek ? 'hybrid' : 'local-only',
-          coordinator: usesDeepSeek ? 'deepseek-live' : 'ollama-live',
-          worker: usesOllama ? 'ollama-live' : 'deepseek-live',
-          reviewer: usesDeepSeek ? 'deepseek-live' : 'ollama-live',
+          policy: usesDeepSeek || usesCodex ? 'hybrid' : 'local-only',
+          coordinator: usesCodex ? 'codex' : usesDeepSeek ? 'deepseek-live' : 'ollama-live',
+          worker: usesCodex ? 'codex' : usesOllama ? 'ollama-live' : 'deepseek-live',
+          reviewer: usesCodex ? 'codex' : usesDeepSeek ? 'deepseek-live' : 'ollama-live',
         },
       ],
     });
@@ -942,7 +989,9 @@ async function runLiveProviderEvaluation(options = {}) {
       segmentPolicy: options.segmentPolicy,
       fetch: observedFetch,
       credentials: options.credentials,
-      codex: { executable: path.join(root, 'codex-not-installed') },
+      codex: usesCodex
+        ? { ...options.codex, networkAccess: false, onEvent: recordNativeUsage }
+        : { executable: path.join(root, 'codex-not-installed') },
     });
     assert.deepEqual(
       host.ctx.agentRuntime.registry.list().sort(),
@@ -955,7 +1004,9 @@ async function runLiveProviderEvaluation(options = {}) {
       });
     for (const provider of usesOllama && usesDeepSeek
       ? ['ollama', 'deepseek']
-      : [usesOllama ? 'ollama' : 'deepseek']) {
+      : usesCodex
+        ? []
+        : [usesOllama ? 'ollama' : 'deepseek']) {
       const installed = await command({
         method: 'resources.models',
         params: { connectionId: provider },
@@ -963,21 +1014,26 @@ async function runLiveProviderEvaluation(options = {}) {
       if (!installed.some((model) => model.id === checked.models[provider]))
         throw new LiveEvaluationError('LIVE_MODEL_NOT_AVAILABLE');
     }
-    report.stage = 'capability-probe';
-    diagnosticTimer = setTimeout(
-      () => budget.stop('LIVE_DIAGNOSTIC_TIMEOUT'),
-      limits.diagnosticWallTimeMs,
-    );
-    await writeReport(options.reportPath, report);
-    const probeRuntime = usesOllama ? 'ollama-live' : 'deepseek-live';
-    const probe = await command({ method: 'resources.probe', params: { runtimeId: probeRuntime } });
-    report.diagnostic = {
-      status: probe.status,
-      runtimeId: probeRuntime,
-      tools: probe.tools,
-      structured: probe.structured,
-    };
-    clearTimeout(diagnosticTimer);
+    if (!usesCodex) {
+      report.stage = 'capability-probe';
+      diagnosticTimer = setTimeout(
+        () => budget.stop('LIVE_DIAGNOSTIC_TIMEOUT'),
+        limits.diagnosticWallTimeMs,
+      );
+      await writeReport(options.reportPath, report);
+      const probeRuntime = usesOllama ? 'ollama-live' : 'deepseek-live';
+      const probe = await command({
+        method: 'resources.probe',
+        params: { runtimeId: probeRuntime },
+      });
+      report.diagnostic = {
+        status: probe.status,
+        runtimeId: probeRuntime,
+        tools: probe.tools,
+        structured: probe.structured,
+      };
+      clearTimeout(diagnosticTimer);
+    } else report.diagnostic = { status: 'not-applicable', runtimeId: 'codex' };
     const environments = new ProjectEnvironments(
       host.ctx.projects.registry,
       host.ctx.agentRuntime.adapter,
@@ -991,6 +1047,7 @@ async function runLiveProviderEvaluation(options = {}) {
     };
     await host.ctx.plugin(executionPlugin, {
       policies: { p: policy },
+      planningMode: options.planningMode,
       workspaces,
       checks,
       environments,
@@ -1030,8 +1087,10 @@ async function runLiveProviderEvaluation(options = {}) {
     await host.ctx.workflows.api.jobs.get(runId)?.promise;
     clearTimeout(codingTimer);
     const run = host.ctx.workflows.api.get('p', runId);
+    await options.onRunFinished?.({ run, fixture });
     report.run = {
       ...evaluationRunProgress(run),
+      ...(run.planningPolicy ? { planningPolicy: { ...run.planningPolicy } } : {}),
       ...(run.managedBudget ? { managedBudget: structuredClone(run.managedBudget) } : {}),
       status: run.status,
       phase: run.phase,
@@ -1052,7 +1111,7 @@ async function runLiveProviderEvaluation(options = {}) {
         .filter(Boolean)
         .map((session) => ({
           role: ['coordinator', 'reviewer'].includes(session.roleId) ? session.roleId : 'worker',
-          runtimeId: ['ollama-live', 'deepseek-live'].includes(session.runtimeId)
+          runtimeId: ['codex', 'ollama-live', 'deepseek-live'].includes(session.runtimeId)
             ? session.runtimeId
             : 'unknown',
           requestedModelMatchesConfigured: Object.values(checked.models).includes(session.model),
@@ -1064,10 +1123,11 @@ async function runLiveProviderEvaluation(options = {}) {
     const routes = new FileRuntimeRoutes(path.join(directory, 'local/runtime-routes'));
     const sessions = new FileManagedSessions(path.join(directory, 'local/managed-sessions'));
     report.checkpoints = [];
-    for (const handle of [run.threadId, ...run.agents.map((agent) => agent.threadId)]) {
-      const route = await routes.load(handle);
-      if (!route?.externalThreadId) continue;
-      const saved = await sessions.load(route.externalThreadId);
+    for (const saved of await loadManagedCheckpoints(
+      [run.threadId, ...run.agents.map((agent) => agent.threadId)],
+      routes,
+      sessions,
+    )) {
       if (saved)
         report.checkpoints.push({
           requests: saved.requests,
@@ -1218,6 +1278,22 @@ async function runLiveProviderEvaluation(options = {}) {
       }
     }
     if (fixture?.evidence?.source) report.sourceCase = sourceCaseEvidence(fixture);
+    if (checked.mode === 'codex') {
+      report.nativeAccounting = {
+        coverage: 'reported-usage-only',
+        generationRequests: null,
+        reservedOutputTokens: null,
+        hardTokenCeilings: false,
+      };
+      if (nativeUsage.size)
+        report.nativeUsage = [...nativeUsage.values()].reduce(
+          (sum, usage) => ({
+            inputTokens: sum.inputTokens + usage.inputTokens,
+            outputTokens: sum.outputTokens + usage.outputTokens,
+          }),
+          { inputTokens: 0, outputTokens: 0 },
+        );
+    }
     report.http = observedFetch.snapshot();
     report.budget = budget.snapshot();
     report.finishedAt = new Date().toISOString();
@@ -1233,6 +1309,7 @@ module.exports = {
   normalizedLimits,
   contextBudgets,
   preflight,
+  loadManagedCheckpoints,
   createBudgetedFetch,
   assertMixedDelegation,
   classifyEvaluationFailure,

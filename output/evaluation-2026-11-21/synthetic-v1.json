@@ -1,0 +1,831 @@
+{
+  "version": 1,
+  "syntheticOnly": true,
+  "fixture": {
+    "caseId": "synthetic-ready-queue-v1",
+    "caseHash": "a4972e8be97d657c33c55aa3e949462dfefc2993708a49ff402798115d2965ce",
+    "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+    "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+    "taskHash": "dfedfa67f2f8f28845498eeef9a9f8de4a7d1c6821f786d3b9cdc8d3eea9a2b9",
+    "oracleHash": "ffc074a31214cdae4bfb1df834738629f734b581ec333f78c38b578862781040",
+    "allowedPaths": [
+      "src/priority.mjs",
+      "src/queue.mjs"
+    ],
+    "publicChecks": 3,
+    "holdoutChecks": 5
+  },
+  "startedAt": "2026-11-20T23:06:16.910Z",
+  "limits": {
+    "maxGenerationRequests": 24,
+    "maxReservedOutputTokens": 65536,
+    "maxDiagnosticRequests": 2,
+    "diagnosticWallTimeMs": 120000,
+    "codingWallTimeMs": 300000,
+    "contextTokens": 32768,
+    "maxOutputTokens": 2048
+  },
+  "comparability": {
+    "sameFixture": true,
+    "sameTask": true,
+    "sameOracle": true,
+    "sameCodingWall": true,
+    "oracleWallTimeMs": 10000,
+    "managedTokenCeilingsApplyToNative": false,
+    "nativeContextLimitEnforced": false,
+    "sameToolReadBoundary": false,
+    "nativeToolReadBoundary": "native-default-host-read",
+    "managedToolReadBoundary": "isolated-workspace-with-private-path-denials",
+    "buroRequiresWorker": true,
+    "nativeModel": "gpt-6.1-sol",
+    "nativeReasoningEffort": "high"
+  },
+  "results": [
+    {
+      "arm": "codex-direct",
+      "planning": "not-applicable",
+      "planningCoverage": "not-applicable",
+      "actualPlanning": null,
+      "model": "gpt-6.1-sol",
+      "status": "completed",
+      "orchestration": null,
+      "budgetCoverage": {
+        "kind": "native-observed-only",
+        "requestsEnforced": false,
+        "tokensEnforced": false,
+        "generationRequests": null,
+        "reservedOutputTokens": null,
+        "observedInputTokens": 54898,
+        "observedOutputTokens": 711
+      },
+      "elapsedMs": 27382,
+      "canonical": {
+        "public": {
+          "passed": true,
+          "checks": 3,
+          "passedChecks": 3,
+          "rows": [
+            {
+              "name": "explicit-zero",
+              "passed": true
+            },
+            {
+              "name": "independent-task",
+              "passed": true
+            },
+            {
+              "name": "all-dependencies-required",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "e1dda0250467781a7c29ac868a9d9b342c218644c38cfa5e0e8e3361d4a67dde"
+          }
+        },
+        "holdout": {
+          "passed": true,
+          "checks": 5,
+          "passedChecks": 5,
+          "rows": [
+            {
+              "name": "missing-priority",
+              "passed": true
+            },
+            {
+              "name": "null-priority",
+              "passed": true
+            },
+            {
+              "name": "zero-below-one",
+              "passed": true
+            },
+            {
+              "name": "completed-and-ready",
+              "passed": true
+            },
+            {
+              "name": "stable-equal-priorities",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "e1dda0250467781a7c29ac868a9d9b342c218644c38cfa5e0e8e3361d4a67dde"
+          }
+        }
+      },
+      "accepted": true
+    },
+    {
+      "arm": "codex-buro",
+      "planning": "legacy",
+      "planningCoverage": "native-legacy",
+      "actualPlanning": {
+        "mode": "legacy",
+        "revision": "legacy-planning-v1"
+      },
+      "model": "gpt-6.1-sol",
+      "status": "failed",
+      "errorCode": "INVALID_SESSION_ID",
+      "orchestration": {
+        "planSaved": true,
+        "baselinePassed": 0,
+        "baselineTotal": 1,
+        "acceptancePassed": 1,
+        "acceptanceTotal": 1,
+        "independentReviewer": true,
+        "reviewApproved": true,
+        "acceptedCommit": true
+      },
+      "budgetCoverage": {
+        "kind": "native-observed-only",
+        "requestsEnforced": false,
+        "tokensEnforced": false,
+        "generationRequests": null,
+        "reservedOutputTokens": null,
+        "observedInputTokens": 223573,
+        "observedOutputTokens": 3741
+      },
+      "elapsedMs": 116392,
+      "canonical": {
+        "public": {
+          "passed": true,
+          "checks": 3,
+          "passedChecks": 3,
+          "rows": [
+            {
+              "name": "explicit-zero",
+              "passed": true
+            },
+            {
+              "name": "independent-task",
+              "passed": true
+            },
+            {
+              "name": "all-dependencies-required",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "e1dda0250467781a7c29ac868a9d9b342c218644c38cfa5e0e8e3361d4a67dde"
+          }
+        },
+        "holdout": {
+          "passed": true,
+          "checks": 5,
+          "passedChecks": 5,
+          "rows": [
+            {
+              "name": "missing-priority",
+              "passed": true
+            },
+            {
+              "name": "null-priority",
+              "passed": true
+            },
+            {
+              "name": "zero-below-one",
+              "passed": true
+            },
+            {
+              "name": "completed-and-ready",
+              "passed": true
+            },
+            {
+              "name": "stable-equal-priorities",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "e1dda0250467781a7c29ac868a9d9b342c218644c38cfa5e0e8e3361d4a67dde"
+          }
+        }
+      },
+      "accepted": false
+    },
+    {
+      "arm": "deepseek-buro",
+      "planning": "legacy",
+      "planningCoverage": "managed-legacy",
+      "actualPlanning": {
+        "mode": "legacy",
+        "revision": "legacy-planning-v1"
+      },
+      "model": "deepseek-flash",
+      "status": "passed",
+      "orchestration": {
+        "planSaved": true,
+        "baselinePassed": 0,
+        "baselineTotal": 1,
+        "acceptancePassed": 1,
+        "acceptanceTotal": 1,
+        "independentReviewer": true,
+        "reviewApproved": true,
+        "acceptedCommit": true
+      },
+      "budgetCoverage": {
+        "kind": "managed-enforced",
+        "requestsEnforced": true,
+        "tokensEnforced": true,
+        "generationRequests": 16,
+        "diagnosticRequests": 2,
+        "codingGenerationRequests": 14,
+        "reservedOutputTokens": 29184,
+        "observedInputTokens": 44057,
+        "observedOutputTokens": 2684,
+        "requestsWithCompleteUsage": 16,
+        "requestsWithUnknownUsage": 0
+      },
+      "elapsedMs": 27434,
+      "canonical": {
+        "public": {
+          "passed": true,
+          "checks": 3,
+          "passedChecks": 3,
+          "rows": [
+            {
+              "name": "explicit-zero",
+              "passed": true
+            },
+            {
+              "name": "independent-task",
+              "passed": true
+            },
+            {
+              "name": "all-dependencies-required",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "5db37b9d5f8b29d5a58a4eeddf7ef0fe4c7dbe17930245e60a016df4dc0c90f8"
+          }
+        },
+        "holdout": {
+          "passed": true,
+          "checks": 5,
+          "passedChecks": 5,
+          "rows": [
+            {
+              "name": "missing-priority",
+              "passed": true
+            },
+            {
+              "name": "null-priority",
+              "passed": true
+            },
+            {
+              "name": "zero-below-one",
+              "passed": true
+            },
+            {
+              "name": "completed-and-ready",
+              "passed": true
+            },
+            {
+              "name": "stable-equal-priorities",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "5db37b9d5f8b29d5a58a4eeddf7ef0fe4c7dbe17930245e60a016df4dc0c90f8"
+          }
+        }
+      },
+      "accepted": true
+    },
+    {
+      "arm": "deepseek-buro",
+      "planning": "bounded",
+      "planningCoverage": "managed-bounded",
+      "actualPlanning": {
+        "mode": "bounded",
+        "revision": "bounded-planning-v1"
+      },
+      "model": "deepseek-flash",
+      "status": "passed",
+      "orchestration": {
+        "planSaved": true,
+        "baselinePassed": 0,
+        "baselineTotal": 1,
+        "acceptancePassed": 1,
+        "acceptanceTotal": 1,
+        "independentReviewer": true,
+        "reviewApproved": true,
+        "acceptedCommit": true
+      },
+      "budgetCoverage": {
+        "kind": "managed-enforced",
+        "requestsEnforced": true,
+        "tokensEnforced": true,
+        "generationRequests": 13,
+        "diagnosticRequests": 2,
+        "codingGenerationRequests": 11,
+        "reservedOutputTokens": 23040,
+        "observedInputTokens": 28921,
+        "observedOutputTokens": 2178,
+        "requestsWithCompleteUsage": 13,
+        "requestsWithUnknownUsage": 0
+      },
+      "elapsedMs": 24386,
+      "canonical": {
+        "public": {
+          "passed": true,
+          "checks": 3,
+          "passedChecks": 3,
+          "rows": [
+            {
+              "name": "explicit-zero",
+              "passed": true
+            },
+            {
+              "name": "independent-task",
+              "passed": true
+            },
+            {
+              "name": "all-dependencies-required",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "8eb5d9d87d508981754cedfe8b13c53d0bb6b60f2f3a55e24151d38c521172c1"
+          }
+        },
+        "holdout": {
+          "passed": true,
+          "checks": 5,
+          "passedChecks": 5,
+          "rows": [
+            {
+              "name": "missing-priority",
+              "passed": true
+            },
+            {
+              "name": "null-priority",
+              "passed": true
+            },
+            {
+              "name": "zero-below-one",
+              "passed": true
+            },
+            {
+              "name": "completed-and-ready",
+              "passed": true
+            },
+            {
+              "name": "stable-equal-priorities",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "8eb5d9d87d508981754cedfe8b13c53d0bb6b60f2f3a55e24151d38c521172c1"
+          }
+        }
+      },
+      "accepted": true
+    },
+    {
+      "arm": "ollama-buro",
+      "planning": "legacy",
+      "planningCoverage": "managed-legacy",
+      "actualPlanning": {
+        "mode": "legacy",
+        "revision": "legacy-planning-v1"
+      },
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "status": "resource-blocked",
+      "errorCode": "LIVE_STEP_CHECK_FEEDBACK_LIMIT",
+      "orchestration": {
+        "planSaved": true,
+        "baselinePassed": 0,
+        "baselineTotal": 1,
+        "acceptancePassed": 0,
+        "acceptanceTotal": 0,
+        "independentReviewer": false,
+        "reviewApproved": false,
+        "acceptedCommit": false
+      },
+      "budgetCoverage": {
+        "kind": "managed-enforced",
+        "requestsEnforced": true,
+        "tokensEnforced": true,
+        "generationRequests": 18,
+        "diagnosticRequests": 2,
+        "codingGenerationRequests": 16,
+        "reservedOutputTokens": 28672,
+        "observedInputTokens": 35224,
+        "observedOutputTokens": 2379,
+        "requestsWithCompleteUsage": 18,
+        "requestsWithUnknownUsage": 0
+      },
+      "elapsedMs": 111874,
+      "canonical": {
+        "public": {
+          "passed": false,
+          "checks": 3,
+          "passedChecks": 0,
+          "rows": [
+            {
+              "name": "explicit-zero",
+              "passed": false
+            },
+            {
+              "name": "independent-task",
+              "passed": false
+            },
+            {
+              "name": "all-dependencies-required",
+              "passed": false
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [],
+            "unexpectedCount": 0,
+            "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3"
+          }
+        },
+        "holdout": {
+          "passed": false,
+          "checks": 5,
+          "passedChecks": 3,
+          "rows": [
+            {
+              "name": "missing-priority",
+              "passed": true
+            },
+            {
+              "name": "null-priority",
+              "passed": true
+            },
+            {
+              "name": "zero-below-one",
+              "passed": false
+            },
+            {
+              "name": "completed-and-ready",
+              "passed": true
+            },
+            {
+              "name": "stable-equal-priorities",
+              "passed": false
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [],
+            "unexpectedCount": 0,
+            "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3"
+          }
+        }
+      },
+      "accepted": false
+    },
+    {
+      "arm": "ollama-buro",
+      "planning": "bounded",
+      "planningCoverage": "managed-bounded",
+      "actualPlanning": {
+        "mode": "bounded",
+        "revision": "bounded-planning-v1"
+      },
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "status": "budget-exhausted",
+      "errorCode": "LIVE_CONTEXT_BUDGET_EXHAUSTED",
+      "orchestration": {
+        "planSaved": false,
+        "baselinePassed": 0,
+        "baselineTotal": 1,
+        "acceptancePassed": 0,
+        "acceptanceTotal": 0,
+        "independentReviewer": false,
+        "reviewApproved": false,
+        "acceptedCommit": false
+      },
+      "budgetCoverage": {
+        "kind": "managed-enforced",
+        "requestsEnforced": true,
+        "tokensEnforced": true,
+        "generationRequests": 3,
+        "diagnosticRequests": 2,
+        "codingGenerationRequests": 1,
+        "reservedOutputTokens": 4096,
+        "observedInputTokens": 1675,
+        "observedOutputTokens": 1014,
+        "requestsWithCompleteUsage": 3,
+        "requestsWithUnknownUsage": 0
+      },
+      "elapsedMs": 30039,
+      "canonical": {
+        "public": {
+          "passed": false,
+          "checks": 3,
+          "passedChecks": 0,
+          "rows": [
+            {
+              "name": "explicit-zero",
+              "passed": false
+            },
+            {
+              "name": "independent-task",
+              "passed": false
+            },
+            {
+              "name": "all-dependencies-required",
+              "passed": false
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [],
+            "unexpectedCount": 0,
+            "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3"
+          }
+        },
+        "holdout": {
+          "passed": false,
+          "checks": 5,
+          "passedChecks": 3,
+          "rows": [
+            {
+              "name": "missing-priority",
+              "passed": true
+            },
+            {
+              "name": "null-priority",
+              "passed": true
+            },
+            {
+              "name": "zero-below-one",
+              "passed": false
+            },
+            {
+              "name": "completed-and-ready",
+              "passed": true
+            },
+            {
+              "name": "stable-equal-priorities",
+              "passed": false
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [],
+            "unexpectedCount": 0,
+            "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3"
+          }
+        }
+      },
+      "accepted": false
+    },
+    {
+      "arm": "mixed-buro",
+      "planning": "legacy",
+      "planningCoverage": "managed-legacy",
+      "actualPlanning": {
+        "mode": "legacy",
+        "revision": "legacy-planning-v1"
+      },
+      "model": {
+        "coordinator": "deepseek-flash",
+        "worker": "qwen3:4b-instruct-2507-q4_K_M",
+        "reviewer": "deepseek-flash"
+      },
+      "status": "resource-blocked",
+      "errorCode": "LIVE_STEP_CHECK_FEEDBACK_LIMIT",
+      "orchestration": {
+        "planSaved": true,
+        "baselinePassed": 0,
+        "baselineTotal": 1,
+        "acceptancePassed": 0,
+        "acceptanceTotal": 0,
+        "independentReviewer": false,
+        "reviewApproved": false,
+        "acceptedCommit": false
+      },
+      "budgetCoverage": {
+        "kind": "managed-enforced",
+        "requestsEnforced": true,
+        "tokensEnforced": true,
+        "generationRequests": 13,
+        "diagnosticRequests": 2,
+        "codingGenerationRequests": 11,
+        "reservedOutputTokens": 19968,
+        "observedInputTokens": 22718,
+        "observedOutputTokens": 1135,
+        "requestsWithCompleteUsage": 13,
+        "requestsWithUnknownUsage": 0
+      },
+      "elapsedMs": 32571,
+      "canonical": {
+        "public": {
+          "passed": false,
+          "checks": 3,
+          "passedChecks": 0,
+          "rows": [
+            {
+              "name": "explicit-zero",
+              "passed": false
+            },
+            {
+              "name": "independent-task",
+              "passed": false
+            },
+            {
+              "name": "all-dependencies-required",
+              "passed": false
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [],
+            "unexpectedCount": 0,
+            "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3"
+          }
+        },
+        "holdout": {
+          "passed": false,
+          "checks": 5,
+          "passedChecks": 3,
+          "rows": [
+            {
+              "name": "missing-priority",
+              "passed": true
+            },
+            {
+              "name": "null-priority",
+              "passed": true
+            },
+            {
+              "name": "zero-below-one",
+              "passed": false
+            },
+            {
+              "name": "completed-and-ready",
+              "passed": true
+            },
+            {
+              "name": "stable-equal-priorities",
+              "passed": false
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [],
+            "unexpectedCount": 0,
+            "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3"
+          }
+        }
+      },
+      "accepted": false
+    },
+    {
+      "arm": "mixed-buro",
+      "planning": "bounded",
+      "planningCoverage": "managed-bounded",
+      "actualPlanning": {
+        "mode": "bounded",
+        "revision": "bounded-planning-v1"
+      },
+      "model": {
+        "coordinator": "deepseek-flash",
+        "worker": "qwen3:4b-instruct-2507-q4_K_M",
+        "reviewer": "deepseek-flash"
+      },
+      "status": "resource-blocked",
+      "errorCode": "LIVE_WORK_SEGMENT_LIMIT",
+      "orchestration": {
+        "planSaved": true,
+        "baselinePassed": 0,
+        "baselineTotal": 1,
+        "acceptancePassed": 0,
+        "acceptanceTotal": 0,
+        "independentReviewer": false,
+        "reviewApproved": false,
+        "acceptedCommit": false
+      },
+      "budgetCoverage": {
+        "kind": "managed-enforced",
+        "requestsEnforced": true,
+        "tokensEnforced": true,
+        "generationRequests": 11,
+        "diagnosticRequests": 2,
+        "codingGenerationRequests": 9,
+        "reservedOutputTokens": 14336,
+        "observedInputTokens": 19942,
+        "observedOutputTokens": 1262,
+        "requestsWithCompleteUsage": 11,
+        "requestsWithUnknownUsage": 0
+      },
+      "elapsedMs": 50878,
+      "canonical": {
+        "public": {
+          "passed": false,
+          "checks": 3,
+          "passedChecks": 0,
+          "rows": [
+            {
+              "name": "explicit-zero",
+              "passed": false
+            },
+            {
+              "name": "independent-task",
+              "passed": false
+            },
+            {
+              "name": "all-dependencies-required",
+              "passed": false
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [],
+            "unexpectedCount": 0,
+            "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3"
+          }
+        },
+        "holdout": {
+          "passed": false,
+          "checks": 5,
+          "passedChecks": 3,
+          "rows": [
+            {
+              "name": "missing-priority",
+              "passed": true
+            },
+            {
+              "name": "null-priority",
+              "passed": true
+            },
+            {
+              "name": "zero-below-one",
+              "passed": false
+            },
+            {
+              "name": "completed-and-ready",
+              "passed": true
+            },
+            {
+              "name": "stable-equal-priorities",
+              "passed": false
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [],
+            "unexpectedCount": 0,
+            "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3"
+          }
+        }
+      },
+      "accepted": false
+    }
+  ],
+  "finishedAt": "2026-11-20T23:13:17.872Z"
+}

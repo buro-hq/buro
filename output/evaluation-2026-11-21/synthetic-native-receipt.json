@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "caseId": "synthetic-ready-queue-v1",
+  "fixture": {
+    "caseId": "synthetic-ready-queue-v1",
+    "caseHash": "a4972e8be97d657c33c55aa3e949462dfefc2993708a49ff402798115d2965ce",
+    "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+    "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+    "taskHash": "dfedfa67f2f8f28845498eeef9a9f8de4a7d1c6821f786d3b9cdc8d3eea9a2b9",
+    "oracleHash": "ffc074a31214cdae4bfb1df834738629f734b581ec333f78c38b578862781040",
+    "allowedPaths": [
+      "src/priority.mjs",
+      "src/queue.mjs"
+    ],
+    "publicChecks": 3,
+    "holdoutChecks": 5
+  },
+  "verifiedAt": "2026-11-20T23:11:10.924Z",
+  "modelWorkRepeated": false,
+  "originalMeasurementError": "INVALID_SESSION_ID",
+  "correction": "Native routes are excluded from managed checkpoint loading by resource.client.",
+  "persistedStateHash": "e3a782978eaedf59f01079ccfd7d0f4b1e2c875db5cf6cc544ff343e32f519ac",
+  "runId": "R-dde9c9d7-80c8-4277-b9d6-0c5635b1887b",
+  "orchestration": {
+    "completed": true,
+    "independentReviewer": true,
+    "approved": true,
+    "acceptedCommit": true,
+    "successfulDistinctWorker": true
+  },
+  "canonical": {
+    "public": {
+      "passed": true,
+      "checks": 3,
+      "passedChecks": 3,
+      "rows": [
+        {
+          "name": "explicit-zero",
+          "passed": true
+        },
+        {
+          "name": "independent-task",
+          "passed": true
+        },
+        {
+          "name": "all-dependencies-required",
+          "passed": true
+        }
+      ],
+      "scope": {
+        "passed": true,
+        "changedFiles": [
+          "src/priority.mjs",
+          "src/queue.mjs"
+        ],
+        "unexpectedCount": 0,
+        "sourceHash": "e1dda0250467781a7c29ac868a9d9b342c218644c38cfa5e0e8e3361d4a67dde"
+      }
+    },
+    "holdout": {
+      "passed": true,
+      "checks": 5,
+      "passedChecks": 5,
+      "rows": [
+        {
+          "name": "missing-priority",
+          "passed": true
+        },
+        {
+          "name": "null-priority",
+          "passed": true
+        },
+        {
+          "name": "zero-below-one",
+          "passed": true
+        },
+        {
+          "name": "completed-and-ready",
+          "passed": true
+        },
+        {
+          "name": "stable-equal-priorities",
+          "passed": true
+        }
+      ],
+      "scope": {
+        "passed": true,
+        "changedFiles": [
+          "src/priority.mjs",
+          "src/queue.mjs"
+        ],
+        "unexpectedCount": 0,
+        "sourceHash": "e1dda0250467781a7c29ac868a9d9b342c218644c38cfa5e0e8e3361d4a67dde"
+      }
+    }
+  },
+  "accepted": true
+}

@@ -11,6 +11,7 @@ const {
   normalizedLimits,
   contextBudgets,
   preflight,
+  loadManagedCheckpoints,
   createBudgetedFetch,
   assertMixedDelegation,
   classifyEvaluationFailure,
@@ -20,6 +21,33 @@ const {
 } = require('../scripts/lib/live-provider-runner.cjs');
 const endpoints = { ollama: 'http://127.0.0.1:11434/', deepseek: 'https://api.deepseek.com/' };
 const json = (value: unknown) => new Response(JSON.stringify(value));
+
+test('native and absent routes cannot reach managed checkpoint storage', async () => {
+  const loaded: string[] = [];
+  const routes = new Map([
+    [
+      'native',
+      { resource: { client: 'codex' }, externalThreadId: 'native-thread-not-a-managed-id' },
+    ],
+    ['managed', { resource: { client: 'managed' }, externalThreadId: 'M-private' }],
+    ['starting', { resource: { client: 'managed' } }],
+  ]);
+  const checkpoints = await loadManagedCheckpoints(
+    ['native', 'missing', 'starting', 'managed'],
+    {
+      load: async (id: string) => routes.get(id),
+    },
+    {
+      load: async (id: string) => {
+        loaded.push(id);
+        assert.equal(id, 'M-private');
+        return { requests: 1 };
+      },
+    },
+  );
+  assert.deepEqual(loaded, ['M-private']);
+  assert.deepEqual(checkpoints, [{ requests: 1 }]);
+});
 
 test('typed managed budget stops remain resource outcomes without trusting model result text', () => {
   const stopped = classifyEvaluationFailure({
@@ -680,4 +708,22 @@ test('mixed quality requires a successful distinct Ollama worker and DeepSeek re
     mutate(copy);
     assert.throws(() => assertMixedDelegation(copy), { code: 'LIVE_MIXED_DELEGATION_MISSING' });
   }
+});
+
+test('native evaluation requires explicit opt-in and a pinned model without managed credentials or endpoints', () => {
+  const options = { mode: 'codex', codex: { model: 'gpt-6.1-sol', reasoningEffort: 'high' } };
+  assert.equal(preflight({ ...options, env: {} }).code, 'LIVE_OPT_IN_REQUIRED');
+  assert.equal(
+    preflight({ mode: 'codex', env: { BURO_LIVE_CODEX: '1' } }).code,
+    'LIVE_CODEX_PIN_REQUIRED',
+  );
+  const checked = preflight({ ...options, env: { BURO_LIVE_CODEX: '1' } });
+  assert.equal(checked.ok, true);
+  assert.deepEqual(checked.endpoints, {});
+  assert.deepEqual(checked.contexts, {});
+  assert.equal(checked.models.codex, 'gpt-6.1-sol');
+  assert.equal(
+    preflight({ ...options, sourceCase: { id: 'case' }, env: { BURO_LIVE_CODEX: '1' } }).code,
+    'LIVE_SOURCE_TRANSFER_NOT_AUTHORIZED',
+  );
 });
