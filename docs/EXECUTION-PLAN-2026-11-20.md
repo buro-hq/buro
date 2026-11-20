@@ -87,3 +87,9 @@ Five-agent ownership: shared protocol/configuration storage/CLI; factory lifecyc
 The Mac-only pilot exposed coordinator context exhaustion before a plan or worker existed. Worker segments cannot fix that phase. New managed runs freeze `bounded-planning-v1`: one structured, tools-free planning response (existing one correction retained), required goal/criteria/context/scope preserved, bounded optional diagnostic excerpts. Tool authority is enforced and privately journaled before HTTP; no implicit capability expansion. Native Codex explicitly retains `legacy-planning-v1`, and absent historical policy remains legacy across resume. Implementation and fresh review retain their existing tools, scope, budgets and acceptance. Oversized required briefs fail explicitly.
 
 [Private-project evaluation details removed.]
+
+### Comparison-driven planning correction
+
+Committed the controlled comparison harness and first eight synthetic results in `16cf5d0`; full default validation passed 551 tests. Native Codex and DeepSeek produced externally verified fixes; local Qwen and mixed runs remained unaccepted. A native measurement collector error was fixed and the already completed candidate reverified without another model call, retaining its original error receipt.
+
+[Private-project evaluation details removed.]

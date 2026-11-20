@@ -204,6 +204,8 @@ async function runProjectModelComparison(options = {}) {
             workspace = run?.workspace;
             if (['legacy', 'bounded'].includes(run?.planningPolicy?.mode))
               actualPlanning = run.planningPolicy.mode;
+            if (/^[A-Za-z0-9._:-]{1,100}$/.test(run?.planningPolicy?.revision || ''))
+              result.planningRevision = run.planningPolicy.revision;
           },
         });
       }

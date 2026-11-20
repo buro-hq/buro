@@ -55,8 +55,8 @@ test('bounded planning disables tools explicitly and retains goal, constraints a
   const request = boundedPlanningTurn(source);
   const saved = brief(request.text);
   assert.equal(request.toolPolicy, 'none');
-  assert.match(request.text, /Do not inspect the repository/);
-  assert.match(request.text, /Repository discovery belongs to workers/);
+  assert.match(request.text, /No tools, inspection/);
+  assert.match(request.text, /Discovery is for implementation/);
   assert.equal(saved.goal, source.goalText);
   assert.equal(saved.projectContext, source.projectContext);
   assert.deepEqual(saved.scope.allowedPaths, source.allowedPaths);
@@ -115,6 +115,65 @@ test('planning descriptions and validation corrections cannot grow the planning 
   assert.match(saved.roles[0].description, /\[shortened\]$/);
   assert.match(request.text, /Correct the previous plan: /);
   assert.ok(new TextEncoder().encode(request.text).length < MAX_PLANNING_INPUT_BYTES);
+});
+
+test('v2 same-thread correction retains exact validation error without repeating the required brief', () => {
+  const source = input();
+  const correction =
+    'steps.owner must exactly match a worker roleId.\n' + 'Precise diagnostic '.repeat(90);
+  const first = boundedPlanningTurn({ ...source, revision: 'bounded-planning-v2' });
+  const retry = boundedPlanningTurn({
+    ...source,
+    revision: 'bounded-planning-v2',
+    reuseBrief: true,
+    correction,
+  });
+  assert.equal(brief(first.text).goal, source.goalText);
+  assert.equal(retry.toolPolicy, 'none');
+  assert.ok(
+    retry.text.endsWith(correction),
+    'The correction must retain the exact validation error',
+  );
+  assert.doesNotMatch(retry.text, /Brief: /);
+  assert.ok(!retry.text.includes(source.goalText));
+  assert.match(retry.text, /saved brief and constraints in this thread/);
+  assert.match(retry.text, /complete plan, not a patch/);
+});
+
+test('saved v1 corrections preserve the original full-brief algorithm and first v2 turn never reuses absent history', () => {
+  const source = input();
+  const retry = boundedPlanningTurn({
+    ...source,
+    revision: 'bounded-planning-v1',
+    reuseBrief: true,
+    correction: 'Fix owner',
+  });
+  assert.equal(brief(retry.text).goal, source.goalText);
+  const first = boundedPlanningTurn({
+    ...source,
+    revision: 'bounded-planning-v2',
+    correction: 'Fix owner',
+  });
+  assert.equal(brief(first.text).goal, source.goalText);
+});
+
+test('a role change sends the updated pinned catalog with compact v2 correction', () => {
+  const source = input();
+  source.roles[0].version = 4;
+  source.roles[0].runtimePreference = { mode: 'fixed', runtimeId: 'replacement-model' };
+  const retry = boundedPlanningTurn({
+    ...source,
+    revision: 'bounded-planning-v2',
+    reuseBrief: true,
+    roleCatalogChanged: true,
+    correction: 'Role builder changed during planning.',
+  });
+  const catalog = JSON.parse(
+    retry.text.split('Updated role catalog (replaces the previous catalog): ')[1],
+  );
+  assert.equal(catalog[0].version, 4);
+  assert.equal(catalog[0].runtimePreference.runtimeId, 'replacement-model');
+  assert.doesNotMatch(retry.text, /Brief: /);
 });
 
 test('bounded material references preserve scope and staged paths while deferring reads to implementation', () => {

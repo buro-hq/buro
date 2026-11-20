@@ -7,15 +7,23 @@ async function main() {
       code: 'COMPARISON_OPT_IN_REQUIRED',
     });
   const selected = process.argv[2];
+  const planning = process.argv[3];
+  if (process.argv.length > 4 || (planning && !['legacy', 'bounded'].includes(planning)))
+    throw Object.assign(new Error('Invalid comparison arguments.'), {
+      code: 'COMPARISON_INVALID_ARGUMENTS',
+    });
   const arms = selected ? selected.split(',') : undefined;
   // A selected fixture is always synthetic. This does not authorize transfer of any user project.
   const env = { ...process.env, BURO_LIVE_SOURCE_TRANSFER: '1' };
   const { loadModelCredentials } = await import('../adapters/files/model-credentials.ts');
   const { boundedWorkSegmentPolicy } = await import('../core/work-segments.ts');
-  const reportPath = path.resolve('artifacts/model-comparison.json');
+  const reportPath = path.resolve(
+    process.env.BURO_COMPARISON_REPORT || 'artifacts/model-comparison.json',
+  );
   const report = await runModelComparison({
     env,
     arms,
+    planningControls: planning ? [{ id: planning, mode: planning }] : undefined,
     credentials: await loadModelCredentials(path.resolve('.buro/local')),
     segmentPolicy: boundedWorkSegmentPolicy,
     reportPath,

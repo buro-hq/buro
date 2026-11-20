@@ -312,7 +312,7 @@ export const PlanningPolicySchema = z.discriminatedUnion('mode', [
   z.strictObject({
     version: z.literal(1),
     mode: z.literal('bounded'),
-    revision: z.literal('bounded-planning-v1'),
+    revision: z.enum(['bounded-planning-v1', 'bounded-planning-v2']),
   }),
   z.strictObject({
     version: z.literal(1),

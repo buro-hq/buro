@@ -9,6 +9,9 @@ import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { FileProjectRegistry } from '../adapters/files/registry.ts';
 import type { AgentRuntime } from '../core/ports.ts';
 import type { ResourceSnapshot } from '../protocol/resources.ts';
+import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
+import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
+import type { ModelProvider } from '../core/model-ports.ts';
 
 async function fixture(
   t: any,
@@ -16,9 +19,10 @@ async function fixture(
     client?: 'managed' | 'codex';
     mode?: 'bounded' | 'legacy';
     invalidPlans?: number;
+    managed16K?: boolean;
   } = {},
 ) {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-planning-'));
+  const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'buro-planning-')));
   const store = await FileProjectStore.open({
     directory,
     project: { id: 'p', name: 'Planning fixture', root: directory },
@@ -27,6 +31,8 @@ async function fixture(
   let sequence = 0,
     plans = 0;
   const turns: { text: string; toolPolicy?: 'none'; threadId: string }[] = [];
+  const providerCalls: Parameters<ModelProvider['complete']>[0][] = [];
+  const sessions = new FileManagedSessions(path.join(directory, 'private-sessions'));
   const resource = {
     id: options.client === 'codex' ? 'codex' : 'local-qwen',
     client: options.client || 'managed',
@@ -40,7 +46,7 @@ async function fixture(
     worker: resource,
     reviewer: resource,
   };
-  const runtime: AgentRuntime = {
+  const fakeRuntime: AgentRuntime = {
     id: 'fake',
     async start() {
       return { threadId: 'thread-' + ++sequence };
@@ -78,6 +84,107 @@ async function fixture(
       return { turnId: 't', text: JSON.stringify(answer) };
     },
   };
+  const runtime: AgentRuntime = options.managed16K
+    ? new ManagedAgentRuntime({
+        id: 'local-qwen',
+        model: 'fixture-qwen',
+        projects,
+        sessions,
+        idGenerator: () => crypto.randomUUID(),
+        limits: {
+          contextTokens: 16384,
+          maxOutputTokens: 2048,
+          maxRequestsPerTurn: 4,
+          maxToolCallsPerTurn: 4,
+          maxSessionRequests: 12,
+        },
+        tools: {
+          definitions: () => [
+            {
+              name: 'read_file',
+              description: 'Inspect public fixture input',
+              parameters: { type: 'object' },
+            },
+          ],
+          async execute() {
+            throw Error('This fixture never requests tool effects');
+          },
+        },
+        provider: {
+          id: 'ollama',
+          revision: 'fixture-16k',
+          local: true,
+          structuredToolMode: 'separate-turn',
+          async complete(input) {
+            providerCalls.push({
+              ...input,
+              messages: structuredClone(input.messages),
+              tools: structuredClone(input.tools),
+            });
+            const task =
+              [...input.messages].reverse().find((message) => message.role === 'user')?.content ||
+              '';
+            let answer: unknown;
+            if (task.startsWith('First,')) {
+              const invalid = ++plans === 1;
+              assert.deepEqual(input.tools, []);
+              assert.ok(
+                input.schema,
+                'Tools-free Ollama planning must request structured output directly',
+              );
+              answer = {
+                summary: invalid
+                  ? 'Prior planning detail. '.repeat(150)
+                  : 'One coherent assignment.',
+                steps: [
+                  {
+                    step: 'Implement the value change',
+                    owner: invalid ? 'missing-role' : 'builder',
+                  },
+                  { step: 'Verify result', owner: 'reviewer' },
+                ],
+                team: [
+                  {
+                    roleId: 'builder',
+                    action: 'create',
+                    title: 'Builder',
+                    description: 'Implements scoped code',
+                    instructions: 'Preserve the assigned public API.',
+                    kind: 'implementation',
+                    paths: ['src/value.ts'],
+                    runtimeId: null,
+                    runtimeReason: '',
+                    assignment: null,
+                  },
+                ],
+              };
+            } else if (
+              input.messages.some(
+                (message) => message.role === 'user' && message.content.startsWith('Review goal'),
+              )
+            ) {
+              answer = { verdict: 'approved', blockingFindings: [], summary: 'Verified' };
+            } else {
+              answer = {
+                status: 'success',
+                summary: 'Done',
+                artifacts: ['src/value.ts'],
+                notesForNextAgent: '',
+              };
+            }
+            return {
+              model: input.model,
+              finish: 'stop',
+              usage: { inputTokens: 40, outputTokens: 20 },
+              message: {
+                role: 'assistant',
+                content: input.schema ? JSON.stringify(answer) : 'Work complete.',
+              },
+            };
+          },
+        },
+      })
+    : fakeRuntime;
   const environment = {
     projects,
     runtime,
@@ -93,7 +200,9 @@ async function fixture(
       p: {
         allowedPaths: ['src/'],
         protectedPaths: ['checks/'],
-        context: 'Preserve the public API.',
+        context: options.managed16K
+          ? 'Preserve the public API. '.repeat(60)
+          : 'Preserve the public API.',
         checks: [{ id: 'suite', title: 'Suite' }],
         defaultCheckIds: ['suite'],
         maxWorkers: 2,
@@ -135,7 +244,19 @@ async function fixture(
     await engine.jobs.get(result.runId)?.promise;
     return engine.get('p', result.runId);
   }
-  return { engine, store, environment, turns, run, directory };
+  return {
+    engine,
+    store,
+    environment,
+    turns,
+    run,
+    directory,
+    providerCalls,
+    sessions,
+    resetPlanningCount: () => {
+      plans = 0;
+    },
+  };
 }
 
 test('new managed planning saves bounded policy and only planning turns disable tools', async (t) => {
@@ -143,15 +264,61 @@ test('new managed planning saves bounded policy and only planning turns disable 
   const run = await f.run();
   assert.equal(run.status, 'completed', run.result);
   assert.equal(run.planningPolicy?.mode, 'bounded');
+  assert.equal(run.planningPolicy?.revision, 'bounded-planning-v2');
   const planning = f.turns.filter(({ text }) => text.startsWith('First,'));
   assert.equal(planning.length, 2);
   assert.ok(planning.every(({ toolPolicy }) => toolPolicy === 'none'));
   assert.match(planning[1].text, /steps.owner must exactly match/);
+  assert.doesNotMatch(planning[1].text, /Brief: /);
   const integration = f.turns.find(({ text }) => text.startsWith('Plan accepted.'))!;
   assert.equal(integration.toolPolicy, undefined);
   assert.equal(integration.threadId, planning[0].threadId);
   assert.equal(f.turns.find(({ text }) => text.startsWith('Review goal'))?.toolPolicy, undefined);
   assert.equal(run.independentReviewer, true);
+});
+
+test('managed Ollama 16K corrects an invalid plan without repeating the brief or resetting its journal', async (t) => {
+  const f = await fixture(t, { managed16K: true });
+  const run = await f.run();
+  assert.equal(run.status, 'completed', run.result);
+  assert.equal(run.planningPolicy?.revision, 'bounded-planning-v2');
+  assert.ok(
+    run.agents.some((agent) => agent.session?.roleId === 'builder' && agent.status === 'completed'),
+  );
+  const planning = f.providerCalls.filter((call) =>
+    [...call.messages]
+      .reverse()
+      .find((message) => message.role === 'user')
+      ?.content.startsWith('First,'),
+  );
+  assert.equal(planning.length, 2);
+  assert.equal(planning[0].contextTokens, 16384);
+  assert.equal(planning[1].contextTokens, 16384);
+  const users = planning[1].messages.filter((message) => message.role === 'user');
+  assert.match(users[0].content, /Brief: /);
+  assert.doesNotMatch(users[1].content, /Brief: /);
+  assert.match(users[1].content, /steps.owner must exactly match/);
+  assert.ok(
+    planning[1].messages.some(
+      (message) =>
+        message.role === 'assistant' && message.content.includes('Prior planning detail.'),
+    ),
+  );
+  const saved = (await f.sessions.load(run.threadId))!;
+  assert.deepEqual(
+    saved.turnAuthorities?.slice(0, 2).map((entry) => [entry.toolPolicy, entry.startedAtRequest]),
+    [
+      ['none', 0],
+      ['none', 1],
+    ],
+  );
+  assert.equal(
+    saved.requests,
+    4,
+    'Two planning generations and normal two-phase integration share the original counter',
+  );
+  assert.equal(saved.actions.length, 0);
+  assert.equal(run.events.filter((event) => event.type === 'plan.rejected').length, 1);
 });
 
 test('legacy comparison mode and native Codex retain existing planning authority', async (t) => {
@@ -202,4 +369,43 @@ test('historical missing planning policy remains legacy even when current enviro
   const planning = f.turns.find(({ text }) => text.startsWith('First,'))!;
   assert.equal(planning.toolPolicy, undefined);
   assert.match(planning.text, /only inspect the project/);
+});
+
+test('a resumed saved v1 run retains its original full-brief correction algorithm', async (t) => {
+  const f = await fixture(t, { invalidPlans: 1 });
+  const original = await f.run();
+  await f.store.transact('historical-v1', 'historical-v1', (doc) => {
+    const historical = {
+      ...structuredClone(original),
+      id: 'R-historical-v1',
+      planningPolicy: {
+        version: 1 as const,
+        mode: 'bounded' as const,
+        revision: 'bounded-planning-v1',
+      },
+      managedBudget: undefined,
+    };
+    doc.runs.push(historical);
+    return { result: null, change: { type: 'run.changed', run: historical, goal: doc.goals[0] } };
+  });
+  f.turns.length = 0;
+  f.resetPlanningCount();
+  await f.engine.planAndImplement(
+    'p',
+    'R-historical-v1',
+    { path: f.directory, base: 'initial' },
+    f.environment.policies.p,
+    new AbortController().signal,
+    [],
+    true,
+  );
+  const planning = f.turns.filter(({ text }) => text.startsWith('First,'));
+  assert.equal(planning.length, 2);
+  assert.ok(
+    planning.every(({ text, toolPolicy }) => text.includes('Brief: ') && toolPolicy === 'none'),
+  );
+  assert.equal(
+    f.engine.get('p', 'R-historical-v1').planningPolicy?.revision,
+    'bounded-planning-v1',
+  );
 });

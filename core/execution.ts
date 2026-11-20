@@ -911,6 +911,7 @@ ${installation.output || installation.error || ''}`,
     let plan: TeamPlan | undefined,
       team: ReturnType<typeof resolveTeam> | undefined,
       correction = '',
+      roleCatalogChanged = false,
       planningRoles = initial.roles;
     for (let attempt = 0; attempt < 2; attempt++) {
       const workerCatalog = planningRoles.filter(
@@ -919,6 +920,12 @@ ${installation.output || installation.error || ''}`,
       const pool = run.resources ? workerResourcePool(run.resources) : [];
       const boundedTurn = boundedPlanning
         ? boundedPlanningTurn({
+            revision:
+              run.planningPolicy?.revision === BOUNDED_PLANNING_REVISION
+                ? BOUNDED_PLANNING_REVISION
+                : 'bounded-planning-v1',
+            reuseBrief: attempt > 0,
+            roleCatalogChanged,
             title: run.title,
             goalText: run.goalText,
             allowedPaths: policy.allowedPaths,
@@ -1036,8 +1043,10 @@ ${correction}`;
         break;
       } catch (e) {
         if (e instanceof DomainError && e.code === 'FIXED_RUNTIME_UNAVAILABLE') throw e;
-        if (e instanceof DomainError && e.code === 'ROLE_CHANGED')
+        if (e instanceof DomainError && e.code === 'ROLE_CHANGED') {
           planningRoles = this.env.projects.get(projectId).snapshot().roles;
+          roleCatalogChanged = true;
+        }
         correction = 'Correct the previous plan: ' + String(e);
         await this.update(projectId, runId, (r) =>
           r.events.push({ at: this.env.now(), type: 'plan.rejected', text: correction }),
