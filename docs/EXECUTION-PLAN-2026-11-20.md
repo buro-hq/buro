@@ -81,3 +81,9 @@ Five-agent ownership: shared protocol/configuration storage/CLI; factory lifecyc
 ## Stage log
 
 [Private-project evaluation details removed.]
+
+## Bounded planning and controlled model comparison — 2026-11-21
+
+The Mac-only pilot exposed coordinator context exhaustion before a plan or worker existed. Worker segments cannot fix that phase. New managed runs freeze `bounded-planning-v1`: one structured, tools-free planning response (existing one correction retained), required goal/criteria/context/scope preserved, bounded optional diagnostic excerpts. Tool authority is enforced and privately journaled before HTTP; no implicit capability expansion. Native Codex explicitly retains `legacy-planning-v1`, and absent historical policy remains legacy across resume. Implementation and fresh review retain their existing tools, scope, budgets and acceptance. Oversized required briefs fail explicitly.
+
+[Private-project evaluation details removed.]

@@ -20,6 +20,7 @@ export const executionPlugin: Plugin.Object<{
   policies: Record<string, ExecutionPolicy>;
   workspaces: WorkspacePort;
   checks: CheckPort;
+  planningMode?: 'bounded' | 'legacy';
 }> = {
   name: 'goal-execution',
   inject: ['projects', 'commands', 'agentRuntime'],

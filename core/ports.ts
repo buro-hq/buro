@@ -87,7 +87,7 @@ export interface AgentRuntime {
   turn?(
     threadId: string,
     text: string,
-    options: { schema: unknown; signal: AbortSignal; timeoutMs: number },
+    options: { schema: unknown; signal: AbortSignal; timeoutMs: number; toolPolicy?: 'none' },
   ): Promise<{ turnId: string; text: string; model?: string }>;
   subscribe?(listener: (event: RuntimeEvent) => void): () => void;
   release?(threadId: string): Promise<void>;

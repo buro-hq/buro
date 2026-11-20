@@ -308,114 +308,158 @@ const agentSession = z.object({
     })
     .optional(),
 });
-const run = z.object({
-  managedBudget: ManagedRunBudgetSummarySchema.optional(),
-  workerTasks: z.record(z.string(), WorkerTaskSchema).optional(),
-  workerReplan: WorkerReplanSchema.optional(),
-  resources: ResourceSnapshotSchema.optional(),
-  assignmentResources: z.record(z.string(), AssignmentResourceSchema).optional(),
-  delegation: z.literal('buro').optional(),
-  coordinatorSession: agentSession.optional(),
-  contextMaterials: z.array(ContextMaterialSchema).optional(),
-  id: z.string(),
-  key: z.string(),
-  title: z.string(),
-  summary: z.string(),
-  createdAt: z.string(),
-  completedAt: z.string().optional(),
-  updatedAt: z.string().optional(),
-  planSavedAt: z.string().optional(),
-  threadId: z.string(),
-  status: z
-    .enum([
-      'queued',
-      'running',
-      'canceling',
-      'completed',
-      'failed',
-      'interrupted',
-      'needs-attention',
-    ])
-    .optional(),
-  phase: z
-    .enum([
-      'preparing',
-      'queued',
-      'planning',
-      'implementation',
-      'checking',
-      'review',
-      'repair',
-      'done',
-    ])
-    .optional(),
-  goalId: z.string().optional(),
-  workspace: z.string().optional(),
-  commit: z.string().optional(),
-  checkIds: z.array(z.string()).optional(),
-  timePolicy: z
-    .object({ kind: z.literal('inactivity'), idleTimeoutMs: z.number().positive() })
-    .optional(),
-  repairEnvironment: z.boolean().optional(),
-  cancelRequested: z.boolean().optional(),
-  review: z
-    .object({
-      verdict: z.enum(['approved', 'changes_requested']),
-      blockingFindings: z.array(z.string()),
-      summary: z.string(),
-    })
-    .optional(),
-  roleOrigins: z.record(z.string(), z.enum(['created', 'reused'])).optional(),
-  roleSnapshots: z.array(role).optional(),
-  roleAssignments: z.record(z.string(), z.array(z.string())).optional(),
-  continuation: z
-    .object({
-      mode: z.enum(['repair', 'recheck']),
-      instructions: z.string(),
-      requestedAt: z.string(),
-    })
-    .optional(),
-  issue: z
-    .object({
-      code: z.enum(['BASELINE_CHECKS_FAILED', 'EXECUTION_FAILED', 'MANAGED_BUDGET_BLOCKED']),
-      budgetCode: ManagedBudgetErrorCodeSchema.optional(),
-      message: z.string(),
-      checks: z.array(z.string()),
-    })
-    .superRefine((issue, ctx) => {
-      if ((issue.code === 'MANAGED_BUDGET_BLOCKED') !== (issue.budgetCode !== undefined))
-        ctx.addIssue({
-          code: 'custom',
-          message: 'A managed budget issue requires its typed budget code.',
-        });
-    })
-    .optional(),
-  attempts: z
-    .array(
+export const PlanningPolicySchema = z.discriminatedUnion('mode', [
+  z.strictObject({
+    version: z.literal(1),
+    mode: z.literal('bounded'),
+    revision: z.literal('bounded-planning-v1'),
+  }),
+  z.strictObject({
+    version: z.literal(1),
+    mode: z.literal('legacy'),
+    revision: z.literal('legacy-planning-v1'),
+  }),
+]);
+const run = z
+  .object({
+    planningPolicy: PlanningPolicySchema.optional(),
+    managedBudget: ManagedRunBudgetSummarySchema.optional(),
+    workerTasks: z.record(z.string(), WorkerTaskSchema).optional(),
+    workerReplan: WorkerReplanSchema.optional(),
+    resources: ResourceSnapshotSchema.optional(),
+    assignmentResources: z.record(z.string(), AssignmentResourceSchema).optional(),
+    delegation: z.literal('buro').optional(),
+    coordinatorSession: agentSession.optional(),
+    contextMaterials: z.array(ContextMaterialSchema).optional(),
+    id: z.string(),
+    key: z.string(),
+    title: z.string(),
+    summary: z.string(),
+    createdAt: z.string(),
+    completedAt: z.string().optional(),
+    updatedAt: z.string().optional(),
+    planSavedAt: z.string().optional(),
+    threadId: z.string(),
+    status: z
+      .enum([
+        'queued',
+        'running',
+        'canceling',
+        'completed',
+        'failed',
+        'interrupted',
+        'needs-attention',
+      ])
+      .optional(),
+    phase: z
+      .enum([
+        'preparing',
+        'queued',
+        'planning',
+        'implementation',
+        'checking',
+        'review',
+        'repair',
+        'done',
+      ])
+      .optional(),
+    goalId: z.string().optional(),
+    workspace: z.string().optional(),
+    commit: z.string().optional(),
+    checkIds: z.array(z.string()).optional(),
+    timePolicy: z
+      .object({ kind: z.literal('inactivity'), idleTimeoutMs: z.number().positive() })
+      .optional(),
+    repairEnvironment: z.boolean().optional(),
+    cancelRequested: z.boolean().optional(),
+    review: z
+      .object({
+        verdict: z.enum(['approved', 'changes_requested']),
+        blockingFindings: z.array(z.string()),
+        summary: z.string(),
+      })
+      .optional(),
+    roleOrigins: z.record(z.string(), z.enum(['created', 'reused'])).optional(),
+    roleSnapshots: z.array(role).optional(),
+    roleAssignments: z.record(z.string(), z.array(z.string())).optional(),
+    continuation: z
+      .object({
+        mode: z.enum(['repair', 'recheck']),
+        instructions: z.string(),
+        requestedAt: z.string(),
+      })
+      .optional(),
+    issue: z
+      .object({
+        code: z.enum(['BASELINE_CHECKS_FAILED', 'EXECUTION_FAILED', 'MANAGED_BUDGET_BLOCKED']),
+        budgetCode: ManagedBudgetErrorCodeSchema.optional(),
+        message: z.string(),
+        checks: z.array(z.string()),
+      })
+      .superRefine((issue, ctx) => {
+        if ((issue.code === 'MANAGED_BUDGET_BLOCKED') !== (issue.budgetCode !== undefined))
+          ctx.addIssue({
+            code: 'custom',
+            message: 'A managed budget issue requires its typed budget code.',
+          });
+      })
+      .optional(),
+    attempts: z
+      .array(
+        z.object({
+          at: z.string(),
+          status: z.string(),
+          result: z.string(),
+          policy: z.unknown().optional(),
+          planningPolicy: PlanningPolicySchema.optional(),
+          goalText: z.string(),
+          contextMaterials: z.array(ContextMaterialSchema).optional(),
+          repairEnvironment: z.boolean().optional(),
+          timePolicy: z
+            .object({ kind: z.literal('inactivity'), idleTimeoutMs: z.number().positive() })
+            .optional(),
+        }),
+      )
+      .optional(),
+    baseCommit: z.string().optional(),
+    baseBranch: z.string().optional(),
+    parentRunId: z.string().optional(),
+    outcome: GoalOutcomeSchema.optional(),
+    delivery: DeliverySchema.optional(),
+    deliveryHistory: z.array(DeliverySchema).optional(),
+    preview: PreviewSchema.optional(),
+    resultAgents: z
+      .array(
+        z.object({
+          threadId: z.string(),
+          name: z.string(),
+          agentPath: z.string(),
+          startedAt: z.string(),
+          completedAt: z.string(),
+          messages: z.array(z.string()),
+          commands: z.number(),
+          status: z.string(),
+        }),
+      )
+      .optional(),
+    appliedAt: z.string().optional(),
+    appliedBranch: z.string().optional(),
+    executionPolicySnapshot: z
+      .object({
+        allowedPaths: z.array(z.string()),
+        protectedPaths: z.array(z.string()).optional(),
+        checks: z.array(z.object({ id: z.string(), title: z.string() })),
+        defaultCheckIds: z.array(z.string()),
+        maxWorkers: z.number(),
+        maxRepairs: z.number(),
+        turnTimeoutMs: z.number(),
+        context: z.string().optional(),
+        profile: ProjectProfileSchema.optional(),
+      })
+      .optional(),
+    agents: z.array(
       z.object({
-        at: z.string(),
-        status: z.string(),
-        result: z.string(),
-        policy: z.unknown().optional(),
-        goalText: z.string(),
-        contextMaterials: z.array(ContextMaterialSchema).optional(),
-        repairEnvironment: z.boolean().optional(),
-        timePolicy: z
-          .object({ kind: z.literal('inactivity'), idleTimeoutMs: z.number().positive() })
-          .optional(),
-      }),
-    )
-    .optional(),
-  baseCommit: z.string().optional(),
-  baseBranch: z.string().optional(),
-  parentRunId: z.string().optional(),
-  outcome: GoalOutcomeSchema.optional(),
-  delivery: DeliverySchema.optional(),
-  deliveryHistory: z.array(DeliverySchema).optional(),
-  preview: PreviewSchema.optional(),
-  resultAgents: z
-    .array(
-      z.object({
+        session: agentSession.optional(),
         threadId: z.string(),
         name: z.string(),
         agentPath: z.string(),
@@ -424,79 +468,54 @@ const run = z.object({
         messages: z.array(z.string()),
         commands: z.number(),
         status: z.string(),
+        assignment: z
+          .object({
+            paths: z.array(z.string()),
+            envelope: WorkerEnvelopeSchema.optional(),
+            knownFailure: WorkerKnownFailureSchema.optional(),
+          })
+          .optional(),
       }),
-    )
-    .optional(),
-  appliedAt: z.string().optional(),
-  appliedBranch: z.string().optional(),
-  executionPolicySnapshot: z
-    .object({
-      allowedPaths: z.array(z.string()),
-      protectedPaths: z.array(z.string()).optional(),
-      checks: z.array(z.object({ id: z.string(), title: z.string() })),
-      defaultCheckIds: z.array(z.string()),
-      maxWorkers: z.number(),
-      maxRepairs: z.number(),
-      turnTimeoutMs: z.number(),
-      context: z.string().optional(),
-      profile: ProjectProfileSchema.optional(),
-    })
-    .optional(),
-  agents: z.array(
-    z.object({
-      session: agentSession.optional(),
-      threadId: z.string(),
-      name: z.string(),
-      agentPath: z.string(),
-      startedAt: z.string(),
-      completedAt: z.string(),
-      messages: z.array(z.string()),
-      commands: z.number(),
-      status: z.string(),
-      assignment: z
-        .object({
-          paths: z.array(z.string()),
-          envelope: WorkerEnvelopeSchema.optional(),
-          knownFailure: WorkerKnownFailureSchema.optional(),
-        })
-        .optional(),
-    }),
-  ),
-  events: z.array(
-    z.object({
-      type: z.string(),
-      at: z.string(),
-      threadId: z.string().optional(),
-      text: z.string().optional(),
-      commandId: z.string().optional(),
-      durationMs: z.number().nonnegative().optional(),
-    }),
-  ),
-  commands: z.array(
-    z.object({
-      id: z.string(),
-      threadId: z.string(),
-      command: z.string(),
-      startedAt: z.string(),
-      completedAt: z.string().optional(),
-      exitCode: z.number().nullable().optional(),
-      output: z
-        .string()
-        .nullish()
-        .transform((v) => v ?? undefined),
-    }),
-  ),
-  plan: z.array(z.object({ step: z.string(), owner: z.string() })),
-  changedFiles: z.array(z.object({ path: z.string(), before: z.string(), after: z.string() })),
-  baseline: checks,
-  acceptance: checks,
-  specsUnchanged: z.boolean(),
-  scopePreserved: z.boolean(),
-  independentReviewer: z.boolean(),
-  goalText: z.string(),
-  result: z.string(),
-  sourceHash: z.string(),
-});
+    ),
+    events: z.array(
+      z.object({
+        type: z.string(),
+        at: z.string(),
+        threadId: z.string().optional(),
+        text: z.string().optional(),
+        commandId: z.string().optional(),
+        durationMs: z.number().nonnegative().optional(),
+      }),
+    ),
+    commands: z.array(
+      z.object({
+        id: z.string(),
+        threadId: z.string(),
+        command: z.string(),
+        startedAt: z.string(),
+        completedAt: z.string().optional(),
+        exitCode: z.number().nullable().optional(),
+        output: z
+          .string()
+          .nullish()
+          .transform((v) => v ?? undefined),
+      }),
+    ),
+    plan: z.array(z.object({ step: z.string(), owner: z.string() })),
+    changedFiles: z.array(z.object({ path: z.string(), before: z.string(), after: z.string() })),
+    baseline: checks,
+    acceptance: checks,
+    specsUnchanged: z.boolean(),
+    scopePreserved: z.boolean(),
+    independentReviewer: z.boolean(),
+    goalText: z.string(),
+    result: z.string(),
+    sourceHash: z.string(),
+  })
+  .superRefine((run, ctx) => {
+    if (run.planningPolicy?.mode === 'bounded' && run.resources?.coordinator.client !== 'managed')
+      ctx.addIssue({ code: 'custom', message: 'Bounded planning requires a managed coordinator.' });
+  });
 export const DomainEventSchema = z.object({
   version: z.literal(1),
   id: z.string(),

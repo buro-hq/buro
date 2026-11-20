@@ -17,6 +17,7 @@ import type {
 
 import { packEvent, expandEvent, type StoredEvent } from './event-log.ts';
 import { validateProjectRunBudgets } from './project-run-budgets.ts';
+import { validateProjectPlanningPolicies } from './project-planning-policy.ts';
 type StoredDocument = ProjectDocument & { events: StoredEvent[]; eventEncoding?: 'run-delta-v1' };
 type Options = {
   directory: string;
@@ -98,6 +99,7 @@ export class FileProjectStore implements ProjectStore {
       if (options.profile && (!doc.profile || options.profile.revision >= doc.profile.revision))
         doc.profile = options.profile;
       validateProjectRunBudgets(doc);
+      validateProjectPlanningPolicies(doc);
       store = new FileProjectStore(options, doc, nonce);
       doc.eventEncoding = 'run-delta-v1';
       await store.persist(doc);
@@ -165,6 +167,7 @@ export class FileProjectStore implements ProjectStore {
       const draft = structuredClone(state),
         { result, change } = apply(draft);
       validateProjectRunBudgets(draft, this.doc);
+      validateProjectPlanningPolicies(draft, this.doc);
       draft.revision++;
       draft.sequence++;
       const event: DomainEvent = {

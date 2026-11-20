@@ -174,6 +174,7 @@ export type RunIssue = {
   checks: string[];
 };
 export type Run = {
+  planningPolicy?: { version: 1; mode: 'bounded' | 'legacy'; revision: string };
   managedBudget?: import('./run-budget.ts').ManagedRunBudgetSummary;
   workerTasks?: Record<string, import('./worker-tasks.ts').WorkerTask>;
   workerReplan?: import('./worker-tasks.ts').WorkerReplan;
@@ -235,6 +236,7 @@ export type Run = {
     status: string;
     result: string;
     policy?: Run['executionPolicySnapshot'];
+    planningPolicy?: Run['planningPolicy'];
     goalText: string;
     contextMaterials?: ContextMaterial[];
     repairEnvironment?: boolean;

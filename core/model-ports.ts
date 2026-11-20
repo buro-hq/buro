@@ -89,6 +89,13 @@ export type ManagedSession = {
   scope: ToolScope;
   assignment?: { roleId: string; allowedPaths: string[]; protectedPaths: string[] };
   scopeRevisions?: { revision: number; scope: ToolScope; instructions: string }[];
+  /** Service-owned per-turn authority; persisted before generation and never model-controlled. */
+  turnAuthorities?: {
+    turnId: string;
+    toolPolicy: 'none' | 'normal';
+    startedAtRequest: number;
+    scopeRevision: number;
+  }[];
   messages: ModelMessage[];
   intermediateNotes?: number[];
   /** Atomic private archive and active context; never part of a public session DTO. */

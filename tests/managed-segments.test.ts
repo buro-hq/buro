@@ -152,6 +152,11 @@ async function fixture(
           description: 'Read one assigned file',
           parameters: { type: 'object' },
         },
+        {
+          name: 'edit_file',
+          description: 'Edit one assigned file',
+          parameters: { type: 'object' },
+        },
       ],
       async execute() {
         executed++;

@@ -100,7 +100,13 @@ async function fixture(t: any, fileStore = false) {
       tools: tools || {
         definitions(scope) {
           scopes.push(structuredClone(scope));
-          return [];
+          return [
+            {
+              name: 'read_file',
+              description: 'Read assigned input',
+              parameters: { type: 'object' },
+            },
+          ];
         },
         async execute() {
           return { content: 'read result' };

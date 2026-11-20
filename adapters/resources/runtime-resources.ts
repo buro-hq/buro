@@ -46,7 +46,14 @@ export async function createRuntimeResources(options: {
   projects: ProjectRegistry;
   executors: EnvironmentExecutors;
   fetch?: typeof fetch;
-  codex?: { executable?: string; args?: string[] };
+  codex?: {
+    executable?: string;
+    args?: string[];
+    model?: string;
+    reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+    networkAccess?: boolean;
+    onEvent?: (event: { method: string; params: unknown }) => void;
+  };
   credentials?: (reference: string) => string | undefined;
   requestPolicy?: ManagedRequestPolicy;
   budgets?: ManagedRunBudgetPort;

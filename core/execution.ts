@@ -1,4 +1,5 @@
 import { runWorkerAssignments } from './worker-assignments.ts';
+import { boundedPlanningTurn, BOUNDED_PLANNING_REVISION } from './planning-policy.ts';
 import { createManagedRunBudget, managedBudgetSummary } from './run-budget.ts';
 import { ManagedBudgetErrorCodeSchema } from '../protocol/run-budget.ts';
 import { validateWorkerTask } from './worker-envelope.ts';
@@ -53,6 +54,8 @@ type Environment = {
   projects: ProjectRegistry;
   runtime: AgentRuntime;
   selection?: RuntimeSelection;
+  /** Saved on new runs; existing runs keep their original planning behavior. */
+  planningMode?: 'bounded' | 'legacy';
   workspaces: WorkspacePort;
   checks: CheckPort;
   policies: Record<string, ExecutionPolicy>;
@@ -231,11 +234,17 @@ ${installation.output || installation.error || ''}`,
     schema: unknown,
     signal: AbortSignal,
     timeoutMs: number,
+    toolPolicy?: 'none',
   ) {
     if (signal.aborted) throw new DOMException('Interrupted', 'AbortError');
     if (!this.env.runtime.turn) throw Error('The runtime does not support completed phases.');
     const answer = await this.measure(projectId, runId, 'agent.turn', () =>
-      this.env.runtime.turn!(threadId, text, { schema, signal, timeoutMs }),
+      this.env.runtime.turn!(threadId, text, {
+        schema,
+        signal,
+        timeoutMs,
+        ...(toolPolicy ? { toolPolicy } : {}),
+      }),
     );
     if (answer.model)
       await this.update(projectId, runId, (r) => {
@@ -322,6 +331,13 @@ ${installation.output || installation.error || ''}`,
             result: '',
             sourceHash: '',
           };
+        const bounded =
+          run.resources?.coordinator.client === 'managed' && this.env.planningMode !== 'legacy';
+        run.planningPolicy = {
+          version: 1,
+          mode: bounded ? 'bounded' : 'legacy',
+          revision: bounded ? BOUNDED_PLANNING_REVISION : 'legacy-planning-v1',
+        };
         if (
           run.resources &&
           [
@@ -406,6 +422,7 @@ ${installation.output || installation.error || ''}`,
           contextMaterials: run.contextMaterials,
           repairEnvironment: run.repairEnvironment,
           timePolicy: run.timePolicy,
+          planningPolicy: run.planningPolicy,
           policy: run.executionPolicySnapshot,
         });
         if (input.mode === 'repair') {
@@ -836,6 +853,9 @@ ${installation.output || installation.error || ''}`,
     });
     const initial = this.env.projects.get(projectId).snapshot(),
       run = this.get(projectId, runId);
+    // Missing snapshots are historical runs. Never silently change their comparison arm on resume.
+    const boundedPlanning =
+      run.planningPolicy?.mode === 'bounded' && run.resources?.coordinator.client === 'managed';
     await this.phase(projectId, runId, 'planning', 'Coordinator is planning and selecting roles');
     const coordinator = initial.roles.find((r) => r.id === 'coordinator');
     const input = {
@@ -845,9 +865,11 @@ ${installation.output || installation.error || ''}`,
       workspace: workspace.path,
       instructions:
         (coordinator?.instructions || 'Coordinate work on the goal.') +
-        '\nDo not start agents: Buro dispatches workers. Do not run Git commit/reset/checkout. An external service accepts changes. Modify only allowed files. Do not touch .git. Network use is limited to preparing project tools and dependencies when a managed environment is provided.\nProject context: ' +
-        (policy.context || '') +
-        materialInstructions(run.contextMaterials || [], workspace.path, true) +
+        '\nDo not start agents: Buro dispatches workers. Do not run Git commit/reset/checkout. An external service accepts changes. Modify only allowed files. Do not touch .git. Network use is limited to preparing project tools and dependencies when a managed environment is provided.' +
+        (boundedPlanning ? '' : '\nProject context: ' + (policy.context || '')) +
+        materialInstructions(run.contextMaterials || [], workspace.path, true, {
+          deferPlanningReads: boundedPlanning,
+        }) +
         (run.repairEnvironment ? '\n' + environmentRepairInstructions : ''),
     };
     await this.update(projectId, runId, (r) => {
@@ -895,9 +917,25 @@ ${installation.output || installation.error || ''}`,
         (role) => !['local_preview', 'delivery_pr', 'production_delivery'].includes(role.id),
       );
       const pool = run.resources ? workerResourcePool(run.resources) : [];
-      const answer = await ask(
-        root.threadId,
-        `First, only inspect the project and create a plan; do not edit files or start agents.
+      const boundedTurn = boundedPlanning
+        ? boundedPlanningTurn({
+            title: run.title,
+            goalText: run.goalText,
+            allowedPaths: policy.allowedPaths,
+            protectedPaths: policy.protectedPaths,
+            projectContext: policy.context,
+            maxWorkers: policy.maxWorkers,
+            roles: workerCatalog,
+            pool,
+            baseline,
+            repairInstructions: run.repairEnvironment ? environmentRepairInstructions : undefined,
+            correction: correction.replace(/^Correct the previous plan: /, ''),
+            sessionInstructions: input.instructions,
+          })
+        : undefined;
+      const legacyPrompt = boundedTurn
+        ? ''
+        : `First, only inspect the project and create a plan; do not edit files or start agents.
 Goal: ${run.title}
 ${run.goalText}
 Only these paths may change: ${JSON.stringify(policy.allowedPaths)}. Protected paths: ${JSON.stringify(policy.protectedPaths || [])}. Project context: ${policy.context || ''}.
@@ -908,9 +946,19 @@ ${run.repairEnvironment ? environmentRepairInstructions : ''}
 Catalog: ${JSON.stringify(roleContext(workerCatalog))}
 Permitted worker runtimes: ${JSON.stringify(pool.map(({ id, client, providerId, model, local }) => ({ id, client, providerId, model, local })))}.
 Choose a runtime for each worker only from this pool when that improves its assignment. Use runtimeId null and runtimeReason "" to follow its user preference or the profile default. Respect fixed user preferences. Explain a different choice when a user prefers another runtime. A runtime selection applies only to this assignment; never put it in reusable role instructions or create a new connection. Runtime metadata is not evidence of coding quality; the service still checks capabilities, scope, tests and independent review.
-${correction}`,
-        teamOutputSchema,
-      );
+${correction}`;
+      const answer = boundedTurn
+        ? await this.completedTurn(
+            projectId,
+            runId,
+            root.threadId,
+            boundedTurn.text,
+            teamOutputSchema,
+            signal,
+            run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
+            boundedTurn.toolPolicy,
+          )
+        : await ask(root.threadId, legacyPrompt, teamOutputSchema);
       try {
         const candidatePlan = TeamPlanSchema.parse(answer);
         const workerTasks = Object.fromEntries(

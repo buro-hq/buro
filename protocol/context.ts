@@ -33,7 +33,12 @@ export type LocalDirectory = {
   entries: LocalEntry[];
   truncated: boolean;
 };
-export function materialInstructions(materials: ContextMaterial[], base: string, staged = false) {
+export function materialInstructions(
+  materials: ContextMaterial[],
+  base: string,
+  staged = false,
+  options: { deferPlanningReads?: boolean } = {},
+) {
   if (!materials.length) return '';
   const folder = base.replaceAll('\\', '/').replace(/\/$/, '') + '/.buro/';
   return (
@@ -42,9 +47,11 @@ export function materialInstructions(materials: ContextMaterial[], base: string,
       .map((m) => {
         const preferred = m.textPath || m.relativePath;
         const file = folder + (staged ? preferred.replace(/^local\//, '') : preferred);
-        return `- ${JSON.stringify(m.name)} (${m.mimeType}, ${m.hash.slice(0, 8)}): ${JSON.stringify(file)}${m.textPath ? `; original: ${JSON.stringify(folder + (staged ? m.relativePath.replace(/^local\//, '') : m.relativePath))}` : ''}${m.note ? ` · ${m.note}` : ''}`;
+        return `- ${JSON.stringify(m.name)} (${options.deferPlanningReads ? m.scope + ', ' : ''}${m.mimeType}, ${m.hash.slice(0, 8)}): ${JSON.stringify(file)}${m.textPath ? `; original: ${JSON.stringify(folder + (staged ? m.relativePath.replace(/^local\//, '') : m.relativePath))}` : ''}${m.note ? ` · ${m.note}` : ''}`;
       })
       .join('\n') +
-    '\nRead relevant materials before planning. Use available tools to inspect images. Reading these specific files inside the service directory is allowed. Pass relevant references to workers; do not modify materials.'
+    (options.deferPlanningReads
+      ? '\nMaterials have not been inspected during this tool-free planning turn. Do not invent their contents. If their content is needed, include an explicit discovery step during implementation and use assignment null when a complete compact task cannot be specified yet. Workers receive the saved material references. Reading these specific files inside the service directory is allowed during implementation; do not modify materials.'
+      : '\nRead relevant materials before planning. Use available tools to inspect images. Reading these specific files inside the service directory is allowed. Pass relevant references to workers; do not modify materials.')
   );
 }

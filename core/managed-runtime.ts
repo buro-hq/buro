@@ -288,7 +288,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
   async turn(
     threadId: string,
     text: string,
-    options: { schema: unknown; signal: AbortSignal; timeoutMs: number },
+    options: { schema: unknown; signal: AbortSignal; timeoutMs: number; toolPolicy?: 'none' },
   ) {
     this.assertOpen();
     if (this.active.has(threadId) || this.resuming.has(threadId))
@@ -315,7 +315,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
     threadId: string,
     turnId: string,
     text: string,
-    options: { schema: unknown; timeoutMs: number },
+    options: { schema: unknown; timeoutMs: number; toolPolicy?: 'none' },
     controller: AbortController,
   ) {
     let session = await this.session(threadId);
@@ -327,7 +327,8 @@ export class ManagedAgentRuntime implements AgentRuntime {
       throw new DomainError('SESSION_MISMATCH', 'Review requires a read-only service session.');
     const limits = session.limits;
     const signal = controller.signal;
-    const separate = provider.structuredToolMode === 'separate-turn';
+    const noTools = options.toolPolicy === 'none';
+    const separate = !noTools && provider.structuredToolMode === 'separate-turn';
     let finalizing = false;
     let closing = false;
     let segmentCompleteEmitted = false;
@@ -365,6 +366,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
           : '\nReturn your final answer as JSON matching this schema: ' +
             JSON.stringify(options.schema));
       if (
+        !noTools &&
         this.options.segmentPolicy &&
         this.options.segmentEvidence &&
         session.purpose === 'implementation' &&
@@ -398,6 +400,13 @@ export class ManagedAgentRuntime implements AgentRuntime {
         }
       }
       session.status = 'running';
+      session.turnAuthorities ||= [];
+      session.turnAuthorities.push({
+        turnId,
+        toolPolicy: noTools ? 'none' : 'normal',
+        startedAtRequest: session.requests,
+        scopeRevision: session.scopeRevisions?.at(-1)?.revision || 1,
+      });
       session.messages.push({
         role: 'user',
         content: task,
@@ -419,6 +428,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
             'The session request budget is exhausted.',
           );
         if (
+          !noTools &&
           !finalizing &&
           !closing &&
           session.workSegments &&
@@ -451,7 +461,8 @@ export class ManagedAgentRuntime implements AgentRuntime {
             closing = true;
           }
         }
-        const definitions = finalizing || closing ? [] : tools.definitions(session.scope);
+        const definitions =
+          noTools || finalizing || closing ? [] : tools.definitions(session.scope);
         const requestMessages = provider.contextMessages
           ? provider.contextMessages(structuredClone(session.messages), {
               phase: finalizing || closing ? 'final' : 'work',
@@ -553,6 +564,12 @@ export class ManagedAgentRuntime implements AgentRuntime {
         if (response.message.role !== 'assistant')
           throw new DomainError('MODEL_INVALID_RESPONSE', 'Expected an assistant message.');
         const requested = response.message.toolCalls || [];
+        // Authority is enforced before reservations, intent journaling and broker dispatch.
+        if (noTools && requested.length)
+          throw new DomainError(
+            'TOOL_POLICY_VIOLATION',
+            'The model requested a tool that this turn did not authorize.',
+          );
         if ((finalizing || closing) && requested.length)
           throw new DomainError(
             'MODEL_INVALID_RESPONSE',
@@ -577,6 +594,13 @@ export class ManagedAgentRuntime implements AgentRuntime {
             );
           known.add(call.id);
         }
+        // Checking the exact request definitions also rejects hidden tools on ordinary turns.
+        const advertised = new Set(definitions.map((definition) => definition.name));
+        if (requested.some((call) => !advertised.has(call.name)))
+          throw new DomainError(
+            'TOOL_POLICY_VIOLATION',
+            'The model requested a tool that this turn did not authorize.',
+          );
         if (calls + requested.length > limits.maxToolCallsPerTurn)
           throw new DomainError('TOOL_BUDGET_EXHAUSTED', 'The tool action budget is exhausted.');
         if (requested.length && budgetOwner && budgets) {
@@ -657,6 +681,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
             ? parseSegmentClosing(response.message.content)
             : undefined;
           if (
+            !noTools &&
             !finalizing &&
             (!closing || closingDecision?.status === 'complete') &&
             this.options.workerStepChecks &&

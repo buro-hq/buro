@@ -184,6 +184,16 @@ const schema = z
     scopeRevisions: z
       .array(z.object({ revision: z.number().int().positive(), scope, instructions: z.string() }))
       .optional(),
+    turnAuthorities: z
+      .array(
+        z.strictObject({
+          turnId: z.string().min(1).max(256),
+          toolPolicy: z.enum(['none', 'normal']),
+          startedAtRequest: z.number().int().nonnegative(),
+          scopeRevision: z.number().int().positive(),
+        }),
+      )
+      .optional(),
     messages: z.array(message),
     intermediateNotes: z.array(z.number().int().nonnegative()).optional(),
     workSegments: workSegments.optional(),
@@ -286,6 +296,7 @@ function validateWorkerCheckCheckpoint(session: ManagedSession) {
   }
 }
 function validateSegmentCheckpoint(session: ManagedSession) {
+  validateTurnAuthorities(session);
   validateWorkerCheckCheckpoint(session);
   const state = session.workSegments;
   if (!state) return;
@@ -471,10 +482,71 @@ function validateWorkerCheckTransition(previous: ManagedSession, next: ManagedSe
 }
 
 /** Segmentation may rotate context, but never rewrite completed private history or lifetime charges. */
+function validateTurnAuthorities(session: ManagedSession) {
+  const ids = new Set<string>();
+  let started = 0;
+  for (const authority of session.turnAuthorities || []) {
+    if (
+      ids.has(authority.turnId) ||
+      authority.startedAtRequest < started ||
+      authority.startedAtRequest > session.requests ||
+      (session.scopeRevisions
+        ? !session.scopeRevisions.some((revision) => revision.revision === authority.scopeRevision)
+        : authority.scopeRevision !== 1) ||
+      (authority.toolPolicy === 'none' &&
+        session.actions.some((action) => action.turnId === authority.turnId))
+    )
+      invalidSegment('A turn authority has invalid provenance or unauthorized tool actions.');
+    ids.add(authority.turnId);
+    started = authority.startedAtRequest;
+  }
+}
+
+function validateTurnAuthorityTransition(previous: ManagedSession, next: ManagedSession) {
+  const before = previous.turnAuthorities || [];
+  const after = next.turnAuthorities || [];
+  if (
+    (previous.turnAuthorities && !next.turnAuthorities) ||
+    after.length < before.length ||
+    after.length > before.length + 1 ||
+    !same(before, after.slice(0, before.length))
+  )
+    invalidSegment('The private turn authority journal is append-only.');
+  if (after.length > before.length) {
+    const authority = after.at(-1)!;
+    if (
+      authority.startedAtRequest !== previous.requests ||
+      next.requests !== previous.requests ||
+      authority.scopeRevision !== (next.scopeRevisions?.at(-1)?.revision || 1) ||
+      next.status !== 'running' ||
+      next.actions.length !== previous.actions.length
+    )
+      invalidSegment('A turn authority must be saved before its first generation or action.');
+  }
+  for (const action of next.actions.slice(previous.actions.length)) {
+    if (
+      !after.some(
+        (authority) => authority.turnId === action.turnId && authority.toolPolicy === 'normal',
+      )
+    )
+      invalidSegment('A new tool action requires a persisted normal turn authority.');
+  }
+}
+
 function validateTransition(previous: ManagedSession | undefined, next: ManagedSession) {
   if (!previous) return;
   validateWorkerCheckTransition(previous, next);
-  if (!previous.workSegments && !next.workSegments) return;
+  // Coordination sessions do not have work segments. Their authority and cumulative
+  // accounting still require the same protection as implementation checkpoints.
+  if (previous.turnAuthorities || next.turnAuthorities)
+    validateTurnAuthorityTransition(previous, next);
+  if (
+    !previous.workSegments &&
+    !next.workSegments &&
+    !previous.turnAuthorities &&
+    !next.turnAuthorities
+  )
+    return;
   if (previous.workSegments && !next.workSegments)
     invalidSegment('The work segment archive cannot be removed.');
   if (

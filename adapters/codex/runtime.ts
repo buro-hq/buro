@@ -7,11 +7,15 @@ import type { AgentRuntime, ProjectRegistry, RuntimeEvent } from '../../core/por
 import { DomainError } from '../../core/ports.ts';
 import { normalizeCodexEvent } from './events.ts';
 
-type RuntimeOptions = {
+export type RuntimeOptions = {
   projects: ProjectRegistry;
   executors?: EnvironmentExecutors;
   executable?: string;
   args?: string[];
+  model?: string;
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+  /** Explicit false confines native benchmark turns even in a configured environment. */
+  networkAccess?: boolean;
   onEvent?: (event: { method: string; params: unknown }) => void;
 };
 /** Native Codex JSONL is contained here. Constructing the adapter launches no processes. */
@@ -42,15 +46,17 @@ export class CodexRuntime implements AgentRuntime {
       world
         ? this.options.executors!.launch(root, argv, { agent: true })
         : { executable: argv[0], args: argv.slice(1), cwd: root, env: process.env };
-    const args =
-      this.options.args ||
-      (await safeArguments(
-        this.options.executable || 'codex',
-        root,
-        launch,
-        world?.variables,
-        !!world?.container,
-      ));
+    const args = this.options.args
+      ? [...codexModelArguments(this.options), ...this.options.args]
+      : await hardenedCodexArguments(
+          this.options.executable || 'codex',
+          root,
+          launch,
+          world?.variables,
+          !!world?.container,
+          this.options,
+        );
+    if (this.disposed) throw new DomainError('RUNTIME_CLOSED', 'The runtime stopped.');
     const specification = launch([this.options.executable || 'codex', ...args]);
     const connection = new Connection(
       specification,
@@ -70,6 +76,7 @@ export class CodexRuntime implements AgentRuntime {
       },
       !!input.readOnly,
       world ? [world.cacheRoot] : [],
+      this.options.networkAccess,
     );
     this.active.add(connection);
     try {
@@ -115,9 +122,11 @@ export class CodexRuntime implements AgentRuntime {
     return connection;
   }
   async submit(threadId: string, text: string) {
-    const result = (await this.get(threadId).call('turn/start', {
+    const connection = this.get(threadId);
+    const result = (await connection.call('turn/start', {
       threadId,
       input: [{ type: 'text', text, text_elements: [] }],
+      sandboxPolicy: connection.sandboxPolicy(),
     })) as { turn: { id: string } };
     return { turnId: result.turn.id };
   }
@@ -127,8 +136,13 @@ export class CodexRuntime implements AgentRuntime {
   turn(
     threadId: string,
     text: string,
-    options: { schema: unknown; signal: AbortSignal; timeoutMs: number },
+    options: { schema: unknown; signal: AbortSignal; timeoutMs: number; toolPolicy?: 'none' },
   ) {
+    if (options.toolPolicy === 'none')
+      throw new DomainError(
+        'TOOL_POLICY_UNSUPPORTED',
+        'Native Codex cannot guarantee a tools-free turn. Use the frozen legacy planning policy.',
+      );
     return this.get(threadId).turn(threadId, text, options);
   }
   subscribe(listener: (event: RuntimeEvent) => void) {
@@ -170,16 +184,30 @@ class Connection {
   readOnly: boolean;
   cwd: string;
   environmentRoots: string[];
+  networkAccess?: boolean;
+  sandboxPolicy() {
+    return this.readOnly
+      ? { type: 'readOnly', networkAccess: false }
+      : {
+          type: 'workspaceWrite',
+          writableRoots: [this.cwd, ...this.environmentRoots],
+          networkAccess: this.networkAccess ?? this.environmentRoots.length > 0,
+          excludeTmpdirEnvVar: true,
+          excludeSlashTmp: true,
+        };
+  }
   constructor(
     launch: Launch,
     cwd: string,
     onEvent?: RuntimeOptions['onEvent'],
     readOnly = false,
     environmentRoots: string[] = [],
+    networkAccess?: boolean,
   ) {
     this.readOnly = readOnly;
     this.cwd = cwd;
     this.environmentRoots = environmentRoots;
+    this.networkAccess = networkAccess;
     this.process = spawn(launch.executable, launch.args, {
       cwd: launch.cwd,
       env: launch.env,
@@ -334,17 +362,7 @@ class Connection {
           threadId,
           input: [{ type: 'text', text, text_elements: [] }],
           outputSchema: options.schema,
-          ...(!this.readOnly
-            ? {
-                sandboxPolicy: {
-                  type: 'workspaceWrite',
-                  writableRoots: [this.cwd, ...this.environmentRoots],
-                  networkAccess: this.environmentRoots.length > 0,
-                  excludeTmpdirEnvVar: true,
-                  excludeSlashTmp: true,
-                },
-              }
-            : { sandboxPolicy: { type: 'readOnly', networkAccess: false } }),
+          sandboxPolicy: this.sandboxPolicy(),
         },
         options.signal,
       )) as { turn: { id: string } };
@@ -383,12 +401,14 @@ class Connection {
     this.closePromise = (async () => {
       if (this.closed) return;
       await new Promise<void>((resolve) => {
+        let killTimer: ReturnType<typeof setTimeout> | undefined;
         const timer = setTimeout(() => {
           this.process.kill('SIGTERM');
-          resolve();
+          killTimer = setTimeout(() => this.process.kill('SIGKILL'), 1000);
         }, 1000);
-        this.process.once('exit', () => {
+        this.process.once('close', () => {
           clearTimeout(timer);
+          clearTimeout(killTimer);
           resolve();
         });
         this.process.stdin.end();
@@ -400,13 +420,32 @@ class Connection {
     return this.closePromise;
   }
 }
-async function safeArguments(
+function codexModelArguments(options: Pick<RuntimeOptions, 'model' | 'reasoningEffort'>) {
+  if (options.model !== undefined && (!options.model.trim() || /[\r\n\0]/.test(options.model)))
+    throw new DomainError('INVALID_MODEL_CONFIGURATION', 'Invalid native Codex model.');
+  if (
+    options.reasoningEffort !== undefined &&
+    !['low', 'medium', 'high', 'xhigh'].includes(options.reasoningEffort)
+  )
+    throw new DomainError('INVALID_MODEL_CONFIGURATION', 'Invalid native Codex reasoning effort.');
+  return [
+    ...(options.model ? ['-c', `model=${JSON.stringify(options.model)}`] : []),
+    ...(options.reasoningEffort
+      ? ['-c', `model_reasoning_effort=${JSON.stringify(options.reasoningEffort)}`]
+      : []),
+  ];
+}
+
+/** Shared native CLI hardening and explicit model pin for direct and orchestrated runs. */
+export async function hardenedCodexArguments(
   executable: string,
   cwd: string,
   launch: (argv: string[]) => Launch,
   variables?: Record<string, string>,
   container = false,
+  modelOptions: Pick<RuntimeOptions, 'model' | 'reasoningEffort'> = {},
 ) {
+  const modelArguments = codexModelArguments(modelOptions);
   const config: Record<string, unknown> = {
     'features.multi_agent': false,
     'agents.enabled': false,
@@ -431,8 +470,10 @@ async function safeArguments(
       ]),
     ),
   };
-  const flags = () =>
-    Object.entries(config).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]);
+  const flags = () => [
+    ...modelArguments,
+    ...Object.entries(config).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]),
+  ];
   const list = async () => {
     const spec = launch([executable, ...flags(), 'mcp', 'list', '--json']);
     const result = await exec(spec.executable, spec.args, {
@@ -453,5 +494,5 @@ async function safeArguments(
   }
   if (!(await list()).every((server: any) => server.enabled === false))
     throw Error('Could not disable MCP for isolated execution.');
-  return ['app-server', ...flags()];
+  return [...flags(), 'app-server'];
 }

@@ -126,7 +126,13 @@ function wire(provider: 'ollama' | 'deepseek', model: string, calls: Call[], con
 function taskContext(body: any) {
   const messages = body.messages as { role: string; content: string; [key: string]: unknown }[];
   let userIndex = messages.map((message) => message.role).lastIndexOf('user');
-  if (!body.tools?.length && userIndex > 0) {
+  if (
+    !body.tools?.length &&
+    userIndex > 0 &&
+    /^Return only the final JSON for (the preceding task|the original assignment)\./.test(
+      messages[userIndex].content,
+    )
+  ) {
     const taskIndex = messages
       .slice(0, userIndex)
       .map((message) => message.role)

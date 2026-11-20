@@ -889,7 +889,9 @@ test('essential tool results and private continuation still exhaust projected co
     const runtime = f.make(p, {
       limits: { ...limits, contextTokens: 16000, maxOutputTokens: 1000 },
       tools: {
-        definitions: () => [],
+        definitions: () => [
+          { name: 'read_file', description: 'Read assigned input', parameters: { type: 'object' } },
+        ],
         execute: async () => {
           actions++;
           return { content: result };
