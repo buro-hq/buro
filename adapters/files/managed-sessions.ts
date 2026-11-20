@@ -40,6 +40,9 @@ const schema = z
     providerRevision: z.string(),
     requestedModel: z.string(),
     reportedModel: z.string().optional(),
+    purpose: z
+      .enum(['coordination', 'implementation', 'review', 'research', 'environment', 'delivery'])
+      .optional(),
     scope,
     assignment: z
       .object({
@@ -81,6 +84,12 @@ const schema = z
     ),
   })
   .superRefine((session, ctx) => {
+    if (session.purpose === 'review' && (!session.scope.readOnly || session.assignment))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['purpose'],
+        message: 'A reviewer must be a read-only service session without a worker assignment.',
+      });
     const notes = session.intermediateNotes || [];
     if (
       notes.some(

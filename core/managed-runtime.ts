@@ -14,6 +14,7 @@ import type {
 import { inScope } from './execution-ports.ts';
 import { withEnvironmentRepair } from './environment-repair.ts';
 import { prepareManagedRequest, type ManagedRequestPolicy } from './request-policy.ts';
+import type { ManagedRunBudgetPort } from './run-budget.ts';
 type EventBody<T = RuntimeEvent> = T extends RuntimeEvent
   ? Omit<T, 'id' | 'threadId' | 'runId'>
   : never;
@@ -27,6 +28,7 @@ export type ManagedRuntimeOptions = {
   projects: ProjectRegistry;
   idGenerator: () => string;
   requestPolicy?: ManagedRequestPolicy;
+  budgets?: ManagedRunBudgetPort;
   limits: {
     contextTokens: number;
     maxOutputTokens: number;
@@ -72,6 +74,15 @@ export class ManagedAgentRuntime implements AgentRuntime {
     const run = snapshot.runs.find((r) => r.id === ownerRunId);
     if (input.ownerRunId && !run)
       throw new DomainError('SESSION_MISMATCH', 'The owning run was not found.');
+    if (input.purpose === 'review' && (!input.readOnly || input.assignment))
+      throw new DomainError('SESSION_MISMATCH', 'Review requires a read-only service session.');
+    if (
+      this.options.budgets &&
+      ownerRunId &&
+      !run &&
+      !['research', 'environment'].includes(input.purpose || '')
+    )
+      throw new DomainError('SESSION_MISMATCH', 'The owning run was not found.');
     const workspace = input.workspace || snapshot.project.root;
     if (run?.workspace && run.workspace !== workspace)
       throw new DomainError('SESSION_MISMATCH', 'The owning run uses another workspace.');
@@ -89,6 +100,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
       providerId: this.options.provider.id,
       providerRevision: this.options.provider.revision,
       requestedModel: this.options.model,
+      ...(input.purpose ? { purpose: input.purpose } : {}),
       scope: {
         projectId: input.projectId,
         runId: input.runId,
@@ -277,7 +289,11 @@ export class ManagedAgentRuntime implements AgentRuntime {
   ) {
     const session = await this.session(threadId);
     this.assertReconciled(session);
-    const { provider, sessions, tools } = this.options;
+    const { provider, sessions, tools, budgets } = this.options;
+    const budgetOwner = budgets ? this.budgetOwner(session) : undefined;
+    const budgetPhase = session.purpose === 'review' ? ('review' as const) : ('work' as const);
+    if (session.purpose === 'review' && (!session.scope.readOnly || session.assignment))
+      throw new DomainError('SESSION_MISMATCH', 'Review requires a read-only service session.');
     const limits = session.limits;
     const signal = controller.signal;
     const separate = provider.structuredToolMode === 'separate-turn';
@@ -348,19 +364,65 @@ export class ManagedAgentRuntime implements AgentRuntime {
           },
           this.options.requestPolicy,
         );
+        const operationId = 'G-' + turnId + '-' + round;
+        const reservation =
+          budgetOwner && budgets
+            ? await budgets.reserveGeneration({
+                ...budgetOwner,
+                operationId,
+                phase: budgetPhase,
+                requestedOutputTokens: budget.maxOutputTokens,
+                minimumOutputTokens: Math.min(128, budget.maxOutputTokens),
+              })
+            : undefined;
+        check();
+        if (budgetOwner && budgets && (!reservation || reservation.operationId !== operationId))
+          throw new DomainError(
+            'INVALID_RUN_BUDGET',
+            'The run budget returned an invalid reservation.',
+          );
+        const maxOutputTokens = reservation ? reservation.maxOutputTokens : budget.maxOutputTokens;
+        if (
+          !Number.isSafeInteger(maxOutputTokens) ||
+          maxOutputTokens < Math.min(128, budget.maxOutputTokens) ||
+          maxOutputTokens > budget.maxOutputTokens
+        )
+          throw new DomainError(
+            'INVALID_RUN_BUDGET',
+            'The run budget returned an invalid output reservation.',
+          );
         session.requests++;
         await sessions.save(session);
-        const response = await provider.complete({
-          requestId: `${turnId}:${round}`,
-          model: session.requestedModel,
-          messages: requestMessages,
-          tools: definitions,
-          schema: requestSchema,
-          maxOutputTokens: budget.maxOutputTokens,
-          contextTokens: limits.contextTokens,
-          signal,
-          onProgress: touch,
-        });
+        check();
+        let response: Awaited<ReturnType<ModelProvider['complete']>>;
+        try {
+          response = await provider.complete({
+            requestId: `${turnId}:${round}`,
+            model: session.requestedModel,
+            messages: requestMessages,
+            tools: definitions,
+            schema: requestSchema,
+            maxOutputTokens,
+            contextTokens: limits.contextTokens,
+            signal,
+            onProgress: touch,
+          });
+        } catch (error) {
+          if (reservation && budgets && budgetOwner)
+            await budgets.recordUsage({
+              ...budgetOwner,
+              operationId: reservation.operationId,
+              outcome: 'unknown',
+            });
+          throw error;
+        }
+        if (reservation && budgets && budgetOwner)
+          await budgets.recordUsage({
+            ...budgetOwner,
+            operationId: reservation.operationId,
+            usage: response.usage,
+            outcome: 'observed',
+          });
         check();
         session.reportedModel = response.model;
         if (response.usage) {
@@ -399,6 +461,15 @@ export class ManagedAgentRuntime implements AgentRuntime {
         }
         if (calls + requested.length > limits.maxToolCallsPerTurn)
           throw new DomainError('TOOL_BUDGET_EXHAUSTED', 'The tool action budget is exhausted.');
+        if (requested.length && budgetOwner && budgets) {
+          await budgets.reserveTools({
+            ...budgetOwner,
+            operationId: 'U-' + turnId + '-' + round,
+            phase: budgetPhase,
+            count: requested.length,
+          });
+          check();
+        }
         session.messages.push(response.message);
         const actions = requested.map((call, index) => ({
           id: `A-${turnId}-${round}-${index}`,
@@ -498,6 +569,23 @@ export class ManagedAgentRuntime implements AgentRuntime {
 
   private assertOpen() {
     if (this.closed) throw new DomainError('RUNTIME_CLOSED', 'The runtime stopped.');
+  }
+  private budgetOwner(session: ManagedSession) {
+    const scope = session.scope;
+    const ownerRunId = scope.ownerRunId || scope.runId;
+    if (!ownerRunId) return undefined;
+    const run = this.options.projects
+      .get(scope.projectId)
+      .snapshot()
+      .runs.find((run) => run.id === ownerRunId);
+    if (!run) {
+      if (!scope.ownerRunId && ['research', 'environment'].includes(session.purpose || ''))
+        return undefined;
+      throw new DomainError('SESSION_MISMATCH', 'The owning run was not found.');
+    }
+    if (run.workspace && run.workspace !== scope.workspace)
+      throw new DomainError('SESSION_MISMATCH', 'The owning run uses another workspace.');
+    return { projectId: scope.projectId, ownerRunId };
   }
   private assertReconciled(session: ManagedSession) {
     if (session.actions.some((action) => action.status !== 'completed'))

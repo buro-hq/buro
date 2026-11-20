@@ -67,6 +67,13 @@ const { chromium, expect } = require('@playwright/test');
       maxWorkers: 1,
       maxRepairs: 0,
       turnTimeoutMs: 10000,
+      managedBudget: {
+        version: 1,
+        maxRequests: 24,
+        maxReservedOutputTokens: 32768,
+        maxToolCalls: 64,
+        reviewReserve: { requests: 4, outputTokens: 4096, toolCalls: 8 },
+      },
     });
     host = await createHost({
       projects: [
@@ -287,10 +294,21 @@ const { chromium, expect } = require('@playwright/test');
       host.ctx.projects.registry.get('codex-panel').snapshot().profile.resourceProfile,
       'local',
     );
+    assert.deepEqual(
+      host.ctx.projects.registry.get('codex-panel').snapshot().profile.managedBudget,
+      profile.managedBudget,
+      'An unrelated profile edit must preserve the configured managed budget',
+    );
     assert.equal(
       JSON.parse(await fs.readFile(path.join(root, '.buro/project.json'), 'utf8')).profile
         .resourceProfile,
       'local',
+    );
+    assert.deepEqual(
+      JSON.parse(await fs.readFile(path.join(root, '.buro/project.json'), 'utf8')).profile
+        .managedBudget,
+      profile.managedBudget,
+      'The exported shared profile must retain its budget',
     );
     await page.reload();
     await page.getByRole('button', { name: 'Project settings', exact: true }).click();
@@ -323,6 +341,11 @@ const { chromium, expect } = require('@playwright/test');
       undefined,
     );
     assert.equal(host.ctx.agentRuntime.selection.forProject('codex-panel').profileId, 'codex');
+    assert.deepEqual(
+      host.ctx.projects.registry.get('codex-panel').snapshot().profile.managedBudget,
+      profile.managedBudget,
+      'Returning to resource inheritance must not clear project budget policy',
+    );
     await page.reload();
     await page.getByRole('button', { name: 'Project settings', exact: true }).click();
     await page.getByRole('textbox', { name: 'Execution profile', exact: true }).waitFor();

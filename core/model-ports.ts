@@ -1,3 +1,5 @@
+import type { RuntimePurpose } from '../protocol/resources.ts';
+
 export type ToolDefinition = {
   name: string;
   description: string;
@@ -80,6 +82,8 @@ export type ManagedSession = {
   providerRevision: string;
   requestedModel: string;
   reportedModel?: string;
+  /** Service-owned immutable routing purpose; absent legacy values use the work allowance. */
+  purpose?: RuntimePurpose;
   scope: ToolScope;
   assignment?: { roleId: string; allowedPaths: string[]; protectedPaths: string[] };
   scopeRevisions?: { revision: number; scope: ToolScope; instructions: string }[];

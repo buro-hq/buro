@@ -993,5 +993,8 @@
   "Only: {p0}": "Только: {p0}",
   "Prefer: {p0}": "Предпочтительно: {p0}",
   "Preferred model": "Предпочтительная модель",
-  "Chosen by coordinator": "Выбор координатора"
+  "Chosen by coordinator": "Выбор координатора",
+  "This budget is blocked. Start a new run; previous work and history are preserved.": "Бюджет заблокирован. Начните новый запуск; предыдущие изменения и история сохранены.",
+  "Continuing keeps this run’s budget. Start a new run for a new budget; rechecking can use any remaining review allowance.": "Продолжение сохраняет бюджет этого запуска. Для нового бюджета начните новый запуск; повторная проверка может использовать оставшийся резерв на ревью.",
+  "This run keeps its original budget, even when current project settings are selected.": "Запуск сохраняет исходный бюджет даже при выборе текущих настроек проекта."
 }

@@ -27,6 +27,7 @@ export type Project = {
 };
 export type ProjectCommand = { id: string; title: string; command: string; timeoutMs: number };
 export type ProjectProfile = {
+  managedBudget?: import('./run-budget.ts').ManagedRunBudgetPolicy;
   resourceProfile?: string;
   version: 1;
   revision: number;
@@ -167,11 +168,13 @@ export type RunContinuation = {
   requestedAt: string;
 };
 export type RunIssue = {
-  code: 'BASELINE_CHECKS_FAILED' | 'EXECUTION_FAILED';
+  code: 'BASELINE_CHECKS_FAILED' | 'EXECUTION_FAILED' | 'MANAGED_BUDGET_BLOCKED';
+  budgetCode?: import('./run-budget.ts').ManagedBudgetErrorCode;
   message: string;
   checks: string[];
 };
 export type Run = {
+  managedBudget?: import('./run-budget.ts').ManagedRunBudgetSummary;
   workerTasks?: Record<string, import('./worker-tasks.ts').WorkerTask>;
   workerReplan?: import('./worker-tasks.ts').WorkerReplan;
   resources?: import('./resources.ts').ResourceSnapshot;

@@ -7,6 +7,7 @@ import type { EnvironmentExecutors } from '../adapters/environments/executors.ts
 import { RuntimeRouter } from '../core/runtime-router.ts';
 import { runtimePlugin } from './runtime.ts';
 import type { ManagedRequestPolicy } from '../core/request-policy.ts';
+import type { ManagedRunBudgetPort } from '../core/run-budget.ts';
 
 export const resourcesPlugin: Plugin.Object<{
   directory: string;
@@ -15,6 +16,7 @@ export const resourcesPlugin: Plugin.Object<{
   codex?: { executable?: string; args?: string[] };
   credentials?: (reference: string) => string | undefined;
   requestPolicy?: ManagedRequestPolicy;
+  budgets?: ManagedRunBudgetPort;
 }> = {
   name: 'execution-resources',
   inject: ['projects', 'commands'],

@@ -1,6 +1,6 @@
 # Next bounded orchestration slice
 
-Agreed after the live evaluation on 20 November 2026. The first compact-task/request-policy/refinement slice is implemented; persistent data grants, aggregate production-run budgets and Java candidate confinement remain proposals. See [implementation status](IMPLEMENTATION.md), [evaluation evidence](EVALUATION.md), [runtime contracts](RUNTIME-CONTRACTS.md) and [architecture](../ARCHITECTURE.md).
+Agreed after the live evaluation on 20 November 2026. Compact tasks, request policy, one known-failure refinement and a durable aggregate managed-API run budget are implemented. Work segments, persistent data grants and Java candidate confinement remain proposals. Native-client API accounting and a whole-workflow deadline remain separate contracts. See [implementation status](IMPLEMENTATION.md), [evaluation evidence](EVALUATION.md), [runtime contracts](RUNTIME-CONTRACTS.md) and [the reviewed execution plan](EXECUTION-PLAN-2026-11-20.md).
 
 ## Immediate priority
 

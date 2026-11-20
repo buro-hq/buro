@@ -6,6 +6,8 @@ A tested self-hosted GPU route uses an authenticated SSH forward to Ollama on a 
 
 The default remains Codex until a resource profile is selected. Connections and model settings live in the daemon's private data directory, normally `.buro/local/resources.json`. A connected project's shared profile can contain `resourceProfile`, referencing one of those private profiles. It never contains an API key.
 
+Managed model calls within a goal also share a durable budget, independent of per-session caps. The default reserves 64 generations, 131,072 output tokens and 256 tool calls, including a protected review allowance of 8 generations / 16,384 output tokens / 32 tools. `profile.managedBudget` can configure these values for new runs. Existing runs keep their original policy and charges when continued, even with current project settings. Budget accounting covers managed APIs, not native clients' hidden requests or currency costs. A blocked usage record requires a new run; low/missing usage never refunds reservations.
+
 ## Configure a connection
 
 Start the service, then inspect or create its configuration:

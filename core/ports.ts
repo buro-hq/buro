@@ -16,6 +16,8 @@ import type { ResourceSnapshot, RuntimePurpose } from '../protocol/resources.ts'
 export type { RuntimeEvent } from './runtime-events.ts';
 export type Receipt = { fingerprint: string; result: unknown };
 export type ProjectDocument = {
+  /** Private reservations; public snapshots contain only the run's bounded summary. */
+  managedRunBudgets?: Record<string, import('./run-budget.ts').ManagedRunBudgetLedger>;
   contextMaterials?: ContextMaterial[];
   version: 1;
   revision: number;

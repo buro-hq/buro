@@ -632,9 +632,31 @@ function assertMixedDelegation(run) {
     throw new LiveEvaluationError('LIVE_MIXED_DELEGATION_MISSING');
 }
 
-/** Evaluation diagnostics only. Public result text is not a typed failure DTO and is never copied. */
+/** Typed service issues take precedence; legacy public text remains a bounded diagnostic heuristic. */
 function classifyEvaluationFailure(run) {
   const terminalFailure = ['failed', 'needs-attention'].includes(run.status);
+  if (
+    terminalFailure &&
+    run.issue?.code === 'MANAGED_BUDGET_BLOCKED' &&
+    [
+      'RUN_BUDGET_EXHAUSTED',
+      'RUN_BUDGET_USAGE_EXCEEDED',
+      'INVALID_RUN_BUDGET',
+      'RUN_BUDGET_OWNER_UNKNOWN',
+      'BUDGET_RECEIPT_CONFLICT',
+    ].includes(run.issue.budgetCode)
+  )
+    return {
+      category: 'runBudget',
+      status:
+        run.issue.budgetCode === 'RUN_BUDGET_EXHAUSTED' ? 'budget-exhausted' : 'resource-blocked',
+      code:
+        run.issue.budgetCode === 'RUN_BUDGET_EXHAUSTED'
+          ? 'LIVE_RUN_BUDGET_EXHAUSTED'
+          : 'LIVE_RUN_BUDGET_BLOCKED',
+      evidence: 'service-budget-issue',
+      basis: 'typed-service-issue',
+    };
   const message = typeof run.result === 'string' ? run.result : '';
   const classified = (category, status, code, evidence = 'known-service-message') => ({
     category,
@@ -964,6 +986,7 @@ async function runLiveProviderEvaluation(options = {}) {
     const run = host.ctx.workflows.api.get('p', runId);
     report.run = {
       ...evaluationRunProgress(run),
+      ...(run.managedBudget ? { managedBudget: structuredClone(run.managedBudget) } : {}),
       status: run.status,
       phase: run.phase,
       profile: run.resources?.profileId,

@@ -57,3 +57,4 @@ export const teamOutputSchema = z.toJSONSchema(
 );
 export const envelopeOutputSchema = z.toJSONSchema(EnvelopeSchema);
 export const reviewOutputSchema = z.toJSONSchema(ReviewSchema);
+export type TeamPlan = z.infer<typeof TeamPlanSchema>;

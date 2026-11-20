@@ -17,6 +17,8 @@ import { PrivateJSONFiles } from '../files/private-json.ts';
 import { loadModelCredentials } from '../files/model-credentials.ts';
 import { RepositoryTools } from '../tools/repository-tools.ts';
 import type { EnvironmentExecutors } from '../environments/executors.ts';
+import { ProjectRunBudgets } from '../files/project-run-budgets.ts';
+import type { ManagedRunBudgetPort } from '../../core/run-budget.ts';
 
 export async function createRuntimeResources(options: {
   directory: string;
@@ -26,6 +28,7 @@ export async function createRuntimeResources(options: {
   codex?: { executable?: string; args?: string[] };
   credentials?: (reference: string) => string | undefined;
   requestPolicy?: ManagedRequestPolicy;
+  budgets?: ManagedRunBudgetPort;
 }) {
   const local = path.join(options.directory, 'local');
   options.executors.protectPrivatePaths([local]);
@@ -35,6 +38,7 @@ export async function createRuntimeResources(options: {
   const sessions = new FileManagedSessions(path.join(local, 'managed-sessions'));
   const probes = new PrivateJSONFiles(path.join(local, 'resource-probes'));
   const tools = new RepositoryTools(options.executors);
+  const budgets = options.budgets || new ProjectRunBudgets(options.projects);
   const requestPolicy = options.requestPolicy || conservativeRequestPolicy;
   if (
     typeof requestPolicy.revision !== 'string' ||
@@ -102,6 +106,7 @@ export async function createRuntimeResources(options: {
           idGenerator: randomUUID,
           limits: runtime.limits,
           requestPolicy,
+          budgets,
         }),
       );
       resources.push({

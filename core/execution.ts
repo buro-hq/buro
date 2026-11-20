@@ -1,4 +1,6 @@
 import { runWorkerAssignments } from './worker-assignments.ts';
+import { createManagedRunBudget, managedBudgetSummary } from './run-budget.ts';
+import { ManagedBudgetErrorCodeSchema } from '../protocol/run-budget.ts';
 import { validateWorkerTask } from './worker-envelope.ts';
 import { workerFailureForReplan, refineWorkerTask, pendingWorkerRoles } from './worker-recovery.ts';
 import { workerRefinementOutputSchema } from '../protocol/worker-tasks.ts';
@@ -81,6 +83,13 @@ export class ExecutionService {
     if (!p)
       throw new DomainError('EXECUTION_DISABLED', 'Execution is not configured for this project.');
     return p;
+  }
+  private assertManagedBudgetOpen(run: Run) {
+    if (run.managedBudget?.status === 'exceeded')
+      throw new DomainError(
+        'RUN_BUDGET_USAGE_EXCEEDED',
+        'The managed run budget is blocked by invalid or excessive usage. Start a new run.',
+      );
   }
   assertEnvironmentRepair(goal: Goal, policy: ExecutionPolicy) {
     if (
@@ -302,6 +311,24 @@ ${installation.output || installation.error || ''}`,
             result: '',
             sourceHash: '',
           };
+        if (
+          run.resources &&
+          [
+            run.resources.coordinator,
+            run.resources.worker,
+            run.resources.reviewer,
+            ...(run.resources.workerPool || []),
+          ].some((resource) => resource.client === 'managed')
+        ) {
+          const ledger = createManagedRunBudget({
+            projectId: input.projectId,
+            ownerRunId: run.id,
+            policy: policy.profile?.managedBudget,
+            coverage: 'managed-api',
+          });
+          doc.managedRunBudgets = { ...doc.managedRunBudgets, [run.id]: ledger };
+          run.managedBudget = managedBudgetSummary(ledger);
+        }
         doc.runs.unshift(run);
         goal.status = 'running';
         goal.runId = run.id;
@@ -329,6 +356,7 @@ ${installation.output || installation.error || ''}`,
         const run = doc.runs.find((r) => r.id === input.runId),
           goal = doc.goals.find((g) => g.id === run?.goalId);
         if (!run || !goal) throw new DomainError('NOT_FOUND', 'Run or goal not found.');
+        this.assertManagedBudgetOpen(run);
         if (
           input.mode === 'recheck' &&
           !run.planSavedAt &&
@@ -653,7 +681,13 @@ ${installation.output || installation.error || ''}`,
           );
       }
   }
-  async finish(projectId: string, runId: string, status: Run['status'], text: string) {
+  async finish(
+    projectId: string,
+    runId: string,
+    status: Run['status'],
+    text: string,
+    issue?: Run['issue'],
+  ) {
     await this.eventQueue;
     await this.update(projectId, runId, (r, g) => {
       r.status = status;
@@ -661,6 +695,7 @@ ${installation.output || installation.error || ''}`,
       r.completedAt = this.env.now();
       r.result = text;
       r.summary = text;
+      if (issue) r.issue = issue;
       g.status = status === 'completed' ? 'completed' : 'failed';
       for (const a of r.agents)
         if (!a.completedAt) {
@@ -725,21 +760,37 @@ ${installation.output || installation.error || ''}`,
       });
       await this.planAndImplement(projectId, runId, workspace, policy, signal, threads);
     } catch (error) {
+      const interrupted =
+        signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
+      const budgetFailure =
+        error instanceof DomainError
+          ? ManagedBudgetErrorCodeSchema.safeParse(error.code)
+          : undefined;
+      const budgetCode = budgetFailure?.success ? budgetFailure.data : undefined;
       await this.finish(
         projectId,
         runId,
-        signal.aborted || (error instanceof DOMException && error.name === 'AbortError')
+        interrupted
           ? 'interrupted'
-          : error instanceof DomainError &&
-              [
-                'BASELINE_CHECKS_FAILED',
-                'ENVIRONMENT_FAILED',
-                'ENVIRONMENT_UNAVAILABLE',
-                'FIXED_RUNTIME_UNAVAILABLE',
-              ].includes(error.code)
+          : budgetCode ||
+              (error instanceof DomainError &&
+                [
+                  'BASELINE_CHECKS_FAILED',
+                  'ENVIRONMENT_FAILED',
+                  'ENVIRONMENT_UNAVAILABLE',
+                  'FIXED_RUNTIME_UNAVAILABLE',
+                ].includes(error.code))
             ? 'needs-attention'
             : 'failed',
         error instanceof Error ? error.message : String(error),
+        !interrupted && budgetCode
+          ? {
+              code: 'MANAGED_BUDGET_BLOCKED',
+              budgetCode,
+              message: error instanceof Error ? error.message : String(error),
+              checks: [],
+            }
+          : undefined,
       );
     } finally {
       await Promise.all(threads.map((id) => this.env.runtime.release?.(id)));
@@ -1053,6 +1104,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
       });
       await dispatch(pendingWorkerRoles(this.get(projectId, runId), roles));
       const observed = this.get(projectId, runId);
+      this.assertManagedBudgetOpen(observed);
       const results = roles.map((role) => {
         const agent = [...observed.agents]
           .reverse()
@@ -1261,6 +1313,7 @@ Read relevant sources and verify actual correctness, including preservation of e
       await this.env.runtime.release?.(reviewer.threadId);
       await this.eventQueue;
       const observed = this.get(projectId, runId);
+      this.assertManagedBudgetOpen(observed);
       const workersReady = team.roles.every((role) => {
         if (observed.delegation !== 'buro')
           return observed.agents.some((a) => a.name === role.id && a.status === 'completed');
@@ -1316,6 +1369,7 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
         throw Error('Role catalog conflict: ' + role.id);
       if (!current) acceptedRoles.push(role);
     }
+    this.assertManagedBudgetOpen(this.get(projectId, runId));
     const commit = await this.measure(projectId, runId, 'workspace.checkpoint', () =>
       this.env.workspaces.checkpoint(workspace.path, runId),
     );
@@ -1325,6 +1379,7 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
       projectId,
       runId,
       (r, g, doc) => {
+        this.assertManagedBudgetOpen(r);
         for (const role of acceptedRoles) {
           if (doc.roleVersions.some((x) => x.id === role.id))
             throw Error('Role catalog conflict: ' + role.id);

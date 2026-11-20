@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ManagedRunBudgetPolicySchema } from './run-budget.ts';
 import { EnvironmentConfigSchema } from './environment.ts';
 import { RelativePathSchema } from './projects-paths.ts';
 import { ComponentSchema, DeliveryConfigSchema } from './operations.ts';
@@ -14,6 +15,7 @@ export const ProjectProfileSchema = z
   .strictObject({
     version: z.literal(1),
     revision: z.number().int().nonnegative(),
+    managedBudget: ManagedRunBudgetPolicySchema.optional(),
     resourceProfile: z
       .string()
       .regex(/^[a-z][a-z0-9_-]{0,63}$/)

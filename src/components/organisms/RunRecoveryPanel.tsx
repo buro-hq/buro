@@ -40,6 +40,7 @@ export function RunRecoveryPanel({
   const blocked = snapshot?.runs.some(
     (r) => r.status && ['queued', 'running', 'canceling'].includes(r.status),
   );
+  const poisonedBudget = run.managedBudget?.status === 'exceeded';
   async function resume() {
     setBusy(true);
     setError('');
@@ -77,12 +78,23 @@ export function RunRecoveryPanel({
         </>
       )}
       {compact && run.issue && <Notice tone="warning">{run.issue.message}</Notice>}
+      {run.issue?.code === 'MANAGED_BUDGET_BLOCKED' && (
+        <p className="caption">
+          {poisonedBudget
+            ? t('This budget is blocked. Start a new run; previous work and history are preserved.')
+            : t(
+                'Continuing keeps this run’s budget. Start a new run for a new budget; rechecking can use any remaining review allowance.',
+              )}
+        </p>
+      )}
       <div className="recovery-buttons">
         <Button
           variant="light"
           size="xs"
           leftSection={<Play size={13} />}
-          disabled={!supported || blocked || connection !== 'connected' || !run.workspace}
+          disabled={
+            poisonedBudget || !supported || blocked || connection !== 'connected' || !run.workspace
+          }
           onClick={() => setMode('repair')}
         >
           {t('Continue')}
@@ -92,7 +104,12 @@ export function RunRecoveryPanel({
           size="xs"
           leftSection={<RefreshCw size={13} />}
           disabled={
-            !supported || !canRecheck || blocked || connection !== 'connected' || !run.workspace
+            poisonedBudget ||
+            !supported ||
+            !canRecheck ||
+            blocked ||
+            connection !== 'connected' ||
+            !run.workspace
           }
           onClick={() => setMode('recheck')}
         >
@@ -130,6 +147,13 @@ export function RunRecoveryPanel({
           <Notice>
             {t('The same workspace is used. Previous events and results are preserved.')}
           </Notice>
+          {run.managedBudget && (
+            <Notice>
+              {t(
+                'This run keeps its original budget, even when current project settings are selected.',
+              )}
+            </Notice>
+          )}
           {goal?.repairEnvironment && (
             <Notice>
               {t(
@@ -187,7 +211,9 @@ export function RunRecoveryPanel({
             </Button>
             <Button
               loading={busy}
-              disabled={!ids.length || (mode === 'repair' && !instructions.trim())}
+              disabled={
+                poisonedBudget || !ids.length || (mode === 'repair' && !instructions.trim())
+              }
               onClick={() => void resume()}
             >
               {mode === 'recheck' ? t('Check saved result') : t('Continue with clarification')}

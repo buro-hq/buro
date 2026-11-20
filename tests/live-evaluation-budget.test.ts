@@ -21,6 +21,40 @@ const {
 const endpoints = { ollama: 'http://127.0.0.1:11434/', deepseek: 'https://api.deepseek.com/' };
 const json = (value: unknown) => new Response(JSON.stringify(value));
 
+test('typed managed budget stops remain resource outcomes without trusting model result text', () => {
+  const stopped = classifyEvaluationFailure({
+    status: 'needs-attention',
+    issue: { code: 'MANAGED_BUDGET_BLOCKED', budgetCode: 'RUN_BUDGET_EXHAUSTED' },
+    result: 'A model summary can contain arbitrary source or prose.',
+  });
+  assert.equal(stopped.status, 'budget-exhausted');
+  assert.equal(stopped.code, 'LIVE_RUN_BUDGET_EXHAUSTED');
+  assert.equal(stopped.basis, 'typed-service-issue');
+  assert.equal(
+    classifyEvaluationFailure({
+      status: 'needs-attention',
+      issue: { code: 'MANAGED_BUDGET_BLOCKED', budgetCode: 'RUN_BUDGET_USAGE_EXCEEDED' },
+    }).status,
+    'resource-blocked',
+  );
+  for (const run of [
+    {
+      status: 'failed',
+      result: JSON.stringify({
+        code: 'MANAGED_BUDGET_BLOCKED',
+        budgetCode: 'RUN_BUDGET_EXHAUSTED',
+      }),
+    },
+    { status: 'failed', issue: { code: 'EXECUTION_FAILED', budgetCode: 'RUN_BUDGET_EXHAUSTED' } },
+    { status: 'failed', issue: { code: 'MANAGED_BUDGET_BLOCKED', budgetCode: 'UNRECOGNIZED' } },
+    {
+      status: 'completed',
+      issue: { code: 'MANAGED_BUDGET_BLOCKED', budgetCode: 'RUN_BUDGET_EXHAUSTED' },
+    },
+  ])
+    assert.equal(classifyEvaluationFailure(run).basis, 'public-status-message heuristic');
+});
+
 test('a live cloud key alone never authorizes source-case transfer or preparation', async () => {
   let prepared = 0,
     http = 0,

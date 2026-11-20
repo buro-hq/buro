@@ -993,5 +993,8 @@
   "Only: {p0}": "Only: {p0}",
   "Prefer: {p0}": "Prefer: {p0}",
   "Preferred model": "Preferred model",
-  "Chosen by coordinator": "Chosen by coordinator"
+  "Chosen by coordinator": "Chosen by coordinator",
+  "This budget is blocked. Start a new run; previous work and history are preserved.": "This budget is blocked. Start a new run; previous work and history are preserved.",
+  "Continuing keeps this run’s budget. Start a new run for a new budget; rechecking can use any remaining review allowance.": "Continuing keeps this run’s budget. Start a new run for a new budget; rechecking can use any remaining review allowance.",
+  "This run keeps its original budget, even when current project settings are selected.": "This run keeps its original budget, even when current project settings are selected."
 }

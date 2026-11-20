@@ -59,4 +59,6 @@ Dynamic specialists/task graph, queued/concurrent runs with one writer per works
 ## Stage log
 
 - Review baseline: 302 tests, build/typecheck, formatting, 9 oracle checks and six browser scripts passed. Review/plan saved before delegated implementation.
-- Stage 1: pending implementation.
+- Stage 1 implemented with five delegated tasks. 342 default tests and production build pass; resource/project/localization browser checks pass. Atomic reservation/state tests cover restart, duplicate operations, protected review allowance, frozen policy, rejected ledger removal/rewrites, unknown accounting, persistence failures and late overage. Private purpose and bounded typed budget outcomes are retained across transport/recovery. No paid/live model calls were made for this stage.
+- Stage 1 boundaries: accounting covers managed model APIs/managed tools, not hidden native-client API traffic or monetary billing. Legacy activation records earlier usage as unknown. Public budget updates currently reuse full `run.changed` events; bounded delta/read models remain later work. Already granted/in-flight effects are not a global cancellable lease.
+- Stage 2 is next: safe managed segments and lifecycle semantics; automatic rotation remains disabled until its archive/handoff contract is implemented.

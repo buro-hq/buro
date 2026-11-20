@@ -4,6 +4,8 @@
 
 [Implementation sequence](docs/IMPLEMENTATION.md) records the agreed order: refactor the current route, add Ollama and DeepSeek, then expand orchestration and the production interface.
 
+The latest [full review](docs/REVIEW-2026-11-20.md) and [execution plan](docs/EXECUTION-PLAN-2026-11-20.md) prioritize durable managed budgets before work-segment rotation.
+
 The service supports Codex CLI and opt-in **Ollama and DeepSeek model API** routes through a shared Buro-managed runtime. Buro controls worker dispatch and resource routing. DeepSeek Harness is a reference and possible later runtime, not a prerequisite. Live acceptance and the broader orchestration model remain distinct gates.
 
 ## First milestone
@@ -19,7 +21,8 @@ Full automatic crash reconciliation, a general task graph and concurrent project
 The immediate bounded-assignment and plugin boundary proposal is in [next orchestration slice](docs/ORCHESTRATION-NEXT.md). It preserves core ownership of budgets, authorization, dispatch and acceptance.
 
 - [ ] Expand the delegation protocol into a versioned task graph with bounded replanning and targeted evidence invalidation.
-- [ ] Add a durable aggregate run budget with reserved review capacity, then safe managed work segments through a core-validated `WorkSegmentPolicy`. Preserve logical identity, action receipts and cumulative limits across fresh conversation windows.
+- [x] Add a durable aggregate managed-API run budget with protected review capacity and private atomic receipts. Preserve charges through replacement/recovery; expose native accounting limitations explicitly.
+- [ ] Add safe managed work segments through a core-validated `WorkSegmentPolicy`. Preserve logical identity, action receipts and cumulative limits across fresh conversation windows; add a whole-workflow time policy separately.
 - [ ] Replace PROJECT_BUSY and the fixed two-worker plan schema with queued runs, multiple runs per goal, resource budgets and one writer per run worktree initially.
 - [ ] Add durable operator questions and clarifications that block only dependent work.
 - [ ] Add full per-action dispatch reconciliation and resource leases for automatic recovery where the outcome can be established.

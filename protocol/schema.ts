@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ManagedRunBudgetSummarySchema, ManagedBudgetErrorCodeSchema } from './run-budget.ts';
 import { roleIdPattern, type DomainEvent, type Snapshot } from './domain.ts';
 import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
 import { DeliverySchema, PreviewSchema, ResearchSchema, GoalOutcomeSchema } from './operations.ts';
@@ -292,6 +293,7 @@ const agentSession = z.object({
     .optional(),
 });
 const run = z.object({
+  managedBudget: ManagedRunBudgetSummarySchema.optional(),
   workerTasks: z.record(z.string(), WorkerTaskSchema).optional(),
   workerReplan: WorkerReplanSchema.optional(),
   resources: ResourceSnapshotSchema.optional(),
@@ -359,9 +361,17 @@ const run = z.object({
     .optional(),
   issue: z
     .object({
-      code: z.enum(['BASELINE_CHECKS_FAILED', 'EXECUTION_FAILED']),
+      code: z.enum(['BASELINE_CHECKS_FAILED', 'EXECUTION_FAILED', 'MANAGED_BUDGET_BLOCKED']),
+      budgetCode: ManagedBudgetErrorCodeSchema.optional(),
       message: z.string(),
       checks: z.array(z.string()),
+    })
+    .superRefine((issue, ctx) => {
+      if ((issue.code === 'MANAGED_BUDGET_BLOCKED') !== (issue.budgetCode !== undefined))
+        ctx.addIssue({
+          code: 'custom',
+          message: 'A managed budget issue requires its typed budget code.',
+        });
     })
     .optional(),
   attempts: z

@@ -1,5 +1,7 @@
 import { PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
 import { roleIdPattern } from '../protocol/domain.ts';
+import type { TeamPlan } from '../protocol/execution.ts';
+export type { TeamPlan } from '../protocol/execution.ts';
 import type {
   Run,
   FileChange,
@@ -52,22 +54,7 @@ export type ExecutionPolicy = ExecutionPolicyView & {
   context?: string;
   profile?: ProjectProfile;
 };
-export type PlannedWorker = {
-  roleId: string;
-  action: 'reuse' | 'create';
-  title: string;
-  description: string;
-  instructions: string;
-  kind: 'implementation' | 'testing' | 'general';
-  paths: string[];
-  runtimeId?: string | null;
-  runtimeReason?: string;
-};
-export type TeamPlan = {
-  summary: string;
-  steps: { step: string; owner: string }[];
-  team: PlannedWorker[];
-};
+export type PlannedWorker = TeamPlan['team'][number];
 export const terminal = (run: Run) =>
   !run.status || ['completed', 'failed', 'interrupted', 'needs-attention'].includes(run.status);
 const matches = (file: string, p: string) =>
