@@ -6,6 +6,7 @@ import { ThemePreview } from '../components/atoms/ThemePreview';
 import { Panel } from '../components/molecules/Panel';
 import { useAppearance } from '../theme/AppearanceProvider';
 import { themePresets } from '../theme/presets';
+import { ExecutionResources } from '../components/organisms/ExecutionResources';
 export function UserSettingsPage() {
   const locale = useLocale();
   const { themeId, setThemeId } = useAppearance(),
@@ -19,10 +20,9 @@ export function UserSettingsPage() {
   return (
     <Panel
       title={t('User settings')}
-      description={t(
-        'Panel appearance. Preferences are saved in this browser and apply to all projects.',
-      )}
+      description={t('Execution resources and interface preferences.')}
     >
+      <ExecutionResources />
       <section className="appearance-section">
         <h3>{t('Language')}</h3>
         <Select

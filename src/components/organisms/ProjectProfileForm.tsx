@@ -6,6 +6,7 @@ import { PathListInput } from '../molecules/PathInput';
 import { ContextMaterialsEditor } from './ContextMaterialsEditor';
 import { ProjectOperationsFields } from './ProjectOperationsFields';
 import type { ProjectProfile } from '../../../protocol/domain.ts';
+import { ProjectResourceField } from './ExecutionResources';
 export function ProjectProfileForm({
   initial,
   projectId,
@@ -70,6 +71,10 @@ export function ProjectProfileForm({
         value={profile.context}
         onChange={(e) => update({ context: e.currentTarget.value })}
         minRows={3}
+      />
+      <ProjectResourceField
+        value={profile.resourceProfile}
+        onChange={(resourceProfile) => update({ resourceProfile })}
       />
       <ContextMaterialsEditor projectId={projectId} root={root} scope="project" />
       <div className="profile-paths">

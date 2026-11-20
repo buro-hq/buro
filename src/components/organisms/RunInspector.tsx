@@ -164,6 +164,7 @@ export function RunInspector({
                   messages: [],
                   commands: 0,
                   status: 'completed',
+                  session: run.coordinatorSession,
                 }
               : chosen!;
           const role = roles[agentName];
@@ -197,6 +198,12 @@ export function RunInspector({
               </div>
               <p>{role.description}</p>
               <div className="agent-facts">
+                {a.session && (
+                  <div>
+                    <span>{t('Execution resource')}</span>
+                    <b>{a.session.reportedModel || a.session.model || a.session.runtimeId}</b>
+                  </div>
+                )}
                 <div>
                   <span>{t('Workspace')}</span>
                   <b className="mono">{role.owns}</b>

@@ -62,6 +62,7 @@ npm run check:projects
 npm run check:setup
 npm run check:context
 npm run check:appearance
+npm run check:resources
 npm run check:localization
 npm run docs:screenshots
 ```
@@ -126,7 +127,7 @@ Core has no React, Node, Cordis or transport imports. UI and clients do not impo
 
 Runtime activity is typed in `core/runtime-events.ts`. Adapters normalize notifications before publishing them; `core/runtime-projection.ts` applies public activity to saved runs. `core/runtimes.ts` holds adapters, `core/runtime-router.ts` binds durable Buro handles, and `core/resource-selection.ts` enforces profile/data policy. `plugins/runtime.ts` and `plugins/resources.ts` compose their ports and cleanup. Codex remains the default until configured otherwise. `core/worker-assignments.ts` dispatches independent workers; native activity cannot establish role identity. `core/capability-probe.ts` owns bounded diagnostics and durable receipts. See [implementation progress](IMPLEMENTATION.md).
 
-Managed commands use additional private-file/read/network restrictions. Managed Docker execution is currently unsupported and fails before credentials or containers are created; existing native Codex Docker execution is separate. Browser resource settings can be checked with `node scripts/check-resources.cjs`. Opt-in live Ollama checks use `BURO_LIVE_OLLAMA=1 node scripts/check-live-ollama.cjs`; the default unit suite does not make live model requests.
+Managed commands use additional private-file/read/network restrictions. Managed Docker execution is currently unsupported and fails before credentials or containers are created; existing native Codex Docker execution is separate. `check:resources` starts an isolated service and Vite instance with HTTP fixtures; it does not call installed models or change the user's profiles. Opt-in live Ollama checks use `BURO_LIVE_OLLAMA=1 node scripts/check-live-ollama.cjs`; the default unit suite does not make live model requests.
 
 The protocol uses versioned requests, IDs and validated parameters. Metadata, receipts and events are written before publication. Retries reuse receipts; conflicting payloads are rejected. Reconnecting clients catch up from a sequence number. Git operations and delivery are separate from metadata transactions.
 

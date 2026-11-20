@@ -153,7 +153,7 @@ export function milestone(r: Run, e: Event, roles = roleViewsForRun([], r)): Mil
       ...base,
       kind: 'system',
       title: t('Goal started'),
-      detail: t('Separate Codex session · planning before execution'),
+      detail: t('Separate coordinator session · planning before execution'),
     };
   if (e.type === 'plan.rejected')
     return { ...base, kind: 'finding', failed: true, title: t('Plan needs revision') };

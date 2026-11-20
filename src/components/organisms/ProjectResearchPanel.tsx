@@ -213,7 +213,7 @@ export function ProjectResearchPanel({
             disabled={starting || connection !== 'connected'}
             onClick={() => void start()}
           >
-            {research ? t('Research again') : t('Research project with Codex')}
+            {research ? t('Research again') : t('Research project')}
           </Button>
         )}
         {onApply && research?.status === 'ready' && (

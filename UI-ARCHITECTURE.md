@@ -4,7 +4,7 @@ The project is the entry point. Each project has an office, goals, runs, team, f
 
 ## Product direction
 
-[VISION.md](VISION.md) governs the agreed interaction model; [ARCHITECTURE.md](ARCHITECTURE.md) and [providers](docs/PROVIDERS.md) govern the next implementation milestone. The current production runtime is Codex-only. Resource selection for Ollama/DeepSeek and the reviewed UX prototype remain target behavior until backed by the service.
+[VISION.md](VISION.md) governs the agreed interaction model; [ARCHITECTURE.md](ARCHITECTURE.md) and [providers](docs/PROVIDERS.md) govern implementation. The service supports configured Codex/Ollama/DeepSeek resources. The settings interface reads real resource profiles, model discovery and capability-probe evidence; project settings can inherit or pin a profile. The broader reviewed UX prototype remains a design reference until connected to service state.
 
 The target run overview combines a compact coordinator/agent map, timeline and an agent-focused feed on the right, with agent details below the map. Goals use dense navigation and concurrent runs keep visible context. Team cards describe role definitions and their concrete sessions; materials use a scope tree and list.
 

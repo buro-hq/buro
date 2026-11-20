@@ -168,7 +168,7 @@ export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: (
                 {!connected && (
                   <>
                     <Checkbox
-                      label={t('Research project with Codex')}
+                      label={t('Research project')}
                       checked={autoResearch && supportsResearch}
                       disabled={!supportsResearch}
                       description={t(
