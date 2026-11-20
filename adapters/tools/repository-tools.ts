@@ -43,7 +43,7 @@ const descriptions: Record<keyof typeof schemas, string> = {
   list_files:
     'List repository files, excluding private metadata, secrets, dependencies and generated directories. Defaults to the workspace root.',
   search_text:
-    'Find literal text in bounded repository files, with file names and line numbers. Not a regular expression.',
+    'Find literal text in a repository file or directory, with file names and line numbers. Not a regular expression.',
   edit_file:
     'Replace one exact, unique oldText occurrence in an assigned file. To create a new file, use empty oldText. Existing files require a nonempty exact match.',
   run_command:
@@ -232,12 +232,21 @@ export class RepositoryTools implements ToolBroker {
       if (call.name === 'list_files' || call.name === 'search_text') {
         const input = parsed.data as z.infer<typeof schemas.search_text>;
         const relative = this.relative(scope, input.path || '.');
-        const listed = await this.files(scope, relative, options.signal);
+        const singleFile =
+          call.name === 'search_text' &&
+          (await fs.lstat(await this.filename(scope, relative))).isFile();
+        const listed = singleFile
+          ? { files: [relative], truncated: false }
+          : await this.files(scope, relative, options.signal);
         if (call.name === 'list_files') return { content: JSON.stringify(listed) };
         const matches: { path: string; line: number; text: string }[] = [];
         for (const file of listed.files) {
           options.signal.throwIfAborted();
-          const text = await this.read(scope, file).catch(() => '');
+          // A requested file must report an unreadable/oversized target. Directory
+          // searches keep skipping unsupported files while searching the others.
+          const text = singleFile
+            ? await this.read(scope, file)
+            : await this.read(scope, file).catch(() => '');
           const lines = text.split('\n');
           for (let i = 0; i < lines.length && matches.length < 50; i++)
             if (lines[i].includes(input.query))

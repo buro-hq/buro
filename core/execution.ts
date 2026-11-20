@@ -1,5 +1,9 @@
 import { runWorkerAssignments } from './worker-assignments.ts';
-import { boundedPlanningTurn, BOUNDED_PLANNING_REVISION } from './planning-policy.ts';
+import {
+  boundedPlanningTurn,
+  BOUNDED_PLANNING_REVISION,
+  planningOutputSchema,
+} from './planning-policy.ts';
 import { createManagedRunBudget, managedBudgetSummary } from './run-budget.ts';
 import { ManagedBudgetErrorCodeSchema } from '../protocol/run-budget.ts';
 import { validateWorkerTask } from './worker-envelope.ts';
@@ -913,6 +917,10 @@ ${installation.output || installation.error || ''}`,
       correction = '',
       roleCatalogChanged = false,
       planningRoles = initial.roles;
+    const planningSchema =
+      boundedPlanning && run.planningPolicy?.revision === 'bounded-planning-v3'
+        ? planningOutputSchema(teamOutputSchema, policy.maxWorkers)
+        : teamOutputSchema;
     for (let attempt = 0; attempt < 2; attempt++) {
       const workerCatalog = planningRoles.filter(
         (role) => !['local_preview', 'delivery_pr', 'production_delivery'].includes(role.id),
@@ -921,8 +929,9 @@ ${installation.output || installation.error || ''}`,
       const boundedTurn = boundedPlanning
         ? boundedPlanningTurn({
             revision:
-              run.planningPolicy?.revision === BOUNDED_PLANNING_REVISION
-                ? BOUNDED_PLANNING_REVISION
+              run.planningPolicy?.revision === 'bounded-planning-v3' ||
+              run.planningPolicy?.revision === 'bounded-planning-v2'
+                ? run.planningPolicy.revision
                 : 'bounded-planning-v1',
             reuseBrief: attempt > 0,
             roleCatalogChanged,
@@ -960,7 +969,7 @@ ${correction}`;
             runId,
             root.threadId,
             boundedTurn.text,
-            teamOutputSchema,
+            planningSchema,
             signal,
             run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
             boundedTurn.toolPolicy,

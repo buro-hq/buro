@@ -93,3 +93,7 @@ The Mac-only pilot exposed coordinator context exhaustion before a plan or worke
 Committed the controlled comparison harness and first eight synthetic results in `16cf5d0`; full default validation passed 551 tests. Native Codex and DeepSeek produced externally verified fixes; local Qwen and mixed runs remained unaccepted. A native measurement collector error was fixed and the already completed candidate reverified without another model call, retaining its original error receipt.
 
 [Private-project evaluation details removed.]
+
+### Policy-shaped output and file search repair
+
+[Private-project evaluation details removed.]

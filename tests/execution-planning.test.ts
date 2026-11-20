@@ -30,7 +30,7 @@ async function fixture(
   const projects = new FileProjectRegistry([store]);
   let sequence = 0,
     plans = 0;
-  const turns: { text: string; toolPolicy?: 'none'; threadId: string }[] = [];
+  const turns: { text: string; toolPolicy?: 'none'; threadId: string; schema?: unknown }[] = [];
   const providerCalls: Parameters<ModelProvider['complete']>[0][] = [];
   const sessions = new FileManagedSessions(path.join(directory, 'private-sessions'));
   const resource = {
@@ -60,7 +60,12 @@ async function fixture(
     async interrupt() {},
     async dispose() {},
     async turn(threadId, text, turnOptions) {
-      turns.push({ threadId, text, toolPolicy: turnOptions?.toolPolicy });
+      turns.push({
+        threadId,
+        text,
+        toolPolicy: turnOptions?.toolPolicy,
+        schema: turnOptions?.schema,
+      });
       const answer = text.startsWith('First,')
         ? {
             summary: 'One coherent edit',
@@ -132,6 +137,7 @@ async function fixture(
                 input.schema,
                 'Tools-free Ollama planning must request structured output directly',
               );
+              assert.equal((input.schema as any).properties.team.maxItems, 1);
               answer = {
                 summary: invalid
                   ? 'Prior planning detail. '.repeat(150)
@@ -205,7 +211,7 @@ async function fixture(
           : 'Preserve the public API.',
         checks: [{ id: 'suite', title: 'Suite' }],
         defaultCheckIds: ['suite'],
-        maxWorkers: 2,
+        maxWorkers: options.managed16K ? 1 : 2,
         maxRepairs: 0,
         turnTimeoutMs: 1000,
       },
@@ -264,7 +270,7 @@ test('new managed planning saves bounded policy and only planning turns disable 
   const run = await f.run();
   assert.equal(run.status, 'completed', run.result);
   assert.equal(run.planningPolicy?.mode, 'bounded');
-  assert.equal(run.planningPolicy?.revision, 'bounded-planning-v2');
+  assert.equal(run.planningPolicy?.revision, 'bounded-planning-v3');
   const planning = f.turns.filter(({ text }) => text.startsWith('First,'));
   assert.equal(planning.length, 2);
   assert.ok(planning.every(({ toolPolicy }) => toolPolicy === 'none'));
@@ -281,7 +287,7 @@ test('managed Ollama 16K corrects an invalid plan without repeating the brief or
   const f = await fixture(t, { managed16K: true });
   const run = await f.run();
   assert.equal(run.status, 'completed', run.result);
-  assert.equal(run.planningPolicy?.revision, 'bounded-planning-v2');
+  assert.equal(run.planningPolicy?.revision, 'bounded-planning-v3');
   assert.ok(
     run.agents.some((agent) => agent.session?.roleId === 'builder' && agent.status === 'completed'),
   );
@@ -371,41 +377,45 @@ test('historical missing planning policy remains legacy even when current enviro
   assert.match(planning.text, /only inspect the project/);
 });
 
-test('a resumed saved v1 run retains its original full-brief correction algorithm', async (t) => {
-  const f = await fixture(t, { invalidPlans: 1 });
-  const original = await f.run();
-  await f.store.transact('historical-v1', 'historical-v1', (doc) => {
-    const historical = {
-      ...structuredClone(original),
-      id: 'R-historical-v1',
-      planningPolicy: {
-        version: 1 as const,
-        mode: 'bounded' as const,
-        revision: 'bounded-planning-v1',
-      },
-      managedBudget: undefined,
-    };
-    doc.runs.push(historical);
-    return { result: null, change: { type: 'run.changed', run: historical, goal: doc.goals[0] } };
+for (const revision of ['bounded-planning-v1', 'bounded-planning-v2'] as const)
+  test(`a resumed saved ${revision} run retains its original prompts and generic grammar`, async (t) => {
+    const f = await fixture(t, { invalidPlans: 1 });
+    f.environment.policies.p.maxWorkers = 1;
+    const original = await f.run();
+    await f.store.transact('historical-v1', 'historical-v1', (doc) => {
+      const historical = {
+        ...structuredClone(original),
+        id: 'R-historical-v1',
+        planningPolicy: {
+          version: 1 as const,
+          mode: 'bounded' as const,
+          revision,
+        },
+        managedBudget: undefined,
+      };
+      doc.runs.push(historical);
+      return { result: null, change: { type: 'run.changed', run: historical, goal: doc.goals[0] } };
+    });
+    f.turns.length = 0;
+    f.resetPlanningCount();
+    await f.engine.planAndImplement(
+      'p',
+      'R-historical-v1',
+      { path: f.directory, base: 'initial' },
+      f.environment.policies.p,
+      new AbortController().signal,
+      [],
+      true,
+    );
+    const planning = f.turns.filter(({ text }) => text.startsWith('First,'));
+    assert.equal(planning.length, 2);
+    assert.ok(
+      planning.every(
+        ({ toolPolicy, schema }) =>
+          toolPolicy === 'none' && (schema as any).properties.team.maxItems === 2,
+      ),
+    );
+    assert.match(planning[0].text, /Brief: /);
+    assert.equal(planning[1].text.includes('Brief: '), revision === 'bounded-planning-v1');
+    assert.equal(f.engine.get('p', 'R-historical-v1').planningPolicy?.revision, revision);
   });
-  f.turns.length = 0;
-  f.resetPlanningCount();
-  await f.engine.planAndImplement(
-    'p',
-    'R-historical-v1',
-    { path: f.directory, base: 'initial' },
-    f.environment.policies.p,
-    new AbortController().signal,
-    [],
-    true,
-  );
-  const planning = f.turns.filter(({ text }) => text.startsWith('First,'));
-  assert.equal(planning.length, 2);
-  assert.ok(
-    planning.every(({ text, toolPolicy }) => text.includes('Brief: ') && toolPolicy === 'none'),
-  );
-  assert.equal(
-    f.engine.get('p', 'R-historical-v1').planningPolicy?.revision,
-    'bounded-planning-v1',
-  );
-});

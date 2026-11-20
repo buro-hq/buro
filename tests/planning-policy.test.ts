@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DomainError } from '../core/ports.ts';
 import { materialInstructions, type ContextMaterial } from '../protocol/context.ts';
+import { teamOutputSchema } from '../protocol/execution.ts';
 import {
   boundedPlanningTurn,
   MAX_PLANNING_INPUT_BYTES,
   planningBaseline,
+  planningOutputSchema,
 } from '../core/planning-policy.ts';
 
 const input = () => ({
@@ -44,6 +46,47 @@ const input = () => ({
     total: 1,
     results: [{ name: 'Session tests', passed: false, exitCode: 1 }],
   },
+});
+
+test('planning output grammar narrows the frozen worker bound without mutating any other constraint', () => {
+  const original = structuredClone(teamOutputSchema);
+  for (const [maxWorkers, cap] of [
+    [0, 0],
+    [1, 1],
+    [2, 2],
+    [50, 2],
+  ]) {
+    const schema = planningOutputSchema(teamOutputSchema, maxWorkers);
+    const team = (schema.properties as Record<string, Record<string, unknown>>).team;
+    assert.equal(team.maxItems, cap);
+    team.maxItems = 2;
+    assert.deepEqual(schema, original, 'Every other schema property must remain unchanged');
+    assert.notEqual(schema, teamOutputSchema);
+  }
+  assert.deepEqual(teamOutputSchema, original);
+  const uncapped = {
+    type: 'object',
+    properties: { team: { type: 'array', items: { type: 'string' } } },
+  };
+  assert.equal((planningOutputSchema(uncapped, 1).properties as any).team.maxItems, 1);
+  for (const maxWorkers of [-1, 1.5, Number.NaN])
+    assert.throws(() => planningOutputSchema(teamOutputSchema, maxWorkers), {
+      code: 'INVALID_PLANNING_SCHEMA',
+    });
+});
+
+test('v3 changes the output grammar while preserving v2 planning text exactly', () => {
+  for (const retry of [false, true]) {
+    const source = {
+      ...input(),
+      reuseBrief: retry,
+      correction: retry ? 'Invalid number of workers.' : undefined,
+    };
+    assert.deepEqual(
+      boundedPlanningTurn({ ...source, revision: 'bounded-planning-v3' }),
+      boundedPlanningTurn({ ...source, revision: 'bounded-planning-v2' }),
+    );
+  }
 });
 
 function brief(text: string) {
