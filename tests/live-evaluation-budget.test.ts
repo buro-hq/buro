@@ -15,10 +15,91 @@ const {
   assertMixedDelegation,
   classifyEvaluationFailure,
   evaluationRunProgress,
+  sourceCaseEvidence,
   runLiveProviderEvaluation,
 } = require('../scripts/lib/live-provider-runner.cjs');
 const endpoints = { ollama: 'http://127.0.0.1:11434/', deepseek: 'https://api.deepseek.com/' };
 const json = (value: unknown) => new Response(JSON.stringify(value));
+
+test('a live cloud key alone never authorizes source-case transfer or preparation', async () => {
+  let prepared = 0,
+    http = 0,
+    credentialReads = 0;
+  const report = await runLiveProviderEvaluation({
+    mode: 'deepseek',
+    env: { BURO_LIVE_DEEPSEEK: '1', BURO_DEEPSEEK_MODEL: 'synthetic-model' },
+    credentials: () => {
+      credentialReads++;
+      return 'synthetic-key';
+    },
+    sourceCase: {
+      id: 'synthetic-source',
+      prepare: () => {
+        prepared++;
+        throw Error('Must not prepare');
+      },
+    },
+    fetch: async () => {
+      http++;
+      throw Error('Must not send');
+    },
+  });
+  assert.equal(report.status, 'blocked');
+  assert.equal(report.error.code, 'LIVE_SOURCE_TRANSFER_NOT_AUTHORIZED');
+  assert.equal(report.budget.generationRequests, 0);
+  assert.equal(prepared, 0);
+  assert.equal(http, 0);
+  assert.equal(credentialReads, 0);
+});
+
+test('source evaluation exports frozen hashes and bounded receipts without private evidence', () => {
+  const digest = 'a'.repeat(64);
+  const fixture = {
+    goal: { title: 'Synthetic source case' },
+    profile: { allowedPaths: ['src/value.ts'] },
+    evidence: {
+      source: {
+        root: '/private/source-location',
+        head: 'b'.repeat(40),
+        hashes: { 'src/value.ts': digest, '../escape': digest, 'invalid.ts': 'private-value' },
+      },
+      controllerHashes: { 'checks/oracle.cjs': digest, '/private/credentials': digest },
+      public: [
+        {
+          passed: false,
+          exitCode: 1,
+          durationMs: 12,
+          rows: [{ output: 'private-value' }],
+          sourceHash: digest,
+        },
+      ],
+      holdout: [
+        {
+          passed: true,
+          exitCode: 0,
+          durationMs: 24,
+          rows: [{}, {}, {}, {}],
+          sourceHash: digest,
+          rawCandidate: 'private-value',
+        },
+      ],
+    },
+  };
+  const before = structuredClone(fixture);
+  const result = sourceCaseEvidence(fixture);
+  assert.equal(result.commit, 'b'.repeat(40));
+  assert.equal(result.sourceFiles, 1);
+  assert.deepEqual(result.sourceHashes, { 'src/value.ts': digest });
+  assert.deepEqual(result.controllerHashes, { 'checks/oracle.cjs': digest });
+  assert.deepEqual(result.public, [
+    { passed: false, exitCode: 1, durationMs: 12, checks: 1, sourceHash: digest },
+  ]);
+  assert.equal(result.holdout[0].checks, 4);
+  assert.match(result.fixtureContractHash, /^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(result).includes('private'), false);
+  assert.deepEqual(fixture, before);
+  assert.equal(sourceCaseEvidence({}), undefined);
+});
 
 test('mixed evaluation does not increase local model memory when the cloud context budget is larger', () => {
   const limits = normalizedLimits({ contextTokens: 32768 });
@@ -374,7 +455,7 @@ test('missing opt-in, key or explicit model produce typed reports without HTTP o
       const reportPath = path.join(directory, index + '.json');
       const report = await runLiveProviderEvaluation({
         mode: 'deepseek',
-        env: item.env,
+        env: { BURO_LIVE_SOURCE_TRANSFER: '1', ...item.env },
         reportPath,
         fetch: async () => {
           calls++;

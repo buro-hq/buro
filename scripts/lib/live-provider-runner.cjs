@@ -193,6 +193,8 @@ function preflight(options = {}) {
     usesOllama = mode !== 'deepseek';
   if ((usesDeepSeek ? env.BURO_LIVE_DEEPSEEK : env.BURO_LIVE_OLLAMA) !== '1')
     return { ok: false, code: 'LIVE_OPT_IN_REQUIRED' };
+  if (usesDeepSeek && options.sourceCase && env.BURO_LIVE_SOURCE_TRANSFER !== '1')
+    return { ok: false, code: 'LIVE_SOURCE_TRANSFER_NOT_AUTHORIZED' };
   const models = {
     ollama: options.models?.ollama || env.BURO_OLLAMA_MODEL,
     deepseek: options.models?.deepseek || env.BURO_DEEPSEEK_MODEL,
@@ -446,6 +448,44 @@ const safeError = (error) => ({
       ? error.code
       : 'LIVE_VALIDATION_FAILED',
 });
+/** Public evidence contains frozen hashes and bounded outcomes, never candidate text or paths to secrets. */
+function sourceCaseEvidence(fixture) {
+  const evidence = fixture?.evidence;
+  if (!evidence?.source) return undefined;
+  const hashes = (input) =>
+    Object.fromEntries(
+      Object.entries(object(input))
+        .filter(
+          ([name, value]) =>
+            name.length <= 512 &&
+            name
+              .split('/')
+              .every((part) => /^[A-Za-z0-9_.-]+$/.test(part) && !['.', '..'].includes(part)) &&
+            /^[a-f0-9]{64}$/.test(value),
+        )
+        .slice(0, 128),
+    );
+  const sourceHashes = hashes(evidence.source.hashes);
+  const receipts = (mode) =>
+    (Array.isArray(evidence[mode]) ? evidence[mode] : []).slice(0, 64).map((record) => ({
+      passed: record.passed === true,
+      exitCode: [0, 1].includes(record.exitCode) ? record.exitCode : null,
+      durationMs: finiteCount(record.durationMs),
+      checks: Array.isArray(record.rows) ? record.rows.length : 0,
+      sourceHash: /^[a-f0-9]{64}$/.test(record.sourceHash || '') ? record.sourceHash : 'unknown',
+    }));
+  return {
+    commit: /^[a-f0-9]{40,64}$/.test(evidence.source.head || '') ? evidence.source.head : 'unknown',
+    sourceFiles: Object.keys(sourceHashes).length,
+    sourceHashes,
+    controllerHashes: hashes(evidence.controllerHashes),
+    fixtureContractHash: createHash('sha256')
+      .update(JSON.stringify([fixture.goal, fixture.profile]))
+      .digest('hex'),
+    public: receipts('public'),
+    holdout: receipts('holdout'),
+  };
+}
 async function writeReport(reportPath, report) {
   if (!reportPath) return;
   await fs.mkdir(path.dirname(path.resolve(reportPath)), { recursive: true });
@@ -722,13 +762,7 @@ async function runLiveProviderEvaluation(options = {}) {
     if (!fixture.profile?.checks?.length || typeof fixture.verifyAccepted !== 'function')
       throw new LiveEvaluationError('LIVE_INVALID_FIXTURE');
     report.caseId = fixture.caseId || report.caseId;
-    if (fixture.evidence?.source) {
-      const source = fixture.evidence.source;
-      report.sourceCase = {
-        commit: /^[a-f0-9]{40,64}$/.test(source.head || '') ? source.head : 'unknown',
-        sourceFiles: Object.keys(source.hashes || {}).length,
-      };
-    }
+    if (fixture.evidence?.source) report.sourceCase = sourceCaseEvidence(fixture);
     const root = realRoot,
       directory = path.join(root, '.buro');
     original = await sourceState(root);
@@ -1070,6 +1104,7 @@ async function runLiveProviderEvaluation(options = {}) {
         report.error = { code: 'LIVE_ORIGINAL_REPOSITORY_CHANGED' };
       }
     }
+    if (fixture?.evidence?.source) report.sourceCase = sourceCaseEvidence(fixture);
     report.http = observedFetch.snapshot();
     report.budget = budget.snapshot();
     report.finishedAt = new Date().toISOString();
@@ -1089,5 +1124,6 @@ module.exports = {
   assertMixedDelegation,
   classifyEvaluationFailure,
   evaluationRunProgress,
+  sourceCaseEvidence,
   runLiveProviderEvaluation,
 };

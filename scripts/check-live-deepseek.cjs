@@ -17,6 +17,11 @@ const { runLiveProviderEvaluation } = require('./lib/live-provider-runner.cjs');
       ollama: process.env.BURO_OLLAMA_ENDPOINT || 'http://127.0.0.1:11434',
     },
     credentials,
+    sourceCase: process.env.BURO_LIVE_CASE
+      ? require('./lib/source-evaluation-cases.cjs').getSourceEvaluationCase(
+          process.env.BURO_LIVE_CASE,
+        )
+      : undefined,
     budgets: process.env.BURO_LIVE_CONTEXT_TOKENS
       ? { contextTokens: Number(process.env.BURO_LIVE_CONTEXT_TOKENS) }
       : undefined,
