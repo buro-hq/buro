@@ -666,6 +666,14 @@ function classifyEvaluationFailure(run) {
     basis: 'public-status-message heuristic',
   });
   if (terminalFailure) {
+    if (message === 'The saved work segment limit is exhausted.')
+      return classified('workSegmentLimit', 'resource-blocked', 'LIVE_WORK_SEGMENT_LIMIT');
+    if (
+      message ===
+        'A saved model generation has an unknown outcome. It cannot be automatically repeated.' ||
+      message === 'A saved tool action has an unknown outcome. It cannot be automatically repeated.'
+    )
+      return classified('unknownOutcome', 'resource-blocked', 'LIVE_RECONCILIATION_REQUIRED');
     if (/^Acceptance failed: [0-9]+\/[0-9]+ checks;/.test(message))
       return classified(
         'qualityFailure',
@@ -732,6 +740,9 @@ async function runLiveProviderEvaluation(options = {}) {
     status: 'blocked',
     stage: 'preflight',
     caseId: options.sourceCase?.id || 'synthetic-value',
+    ...(options.segmentPolicy
+      ? { segmentPolicy: { revision: options.segmentPolicy.revision } }
+      : {}),
   };
   let budget;
   try {
@@ -777,7 +788,10 @@ async function runLiveProviderEvaluation(options = {}) {
     await writeReport(options.reportPath, report);
     fixture = options.sourceCase?.prepare
       ? await options.sourceCase.prepare({ temporaryDirectory, mode: checked.mode, limits })
-      : await prepareSyntheticFixture(temporaryDirectory, checked.mode);
+      : await prepareSyntheticFixture(
+          temporaryDirectory,
+          options.forceWorker ? 'mixed' : checked.mode,
+        );
     const realRoot = await fs.realpath(fixture.root);
     if (realRoot !== temporaryDirectory && !realRoot.startsWith(temporaryDirectory + path.sep))
       throw new LiveEvaluationError('LIVE_FIXTURE_OUTSIDE_TEMPORARY_DIRECTORY');
@@ -891,9 +905,12 @@ async function runLiveProviderEvaluation(options = {}) {
       ],
     });
     const executors = new EnvironmentExecutors();
+    const workspaces = new GitWorkspaces(host.ctx.projects.registry);
     await host.ctx.plugin(resourcesPlugin, {
       directory,
       executors,
+      workspaces,
+      segmentPolicy: options.segmentPolicy,
       fetch: observedFetch,
       credentials: options.credentials,
       codex: { executable: path.join(root, 'codex-not-installed') },
@@ -932,7 +949,6 @@ async function runLiveProviderEvaluation(options = {}) {
       structured: probe.structured,
     };
     clearTimeout(diagnosticTimer);
-    const workspaces = new GitWorkspaces(host.ctx.projects.registry);
     const checks = fixture.createChecks
       ? await fixture.createChecks({ projects: host.ctx.projects.registry, executors })
       : new ProjectChecks(
@@ -1030,6 +1046,15 @@ async function runLiveProviderEvaluation(options = {}) {
             tool: knownTools.has(call.name) ? call.name : 'unknown',
           })),
           usage: saved.usage,
+          ...(saved.workSegments
+            ? {
+                workSegments: {
+                  archiveCount: saved.workSegments.archives.length,
+                  activeIndex: saved.workSegments.active.index,
+                  policyRevision: saved.workSegments.limits.revision,
+                },
+              }
+            : {}),
         });
     }
     if (budget.violation) throw new LiveEvaluationError(budget.violation);
@@ -1077,6 +1102,23 @@ async function runLiveProviderEvaluation(options = {}) {
           : 'unknown',
       };
     if (checked.mode === 'mixed') assertMixedDelegation(run);
+    if (
+      options.forceWorker &&
+      !run.agents.some(
+        (agent) =>
+          agent.session &&
+          !['coordinator', 'reviewer'].includes(agent.session.roleId) &&
+          agent.session.result?.status === 'success' &&
+          agent.status === 'completed' &&
+          agent.threadId &&
+          agent.threadId !== run.threadId &&
+          !run.agents.some(
+            (reviewer) =>
+              reviewer.session?.roleId === 'reviewer' && reviewer.threadId === agent.threadId,
+          ),
+      )
+    )
+      throw new LiveEvaluationError('LIVE_WORKER_DELEGATION_MISSING');
     report.status = 'passed';
     report.stage = 'complete';
   } catch (error) {
@@ -1148,5 +1190,6 @@ module.exports = {
   classifyEvaluationFailure,
   evaluationRunProgress,
   sourceCaseEvidence,
+  prepareSyntheticFixture,
   runLiveProviderEvaluation,
 };

@@ -1,4 +1,5 @@
 import type { RuntimePurpose } from '../protocol/resources.ts';
+import type { ManagedWorkSegments } from './work-segments.ts';
 
 export type ToolDefinition = {
   name: string;
@@ -89,6 +90,10 @@ export type ManagedSession = {
   scopeRevisions?: { revision: number; scope: ToolScope; instructions: string }[];
   messages: ModelMessage[];
   intermediateNotes?: number[];
+  /** Atomic private archive and active context; never part of a public session DTO. */
+  workSegments?: ManagedWorkSegments;
+  /** Segmented sessions fail closed after an unknown generation, including a lost closing reply. */
+  generation?: { requestId: string; outcome: 'pending' | 'completed' | 'unknown' };
   status: 'ready' | 'running' | 'interrupted' | 'failed';
   cancelRequested?: boolean;
   requests: number;

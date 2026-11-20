@@ -13,8 +13,25 @@ import type {
 } from './model-ports.ts';
 import { inScope } from './execution-ports.ts';
 import { withEnvironmentRepair } from './environment-repair.ts';
-import { prepareManagedRequest, type ManagedRequestPolicy } from './request-policy.ts';
+import {
+  estimateManagedRequest,
+  prepareManagedRequest,
+  type ManagedRequestPolicy,
+} from './request-policy.ts';
 import type { ManagedRunBudgetPort } from './run-budget.ts';
+import {
+  assertSegmentScope,
+  decideWorkSegment,
+  parseSegmentClosing,
+  segmentActionReceipts,
+  segmentClosingInstruction,
+  segmentClosingSchema,
+  segmentMessages,
+  validateSegmentEvidence,
+  validateSegmentLimits,
+  type SegmentEvidencePort,
+  type WorkSegmentPolicy,
+} from './work-segments.ts';
 type EventBody<T = RuntimeEvent> = T extends RuntimeEvent
   ? Omit<T, 'id' | 'threadId' | 'runId'>
   : never;
@@ -29,6 +46,8 @@ export type ManagedRuntimeOptions = {
   idGenerator: () => string;
   requestPolicy?: ManagedRequestPolicy;
   budgets?: ManagedRunBudgetPort;
+  segmentPolicy?: WorkSegmentPolicy;
+  segmentEvidence?: SegmentEvidencePort;
   limits: {
     contextTokens: number;
     maxOutputTokens: number;
@@ -64,6 +83,15 @@ export class ManagedAgentRuntime implements AgentRuntime {
       );
     this.id = options.id;
     this.options = options;
+    if (options.segmentPolicy) {
+      validateSegmentLimits(options.segmentPolicy.limits);
+      if (
+        options.segmentPolicy.revision !== options.segmentPolicy.limits.revision ||
+        typeof options.segmentPolicy.decide !== 'function' ||
+        !options.segmentEvidence
+      )
+        throw new DomainError('INVALID_SEGMENT_POLICY', 'The work segment policy is incomplete.');
+    }
   }
 
   async start(input: Parameters<AgentRuntime['start']>[0]) {
@@ -287,7 +315,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
     options: { schema: unknown; timeoutMs: number },
     controller: AbortController,
   ) {
-    const session = await this.session(threadId);
+    let session = await this.session(threadId);
     this.assertReconciled(session);
     const { provider, sessions, tools, budgets } = this.options;
     const budgetOwner = budgets ? this.budgetOwner(session) : undefined;
@@ -298,6 +326,9 @@ export class ManagedAgentRuntime implements AgentRuntime {
     const signal = controller.signal;
     const separate = provider.structuredToolMode === 'separate-turn';
     let finalizing = false;
+    let closing = false;
+    let segmentCompleteEmitted = false;
+    let responseSettled = false;
     let sequence = 0,
       calls = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -324,18 +355,58 @@ export class ManagedAgentRuntime implements AgentRuntime {
     };
     try {
       check();
+      const task =
+        text +
+        (separate
+          ? '\nUse the available tools when needed to complete the task. When the work is complete, give a brief completion note; the final response is requested separately.'
+          : '\nReturn your final answer as JSON matching this schema: ' +
+            JSON.stringify(options.schema));
+      if (
+        this.options.segmentPolicy &&
+        this.options.segmentEvidence &&
+        session.purpose === 'implementation' &&
+        session.assignment &&
+        !session.scope.readOnly
+      ) {
+        const anchor = {
+          turnId,
+          instructions:
+            session.scopeRevisions?.at(-1)?.instructions ??
+            session.messages.find((message) => message.role === 'system')?.content ??
+            '',
+          task,
+          scopeRevision: session.scopeRevisions?.at(-1)?.revision || 1,
+        };
+        if (!session.workSegments) {
+          const baseline = await this.options.segmentEvidence.inspect(session.scope, signal);
+          check();
+          validateSegmentEvidence(baseline);
+          session.workSegments = {
+            version: 1,
+            limits: structuredClone(this.options.segmentPolicy.limits),
+            baseline,
+            anchor,
+            active: { index: 1, startedAtRequest: session.requests, toolRounds: 0 },
+            archives: [],
+          };
+        } else {
+          session.workSegments.anchor = anchor;
+          session.workSegments.active.toolRounds = 0;
+        }
+      }
       session.status = 'running';
       session.messages.push({
         role: 'user',
-        content:
-          text +
-          (separate
-            ? '\nUse the available tools when needed to complete the task. When the work is complete, give a brief completion note; the final response is requested separately.'
-            : '\nReturn your final answer as JSON matching this schema: ' +
-              JSON.stringify(options.schema)),
+        content: task,
       });
       await sessions.save(session);
       emit({ type: 'turn.started', turnId });
+      if (session.workSegments)
+        emit({
+          type: 'segment.started',
+          turnId,
+          segmentIndex: session.workSegments.active.index,
+        });
       touch();
       for (let round = 0; round < limits.maxRequestsPerTurn; round++) {
         check();
@@ -344,23 +415,62 @@ export class ManagedAgentRuntime implements AgentRuntime {
             'MODEL_BUDGET_EXHAUSTED',
             'The session request budget is exhausted.',
           );
-        const definitions = finalizing ? [] : tools.definitions(session.scope);
+        if (
+          !finalizing &&
+          !closing &&
+          session.workSegments &&
+          session.workSegments.active.toolRounds > 0 &&
+          this.options.segmentPolicy
+        ) {
+          const step = session.workSegments;
+          const decision = decideWorkSegment(
+            {
+              limits: step.limits,
+              toolRounds: step.active.toolRounds,
+              segmentCount: step.active.index,
+              estimatedInput: estimateManagedRequest({
+                messages: session.messages,
+                tools: tools.definitions(session.scope),
+                schema: separate ? undefined : options.schema,
+              }),
+              contextTokens: limits.contextTokens,
+              maxOutputTokens: limits.maxOutputTokens,
+            },
+            this.options.segmentPolicy,
+          );
+          if (decision === 'close') {
+            this.assertReconciled(session);
+            const next = structuredClone(session);
+            next.messages.push({ role: 'user', content: segmentClosingInstruction });
+            await sessions.save(next);
+            session = next;
+            this.loaded.set(threadId, session);
+            closing = true;
+          }
+        }
+        const definitions = finalizing || closing ? [] : tools.definitions(session.scope);
         const requestMessages = provider.contextMessages
           ? provider.contextMessages(structuredClone(session.messages), {
-              phase: finalizing ? 'final' : 'work',
+              phase: finalizing || closing ? 'final' : 'work',
               ...(session.intermediateNotes
                 ? { intermediateMessageIndexes: [...session.intermediateNotes] }
                 : {}),
             })
           : session.messages;
-        const requestSchema = separate && !finalizing ? undefined : options.schema;
+        const requestSchema = closing
+          ? segmentClosingSchema
+          : separate && !finalizing
+            ? undefined
+            : options.schema;
         const budget = prepareManagedRequest(
           {
-            phase: finalizing ? 'final' : 'work',
+            phase: finalizing || closing ? 'final' : 'work',
             messages: requestMessages,
             tools: definitions,
             schema: requestSchema,
-            limits,
+            limits: closing
+              ? { ...limits, maxOutputTokens: Math.min(512, limits.maxOutputTokens) }
+              : limits,
           },
           this.options.requestPolicy,
         );
@@ -392,6 +502,9 @@ export class ManagedAgentRuntime implements AgentRuntime {
             'The run budget returned an invalid output reservation.',
           );
         session.requests++;
+        responseSettled = false;
+        if (session.workSegments)
+          session.generation = { requestId: `${turnId}:${round}`, outcome: 'pending' };
         await sessions.save(session);
         check();
         let response: Awaited<ReturnType<ModelProvider['complete']>>;
@@ -408,6 +521,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
             onProgress: touch,
           });
         } catch (error) {
+          if (session.workSegments && session.generation) session.generation.outcome = 'unknown';
           if (reservation && budgets && budgetOwner)
             await budgets.recordUsage({
               ...budgetOwner,
@@ -423,6 +537,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
             usage: response.usage,
             outcome: 'observed',
           });
+        responseSettled = true;
         check();
         session.reportedModel = response.model;
         if (response.usage) {
@@ -435,7 +550,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
         if (response.message.role !== 'assistant')
           throw new DomainError('MODEL_INVALID_RESPONSE', 'Expected an assistant message.');
         const requested = response.message.toolCalls || [];
-        if (finalizing && requested.length)
+        if ((finalizing || closing) && requested.length)
           throw new DomainError(
             'MODEL_INVALID_RESPONSE',
             'Tools cannot be dispatched during final serialization.',
@@ -478,6 +593,9 @@ export class ManagedAgentRuntime implements AgentRuntime {
           status: 'pending' as const,
         }));
         session.actions.push(...actions);
+        // A complete response and its tool intents become durable with the generation receipt.
+        // Never publish a completed generation whose response/continuation could still be lost.
+        if (session.workSegments && session.generation) session.generation.outcome = 'completed';
         await sessions.save(session);
         for (const pending of actions) {
           check();
@@ -522,7 +640,98 @@ export class ManagedAgentRuntime implements AgentRuntime {
             });
           touch();
         }
+        if (requested.length && session.workSegments) {
+          session.workSegments.active.toolRounds++;
+          await sessions.save(session);
+        }
         if (!requested.length) {
+          if (closing) {
+            if (response.finish !== 'stop')
+              throw new DomainError(
+                'INVALID_WORK_SEGMENT',
+                'A work step requires a complete tools-free closing response.',
+              );
+            const decision = parseSegmentClosing(response.message.content);
+            this.assertReconciled(session);
+            const step = session.workSegments!;
+            const evidence = await this.options.segmentEvidence!.inspect(session.scope, signal);
+            check();
+            assertSegmentScope(step.baseline, evidence, session.scope);
+            if (decision.status === 'continue') {
+              if (step.active.index >= step.limits.maxSegments)
+                throw new DomainError(
+                  'WORK_SEGMENT_LIMIT',
+                  'The saved work segment limit is exhausted.',
+                );
+              const handoff = {
+                version: 1 as const,
+                nextTask: decision.nextTask,
+                evidence,
+                completedActions: session.actions.length,
+                receipts: segmentActionReceipts(session.actions),
+              };
+              const next = structuredClone(session);
+              next.workSegments!.archives.push({
+                index: step.active.index,
+                anchor: structuredClone(step.anchor),
+                startedAtRequest: step.active.startedAtRequest,
+                endedAtRequest: session.requests,
+                messages: structuredClone(session.messages),
+                ...(session.intermediateNotes
+                  ? { intermediateNotes: [...session.intermediateNotes] }
+                  : {}),
+                handoff,
+              });
+              next.workSegments!.active = {
+                index: step.active.index + 1,
+                startedAtRequest: session.requests,
+                toolRounds: 0,
+              };
+              next.messages = segmentMessages(step.anchor, session.scope, handoff);
+              delete next.intermediateNotes;
+              await sessions.save(next);
+              session = next;
+              this.loaded.set(threadId, session);
+              check();
+              emit({
+                type: 'segment.completed',
+                turnId,
+                segmentIndex: step.active.index,
+                reason: 'continue',
+                workspaceFingerprint: evidence.workspaceFingerprint,
+              });
+              emit({
+                type: 'segment.started',
+                turnId,
+                segmentIndex: session.workSegments!.active.index,
+              });
+              closing = false;
+              continue;
+            }
+            const next = structuredClone(session);
+            next.intermediateNotes = [...(next.intermediateNotes || []), next.messages.length - 1];
+            next.messages.push({
+              role: 'user',
+              content:
+                'Return only the final JSON for the original assignment, reconstructed from the original task and recorded tool results. ' +
+                'A work-step closure is not acceptance. No tools are available. Match this schema: ' +
+                JSON.stringify(options.schema),
+            });
+            await sessions.save(next);
+            session = next;
+            this.loaded.set(threadId, session);
+            emit({
+              type: 'segment.completed',
+              turnId,
+              segmentIndex: step.active.index,
+              reason: 'complete',
+              workspaceFingerprint: evidence.workspaceFingerprint,
+            });
+            segmentCompleteEmitted = true;
+            closing = false;
+            finalizing = true;
+            continue;
+          }
           if (!finalizing && separate) {
             finalizing = true;
             const next: ManagedSession = {
@@ -549,6 +758,13 @@ export class ManagedAgentRuntime implements AgentRuntime {
           }
           session.status = 'ready';
           await sessions.save(session);
+          if (session.workSegments && !segmentCompleteEmitted)
+            emit({
+              type: 'segment.completed',
+              turnId,
+              segmentIndex: session.workSegments.active.index,
+              reason: 'complete',
+            });
           emit({ type: 'message.completed', text: response.message.content.slice(0, 12000) });
           emit({ type: 'turn.completed', turnId, status: 'completed' });
           return { turnId, text: response.message.content, model: session.reportedModel };
@@ -557,6 +773,9 @@ export class ManagedAgentRuntime implements AgentRuntime {
       throw new DomainError('MODEL_BUDGET_EXHAUSTED', 'The turn request budget is exhausted.');
     } catch (error) {
       session.status = signal.aborted || session.cancelRequested ? 'interrupted' : 'failed';
+      if (session.generation?.outcome === 'pending')
+        session.generation.outcome =
+          responseSettled && !signal.aborted && !session.cancelRequested ? 'completed' : 'unknown';
       for (const action of session.actions)
         if (action.status === 'pending') action.status = 'unknown';
       await sessions.save(session).catch(() => {});
@@ -588,6 +807,11 @@ export class ManagedAgentRuntime implements AgentRuntime {
     return { projectId: scope.projectId, ownerRunId };
   }
   private assertReconciled(session: ManagedSession) {
+    if (session.generation && session.generation.outcome !== 'completed')
+      throw new DomainError(
+        'GENERATION_RECONCILIATION_REQUIRED',
+        'A saved model generation has an unknown outcome. It cannot be automatically repeated.',
+      );
     if (session.actions.some((action) => action.status !== 'completed'))
       throw new DomainError(
         'ACTION_RECONCILIATION_REQUIRED',
@@ -610,6 +834,17 @@ export class ManagedAgentRuntime implements AgentRuntime {
         throw new DomainError(
           'SESSION_MISMATCH',
           'The checkpoint uses another provider configuration or model.',
+        );
+      if (
+        session.workSegments &&
+        (!this.options.segmentPolicy ||
+          !this.options.segmentEvidence ||
+          JSON.stringify(session.workSegments.limits) !==
+            JSON.stringify(this.options.segmentPolicy.limits))
+      )
+        throw new DomainError(
+          'SEGMENT_POLICY_CHANGED',
+          'The saved work segment policy is unavailable or changed.',
         );
       this.loaded.set(id, session);
     }

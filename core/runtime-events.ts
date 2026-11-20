@@ -3,6 +3,14 @@ type EventBase = { id: string; runId: string; threadId: string };
 export type RuntimeEvent = EventBase &
   (
     | { type: 'turn.started'; turnId?: string }
+    | { type: 'segment.started'; turnId: string; segmentIndex: number }
+    | {
+        type: 'segment.completed';
+        turnId: string;
+        segmentIndex: number;
+        reason: 'continue' | 'complete';
+        workspaceFingerprint?: string;
+      }
     | {
         type: 'turn.completed';
         turnId?: string;

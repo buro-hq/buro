@@ -8,6 +8,8 @@ import { RuntimeRouter } from '../core/runtime-router.ts';
 import { runtimePlugin } from './runtime.ts';
 import type { ManagedRequestPolicy } from '../core/request-policy.ts';
 import type { ManagedRunBudgetPort } from '../core/run-budget.ts';
+import type { WorkspacePort } from '../core/execution-ports.ts';
+import type { SegmentEvidencePort, WorkSegmentPolicy } from '../core/work-segments.ts';
 
 export const resourcesPlugin: Plugin.Object<{
   directory: string;
@@ -17,6 +19,9 @@ export const resourcesPlugin: Plugin.Object<{
   credentials?: (reference: string) => string | undefined;
   requestPolicy?: ManagedRequestPolicy;
   budgets?: ManagedRunBudgetPort;
+  workspaces?: Pick<WorkspacePort, 'changes'>;
+  segmentPolicy?: WorkSegmentPolicy;
+  segmentEvidence?: SegmentEvidencePort;
 }> = {
   name: 'execution-resources',
   inject: ['projects', 'commands'],

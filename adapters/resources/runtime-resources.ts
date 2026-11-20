@@ -22,6 +22,14 @@ import { RepositoryTools } from '../tools/repository-tools.ts';
 import type { EnvironmentExecutors } from '../environments/executors.ts';
 import { ProjectRunBudgets } from '../files/project-run-budgets.ts';
 import type { ManagedRunBudgetPort } from '../../core/run-budget.ts';
+import type { WorkspacePort } from '../../core/execution-ports.ts';
+import {
+  boundedWorkSegmentPolicy,
+  validateSegmentLimits,
+  type SegmentEvidencePort,
+  type WorkSegmentPolicy,
+} from '../../core/work-segments.ts';
+import { RepositorySegmentEvidence } from '../tools/segment-evidence.ts';
 
 export async function createRuntimeResources(options: {
   directory: string;
@@ -32,6 +40,9 @@ export async function createRuntimeResources(options: {
   credentials?: (reference: string) => string | undefined;
   requestPolicy?: ManagedRequestPolicy;
   budgets?: ManagedRunBudgetPort;
+  workspaces?: Pick<WorkspacePort, 'changes'>;
+  segmentPolicy?: WorkSegmentPolicy;
+  segmentEvidence?: SegmentEvidencePort;
 }) {
   const local = path.join(options.directory, 'local');
   options.executors.protectPrivatePaths([local]);
@@ -43,6 +54,16 @@ export async function createRuntimeResources(options: {
   const tools = new RepositoryTools(options.executors);
   const budgets = options.budgets || new ProjectRunBudgets(options.projects);
   const requestPolicy = options.requestPolicy || conservativeRequestPolicy;
+  const segmentEvidence =
+    options.segmentEvidence ||
+    (options.workspaces ? new RepositorySegmentEvidence(options.workspaces) : undefined);
+  const segmentPolicy =
+    options.segmentPolicy || (segmentEvidence ? boundedWorkSegmentPolicy : undefined);
+  if (segmentPolicy) {
+    validateSegmentLimits(segmentPolicy.limits);
+    if (!segmentEvidence || segmentPolicy.revision !== segmentPolicy.limits.revision)
+      throw new DomainError('INVALID_SEGMENT_POLICY', 'The work segment policy is incomplete.');
+  }
   if (
     typeof requestPolicy.revision !== 'string' ||
     !/^[A-Za-z0-9._:-]{1,100}$/.test(requestPolicy.revision) ||
@@ -110,6 +131,8 @@ export async function createRuntimeResources(options: {
           limits: runtime.limits,
           requestPolicy,
           budgets,
+          segmentPolicy,
+          segmentEvidence,
         }),
       );
       resources.push({
@@ -125,6 +148,7 @@ export async function createRuntimeResources(options: {
               runtime.model,
               runtime.limits,
               requestPolicy.revision,
+              ...(segmentPolicy ? [[segmentPolicy.revision, segmentPolicy.limits]] : []),
             ]),
           )
           .digest('hex'),

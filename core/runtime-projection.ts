@@ -43,6 +43,16 @@ export function applyRuntimeEvent(run: Run, event: RuntimeEvent, now: string) {
     return;
   }
   const agent = run.agents.find((a) => a.threadId === tid);
+  if (event.type === 'segment.started' || event.type === 'segment.completed') {
+    run.events.push({
+      at: now,
+      type: 'agent.' + event.type,
+      threadId: tid,
+      text: String(event.segmentIndex),
+    });
+    // A conversation window is not a logical worker completion or acceptance receipt.
+    return;
+  }
   if (event.type === 'tool.started' || event.type === 'tool.completed') {
     run.events.push({
       at: now,

@@ -56,7 +56,7 @@ const workspaces = new GitWorkspaces(host.ctx.projects.registry),
     executors,
   );
 try {
-  await host.ctx.plugin(resourcesPlugin, { directory, executors });
+  await host.ctx.plugin(resourcesPlugin, { directory, executors, workspaces });
   const environments = new ProjectEnvironments(
     host.ctx.projects.registry,
     host.ctx.agentRuntime.adapter,

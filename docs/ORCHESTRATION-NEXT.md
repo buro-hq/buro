@@ -1,6 +1,6 @@
 # Next bounded orchestration slice
 
-Agreed after the live evaluation on 20 November 2026. Compact tasks, request policy, one known-failure refinement and a durable aggregate managed-API run budget are implemented. Work segments, persistent data grants and Java candidate confinement remain proposals. Native-client API accounting and a whole-workflow deadline remain separate contracts. See [implementation status](IMPLEMENTATION.md), [evaluation evidence](EVALUATION.md), [runtime contracts](RUNTIME-CONTRACTS.md) and [the reviewed execution plan](EXECUTION-PLAN-2026-11-20.md).
+Agreed after the live evaluation on 20 November 2026. Compact tasks, request policy, one known-failure refinement, a durable aggregate managed-API run budget and managed-worker context segments are implemented. The check-backed step loop, persistent data grants and Java candidate confinement remain proposals. Native-client API accounting and a whole-workflow deadline remain separate contracts. See [implementation status](IMPLEMENTATION.md), [evaluation evidence](EVALUATION.md), [runtime contracts](RUNTIME-CONTRACTS.md) and [the reviewed execution plan](EXECUTION-PLAN-2026-11-20.md).
 
 ## Immediate priority
 
@@ -39,7 +39,7 @@ Connection readiness, tool/JSON mechanics and successful performance as coordina
 
 Use one logical worker/session identity and stable Router `B → M` mapping. Managed model APIs are stateless, so a fresh conversation window can be a new segment within the same managed session. Preserve its role/model/scope, cumulative request count and complete action journal. Keep earlier messages and required provider continuation in private archived segments; do not expose private reasoning in a handoff.
 
-Add a pure `WorkSegmentPolicy` implementation through Cordis. The plugin proposes a bounded next task and context references; core validates and executes transitions. A typical feedback path is a small edit, trusted check, then a fresh focused segment for a specific failure. Avoid imposing a fixed number of steps when the work is already complete.
+The pure `WorkSegmentPolicy` is supplied through resource/Cordis composition. Its initial worker policy closes after three tool rounds or conservative context pressure, with at most four windows over the session lifetime. Core validates transitions against the original workspace baseline, retains the same model/assignment and cumulative budgets, and builds a handoff from frozen instructions/task plus bounded actual tool receipts. The model's next-task proposal remains untrusted. A typical next feedback path is a small edit, trusted check, then a fresh focused segment for a specific failure. Avoid imposing a fixed number of steps when the work is already complete.
 
 Core builds each handoff from frozen objective/criteria, the proposed next task, a verified current diff hash, completed action receipts and references to actual check evidence. Model summaries alone prove none of these facts. An action with `pending` or unknown outcome, cancellation, failed scope inspection or failed persistence prohibits automatic rollover. Required tool-result/continuation chains must finish before a conversation window is retired.
 
@@ -49,3 +49,5 @@ Two implementation gates:
 2. Add managed conversation windows with an atomic archive/handoff checkpoint before the next HTTP request. Separate step completion from logical agent completion in runtime events and UI projection. Start with managed providers; native-client session rotation requires a distinct capability/contract and remains unsupported initially.
 
 Deterministic checks must cover stable routing/identity, criteria and scope preservation, no replay after unknown outcomes or restart, cumulative budgets, reserved review capacity, failed checkpoint preventing dispatch and step events not completing the logical worker. Compare identical synthetic and source cases under identical total ceilings; more short sessions can increase input overhead and request count.
+
+Current evidence: 412 default tests pass. A DeepSeek synthetic route with a two-round diagnostic policy completed one rotation, service checks and fresh review in 16 requests. A mixed DeepSeek/Mac-Qwen Instruct trial rotated once but the worker claimed absent edit permissions despite receiving `edit_file`; it made no edit and was not accepted. One-round experiments hit the window cap while repeating initial reads. This motivates verified feedback next, not larger budgets or a claimed small-model quality improvement. The RTX machine was not contacted during these tests.

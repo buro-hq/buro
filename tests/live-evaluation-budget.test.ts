@@ -201,6 +201,18 @@ test('evaluation separates known context, incomplete output and unavailable reso
       'resource-blocked',
       'LIVE_PROVIDER_UNAVAILABLE',
     ],
+    [
+      'The saved work segment limit is exhausted.',
+      'workSegmentLimit',
+      'resource-blocked',
+      'LIVE_WORK_SEGMENT_LIMIT',
+    ],
+    [
+      'A saved model generation has an unknown outcome. It cannot be automatically repeated.',
+      'unknownOutcome',
+      'resource-blocked',
+      'LIVE_RECONCILIATION_REQUIRED',
+    ],
   ];
   for (const [result, category, status, code] of cases) {
     const diagnosis = classifyEvaluationFailure({ status: 'failed', result });
