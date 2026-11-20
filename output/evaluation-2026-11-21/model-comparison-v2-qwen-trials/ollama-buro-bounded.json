@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-20T23:22:31.620Z",
+  "mode": "ollama",
+  "live": true,
+  "status": "quality-failed",
+  "stage": "coding-goal",
+  "caseId": "synthetic-ready-queue-v1",
+  "forceWorker": true,
+  "segmentPolicy": {
+    "revision": "managed-work-segments-v1"
+  },
+  "models": {
+    "ollama": "qwen3:4b-instruct-2507-q4_K_M"
+  },
+  "contextTokensByProvider": {
+    "ollama": 16384
+  },
+  "fixtureDirectory": "/tmp/buro-provider-evaluation-iRxHPh",
+  "diagnostic": {
+    "status": "passed",
+    "runtimeId": "ollama-live",
+    "tools": true,
+    "structured": true
+  },
+  "runId": "R-85cf5c7d-e22b-4bce-b7c7-ead952d1c4a3",
+  "currentPhase": "done",
+  "run": {
+    "planSaved": false,
+    "planStepsCount": 0,
+    "lastPhaseBeforeDone": "planning",
+    "planningPolicy": {
+      "version": 1,
+      "mode": "bounded",
+      "revision": "bounded-planning-v2"
+    },
+    "managedBudget": {
+      "version": 1,
+      "coverage": "managed-api",
+      "policy": {
+        "version": 1,
+        "maxRequests": 64,
+        "maxReservedOutputTokens": 131072,
+        "maxToolCalls": 256,
+        "reviewReserve": {
+          "requests": 8,
+          "outputTokens": 16384,
+          "toolCalls": 32
+        }
+      },
+      "status": "open",
+      "used": {
+        "requests": 2,
+        "reservedOutputTokens": 3779,
+        "toolCalls": 0
+      },
+      "workUsed": {
+        "requests": 2,
+        "reservedOutputTokens": 3779,
+        "toolCalls": 0
+      },
+      "reviewUsed": {
+        "requests": 0,
+        "reservedOutputTokens": 0,
+        "toolCalls": 0
+      },
+      "observed": {
+        "inputTokens": 3784,
+        "outputTokens": 1747,
+        "completeUsageRequests": 2,
+        "unknownUsageRequests": 0
+      }
+    },
+    "status": "failed",
+    "phase": "done",
+    "profile": "evaluation",
+    "policy": "local-only",
+    "baselinePassed": 0,
+    "baselineTotal": 1,
+    "acceptancePassed": 0,
+    "acceptanceTotal": 0,
+    "independentReviewer": false,
+    "acceptedCommit": false,
+    "changedFiles": [],
+    "sessions": [
+      {
+        "role": "coordinator",
+        "runtimeId": "ollama-live",
+        "requestedModelMatchesConfigured": true,
+        "reportedModelMatchesConfigured": true
+      }
+    ]
+  },
+  "originalSourcePreserved": true,
+  "checkpoints": [
+    {
+      "requests": 2,
+      "actions": [],
+      "usage": {
+        "requestsWithUsage": 2,
+        "inputTokens": 3784,
+        "outputTokens": 1747
+      }
+    }
+  ],
+  "failureClassification": {
+    "category": "qualityFailure",
+    "status": "quality-failed",
+    "code": "LIVE_CODING_QUALITY_FAILED",
+    "evidence": "unknown",
+    "basis": "public-status-message heuristic"
+  },
+  "error": {
+    "code": "LIVE_CODING_QUALITY_FAILED"
+  },
+  "http": {
+    "requests": [
+      {
+        "requestIndex": 1,
+        "provider": "ollama",
+        "maxOutputTokens": 1024,
+        "toolNames": [
+          "diagnostic_echo"
+        ]
+      },
+      {
+        "requestIndex": 2,
+        "provider": "ollama",
+        "maxOutputTokens": 1024,
+        "toolNames": []
+      },
+      {
+        "requestIndex": 3,
+        "provider": "ollama",
+        "maxOutputTokens": 2048,
+        "toolNames": []
+      },
+      {
+        "requestIndex": 4,
+        "provider": "ollama",
+        "maxOutputTokens": 1731,
+        "toolNames": []
+      }
+    ],
+    "responses": [
+      {
+        "requestIndex": 1,
+        "provider": "ollama",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "diagnostic_echo"
+        ],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 185,
+          "outputTokens": 23
+        }
+      },
+      {
+        "requestIndex": 2,
+        "provider": "ollama",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 107,
+          "outputTokens": 6
+        }
+      },
+      {
+        "requestIndex": 3,
+        "provider": "ollama",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 1208,
+          "outputTokens": 887
+        }
+      },
+      {
+        "requestIndex": 4,
+        "provider": "ollama",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 2576,
+          "outputTokens": 860
+        }
+      }
+    ],
+    "metadata": {
+      "ollama": 5,
+      "deepseek": 0
+    }
+  },
+  "budget": {
+    "limits": {
+      "maxGenerationRequests": 24,
+      "maxReservedOutputTokens": 65536,
+      "maxDiagnosticRequests": 2,
+      "diagnosticWallTimeMs": 120000,
+      "codingWallTimeMs": 300000,
+      "contextTokens": 32768,
+      "maxOutputTokens": 2048
+    },
+    "generationRequests": 4,
+    "diagnosticRequests": 2,
+    "reservedOutputTokens": 5827,
+    "observedInputTokens": 4076,
+    "observedOutputTokens": 1776,
+    "requestsWithCompleteUsage": 4,
+    "requestsWithUnknownUsage": 0,
+    "reservationRefunds": 0,
+    "cost": "unknown"
+  },
+  "finishedAt": "2026-11-20T23:23:26.983Z"
+}

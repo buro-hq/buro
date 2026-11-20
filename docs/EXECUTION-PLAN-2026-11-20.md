@@ -97,3 +97,9 @@ Committed the controlled comparison harness and first eight synthetic results in
 ### Policy-shaped output and file search repair
 
 [Private-project evaluation details removed.]
+
+### Measured outcome and next priorities — 2026-11-21
+
+[Private-project evaluation details removed.]
+
+[Private-project evaluation details removed.]

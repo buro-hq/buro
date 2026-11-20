@@ -168,7 +168,7 @@ test('file search feeds real edits and check-feedback repair without widening a 
             fingerprint: hash(await fs.readFile(path.join(directory, file), 'utf8')),
           })),
         );
-        files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+        files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
         return {
           version: 1,
           baseCommit: 'a'.repeat(40),

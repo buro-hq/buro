@@ -13,7 +13,7 @@ Buro is still in development. It supports your installed Codex CLI and opt-in **
 
 The [product vision](VISION.md), [target architecture](ARCHITECTURE.md) and [provider integration contract](docs/PROVIDERS.md) define the full direction. Buro owns worker dispatch, tools and verification; richer replanning and concurrent runs remain on the roadmap.
 
-The [implementation sequence](docs/IMPLEMENTATION.md) tracks the transition from the existing route to that vision.
+The [implementation sequence](docs/IMPLEMENTATION.md) tracks the transition from the existing route to that vision. The [controlled model comparison](docs/MODEL-COMPARISON-2026-11-21.md) records direct Codex, Buro and local/cloud model results and their current limits.
 
 ![Buro project office with the coordinator, developer, test author and reviewer](docs/images/office.png)
 
