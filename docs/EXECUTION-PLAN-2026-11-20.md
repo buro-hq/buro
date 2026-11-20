@@ -70,6 +70,14 @@ Reserve the selected check count through the same managed tool ledger before eff
 
 Dynamic specialists/task graph, queued/concurrent runs with one writer per workspace, durable operator questions, versioned disclosure grants, RTX connection/reconnect lifecycle, then agreed dense goals/material hierarchy/office-feed/agent details on real service data. Extract workflow responsibilities in small reviewed increments. SQLite, pagination and retention follow bounded read-model design, with migration/replay evidence.
 
+### Model/profile setup without manual JSON
+
+Complete the agreed resource onboarding as a separate bounded slice: an active API's discovered model can create managed runtime definitions and one new execution profile atomically. `resources.setup.save` accepts a semantic configuration revision, zero to eight new managed definitions and an explicit profile with coordinator/worker/reviewer/authorized pool/local-or-hybrid policy. Create-only IDs, no default change, no old runtime/profile overwrite, no inference or diagnostic on save. Per-connection editing remains separate. The revision excludes command receipts and credential values; stale/external edits cannot be overwritten.
+
+Active catalogs remain authoritative for run/role selection. Expose configured pending definitions separately; new definitions activate only after service restart. Server-side `resources.use` must reject a pending profile/dependency before cached receipts, and new pending runtime probes must not contact the old client. Existing owned/frozen routes and defaults remain intact. After restart the user explicitly selects the new machine/project profile, then role preferences can use its authorized pool. A new endpoint currently needs restart before discovery and another after model/profile creation; display this honestly until draft metadata has its own contract.
+
+Five-agent ownership: shared protocol/configuration storage/CLI; factory lifecycle and server guards; Mantine model/team wizard and EN/RU/browser gate; integration/concurrency/restart tests; independent architecture/boundary review. Primary agent maintains plan/docs and verifies final artifacts. Preserve the Mac-only live testing constraint and the existing source grants. Onboarding is metadata-only and needs no new live model calls.
+
 ## Stage log
 
 [Private-project evaluation details removed.]

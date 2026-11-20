@@ -7,6 +7,7 @@ export function useResourceCatalog(projectId?: string) {
   const supported =
     !!client && connection === 'connected' && !!snapshot?.capabilities.includes('resources.list');
   const canConfigure = supported && !!snapshot?.capabilities.includes('resources.connection.save');
+  const canSetup = supported && !!snapshot?.capabilities.includes('resources.setup.save');
   const [catalog, setCatalog] = useState<ResourceCatalog | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,5 +42,5 @@ export function useResourceCatalog(projectId?: string) {
       generation.current++;
     };
   }, [refresh, supported]);
-  return { client, supported, canConfigure, catalog, error, loading, refresh };
+  return { client, supported, canConfigure, canSetup, catalog, error, loading, refresh };
 }

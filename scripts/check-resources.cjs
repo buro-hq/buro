@@ -22,6 +22,7 @@ const { chromium, expect } = require('@playwright/test');
     port = 0;
   let failNextCatalog = false;
   let failConnectionSave = false;
+  let failSetupSave = false;
   const errors = [];
   try {
     await privateFiles.save('resources', {
@@ -131,7 +132,13 @@ const { chromium, expect } = require('@playwright/test');
         const route = new URL(String(url)).pathname;
         if (route === '/api/tags') {
           modelsRequested++;
-          return Response.json({ models: [{ name: 'fixture-coder' }, { name: 'fixture-helper' }] });
+          return Response.json({
+            models: [
+              { name: 'fixture-coder' },
+              { name: 'fixture-helper' },
+              { name: 'fixture:cloud' },
+            ],
+          });
         }
         if (route === '/api/show')
           return Response.json({
@@ -166,6 +173,12 @@ const { chromium, expect } = require('@playwright/test');
       },
     });
     const catalogHandler = host.ctx.commands.bus.handlers.get('resources.list');
+    const setupHandler = host.ctx.commands.bus.handlers.get('resources.setup.save');
+    host.ctx.commands.bus.handlers.set('resources.setup.save', (...args) => {
+      if (failSetupSave)
+        throw new DomainError('FIXTURE_SETUP_UNAVAILABLE', 'Fixture team save unavailable');
+      return setupHandler(...args);
+    });
     const saveConnectionHandler = host.ctx.commands.bus.handlers.get('resources.connection.save');
     host.ctx.commands.bus.handlers.set('resources.connection.save', (...args) => {
       if (failConnectionSave)
@@ -212,7 +225,7 @@ const { chromium, expect } = require('@playwright/test');
     await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
     const ollama = page.locator('[data-connection-id="ollama"]');
     await ollama.getByRole('button', { name: 'Available models', exact: true }).click();
-    await page.getByText('fixture-coder · fixture-helper', { exact: true }).waitFor();
+    await ollama.locator('[data-model-id="fixture-helper"]').waitFor();
     assert.equal(modelsRequested, 1);
     await page.getByRole('button', { name: 'Check model', exact: true }).click();
     await page.getByText('ollama · Connection checked', { exact: true }).waitFor();
@@ -464,13 +477,182 @@ const { chromium, expect } = require('@playwright/test');
     await dialog.locator('.mantine-Modal-close').click();
     assert.equal(modelsRequested, 1, 'Role editing never discovers provider models');
     assert.equal(generations, 2, 'Role editing, model selection and role.save never run inference');
+    // Model discovery leads to an explicit new team profile, never a new default or inference.
+    await page.getByRole('button', { name: 'User settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await ollama.getByRole('button', { name: 'Available models', exact: true }).click();
+    const modelHelper = ollama.locator('[data-model-id="fixture-helper"]');
+    await modelHelper.getByRole('button', { name: 'Use in team', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Profile ID', exact: true }).fill('helper-team');
+    await dialog.getByRole('textbox', { name: 'Profile name', exact: true }).fill('Helper team');
+    const beforeConcurrentSetup = await catalogHandler({});
+    await host.ctx.commands.bus.execute(
+      {
+        method: 'resources.setup.save',
+        params: {
+          expectedRevision: beforeConcurrentSetup.configurationRevision,
+          runtimes: [
+            {
+              id: 'ollama-fixture-helper',
+              client: 'managed',
+              connectionId: 'ollama',
+              model: 'other-helper',
+            },
+          ],
+          profile: {
+            id: 'concurrent-team',
+            name: 'Concurrent team',
+            policy: 'hybrid',
+            coordinator: 'codex',
+            worker: 'ollama-fixture-helper',
+            reviewer: 'codex',
+          },
+        },
+      },
+      { id: 'concurrent-setup', fingerprint: 'concurrent-setup' },
+    );
+    await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
+    await dialog
+      .getByText(
+        'Resource settings changed elsewhere. Cancel, refresh, then create the profile again.',
+        { exact: true },
+      )
+      .waitFor();
+    await expect(dialog.getByRole('textbox', { name: 'Profile name', exact: true })).toHaveValue(
+      'Helper team',
+    );
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.locator('[data-pending-profile="concurrent-team"]').waitFor();
+    await modelHelper.getByRole('button', { name: 'Use in team', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Profile ID', exact: true }).fill('helper-team');
+    await dialog.getByRole('textbox', { name: 'Profile name', exact: true }).fill('Helper team');
+    await dialog.getByRole('textbox', { name: 'Data policy', exact: true }).click();
+    await page.getByRole('option', { name: 'Local only', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
+    await dialog
+      .getByText(
+        'Local-only teams cannot include external or native runtimes. Choose local models or explicitly select Hybrid.',
+        { exact: true },
+      )
+      .waitFor();
+    for (const label of ['Coordinator model', 'Reviewer model']) {
+      await dialog.getByRole('textbox', { name: label, exact: true }).click();
+      await page
+        .getByRole('option', { name: 'fixture-coder · ollama · local-coder', exact: true })
+        .click();
+    }
+    await dialog.getByRole('textbox', { name: 'Allowed worker models', exact: true }).click();
+    await page.getByRole('option', { name: 'Codex', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Allowed worker models', exact: true }).click();
+    await page
+      .getByRole('option', { name: 'fixture-coder · ollama · local-coder', exact: true })
+      .click();
+    await dialog.getByRole('textbox', { name: 'Profile name', exact: true }).click();
+    failSetupSave = true;
+    await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
+    await dialog.getByText('Fixture team save unavailable', { exact: true }).waitFor();
+    await expect(dialog.getByRole('textbox', { name: 'Profile name', exact: true })).toHaveValue(
+      'Helper team',
+    );
+    failSetupSave = false;
+    await page.screenshot({ path: 'artifacts/model-team-setup.png', fullPage: true });
+    await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    await page
+      .locator('[data-pending-profile="helper-team"]')
+      .getByText('Restart required', { exact: true })
+      .waitFor();
+    const configuredTeam = await privateFiles.load('resources');
+    const helperRuntime = configuredTeam.runtimes.find(
+      (runtime) => runtime.model === 'fixture-helper',
+    );
+    assert.equal(helperRuntime.connectionId, 'ollama');
+    assert.equal(
+      helperRuntime.id,
+      'ollama-fixture-helper-2',
+      'Generated runtime ID avoids a saved pending collision',
+    );
+    assert.equal(helperRuntime.limits.contextTokens, 16384);
+    assert.equal(helperRuntime.limits.maxOutputTokens, 2048);
+    assert.equal(configuredTeam.defaultProfile, 'codex');
+    assert.ok(
+      configuredTeam.runtimes.some(
+        (runtime) => runtime.id === 'codex' && runtime.client === 'codex',
+      ),
+    );
+    assert.deepEqual(
+      configuredTeam.profiles.find((profile) => profile.id === 'helper-team').workerPool.sort(),
+      [helperRuntime.id, 'local-coder'].sort(),
+    );
+    assert.equal(
+      (await catalogHandler({})).profiles.some((profile) => profile.id === 'helper-team'),
+      false,
+    );
+    assert.equal(
+      generations,
+      2,
+      'Opening, validation, conflicts and saving a team do not generate responses',
+    );
+
+    // Reusing an active model adds only a profile, never another runtime definition.
+    const runtimeCountBeforeReuse = (await privateFiles.load('resources')).runtimes.length;
+    await ollama
+      .locator('[data-model-id="fixture-coder"]')
+      .getByRole('button', { name: 'Use in team', exact: true })
+      .click();
+    await dialog.getByText('Existing model configuration', { exact: true }).waitFor();
+    await dialog.getByRole('textbox', { name: 'Profile ID', exact: true }).fill('reuse-team');
+    await dialog
+      .getByRole('textbox', { name: 'Profile name', exact: true })
+      .fill('Reused model team');
+    await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    assert.equal((await privateFiles.load('resources')).runtimes.length, runtimeCountBeforeReuse);
+    assert.equal(
+      (await privateFiles.load('resources')).profiles.find((item) => item.id === 'reuse-team')
+        .worker,
+      'local-coder',
+    );
+    // A cloud-backed Ollama tag cannot be declared local, even with local other roles.
+    await ollama
+      .locator('[data-model-id="fixture:cloud"]')
+      .getByRole('button', { name: 'Use in team', exact: true })
+      .click();
+    await dialog.getByRole('textbox', { name: 'Data policy', exact: true }).click();
+    await page.getByRole('option', { name: 'Local only', exact: true }).click();
+    for (const label of ['Coordinator model', 'Reviewer model']) {
+      await dialog.getByRole('textbox', { name: label, exact: true }).click();
+      await page
+        .getByRole('option', { name: 'fixture-coder · ollama · local-coder', exact: true })
+        .click();
+    }
+    await dialog.getByRole('textbox', { name: 'Allowed worker models', exact: true }).click();
+    await page.getByRole('option', { name: 'Codex', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Profile name', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
+    await dialog
+      .getByText(
+        'Local-only teams cannot include external or native runtimes. Choose local models or explicitly select Hybrid.',
+        { exact: true },
+      )
+      .waitFor();
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    assert.equal(
+      (await privateFiles.load('resources')).runtimes.some(
+        (runtime) => runtime.model === 'fixture:cloud',
+      ),
+      false,
+    );
+
     // API settings only persist a pending configuration. They never contact a provider.
     const beforeConnections = await privateFiles.load('resources');
     const activeWorker = structuredClone(
       host.ctx.agentRuntime.selection.forProject('codex-panel').worker,
     );
     await page.getByRole('button', { name: 'User settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    if (!(await page.getByRole('button', { name: 'Add API connection', exact: true }).isVisible()))
+      await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
     await page.getByRole('button', { name: 'Add API connection', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Connection ID', exact: true }).fill('rtx-fixture');
     await dialog
@@ -640,8 +822,187 @@ const { chromium, expect } = require('@playwright/test');
       ollama.getByRole('button', { name: 'Available models', exact: true }),
     ).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Check model', exact: true })).toBeDisabled();
-    assert.equal(modelsRequested, 1, 'Connection edits never perform model discovery');
+    assert.equal(modelsRequested, 2, 'Connection edits never perform model discovery');
     assert.equal(generations, 2, 'Connection edits never perform inference');
+    // A real fresh host activates saved definitions; selecting the profile remains explicit.
+    await host.dispose();
+    host = await createHost({
+      projects: [
+        {
+          directory: path.join(root, 'project'),
+          project: { id: 'codex-panel', name: 'Resource settings fixture', root, managed: true },
+        },
+      ],
+    });
+    await host.ctx.plugin(projectManagementPlugin, {
+      catalogFile: path.join(root, 'linked-projects.json'),
+      policies: {},
+      workspaces: new GitWorkspaces(host.ctx.projects.registry),
+      checks: {
+        async run() {
+          throw Error('Settings cannot run checks');
+        },
+      },
+    });
+    await host.ctx.plugin(resourcesPlugin, {
+      directory: root,
+      executors: new EnvironmentExecutors(),
+      fetch: async (url) => {
+        if (new URL(String(url)).pathname === '/api/tags') {
+          modelsRequested++;
+          return Response.json({ models: [{ name: 'fresh-before-edit' }] });
+        }
+        throw Error('Restart or profile selection cannot contact providers');
+      },
+    });
+    await host.ctx.plugin(websocketPlugin, {
+      port: 0,
+      onListen: (value) => {
+        port = value;
+      },
+    });
+    await page.goto(base + '?daemon=' + encodeURIComponent('ws://127.0.0.1:' + port));
+    await page.getByRole('button', { name: 'User settings', exact: true }).click();
+    await expect(
+      page.getByRole('textbox', { name: 'Default execution profile', exact: true }),
+    ).toHaveValue('Codex');
+    await page.getByRole('textbox', { name: 'Default execution profile', exact: true }).click();
+    await page.getByRole('option', { name: 'Helper team', exact: true }).click();
+    await page.getByText('Local only', { exact: true }).waitFor();
+    assert.equal((await privateFiles.load('resources')).defaultProfile, 'helper-team');
+    assert.equal(
+      host.ctx.projects.registry.get('codex-panel').snapshot().profile.resourceProfile,
+      'local',
+      'Project overrides survive machine setup and restart',
+    );
+    await page.getByRole('button', { name: 'Project settings', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Execution profile', exact: true }).click();
+    await page.getByRole('option', { name: 'Helper team', exact: true }).click();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page.getByText('Settings saved', { exact: true }).waitFor();
+    await page.locator('.sidebar').getByRole('button', { name: 'Team', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit role legacy_worker', exact: true }).click();
+    await dialog.getByText('Prefer', { exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Model from project pool', exact: true }).click();
+    await page.getByRole('option', { name: 'fixture-helper · ollama', exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    await dialog.locator('.mantine-Modal-close').click();
+    assert.deepEqual(
+      host.ctx.projects.registry.get('codex-panel').snapshot().profile.managedBudget,
+      profile.managedBudget,
+    );
+    assert.equal(
+      generations,
+      2,
+      'Activation, profile selection and role editing do not generate responses',
+    );
+
+    // Keep the same settings component mounted across a real service reconnect.
+    await page.getByRole('button', { name: 'User settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await ollama.getByRole('button', { name: 'Available models', exact: true }).click();
+    await ollama.locator('[data-model-id="fresh-before-edit"]').waitFor();
+    await ollama
+      .locator('[data-model-id="fresh-before-edit"]')
+      .getByRole('button', { name: 'Use in team', exact: true })
+      .click();
+    await dialog.getByRole('textbox', { name: 'Profile ID', exact: true }).fill('reconnect-team');
+    await dialog.getByRole('textbox', { name: 'Profile name', exact: true }).fill('Reconnect team');
+    await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    await page
+      .getByRole('status')
+      .filter({ hasText: 'Team profile saved. Restart the service, then select it explicitly.' })
+      .waitFor();
+
+    const discoveryBeforeExternalEdit = modelsRequested;
+    const liveCatalog = await host.ctx.commands.bus.execute(
+      { method: 'resources.list', params: {} },
+      { id: 'discovery-revision-catalog', fingerprint: 'discovery-revision-catalog' },
+    );
+    const configuredOllama = (await privateFiles.load('resources')).connections.find(
+      (connection) => connection.id === 'ollama',
+    );
+    await host.ctx.commands.bus.execute(
+      {
+        method: 'resources.connection.save',
+        params: {
+          connection: { ...configuredOllama, capacity: 4 },
+          expectedRevision: liveCatalog.connections.find((connection) => connection.id === 'ollama')
+            .revision,
+        },
+      },
+      { id: 'external-discovery-revision-edit', fingerprint: 'external-discovery-revision-edit' },
+    );
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await ollama.getByText('Restart required', { exact: true }).waitFor();
+    assert.equal(await ollama.locator('[data-model-id="fresh-before-edit"]').count(), 0);
+    const reconnectPort = port;
+    await host.dispose();
+    host = await createHost({
+      projects: [
+        {
+          directory: path.join(root, 'project'),
+          project: { id: 'codex-panel', name: 'Resource settings fixture', root, managed: true },
+        },
+      ],
+    });
+    await host.ctx.plugin(resourcesPlugin, {
+      directory: root,
+      executors: new EnvironmentExecutors(),
+      fetch: async (url) => {
+        if (new URL(String(url)).pathname === '/api/tags') {
+          modelsRequested++;
+          return Response.json({ models: [{ name: 'fresh-after-edit' }] });
+        }
+        throw Error('Metadata reconnect must not run model inference');
+      },
+    });
+    await host.ctx.plugin(websocketPlugin, {
+      port: reconnectPort,
+      onListen: (value) => {
+        port = value;
+      },
+    });
+    await expect(
+      page.getByRole('textbox', { name: 'Default execution profile', exact: true }),
+    ).toHaveValue('Helper team', { timeout: 15000 });
+    if (!(await ollama.getByRole('button', { name: 'Available models', exact: true }).isVisible()))
+      await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await expect(
+      ollama.getByRole('button', { name: 'Available models', exact: true }),
+    ).toBeEnabled();
+    await expect(ollama.getByText('Restart required', { exact: true })).toHaveCount(0);
+    assert.equal(
+      modelsRequested,
+      discoveryBeforeExternalEdit,
+      'Reconnect never implicitly discovers models',
+    );
+    await page
+      .getByRole('status')
+      .filter({ hasText: 'Team profile ready. Select it explicitly to use it for new runs.' })
+      .waitFor();
+    assert.equal(
+      await page
+        .getByRole('status')
+        .filter({ hasText: 'Team profile saved. Restart the service, then select it explicitly.' })
+        .count(),
+      0,
+    );
+    await page.getByRole('textbox', { name: 'Default execution profile', exact: true }).click();
+    await page.getByRole('option', { name: 'Reconnect team', exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+
+    assert.equal(
+      await ollama.locator('[data-model-id="fresh-before-edit"]').count(),
+      0,
+      'A model list from the old connection revision cannot reappear after restart',
+    );
+    await ollama.getByRole('button', { name: 'Available models', exact: true }).click();
+    await ollama.locator('[data-model-id="fresh-after-edit"]').waitFor();
+    assert.equal(modelsRequested, discoveryBeforeExternalEdit + 1);
+    assert.equal(generations, 2);
+
     assert.deepEqual(errors, []);
     await fs.writeFile(
       'artifacts/resources-ui-verification.json',
@@ -668,6 +1029,18 @@ const { chromium, expect } = require('@playwright/test');
           remoteDeepSeekHttpRejected: true,
           staleConnectionEditRejected: true,
           activeResourcesUnchanged: true,
+          modelTeamWizard: true,
+          setupStaleRevisionRejected: true,
+          setupLocalOnlyRejectsNative: true,
+          setupLocalOnlyRejectsCloud: true,
+          setupRuntimeIdsAvoidPendingCollision: true,
+          setupReusesExistingModel: true,
+          setupDefaultPreserved: true,
+          setupActivatedAfterRestart: true,
+          configuredModelAvailableInProjectPool: true,
+          discoveryBoundToConnectionRevision: true,
+          reconnectRequiresExplicitRediscovery: true,
+          setupStatusUpdatesAfterReconnect: true,
           errors,
         },
         null,

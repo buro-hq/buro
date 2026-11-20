@@ -67,12 +67,17 @@ export const resourcesPlugin: Plugin.Object<{
     );
     ctx.effect(() =>
       ctx.commands.bus.register('resources.use', (params, meta) =>
-        resources.configuration.use(meta.id, meta.fingerprint, params.profileId),
+        resources.useProfile(params.profileId, meta),
       ),
     );
     ctx.effect(() =>
       ctx.commands.bus.register('resources.connection.save', (params, meta) =>
         resources.saveConnection(params.connection, params.expectedRevision, meta),
+      ),
+    );
+    ctx.effect(() =>
+      ctx.commands.bus.register('resources.setup.save', (params, meta) =>
+        resources.saveSetup(params, meta),
       ),
     );
     ctx.on('project/snapshot', (snapshot) => {
@@ -82,6 +87,7 @@ export const resourcesPlugin: Plugin.Object<{
         'resources.probe',
         'resources.use',
         'resources.connection.save',
+        'resources.setup.save',
       );
     });
   },

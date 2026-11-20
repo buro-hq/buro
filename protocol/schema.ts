@@ -16,6 +16,7 @@ import {
   AssignmentResourceSchema,
   AssignmentSelectionSchema,
   ResourceConnectionSchema,
+  ResourceSetupInputSchema,
 } from './resources.ts';
 
 const id = z
@@ -70,6 +71,10 @@ export const CommandSchema = z.discriminatedUnion('method', [
         .regex(/^[a-f0-9]{64}$/)
         .nullable(),
     }),
+  }),
+  z.strictObject({
+    method: z.literal('resources.setup.save'),
+    params: ResourceSetupInputSchema,
   }),
   z.strictObject({
     method: z.literal('filesystem.list'),

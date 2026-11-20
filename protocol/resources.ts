@@ -72,6 +72,28 @@ export type ResourceConnectionCatalogEntry = ResourceConnection & {
   activeEndpoint?: string;
   restartRequired?: boolean;
 };
+export const ManagedLimitsSchema = z
+  .strictObject({
+    contextTokens: z.number().int().min(1024).max(262144).default(32768),
+    maxOutputTokens: z.number().int().min(128).max(32768).default(4096),
+    maxRequestsPerTurn: z.number().int().min(1).max(64).default(24),
+    maxToolCallsPerTurn: z.number().int().min(1).max(128).default(64),
+    maxSessionRequests: z.number().int().min(1).max(1024).default(256),
+  })
+  .refine((limits) => limits.maxOutputTokens < limits.contextTokens, 'Reserve input context.');
+export const ManagedRuntimeDefinitionSchema = z.strictObject({
+  id: ResourceIdSchema.refine((value) => value !== 'codex', 'The Codex runtime ID is reserved.'),
+  client: z.literal('managed'),
+  connectionId: ResourceIdSchema,
+  model: z.string().min(1).max(200),
+  limits: ManagedLimitsSchema.default(() => ManagedLimitsSchema.parse({})),
+});
+export const RuntimeDefinitionSchema = z.discriminatedUnion('client', [
+  z.strictObject({ id: z.literal('codex'), client: z.literal('codex') }),
+  ManagedRuntimeDefinitionSchema,
+]);
+export type ManagedRuntimeDefinition = z.infer<typeof ManagedRuntimeDefinitionSchema>;
+export type RuntimeDefinition = z.infer<typeof RuntimeDefinitionSchema>;
 export const RuntimeResourceSchema = z.object({
   id: ResourceIdSchema,
   client: z.enum(['codex', 'managed']),
@@ -102,6 +124,12 @@ export const ResourceProfileSchema = z
         message: 'The worker pool must contain unique runtime IDs and include the default worker.',
       });
   });
+export const ResourceSetupInputSchema = z.strictObject({
+  expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
+  runtimes: z.array(ManagedRuntimeDefinitionSchema).max(8),
+  profile: ResourceProfileSchema,
+});
+export type ResourceSetupInput = z.infer<typeof ResourceSetupInputSchema>;
 export const ResourceSnapshotSchema = z
   .object({
     profileId: ResourceIdSchema,
@@ -156,6 +184,11 @@ export type RuntimePurpose =
   | 'environment'
   | 'delivery';
 export type ResourceCatalog = {
+  configurationRevision?: string;
+  configured?: {
+    runtimes: { definition: RuntimeDefinition; restartRequired: boolean }[];
+    profiles: { profile: ResourceProfile; restartRequired: boolean }[];
+  };
   defaultProfile: string;
   profiles: ResourceProfile[];
   runtimes: RuntimeResource[];

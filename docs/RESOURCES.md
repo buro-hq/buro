@@ -24,6 +24,16 @@ Saving a connection requires a Buro service restart to apply it. The interface s
 
 Every saved connection has its own revision. Edits must submit that revision; creating an ID requires a null revision. A stale edit asks the user to reload settings, and repeated command IDs reuse their saved receipt. External changes to the private configuration are rejected until the service reloads them. Adding a connection configures only its API settings: installed models, runtimes and execution profiles are separate steps.
 
+## Add a model and team through the interface
+
+For an active connection, choose **Available models → Use in team**. The form creates a new execution profile and, if needed, its managed model runtime without editing JSON. Review the profile name/ID, coordinator, primary worker, independent reviewer and allowed alternative workers. The primary worker is always included in its pool. Local-only rejects native/remote choices; Hybrid explicitly permits only the selected configured routes. The form starts from the actual current profile, never invents a cloud coordinator or changes the default by itself.
+
+Existing model configurations are reused. New Ollama configurations start at a conservative 16K context / 2K output cap unless a matching configured model supplies its saved limits; advanced limits are editable. No model is downloaded, generated or probed when opening/saving the form. Discovery is explicit, and its displayed model list is tied to the connection revision so results from an old endpoint do not reappear after reconnect.
+
+Saving atomically adds new IDs only and shows the profile as pending. Restart Buro, explicitly choose the new default or project override, then optionally run the model diagnostic. Existing project overrides, role preferences, defaults and frozen sessions stay intact. After selecting the profile for a project, **Team → Specialist model** offers its authorized pool. A completely new endpoint currently needs a restart before discovery and another after creating its model/profile; there is no hidden hot replacement of an executing client.
+
+The same shared API is `resources.setup.save` with `{ expectedRevision, runtimes, profile }`. `expectedRevision` is `configurationRevision` from `resources list`; it covers semantic settings and excludes command receipts/private credentials. `runtimes` contains zero to eight new managed definitions; `profile` names existing/new runtime IDs. Existing IDs cannot be overwritten, and failures leave no partial model/profile. Active `profiles`/`runtimes` remain separate from `configured` pending definitions. Server guards reject selecting/probing pending definitions before cached receipts or provider lookup, including concurrent queued edits. CLI: `npm run cli -- resources setup-save /path/to/setup.json`.
+
 For CLI setup, inspect or create the private configuration:
 
 ```sh

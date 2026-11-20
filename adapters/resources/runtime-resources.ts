@@ -6,7 +6,11 @@ import { ManagedAgentRuntime } from '../../core/managed-runtime.ts';
 import { conservativeRequestPolicy, type ManagedRequestPolicy } from '../../core/request-policy.ts';
 import { ResourceSelection } from '../../core/resource-selection.ts';
 import { CapabilityProbeService, type ProbeReceipt } from '../../core/capability-probe.ts';
-import type { ResourceConnection, RuntimeResource } from '../../protocol/resources.ts';
+import type {
+  ResourceConnection,
+  ResourceSetupInput,
+  RuntimeResource,
+} from '../../protocol/resources.ts';
 import { CodexRuntime } from '../codex/runtime.ts';
 import { OllamaProvider } from '../models/ollama.ts';
 import { DeepSeekProvider } from '../models/deepseek.ts';
@@ -15,6 +19,7 @@ import { FileManagedSessions } from '../files/managed-sessions.ts';
 import {
   FileResourceConfiguration,
   connectionConfigurationRevision,
+  resourceConfigurationRevision,
 } from '../files/resource-configuration.ts';
 import { PrivateJSONFiles } from '../files/private-json.ts';
 import { loadModelCredentials } from '../files/model-credentials.ts';
@@ -197,6 +202,48 @@ export async function createRuntimeResources(options: {
         'Restart the service to apply this model connection before starting new work.',
       );
   };
+  const pendingRuntime = (runtimeId: string) => {
+    const saved = configuration.snapshot().runtimes.find((item) => item.id === runtimeId);
+    const active = config.runtimes.find((item) => item.id === runtimeId);
+    return (
+      !!saved &&
+      (!active ||
+        JSON.stringify(saved) !== JSON.stringify(active) ||
+        (saved.client === 'managed' && pending(saved.connectionId)))
+    );
+  };
+  const profileRuntimeIds = (profile: (typeof config.profiles)[number]) => [
+    profile.coordinator,
+    profile.worker,
+    profile.reviewer,
+    ...(profile.workerPool || []),
+  ];
+  const pendingProfile = (profileId: string) => {
+    const saved = configuration.snapshot().profiles.find((item) => item.id === profileId);
+    const active = config.profiles.find((item) => item.id === profileId);
+    return (
+      !!saved &&
+      (!active ||
+        JSON.stringify(saved) !== JSON.stringify(active) ||
+        profileRuntimeIds(saved).some(pendingRuntime))
+    );
+  };
+  const assertActiveProfile = (profileId: string) => {
+    const active = config.profiles.find((item) => item.id === profileId);
+    const saved = configuration.snapshot().profiles.find((item) => item.id === profileId);
+    if (!saved)
+      throw new DomainError('RESOURCE_PROFILE_UNAVAILABLE', 'Resource profile unavailable.');
+    if (!active || JSON.stringify(saved) !== JSON.stringify(active))
+      throw new DomainError(
+        'RESOURCE_PROFILE_RESTART_REQUIRED',
+        'Restart the service to activate this execution profile before selecting it.',
+      );
+    if (profileRuntimeIds(active).some(pendingRuntime))
+      throw new DomainError(
+        'CONNECTION_RESTART_REQUIRED',
+        "Restart the service to apply this profile's resource connections before selecting it.",
+      );
+  };
   const selection: RuntimeSelection = {
     forProject(projectId) {
       const selected = activeSelection.forProject(projectId);
@@ -206,14 +253,29 @@ export async function createRuntimeResources(options: {
         selected.reviewer,
         ...(selected.workerPool || []),
       ])
-        if (resource.providerId) assertActive(resource.providerId);
+        if (pendingRuntime(resource.id))
+          throw new DomainError(
+            'CONNECTION_RESTART_REQUIRED',
+            'Restart the service to apply this execution resource before starting new work.',
+          );
       return selected;
     },
   };
   const list = async (projectId?: string) => ({
     defaultProfile: configuration.snapshot().defaultProfile,
-    profiles: config.profiles,
-    runtimes: resources,
+    profiles: structuredClone(config.profiles),
+    runtimes: structuredClone(resources),
+    configurationRevision: resourceConfigurationRevision(configuration.snapshot()),
+    configured: {
+      runtimes: configuration.snapshot().runtimes.map((definition) => ({
+        definition,
+        restartRequired: pendingRuntime(definition.id),
+      })),
+      profiles: configuration.snapshot().profiles.map((profile) => ({
+        profile,
+        restartRequired: pendingProfile(profile.id),
+      })),
+    },
     connections: configuration.snapshot().connections.map((connection) => ({
       ...connection,
       revision: connectionConfigurationRevision(connection),
@@ -237,6 +299,10 @@ export async function createRuntimeResources(options: {
     ).filter(Boolean),
   });
   const models = async (connectionId: string) => {
+    // Admit against all writes already submitted when this request arrived, without holding
+    // the metadata mutation queue for the duration of the HTTP request.
+    const priorMutations = mutationTail;
+    await priorMutations;
     assertActive(connectionId);
     const provider = providers.get(connectionId);
     if (!provider) throw new DomainError('CONNECTION_UNAVAILABLE', 'Model connection unavailable.');
@@ -268,15 +334,52 @@ export async function createRuntimeResources(options: {
     id: randomUUID,
   });
   const probe = async (runtimeId: string, meta: { id: string; fingerprint: string }) => {
+    const priorMutations = mutationTail;
+    await priorMutations;
     const runtime = config.runtimes.find((item) => item.id === runtimeId);
-    if (runtime?.client === 'managed') assertActive(runtime.connectionId);
+    const saved = configuration.snapshot().runtimes.find((item) => item.id === runtimeId);
+    if (saved && (!runtime || JSON.stringify(saved) !== JSON.stringify(runtime)))
+      throw new DomainError(
+        'RESOURCE_RUNTIME_RESTART_REQUIRED',
+        'Restart the service to activate this model runtime before checking it.',
+      );
+    if (!runtime || runtime.client !== 'managed')
+      throw new DomainError(
+        'PROBE_UNSUPPORTED',
+        'Select an active managed model runtime for the capability probe.',
+      );
+    assertActive(runtime.connectionId);
     return probeService.probe(meta.id, meta.fingerprint, runtimeId);
+  };
+  // Serialize public mutations so lifecycle guards observe all earlier acknowledged writes,
+  // including before an idempotent selection receipt is replayed. File persistence stays authoritative.
+  let mutationTail: Promise<unknown> = Promise.resolve();
+  const mutate = <T>(action: () => Promise<T>) => {
+    const next = mutationTail.then(action);
+    mutationTail = next.catch(() => {});
+    return next;
   };
   const saveConnection = (
     connection: ResourceConnection,
     expectedRevision: string | null,
     meta: { id: string; fingerprint: string },
-  ) => configuration.save(meta.id, meta.fingerprint, connection, expectedRevision);
+  ) => {
+    const definition = structuredClone(connection),
+      { id, fingerprint } = meta;
+    return mutate(() => configuration.save(id, fingerprint, definition, expectedRevision));
+  };
+  const saveSetup = (input: ResourceSetupInput, meta: { id: string; fingerprint: string }) => {
+    const setup = structuredClone(input),
+      { id, fingerprint } = meta;
+    return mutate(() => configuration.saveSetup(id, fingerprint, setup));
+  };
+  const useProfile = (profileId: string, meta: { id: string; fingerprint: string }) => {
+    const { id, fingerprint } = meta;
+    return mutate(() => {
+      assertActiveProfile(profileId);
+      return configuration.use(id, fingerprint, profileId);
+    });
+  };
   return {
     configuration,
     runtimes,
@@ -286,6 +389,8 @@ export async function createRuntimeResources(options: {
     models,
     probe,
     saveConnection,
+    saveSetup,
+    useProfile,
     dispose: () => probeService.dispose(),
   };
 }

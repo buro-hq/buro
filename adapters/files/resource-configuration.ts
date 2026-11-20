@@ -6,9 +6,14 @@ import {
   ResourceIdSchema,
   ResourceProfileSchema,
   ResourceConnectionSchema,
+  ResourceSetupInputSchema,
+  RuntimeDefinitionSchema,
   type ResourceConnection,
+  type ResourceSetupInput,
 } from '../../protocol/resources.ts';
+import { endpointIsLocal, modelEndpointURL } from '../../protocol/endpoint-trust.ts';
 import { PrivateJSONFiles } from './private-json.ts';
+export { ManagedLimitsSchema } from '../../protocol/resources.ts';
 export const connectionConfigurationRevision = (connection: ResourceConnection) =>
   createHash('sha256')
     .update(JSON.stringify(ResourceConnectionSchema.parse(connection)))
@@ -16,36 +21,18 @@ export const connectionConfigurationRevision = (connection: ResourceConnection) 
 const receiptSchema = z.union([
   z.strictObject({ fingerprint: z.string(), profileId: ResourceIdSchema }),
   z.strictObject({ fingerprint: z.string(), connectionId: ResourceIdSchema }),
+  z.strictObject({
+    fingerprint: z.string(),
+    setupProfileId: ResourceIdSchema,
+    runtimeIds: z.array(ResourceIdSchema).max(8),
+  }),
 ]);
-export const ManagedLimitsSchema = z
-  .strictObject({
-    contextTokens: z.number().int().min(1024).max(262144).default(32768),
-    maxOutputTokens: z.number().int().min(128).max(32768).default(4096),
-    maxRequestsPerTurn: z.number().int().min(1).max(64).default(24),
-    maxToolCallsPerTurn: z.number().int().min(1).max(128).default(64),
-    maxSessionRequests: z.number().int().min(1).max(1024).default(256),
-  })
-  .refine((limits) => limits.maxOutputTokens < limits.contextTokens, 'Reserve input context.');
 export const ResourceConfigurationSchema = z
   .strictObject({
     version: z.literal(1),
     defaultProfile: ResourceIdSchema,
     connections: z.array(ResourceConnectionSchema).max(16),
-    runtimes: z
-      .array(
-        z.discriminatedUnion('client', [
-          z.strictObject({ id: z.literal('codex'), client: z.literal('codex') }),
-          z.strictObject({
-            id: ResourceIdSchema,
-            client: z.literal('managed'),
-            connectionId: ResourceIdSchema,
-            model: z.string().min(1).max(200),
-            limits: ManagedLimitsSchema.default(() => ManagedLimitsSchema.parse({})),
-          }),
-        ]),
-      )
-      .min(1)
-      .max(32),
+    runtimes: z.array(RuntimeDefinitionSchema).min(1).max(32),
     profiles: z.array(ResourceProfileSchema).min(1).max(32),
     receipts: z.record(z.string(), receiptSchema).default({}),
   })
@@ -82,6 +69,14 @@ export const ResourceConfigurationSchema = z
         ctx.addIssue({ code: 'custom', message: 'A profile references a missing runtime.' });
   });
 export type ResourceConfiguration = z.infer<typeof ResourceConfigurationSchema>;
+/** Machine settings only: command receipts and separate private credentials do not affect the revision. */
+export function resourceConfigurationRevision(configuration: ResourceConfiguration) {
+  const { version, defaultProfile, connections, runtimes, profiles } =
+    ResourceConfigurationSchema.parse(configuration);
+  return createHash('sha256')
+    .update(JSON.stringify({ version, defaultProfile, connections, runtimes, profiles }))
+    .digest('hex');
+}
 export const defaultResources = () =>
   ResourceConfigurationSchema.parse({
     version: 1,
@@ -227,6 +222,113 @@ export class FileResourceConfiguration {
       this.state = validated;
       this.hasPersisted = true;
       return { connectionId: connection.id, appliesTo: 'service-restart' as const };
+    });
+    this.queue = action.catch(() => {});
+    return action;
+  }
+  saveSetup(id: string, fingerprint: string, input: ResourceSetupInput) {
+    const setup = ResourceSetupInputSchema.parse(structuredClone(input));
+    const action = this.queue.then(async () => {
+      const receipt = Object.hasOwn(this.state.receipts, id) ? this.state.receipts[id] : undefined;
+      if (receipt) {
+        if (receipt.fingerprint !== fingerprint || !('setupProfileId' in receipt))
+          throw new DomainError(
+            'IDEMPOTENCY_CONFLICT',
+            'This command ID was used for another resource change.',
+          );
+        return {
+          profileId: receipt.setupProfileId,
+          runtimeIds: [...receipt.runtimeIds],
+          appliesTo: 'service-restart' as const,
+        };
+      }
+      if (resourceConfigurationRevision(this.state) !== setup.expectedRevision)
+        throw new DomainError(
+          'RESOURCE_SETUP_CONFLICT',
+          'Resource settings changed. Reload them before creating the execution profile.',
+        );
+      const ids = new Set(setup.runtimes.map((runtime) => runtime.id));
+      if (
+        ids.size !== setup.runtimes.length ||
+        setup.runtimes.some((runtime) =>
+          this.state.runtimes.some((item) => item.id === runtime.id),
+        ) ||
+        this.state.profiles.some((profile) => profile.id === setup.profile.id)
+      )
+        throw new DomainError(
+          'RESOURCE_SETUP_ID_EXISTS',
+          'Runtime and profile IDs must be new and unique. Existing definitions cannot be replaced.',
+        );
+      if (
+        this.state.runtimes.length + setup.runtimes.length > 32 ||
+        this.state.profiles.length >= 32
+      )
+        throw new DomainError(
+          'RESOURCE_SETUP_LIMIT',
+          'At most 32 model runtimes and 32 execution profiles can be configured.',
+        );
+      const connections = new Map(
+        this.state.connections.map((connection) => [connection.id, connection]),
+      );
+      const runtimes = new Map(
+        [...this.state.runtimes, ...setup.runtimes].map((runtime) => [runtime.id, runtime]),
+      );
+      const referenced = new Set([
+        setup.profile.coordinator,
+        setup.profile.worker,
+        setup.profile.reviewer,
+        ...(setup.profile.workerPool || []),
+      ]);
+      if (
+        setup.runtimes.some((runtime) => !connections.has(runtime.connectionId)) ||
+        [...referenced].some((runtimeId) => !runtimes.has(runtimeId))
+      )
+        throw new DomainError(
+          'RESOURCE_SETUP_REFERENCE',
+          'The execution profile needs existing connections and configured model runtimes.',
+        );
+      const checked = new Set([...ids, ...referenced]);
+      for (const runtimeId of checked) {
+        const runtime = runtimes.get(runtimeId)!;
+        const connection =
+          runtime.client === 'managed' ? connections.get(runtime.connectionId)! : undefined;
+        if (
+          runtime.client === 'managed' &&
+          connection?.kind === 'ollama' &&
+          /(?:[:_-]cloud)(?:$|:)/i.test(runtime.model)
+        )
+          throw new DomainError(
+            'MODEL_REMOTE_ROUTE',
+            'Cloud-backed Ollama models are not enabled by this local-model adapter.',
+          );
+        if (
+          setup.profile.policy === 'local-only' &&
+          referenced.has(runtimeId) &&
+          (runtime.client !== 'managed' ||
+            connection?.kind !== 'ollama' ||
+            !endpointIsLocal(modelEndpointURL(connection.endpoint), connection.trust))
+        )
+          throw new DomainError(
+            'DATA_POLICY_BLOCKED',
+            'A local-only execution profile cannot include remote model runtimes.',
+          );
+      }
+      await this.assertUnchanged();
+      const next = structuredClone(this.state);
+      next.runtimes.push(...setup.runtimes);
+      next.profiles.push(setup.profile);
+      const runtimeIds = setup.runtimes.map((runtime) => runtime.id);
+      Object.defineProperty(next.receipts, id, {
+        value: { fingerprint, setupProfileId: setup.profile.id, runtimeIds },
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+      const validated = ResourceConfigurationSchema.parse(next);
+      await this.files.save('resources', validated);
+      this.state = validated;
+      this.hasPersisted = true;
+      return { profileId: setup.profile.id, runtimeIds, appliesTo: 'service-restart' as const };
     });
     this.queue = action.catch(() => {});
     return action;

@@ -1,21 +1,32 @@
 import { useState } from 'react';
 import { Accordion, Badge, Button, Group, Paper, Select, Stack, Text } from '@mantine/core';
-import type { ResourceCatalog, ResourceConnection } from '../../../protocol/resources.ts';
+import type {
+  ResourceCatalog,
+  ResourceConnection,
+  ResourceSetupInput,
+} from '../../../protocol/resources.ts';
 import { useResourceCatalog } from '../../features/resources/useResourceCatalog';
 import { t } from '../../i18n/index.ts';
 import { ApiConnectionForm } from './ApiConnectionForm';
+import { ModelTeamSetupForm } from './ModelTeamSetupForm';
 
 export function ExecutionResources() {
-  const { client, supported, canConfigure, catalog, error, loading, refresh } =
+  const { client, supported, canConfigure, canSetup, catalog, error, loading, refresh } =
     useResourceCatalog();
   const [busy, setBusy] = useState('');
   const [actionError, setActionError] = useState('');
-  const [models, setModels] = useState<Record<string, string[]>>({});
+  const [models, setModels] = useState<Record<string, { revision: string; models: string[] }>>({});
   const [editing, setEditing] = useState<ResourceCatalog['connections'][number] | 'new' | null>(
     null,
   );
   const [saved, setSaved] = useState(false);
   const [catalogStale, setCatalogStale] = useState(false);
+  const [setup, setSetup] = useState<{
+    catalog: ResourceCatalog;
+    connectionId: string;
+    model: string;
+  } | null>(null);
+  const [setupSaved, setSetupSaved] = useState<string | null>(null);
   if (!supported) return null;
   const profile = catalog?.profiles.find((item) => item.id === catalog.defaultProfile);
   const selected = new Set(profile ? [profile.coordinator, profile.worker, profile.reviewer] : []);
@@ -57,6 +68,17 @@ export function ExecutionResources() {
       setBusy('');
     }
   }
+  async function saveSetup(input: ResourceSetupInput) {
+    setBusy('setup');
+    try {
+      await client!.command({ method: 'resources.setup.save', params: input });
+      setSetupSaved(input.profile.id);
+      setCatalogStale(!(await reload()));
+      setSetup(null);
+    } finally {
+      setBusy('');
+    }
+  }
   async function check(runtimeId: string) {
     setBusy(runtimeId);
     setActionError('');
@@ -70,6 +92,10 @@ export function ExecutionResources() {
     }
   }
   async function discover(connectionId: string) {
+    const revision = catalog?.connections.find(
+      (connection) => connection.id === connectionId,
+    )?.revision;
+    if (!revision) return;
     setBusy(connectionId);
     setActionError('');
     try {
@@ -77,7 +103,10 @@ export function ExecutionResources() {
         method: 'resources.models',
         params: { connectionId },
       });
-      setModels((current) => ({ ...current, [connectionId]: result.map((model) => model.id) }));
+      setModels((current) => ({
+        ...current,
+        [connectionId]: { revision, models: result.map((model) => model.id) },
+      }));
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -156,6 +185,40 @@ export function ExecutionResources() {
                       : t('Connection saved.')}
                   </Text>
                 )}
+                {setupSaved && (
+                  <Text role="status" size="sm" c="dimmed">
+                    {catalogStale ||
+                    catalog?.configured?.profiles.some(
+                      (item) => item.profile.id === setupSaved && item.restartRequired,
+                    )
+                      ? t('Team profile saved. Restart the service, then select it explicitly.')
+                      : catalog?.profiles.some((item) => item.id === setupSaved) &&
+                          catalog.configured?.profiles.some(
+                            (item) => item.profile.id === setupSaved && !item.restartRequired,
+                          )
+                        ? t('Team profile ready. Select it explicitly to use it for new runs.')
+                        : t('Team profile saved. Refresh resource settings to check availability.')}
+                  </Text>
+                )}
+                {catalog?.configured?.profiles
+                  .filter((item) => item.restartRequired)
+                  .map(({ profile }) => (
+                    <Paper key={profile.id} withBorder p="sm" data-pending-profile={profile.id}>
+                      <Group justify="space-between">
+                        <div>
+                          <Text size="sm" fw={600}>
+                            {profile.name}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {t('Saved team profile')} · {profile.id}
+                          </Text>
+                        </div>
+                        <Badge color="orange" variant="light">
+                          {t('Restart required')}
+                        </Badge>
+                      </Group>
+                    </Paper>
+                  ))}
                 {catalog?.connections.map((connection) => (
                   <Paper key={connection.id} withBorder p="sm" data-connection-id={connection.id}>
                     <Group justify="space-between" wrap="wrap">
@@ -212,13 +275,49 @@ export function ExecutionResources() {
                         )}
                       </Group>
                     </Group>
-                    {models[connection.id] && !connection.restartRequired && !catalogStale && (
-                      <Text size="xs" mt="xs" style={{ overflowWrap: 'anywhere' }}>
-                        {models[connection.id].length
-                          ? models[connection.id].join(' · ')
-                          : t('No installed models. Add a model in Ollama, then refresh.')}
-                      </Text>
-                    )}
+                    {models[connection.id]?.revision === connection.revision &&
+                      !connection.restartRequired &&
+                      !catalogStale && (
+                        <Stack gap="xs" mt="xs">
+                          {models[connection.id].models.length ? (
+                            models[connection.id].models.map((model) => (
+                              <Group
+                                key={model}
+                                justify="space-between"
+                                wrap="wrap"
+                                data-model-id={model}
+                              >
+                                <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
+                                  {model}
+                                </Text>
+                                {canSetup &&
+                                  catalog.configurationRevision &&
+                                  catalog.configured && (
+                                    <Button
+                                      variant="light"
+                                      size="xs"
+                                      mih={44}
+                                      disabled={!!busy}
+                                      onClick={() =>
+                                        setSetup({
+                                          catalog: structuredClone(catalog),
+                                          connectionId: connection.id,
+                                          model,
+                                        })
+                                      }
+                                    >
+                                      {t('Use in team')}
+                                    </Button>
+                                  )}
+                              </Group>
+                            ))
+                          ) : (
+                            <Text size="xs">
+                              {t('No installed models. Add a model in Ollama, then refresh.')}
+                            </Text>
+                          )}
+                        </Stack>
+                      )}
                   </Paper>
                 ))}
                 {catalog?.runtimes
@@ -288,6 +387,15 @@ export function ExecutionResources() {
           saving={busy === 'save-connection'}
           onClose={() => setEditing(null)}
           onSave={saveConnection}
+        />
+      )}
+      {setup && (
+        <ModelTeamSetupForm
+          key={setup.connectionId + ':' + setup.model}
+          {...setup}
+          saving={busy === 'setup'}
+          onClose={() => setSetup(null)}
+          onSave={saveSetup}
         />
       )}
     </section>
