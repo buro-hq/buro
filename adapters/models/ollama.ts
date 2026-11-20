@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
 import { DomainError } from '../../core/ports.ts';
-import type { ModelProvider, ModelToolCall } from '../../core/model-ports.ts';
+import type {
+  ModelContext,
+  ModelMessage,
+  ModelProvider,
+  ModelToolCall,
+} from '../../core/model-ports.ts';
 import {
   RequestGate,
   endpointURL,
@@ -27,9 +32,68 @@ export class OllamaProvider implements ModelProvider {
     this.id = options.id;
     this.local = ['localhost', '[::1]'].includes(url.hostname) || /^127\./.test(url.hostname);
     this.revision = createHash('sha256')
-      .update(JSON.stringify(['ollama-native-v1', url.href, options.think ?? 'model-default']))
+      .update(JSON.stringify(['ollama-native-v2', url.href, options.think ?? 'model-default']))
       .digest('hex');
     this.gate = options.gate || new RequestGate(1);
+  }
+  /**
+   * An intentionally lossy request view for explicit non-thinking mode: once every tool
+   * result is present, retain the calls and their evidence without assistant commentary.
+   * Only core-tagged completion notes may be omitted across requests, including after reload.
+   * Private checkpoints remain complete; this is not a lossless provider conversation.
+   */
+  contextMessages(messages: readonly ModelMessage[], context?: ModelContext): ModelMessage[] {
+    const projected = structuredClone([...messages]);
+    if (this.options.think !== false) return projected;
+    const callCounts = new Map<string, number>();
+    const resultCounts = new Map<string, number>();
+    for (const message of messages) {
+      if (message.role === 'assistant')
+        for (const call of message.toolCalls || [])
+          callCounts.set(call.id, (callCounts.get(call.id) || 0) + 1);
+      if (message.role === 'tool' && message.toolCallId)
+        resultCounts.set(message.toolCallId, (resultCounts.get(message.toolCallId) || 0) + 1);
+    }
+    for (let index = 0; index < messages.length; index++) {
+      const message = messages[index];
+      if (message.role !== 'assistant' || !message.toolCalls?.length) continue;
+      const ids = new Set(message.toolCalls.map((call) => call.id));
+      if (
+        ids.size !== message.toolCalls.length ||
+        [...ids].some((id) => !id || callCounts.get(id) !== 1 || resultCounts.get(id) !== 1)
+      )
+        continue;
+      const completed = new Set<string>();
+      let valid = true;
+      for (let next = index + 1; next < messages.length; next++) {
+        const following = messages[next];
+        if (following.role === 'user' || following.role === 'assistant') break;
+        if (following.role !== 'tool') continue;
+        if (!following.toolCallId || !ids.has(following.toolCallId)) {
+          valid = false;
+          break;
+        }
+        completed.add(following.toolCallId);
+      }
+      if (valid && completed.size === ids.size) projected[index].content = '';
+    }
+    const notes = context?.intermediateMessageIndexes;
+    if (
+      notes?.length &&
+      (context?.phase === 'work' ||
+        (context?.phase === 'final' && notes.at(-1) === messages.length - 2)) &&
+      notes.every(
+        (index, position) =>
+          Number.isInteger(index) &&
+          index >= 0 &&
+          (position === 0 || index > notes[position - 1]) &&
+          messages[index]?.role === 'assistant' &&
+          !messages[index].toolCalls?.length &&
+          messages[index + 1]?.role === 'user',
+      )
+    )
+      for (const index of notes) projected[index].content = '';
+    return projected;
   }
   async listModels(signal: AbortSignal) {
     return this.gate.run(signal, async () => {

@@ -13,6 +13,7 @@ import { RequestGate, endpointURL } from '../models/http.ts';
 import { FileManagedSessions } from '../files/managed-sessions.ts';
 import { FileResourceConfiguration } from '../files/resource-configuration.ts';
 import { PrivateJSONFiles } from '../files/private-json.ts';
+import { loadModelCredentials } from '../files/model-credentials.ts';
 import { RepositoryTools } from '../tools/repository-tools.ts';
 import type { EnvironmentExecutors } from '../environments/executors.ts';
 
@@ -22,11 +23,13 @@ export async function createRuntimeResources(options: {
   executors: EnvironmentExecutors;
   fetch?: typeof fetch;
   codex?: { executable?: string; args?: string[] };
+  credentials?: (reference: string) => string | undefined;
 }) {
   const local = path.join(options.directory, 'local');
   options.executors.protectPrivatePaths([local]);
   const configuration = await FileResourceConfiguration.open(local),
     config = configuration.snapshot();
+  const credentials = options.credentials || (await loadModelCredentials(local));
   const sessions = new FileManagedSessions(path.join(local, 'managed-sessions'));
   const probes = new PrivateJSONFiles(path.join(local, 'resource-probes'));
   const tools = new RepositoryTools(options.executors);
@@ -53,7 +56,7 @@ export async function createRuntimeResources(options: {
         ? new OllamaProvider({ ...common, think: connection.think })
         : new DeepSeekProvider({
             ...common,
-            apiKey: () => process.env[connection.apiKeyEnv],
+            apiKey: () => credentials(connection.apiKeyEnv),
             thinking: connection.thinking,
           }),
     );
@@ -119,7 +122,7 @@ export async function createRuntimeResources(options: {
       endpoint: connection.endpoint,
       ...(connection.kind === 'deepseek'
         ? {
-            credentialConfigured: !!process.env[connection.apiKeyEnv],
+            credentialConfigured: !!credentials(connection.apiKeyEnv),
             apiKeyEnv: connection.apiKeyEnv,
           }
         : {}),

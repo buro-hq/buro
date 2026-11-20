@@ -14,11 +14,18 @@ export type ModelMessage = {
   continuation?: unknown;
 };
 export type ModelUsage = { inputTokens?: number; outputTokens?: number };
+export type ModelContext = {
+  phase: 'work' | 'final';
+  /** Core-owned completion-note indexes from the private checkpoint, never model-generated tags. */
+  intermediateMessageIndexes?: readonly number[];
+};
 export interface ModelProvider {
   readonly id: string;
   readonly revision: string;
   readonly local: boolean;
   readonly structuredToolMode?: 'combined' | 'separate-turn';
+  /** Provider-specific request view; the core supplies a clone of the full private history. */
+  contextMessages?(messages: readonly ModelMessage[], context?: ModelContext): ModelMessage[];
   complete(input: {
     requestId: string;
     model: string;
@@ -77,6 +84,7 @@ export type ManagedSession = {
   assignment?: { roleId: string; allowedPaths: string[]; protectedPaths: string[] };
   scopeRevisions?: { revision: number; scope: ToolScope; instructions: string }[];
   messages: ModelMessage[];
+  intermediateNotes?: number[];
   status: 'ready' | 'running' | 'interrupted' | 'failed';
   cancelRequested?: boolean;
   requests: number;

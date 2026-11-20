@@ -23,8 +23,20 @@ For local execution, add a managed runtime and profile to that file. This comple
   "version": 1,
   "defaultProfile": "local",
   "connections": [
-    { "id": "ollama", "kind": "ollama", "endpoint": "http://127.0.0.1:11434", "capacity": 1, "think": false },
-    { "id": "deepseek", "kind": "deepseek", "endpoint": "https://api.deepseek.com", "apiKeyEnv": "DEEPSEEK_API_KEY", "capacity": 2 }
+    {
+      "id": "ollama",
+      "kind": "ollama",
+      "endpoint": "http://127.0.0.1:11434",
+      "capacity": 1,
+      "think": false
+    },
+    {
+      "id": "deepseek",
+      "kind": "deepseek",
+      "endpoint": "https://api.deepseek.com",
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "capacity": 2
+    }
   ],
   "runtimes": [
     { "id": "codex", "client": "codex" },
@@ -43,8 +55,22 @@ For local execution, add a managed runtime and profile to that file. This comple
     }
   ],
   "profiles": [
-    { "id": "local", "name": "Local team", "policy": "local-only", "coordinator": "local-coder", "worker": "local-coder", "reviewer": "local-coder" },
-    { "id": "codex", "name": "Codex", "policy": "hybrid", "coordinator": "codex", "worker": "codex", "reviewer": "codex" }
+    {
+      "id": "local",
+      "name": "Local team",
+      "policy": "local-only",
+      "coordinator": "local-coder",
+      "worker": "local-coder",
+      "reviewer": "local-coder"
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "policy": "hybrid",
+      "coordinator": "codex",
+      "worker": "codex",
+      "reviewer": "codex"
+    }
   ]
 }
 ```
@@ -64,7 +90,7 @@ Qwen3 4B's initial live evaluation is not yet accepted for coding: one diagnosti
 
 ## Add DeepSeek and a mixed team
 
-Provide the key through the daemon process environment named by `apiKeyEnv`, then restart the service so it inherits that environment. Only the variable reference is saved in configuration. Inspect available model IDs:
+Provide the key through the daemon process environment named by `apiKeyEnv`, or the private `local/model-credentials.json` record under the daemon data directory. That file maps the same uppercase references to credentials, requires mode 0600 and must stay outside Git. Environment values take precedence. Restart the daemon after changing the file; credentials are loaded privately, without changing `process.env`. Shared configuration and resource DTOs contain only references/readiness, never keys. Inspect available model IDs:
 
 ```sh
 npm run cli -- resources models deepseek

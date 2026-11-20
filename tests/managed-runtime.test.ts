@@ -9,6 +9,8 @@ import { promisify } from 'node:util';
 import { ManagedAgentRuntime, type ManagedRuntimeOptions } from '../core/managed-runtime.ts';
 import type {
   ManagedSessionStore,
+  ModelContext,
+  ModelMessage,
   ModelProvider,
   ModelToolCall,
   ToolBroker,
@@ -20,6 +22,7 @@ import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { FileProjectRegistry } from '../adapters/files/registry.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { RepositoryTools } from '../adapters/tools/repository-tools.ts';
+import { OllamaProvider } from '../adapters/models/ollama.ts';
 import { EnvironmentExecutors } from '../adapters/environments/executors.ts';
 import { ProjectChecks } from '../adapters/checks/project-commands.ts';
 import { ExecutionService } from '../core/execution.ts';
@@ -382,29 +385,136 @@ test('duplicate tool IDs and exhausted token budgets stop before dispatch', asyn
   assert.equal(requests, 1);
 });
 
-test('separate structured output uses a final-only request without repeating tool actions', async (t) => {
+test('separate structured output keeps the final schema out of tool requests and publishes only the final answer', async (t) => {
   const f = await fixture(t);
+  const schema = {
+    type: 'object',
+    properties: { final_schema_only_marker: { type: 'string' } },
+    required: ['final_schema_only_marker'],
+    additionalProperties: false,
+  };
+  const candidate = 'PRIVATE_INTERMEDIATE_CANDIDATE';
+  const final = '{"final_schema_only_marker":"verified"}';
+  const events: RuntimeEvent[] = [];
   let requests = 0;
   const p: ModelProvider = {
     ...provider(async (input) => {
       requests++;
+      if (requests < 3) {
+        assert.equal(
+          input.schema,
+          undefined,
+          'The tools phase must not request final structured output',
+        );
+        assert.ok(input.tools.length > 0);
+        assert.doesNotMatch(JSON.stringify(input.messages), /final_schema_only_marker/);
+      }
       if (requests === 1)
-        return response([{ id: 'read', name: 'read_file', arguments: { path: 'src/value.mjs' } }]);
-      if (requests === 2) return response([], 'Observed the file. Ready to return JSON.');
+        return response([
+          {
+            id: 'read',
+            name: 'read_file',
+            arguments: { path: 'src/value.mjs' },
+          },
+        ]);
+      if (requests === 2) return response([], candidate);
       assert.deepEqual(input.tools, []);
+      assert.deepEqual(input.schema, schema);
       assert.equal(input.messages.at(-1)?.role, 'user');
-      return response([], '{"ok":true}');
+      assert.ok(input.messages.at(-1)!.content.includes(JSON.stringify(schema)));
+      return response([], final);
     }),
     structuredToolMode: 'separate-turn',
   };
   const runtime = f.make(p),
     started = await f.start(runtime);
-  const answer = await runtime.turn(started.threadId, 'Inspect and report', turnOptions());
-  assert.equal(answer.text, '{"ok":true}');
+  runtime.subscribe((event) => events.push(event));
+  const answer = await runtime.turn(started.threadId, 'Inspect and report', {
+    ...turnOptions(),
+    schema,
+  });
+  assert.equal(answer.text, final);
   assert.equal(requests, 3);
   const saved = await f.sessions.load(started.threadId);
+  assert.equal(saved?.requests, 3, 'Final serialization still consumes a request');
+  assert.deepEqual(saved?.limits, limits);
   assert.equal(saved?.actions.length, 1);
   assert.equal(saved?.actions[0].status, 'completed');
+  assert.ok(saved?.messages.some((message) => message.content === candidate));
+  assert.deepEqual(
+    events.filter((event) => event.type === 'message.completed').map((event) => event.text),
+    [final],
+  );
+  assert.doesNotMatch(
+    JSON.stringify(events),
+    /PRIVATE_INTERMEDIATE_CANDIDATE|PRIVATE_PROVIDER_STATE/,
+  );
+});
+
+test('combined structured tools keep the original single-phase schema instruction', async (t) => {
+  const f = await fixture(t);
+  const schema = {
+    type: 'object',
+    properties: { combined_marker: { type: 'boolean' } },
+  };
+  let requests = 0;
+  const runtime = f.make(
+    provider(async (input) => {
+      requests++;
+      assert.deepEqual(input.schema, schema);
+      assert.ok(
+        input.messages
+          .at(-1)!
+          .content.includes(
+            'Return your final answer as JSON matching this schema: ' + JSON.stringify(schema),
+          ),
+      );
+      return response([], '{"combined_marker":true}');
+    }),
+  );
+  const started = await f.start(runtime);
+  assert.equal(
+    (
+      await runtime.turn(started.threadId, 'Inspect', {
+        ...turnOptions(),
+        schema,
+      })
+    ).text,
+    '{"combined_marker":true}',
+  );
+  assert.equal(requests, 1);
+});
+
+test('separate final serialization never accepts a truncated answer or publishes its intermediate candidate', async (t) => {
+  const f = await fixture(t);
+  for (const finish of ['length', 'failed'] as const) {
+    let requests = 0;
+    const events: RuntimeEvent[] = [];
+    const runtime = f.make({
+      ...provider(async () => {
+        requests++;
+        return requests === 1
+          ? response([], 'PRIVATE_INTERMEDIATE_CANDIDATE')
+          : { ...response([], '{"ok":'), finish };
+      }),
+      structuredToolMode: 'separate-turn',
+    });
+    const started = await f.start(runtime);
+    runtime.subscribe((event) => events.push(event));
+    await assert.rejects(runtime.turn(started.threadId, 'Inspect', turnOptions()), {
+      code: 'MODEL_INCOMPLETE',
+    });
+    const saved = await f.sessions.load(started.threadId);
+    assert.equal(saved?.status, 'failed');
+    assert.equal(saved?.requests, 2);
+    assert.equal(requests, 2);
+    assert.equal(saved?.actions.length, 0);
+    assert.equal(
+      events.some((event) => event.type === 'message.completed'),
+      false,
+    );
+    assert.doesNotMatch(JSON.stringify(events), /PRIVATE_INTERMEDIATE_CANDIDATE/);
+  }
 });
 
 test('final serialization cannot dispatch tools and still consumes the request budget', async (t) => {
@@ -433,6 +543,452 @@ test('final serialization cannot dispatch tools and still consumes the request b
   await assert.rejects(bounded.turn(second.threadId, 'Inspect', turnOptions()), {
     code: 'MODEL_BUDGET_EXHAUSTED',
   });
+});
+
+test('context projection uses a cloned request view for both the guard and inference while preserving full private evidence', async (t) => {
+  const f = await fixture(t);
+  const commentary = 'PRIVATE_COMPLETED_COMMENTARY '.repeat(1000);
+  const candidate = 'PRIVATE_COMPLETION_NOTE '.repeat(1000);
+  const continuation = { private: 'PRIVATE_CORE_CONTINUATION' };
+  const call = {
+    id: 'edit-once',
+    name: 'edit_file',
+    arguments: { path: 'src/value.mjs', oldText: 'value=1', newText: 'value=2' },
+  };
+  const views: ModelMessage[][] = [];
+  const contexts: ModelContext[] = [];
+  const events: RuntimeEvent[] = [];
+  let requests = 0;
+  const bounded = { ...limits, contextTokens: 16000, maxOutputTokens: 1000 };
+  const p: ModelProvider = {
+    ...provider(async (input) => {
+      requests++;
+      assert.equal(input.messages, views.at(-1), 'Send the exact view whose size passed the guard');
+      if (requests === 1)
+        return {
+          ...response([call]),
+          message: { role: 'assistant', content: commentary, toolCalls: [call], continuation },
+        };
+      const assistant = input.messages.find((message) => message.toolCalls?.length)!;
+      const result = input.messages.find((message) => message.role === 'tool')!;
+      assert.equal(assistant.content, '');
+      assert.deepEqual(assistant.toolCalls, [call]);
+      assert.deepEqual(assistant.continuation, continuation);
+      assert.match(result.content, /Edited src\/value.mjs/);
+      const saved = await f.sessions.load(started.threadId);
+      assert.equal(
+        saved?.messages.find((message) => message.toolCalls?.length)?.content,
+        commentary,
+      );
+      assert.ok(
+        new TextEncoder().encode(JSON.stringify(saved?.messages)).length > bounded.contextTokens,
+        'The unprojected checkpoint cannot fit this guard',
+      );
+      if (requests === 3) {
+        assert.equal(input.messages.at(-2)?.content, '');
+        assert.deepEqual(input.messages.at(-2)?.continuation, {
+          private: 'PRIVATE_PROVIDER_STATE',
+        });
+        assert.match(
+          input.messages.at(-1)!.content,
+          /Reconstruct it from the original task and recorded tool results/,
+        );
+      }
+      return response([], requests === 2 ? candidate : '{"ok":true}');
+    }),
+    structuredToolMode: 'separate-turn',
+    contextMessages(messages, context) {
+      // This fake provider deliberately mutates its input to exercise the core clone boundary.
+      const view = messages as ModelMessage[];
+      for (const message of view)
+        if (message.role === 'assistant' && message.toolCalls?.length) message.content = '';
+      assert.ok(context);
+      contexts.push(structuredClone(context));
+      if (context.phase === 'final') {
+        assert.equal(context.intermediateMessageIndexes?.at(-1), view.length - 2);
+        const intermediate = view[context.intermediateMessageIndexes?.at(-1)!];
+        assert.equal(intermediate.role, 'assistant');
+        assert.equal(intermediate.content, candidate);
+        assert.equal(intermediate.toolCalls?.length || 0, 0);
+        intermediate.content = '';
+      } else assert.equal(context.intermediateMessageIndexes?.at(-1), undefined);
+      views.push(view);
+      return view;
+    },
+  };
+  const runtime = f.make(p, { limits: bounded });
+  const started = await f.start(runtime);
+  runtime.subscribe((event) => events.push(event));
+  assert.equal(
+    (await runtime.turn(started.threadId, 'Update the value once and report', turnOptions())).text,
+    '{"ok":true}',
+  );
+  assert.equal(requests, 3);
+  assert.equal(views.length, 3, 'Project every request, including final serialization');
+  assert.deepEqual(
+    contexts.map((context) => context.phase),
+    ['work', 'work', 'final'],
+  );
+  assert.notEqual(views[0], views[1]);
+  const saved = (await f.sessions.load(started.threadId))!;
+  assert.equal(saved.requests, 3);
+  assert.deepEqual(saved.limits, bounded);
+  assert.equal(saved.actions.length, 1);
+  assert.equal(saved.actions[0].status, 'completed');
+  assert.deepEqual(saved.actions[0].call, call);
+  assert.equal(saved.messages.find((message) => message.toolCalls?.length)?.content, commentary);
+  assert.deepEqual(
+    saved.messages.find((message) => message.toolCalls?.length)?.continuation,
+    continuation,
+  );
+  assert.ok(saved.messages.some((message) => message.content === candidate));
+  assert.equal(
+    await fs.readFile(path.join(f.root, 'src/value.mjs'), 'utf8'),
+    'export const value=2;\n',
+  );
+  assert.doesNotMatch(
+    JSON.stringify(events),
+    /PRIVATE_COMPLETED_COMMENTARY|PRIVATE_CORE_CONTINUATION|PRIVATE_COMPLETION_NOTE/,
+  );
+});
+
+test('core-owned intermediate tags survive private reload and omit only marked notes on successive turns', async (t) => {
+  const f = await fixture(t);
+  const contexts: ModelContext[] = [];
+  const actualViews: ModelMessage[][] = [];
+  const events: RuntimeEvent[] = [];
+  const notes = ['PRIVATE_NOTE_ONE '.repeat(1500), 'PRIVATE_NOTE_TWO '.repeat(1500)];
+  const projector = new OllamaProvider({
+    id: 'local',
+    endpoint: 'http://127.0.0.1:11434',
+    think: false,
+  });
+  let requests = 0;
+  const p: ModelProvider = {
+    ...provider(async (input) => {
+      actualViews.push(structuredClone(input.messages));
+      requests++;
+      return response(
+        [],
+        requests % 2 ? notes[(requests - 1) / 2] : JSON.stringify({ result: requests }),
+      );
+    }),
+    structuredToolMode: 'separate-turn',
+    contextMessages(messages, context) {
+      assert.ok(context);
+      contexts.push(structuredClone(context));
+      return projector.contextMessages(messages, context);
+    },
+  };
+  const bounded = { ...limits, contextTokens: 16000, maxOutputTokens: 1000 };
+  const runtime = f.make(p, { limits: bounded });
+  runtime.subscribe((event) => events.push(event));
+  const started = await f.start(runtime);
+  assert.equal(
+    (await runtime.turn(started.threadId, 'First task', turnOptions())).text,
+    '{"result":2}',
+  );
+  const first = (await f.sessions.load(started.threadId))!;
+  assert.equal(first.intermediateNotes?.length, 1);
+  assert.equal(first.messages[first.intermediateNotes![0]].content, notes[0]);
+  await runtime.release(started.threadId);
+  const freshStore = new FileManagedSessions(path.join(f.root, '.buro/local/managed'));
+  assert.deepEqual(
+    (await freshStore.load(started.threadId))?.intermediateNotes,
+    first.intermediateNotes,
+  );
+  const restored = f.make(p, { limits: bounded, sessions: freshStore });
+  restored.subscribe((event) => events.push(event));
+  await restored.resume({
+    projectId: 'p',
+    threadId: started.threadId,
+    workspace: f.root,
+    runId: 'R-fixture',
+    instructions: 'Continue from the saved evidence.',
+  });
+  assert.equal(
+    (await restored.turn(started.threadId, 'Second task', turnOptions())).text,
+    '{"result":4}',
+  );
+  assert.deepEqual(
+    contexts.map((context) => context.phase),
+    ['work', 'final', 'work', 'final'],
+  );
+  assert.equal(contexts[2].intermediateMessageIndexes?.length, 1);
+  assert.equal(contexts[3].intermediateMessageIndexes?.length, 2);
+  assert.equal(actualViews[2][first.intermediateNotes![0]].content, '');
+  assert.ok(actualViews[2].some((message) => message.content === '{"result":2}'));
+  assert.equal(actualViews[3].at(-2)?.content, '');
+  const saved = (await freshStore.load(started.threadId))!;
+  assert.equal(saved.requests, 4);
+  assert.deepEqual(saved.limits, bounded);
+  assert.equal(saved.intermediateNotes?.length, 2);
+  for (let index = 0; index < notes.length; index++) {
+    assert.equal(saved.messages[saved.intermediateNotes![index]].content, notes[index]);
+    assert.deepEqual(saved.messages[saved.intermediateNotes![index]].continuation, {
+      private: 'PRIVATE_PROVIDER_STATE',
+    });
+  }
+  assert.ok(saved.messages.some((message) => message.content === '{"result":2}'));
+  assert.equal(saved.actions.length, 0);
+  assert.doesNotMatch(
+    JSON.stringify(events),
+    /PRIVATE_NOTE_|intermediateNotes|intermediateMessageIndexes/,
+  );
+});
+
+test('intermediate provenance and its final instruction are durable together; failed save leaves the note unmarked', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  const candidate = 'PRIVATE_UNCOMMITTED_NOTE '.repeat(1000);
+  const store: ManagedSessionStore = {
+    load: (id) => f.sessions.load(id),
+    save(session) {
+      if (session.intermediateNotes?.length) throw Error('final instruction persistence failed');
+      return f.sessions.save(session);
+    },
+  };
+  const runtime = f.make(
+    {
+      ...provider(async () => {
+        requests++;
+        return response([], candidate);
+      }),
+      structuredToolMode: 'separate-turn',
+    },
+    { sessions: store },
+  );
+  const started = await f.start(runtime);
+  await assert.rejects(
+    runtime.turn(started.threadId, 'Inspect', turnOptions()),
+    /final instruction persistence failed/,
+  );
+  const saved = (await f.sessions.load(started.threadId))!;
+  assert.equal(requests, 1);
+  assert.equal(saved.requests, 1);
+  assert.equal(saved.intermediateNotes, undefined);
+  assert.equal(saved.messages.at(-1)?.role, 'assistant');
+  assert.equal(saved.messages.at(-1)?.content, candidate);
+  assert.equal(saved.status, 'failed');
+  const projector = new OllamaProvider({
+    id: 'local',
+    endpoint: 'http://127.0.0.1:11434',
+    think: false,
+  });
+  assert.equal(
+    projector.contextMessages(saved.messages, { phase: 'work' }).at(-1)?.content,
+    candidate,
+  );
+});
+
+test('private checkpoint schema rejects invalid, duplicate, unordered or pending intermediate provenance without replacing evidence', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  const runtime = f.make({
+    ...provider(async () => response([], ++requests % 2 ? 'PRIVATE_NOTE' : '{"ok":true}')),
+    structuredToolMode: 'separate-turn',
+  });
+  const started = await f.start(runtime);
+  await runtime.turn(started.threadId, 'Inspect', turnOptions());
+  const saved = (await f.sessions.load(started.threadId))!;
+  const note = saved.intermediateNotes![0];
+  for (const intermediateNotes of [
+    [-1],
+    [0.5],
+    [999],
+    [note, note],
+    [note, 0],
+    [0],
+    [saved.messages.length - 1],
+  ]) {
+    await assert.rejects(async () => f.sessions.save({ ...saved, intermediateNotes }));
+    assert.deepEqual(await f.sessions.load(started.threadId), saved);
+  }
+  const pending = structuredClone(saved);
+  pending.messages.push({ role: 'assistant', content: 'Uncommitted completion note.' });
+  pending.intermediateNotes!.push(pending.messages.length - 1);
+  await assert.rejects(async () => f.sessions.save(pending));
+  const tool = structuredClone(saved);
+  tool.messages[note].toolCalls = [{ id: 'pending', name: 'read_file', arguments: {} }];
+  await assert.rejects(async () => f.sessions.save(tool));
+  assert.deepEqual(await f.sessions.load(started.threadId), saved);
+});
+
+test('omitting the current intermediate content cannot bypass a large private continuation on the final request', async (t) => {
+  const f = await fixture(t);
+  const candidate = 'PRIVATE_CURRENT_NOTE '.repeat(1000);
+  const continuation = { private: 'REQUIRED_FINAL_CONTINUATION '.repeat(1000) };
+  let requests = 0;
+  const phases: string[] = [];
+  const runtime = f.make(
+    {
+      ...provider(async () => {
+        requests++;
+        return {
+          ...response([], candidate),
+          message: { role: 'assistant', content: candidate, continuation },
+        };
+      }),
+      structuredToolMode: 'separate-turn',
+      contextMessages(messages, context) {
+        phases.push(context!.phase);
+        const view = messages as ModelMessage[];
+        if (context?.phase === 'final')
+          view[context.intermediateMessageIndexes?.at(-1)!].content = '';
+        return view;
+      },
+    },
+    { limits: { ...limits, contextTokens: 16000, maxOutputTokens: 1000 } },
+  );
+  const started = await f.start(runtime);
+  await assert.rejects(runtime.turn(started.threadId, 'Inspect', turnOptions()), {
+    code: 'MODEL_CONTEXT_EXHAUSTED',
+  });
+  assert.equal(requests, 1);
+  assert.deepEqual(phases, ['work', 'final']);
+  const saved = (await f.sessions.load(started.threadId))!;
+  assert.equal(saved.requests, 1);
+  const intermediate = saved.messages.at(-2)!;
+  assert.equal(intermediate.content, candidate);
+  assert.deepEqual(intermediate.continuation, continuation);
+  assert.equal(saved.actions.length, 0);
+});
+
+test('essential tool results and private continuation still exhaust projected context before another model request', async (t) => {
+  const f = await fixture(t);
+  for (const essential of ['tool-result', 'continuation']) {
+    let requests = 0,
+      projections = 0,
+      actions = 0;
+    const oversized = 'ESSENTIAL_PRIVATE_EVIDENCE '.repeat(1000);
+    const continuation = { private: essential === 'continuation' ? oversized : 'kept' };
+    const result = essential === 'tool-result' ? oversized : 'Read completed';
+    const p: ModelProvider = {
+      ...provider(async () => {
+        requests++;
+        return {
+          ...response([
+            { id: 'read-once', name: 'read_file', arguments: { path: 'src/value.mjs' } },
+          ]),
+          message: {
+            ...response([
+              { id: 'read-once', name: 'read_file', arguments: { path: 'src/value.mjs' } },
+            ]).message,
+            content: 'OMITTABLE_COMMENTARY '.repeat(1000),
+            continuation,
+          },
+        };
+      }),
+      contextMessages(messages) {
+        projections++;
+        const view = messages as ModelMessage[];
+        for (const message of view) if (message.toolCalls?.length) message.content = '';
+        return view;
+      },
+    };
+    const runtime = f.make(p, {
+      limits: { ...limits, contextTokens: 16000, maxOutputTokens: 1000 },
+      tools: {
+        definitions: () => [],
+        execute: async () => {
+          actions++;
+          return { content: result };
+        },
+      },
+    });
+    const started = await f.start(runtime);
+    await assert.rejects(runtime.turn(started.threadId, 'Inspect', turnOptions()), {
+      code: 'MODEL_CONTEXT_EXHAUSTED',
+    });
+    const saved = (await f.sessions.load(started.threadId))!;
+    assert.equal(requests, 1);
+    assert.equal(projections, 2);
+    assert.equal(actions, 1);
+    assert.equal(saved.requests, 1);
+    assert.equal(saved.actions[0].status, 'completed');
+    assert.equal(saved.actions[0].result?.content, result);
+    assert.deepEqual(
+      saved.messages.find((message) => message.toolCalls?.length)?.continuation,
+      continuation,
+    );
+    assert.match(
+      saved.messages.find((message) => message.toolCalls?.length)!.content,
+      /OMITTABLE_COMMENTARY/,
+    );
+  }
+});
+
+test('providers without context projection retain the full-history guard and never silently omit commentary', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  const commentary = 'REQUIRED_ORIGINAL_COMMENTARY '.repeat(1000);
+  const runtime = f.make(
+    provider(async () => {
+      requests++;
+      return {
+        ...response([{ id: 'read', name: 'read_file', arguments: { path: 'src/value.mjs' } }]),
+        message: {
+          ...response([{ id: 'read', name: 'read_file', arguments: { path: 'src/value.mjs' } }])
+            .message,
+          content: commentary,
+        },
+      };
+    }),
+    { limits: { ...limits, contextTokens: 16000, maxOutputTokens: 1000 } },
+  );
+  const started = await f.start(runtime);
+  await assert.rejects(runtime.turn(started.threadId, 'Inspect', turnOptions()), {
+    code: 'MODEL_CONTEXT_EXHAUSTED',
+  });
+  const saved = (await f.sessions.load(started.threadId))!;
+  assert.equal(requests, 1);
+  assert.equal(saved.requests, 1);
+  assert.equal(saved.actions.length, 1);
+  assert.equal(saved.messages.find((message) => message.toolCalls?.length)?.content, commentary);
+});
+
+test('context projection cannot reset request budgets before separate final serialization', async (t) => {
+  const f = await fixture(t);
+  let requests = 0,
+    projections = 0;
+  const p: ModelProvider = {
+    ...provider(async () => {
+      requests++;
+      return requests === 1
+        ? {
+            ...response([
+              { id: 'read-once', name: 'read_file', arguments: { path: 'src/value.mjs' } },
+            ]),
+            message: {
+              ...response([
+                { id: 'read-once', name: 'read_file', arguments: { path: 'src/value.mjs' } },
+              ]).message,
+              content: 'PRIVATE_COMPLETED_COMMENTARY '.repeat(1000),
+            },
+          }
+        : response([], 'PRIVATE_COMPLETION_NOTE');
+    }),
+    structuredToolMode: 'separate-turn',
+    contextMessages(messages) {
+      projections++;
+      const view = messages as ModelMessage[];
+      for (const message of view) if (message.toolCalls?.length) message.content = '';
+      return view;
+    },
+  };
+  const bounded = { ...limits, contextTokens: 16000, maxOutputTokens: 1000, maxRequestsPerTurn: 2 };
+  const runtime = f.make(p, { limits: bounded }),
+    started = await f.start(runtime);
+  await assert.rejects(runtime.turn(started.threadId, 'Inspect', turnOptions()), {
+    code: 'MODEL_BUDGET_EXHAUSTED',
+  });
+  const saved = (await f.sessions.load(started.threadId))!;
+  assert.equal(requests, 2);
+  assert.equal(projections, 2);
+  assert.equal(saved.requests, 2);
+  assert.deepEqual(saved.limits, bounded);
+  assert.equal(saved.actions.length, 1);
+  assert.equal(saved.actions[0].status, 'completed');
 });
 
 test('interrupt intent survives cancellation and concurrent turns cannot share a session', async (t) => {

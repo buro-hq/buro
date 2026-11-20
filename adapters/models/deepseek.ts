@@ -34,7 +34,7 @@ export class DeepSeekProvider implements ModelProvider {
     this.options = options;
     this.id = options.id;
     this.revision = createHash('sha256')
-      .update(JSON.stringify(['deepseek-chat-v1', endpoint.href, options.thinking ?? 'disabled']))
+      .update(JSON.stringify(['deepseek-chat-v2', endpoint.href, options.thinking ?? 'disabled']))
       .digest('hex');
     this.gate = options.gate || new RequestGate(2);
   }
@@ -89,7 +89,7 @@ export class DeepSeekProvider implements ModelProvider {
           ...(input.tools.length
             ? { tools: input.tools.map((tool) => ({ type: 'function', function: tool })) }
             : {}),
-          response_format: { type: 'json_object' },
+          ...(input.schema != null ? { response_format: { type: 'json_object' } } : {}),
           max_tokens: input.maxOutputTokens,
           thinking: { type: this.options.thinking ?? 'disabled' },
           stream: true,

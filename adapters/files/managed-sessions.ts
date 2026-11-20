@@ -24,60 +24,80 @@ const scope = z.object({
   commands: z.array(z.object({ id: z.string(), command: z.string(), timeoutMs: z.number() })),
   baseCommit: z.string().optional(),
 });
-const schema = z.object({
-  version: z.literal(1),
-  id: z.string(),
-  runtimeId: z.string(),
-  limits: z.object({
-    contextTokens: z.number().int().positive(),
-    maxOutputTokens: z.number().int().positive(),
-    maxRequestsPerTurn: z.number().int().positive(),
-    maxToolCallsPerTurn: z.number().int().positive(),
-    maxSessionRequests: z.number().int().positive(),
-  }),
-  providerId: z.string(),
-  providerRevision: z.string(),
-  requestedModel: z.string(),
-  reportedModel: z.string().optional(),
-  scope,
-  assignment: z
-    .object({
-      roleId: z.string(),
-      allowedPaths: z.array(z.string()),
-      protectedPaths: z.array(z.string()),
-    })
-    .optional(),
-  scopeRevisions: z
-    .array(z.object({ revision: z.number().int().positive(), scope, instructions: z.string() }))
-    .optional(),
-  messages: z.array(
-    z.object({
-      role: z.enum(['system', 'user', 'assistant', 'tool']),
-      content: z.string(),
-      toolCalls: z.array(call).optional(),
-      toolCallId: z.string().optional(),
-      toolName: z.string().optional(),
-      continuation: z.unknown().optional(),
+const schema = z
+  .object({
+    version: z.literal(1),
+    id: z.string(),
+    runtimeId: z.string(),
+    limits: z.object({
+      contextTokens: z.number().int().positive(),
+      maxOutputTokens: z.number().int().positive(),
+      maxRequestsPerTurn: z.number().int().positive(),
+      maxToolCallsPerTurn: z.number().int().positive(),
+      maxSessionRequests: z.number().int().positive(),
     }),
-  ),
-  status: z.enum(['ready', 'running', 'interrupted', 'failed']),
-  cancelRequested: z.boolean().optional(),
-  requests: z.number().int().nonnegative(),
-  usage: z.object({
-    requestsWithUsage: z.number().int().nonnegative(),
-    inputTokens: z.number().nonnegative(),
-    outputTokens: z.number().nonnegative(),
-  }),
-  actions: z.array(
-    z.object({
-      id: z.string(),
-      turnId: z.string(),
-      call,
-      status: z.enum(['pending', 'completed', 'unknown']),
-      result: result.optional(),
+    providerId: z.string(),
+    providerRevision: z.string(),
+    requestedModel: z.string(),
+    reportedModel: z.string().optional(),
+    scope,
+    assignment: z
+      .object({
+        roleId: z.string(),
+        allowedPaths: z.array(z.string()),
+        protectedPaths: z.array(z.string()),
+      })
+      .optional(),
+    scopeRevisions: z
+      .array(z.object({ revision: z.number().int().positive(), scope, instructions: z.string() }))
+      .optional(),
+    messages: z.array(
+      z.object({
+        role: z.enum(['system', 'user', 'assistant', 'tool']),
+        content: z.string(),
+        toolCalls: z.array(call).optional(),
+        toolCallId: z.string().optional(),
+        toolName: z.string().optional(),
+        continuation: z.unknown().optional(),
+      }),
+    ),
+    intermediateNotes: z.array(z.number().int().nonnegative()).optional(),
+    status: z.enum(['ready', 'running', 'interrupted', 'failed']),
+    cancelRequested: z.boolean().optional(),
+    requests: z.number().int().nonnegative(),
+    usage: z.object({
+      requestsWithUsage: z.number().int().nonnegative(),
+      inputTokens: z.number().nonnegative(),
+      outputTokens: z.number().nonnegative(),
     }),
-  ),
-});
+    actions: z.array(
+      z.object({
+        id: z.string(),
+        turnId: z.string(),
+        call,
+        status: z.enum(['pending', 'completed', 'unknown']),
+        result: result.optional(),
+      }),
+    ),
+  })
+  .superRefine((session, ctx) => {
+    const notes = session.intermediateNotes || [];
+    if (
+      notes.some(
+        (index, position) =>
+          (position > 0 && index <= notes[position - 1]) ||
+          session.messages[index]?.role !== 'assistant' ||
+          !!session.messages[index]?.toolCalls?.length ||
+          session.messages[index + 1]?.role !== 'user',
+      )
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['intermediateNotes'],
+        message:
+          'Intermediate notes must be unique ordered no-tool assistant messages followed by a user message.',
+      });
+  });
 
 /** Private checkpoints live separately from public project state and exported events. */
 export class FileManagedSessions implements ManagedSessionStore {

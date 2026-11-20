@@ -98,7 +98,7 @@ export class CapabilityProbeService {
       {
         role: 'user',
         content:
-          'Capability diagnostic. First call diagnostic_echo exactly once with value "buro-ready". After its result, return only JSON {"ok":true}. Do not answer before calling the tool.',
+          'Capability diagnostic. Call diagnostic_echo exactly once with value "buro-ready", then stop and wait for its result. Do not answer before calling the tool.',
       },
     ];
     const generate = (final = false) =>
@@ -120,12 +120,14 @@ export class CapabilityProbeService {
                 },
               },
             ],
-        schema: {
-          type: 'object',
-          properties: { ok: { type: 'boolean' } },
-          required: ['ok'],
-          additionalProperties: false,
-        },
+        schema: final
+          ? {
+              type: 'object',
+              properties: { ok: { type: 'boolean' } },
+              required: ['ok'],
+              additionalProperties: false,
+            }
+          : undefined,
         contextTokens: binding.contextTokens,
         maxOutputTokens: Math.min(binding.maxOutputTokens, 1024),
         signal: controller.signal,
@@ -150,12 +152,20 @@ export class CapabilityProbeService {
           'MODEL_CAPABILITY_FAILED',
           'The model did not produce the required diagnostic tool call.',
         );
-      messages.push(first.message, {
-        role: 'tool',
-        toolCallId: calls[0].id,
-        toolName: calls[0].name,
-        content: '{"value":"buro-ready"}',
-      });
+      messages.push(
+        first.message,
+        {
+          role: 'tool',
+          toolCallId: calls[0].id,
+          toolName: calls[0].name,
+          content: '{"value":"buro-ready"}',
+        },
+        {
+          role: 'user',
+          content:
+            'The diagnostic tool result is available. Return only JSON {"ok":true}. Do not call tools again.',
+        },
+      );
       const second = await generate(true);
       controller.signal.throwIfAborted();
       let answer: unknown;

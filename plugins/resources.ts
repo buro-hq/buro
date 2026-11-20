@@ -12,6 +12,7 @@ export const resourcesPlugin: Plugin.Object<{
   executors: EnvironmentExecutors;
   fetch?: typeof fetch;
   codex?: { executable?: string; args?: string[] };
+  credentials?: (reference: string) => string | undefined;
 }> = {
   name: 'execution-resources',
   inject: ['projects', 'commands'],

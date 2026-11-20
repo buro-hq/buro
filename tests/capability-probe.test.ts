@@ -33,7 +33,12 @@ function fixture(complete?: ModelProvider['complete']) {
       requests++;
       if (complete) return complete(input);
       assert.equal(store.requests.get('command')?.status, 'started');
-      if (requests === 1)
+      if (requests === 1) {
+        assert.equal(input.schema, undefined);
+        assert.equal(input.tools.length, 1);
+        assert.equal(input.messages.length, 1);
+        assert.match(input.messages[0].content, /diagnostic_echo exactly once/);
+        assert.doesNotMatch(input.messages[0].content, /JSON|"ok"/);
         return {
           model: 'model-reported',
           finish: 'tools',
@@ -41,12 +46,27 @@ function fixture(complete?: ModelProvider['complete']) {
             role: 'assistant',
             content: '',
             toolCalls: [
-              { id: 'echo', name: 'diagnostic_echo', arguments: { value: 'buro-ready' } },
+              {
+                id: 'echo',
+                name: 'diagnostic_echo',
+                arguments: { value: 'buro-ready' },
+              },
             ],
             continuation: { private: 'PRIVATE_REASONING' },
           },
         };
+      }
       assert.match(JSON.stringify(input.messages), /PRIVATE_REASONING/);
+      assert.deepEqual(input.tools, []);
+      assert.equal(input.messages.at(-2)?.role, 'tool');
+      assert.equal(input.messages.at(-1)?.role, 'user');
+      assert.match(input.messages.at(-1)!.content, /Return only JSON/);
+      assert.deepEqual(input.schema, {
+        type: 'object',
+        properties: { ok: { type: 'boolean' } },
+        required: ['ok'],
+        additionalProperties: false,
+      });
       return {
         model: 'model-reported',
         finish: 'stop',
@@ -158,4 +178,62 @@ test('service disposal aborts model inference and preserves a retry-safe interru
   await rejected;
   assert.equal(f.store.requests.get('command')?.status, 'failed');
   assert.equal(f.requests(), 1);
+});
+
+test('separated probe instructions still reject duplicate calls and truncated or malformed terminal answers', async () => {
+  const first = {
+    model: 'm',
+    finish: 'tools' as const,
+    message: {
+      role: 'assistant' as const,
+      content: '',
+      toolCalls: [
+        {
+          id: 'echo',
+          name: 'diagnostic_echo',
+          arguments: { value: 'buro-ready' },
+        },
+      ],
+    },
+  };
+  const final = {
+    model: 'm',
+    finish: 'stop' as const,
+    message: { role: 'assistant' as const, content: '{"ok":true}' },
+  };
+  const invalid = [
+    {
+      first: {
+        ...first,
+        message: {
+          ...first.message,
+          toolCalls: [
+            first.message.toolCalls[0],
+            { ...first.message.toolCalls[0], id: 'duplicate' },
+          ],
+        },
+      },
+    },
+    { first: { ...first, finish: 'length' as const } },
+    { final: { ...final, message: { ...final.message, content: '{"ok":' } } },
+    { final: { ...final, finish: 'length' as const } },
+    {
+      final: {
+        ...final,
+        message: { ...final.message, toolCalls: first.message.toolCalls },
+      },
+    },
+  ];
+  for (const fault of invalid) {
+    let requests = 0;
+    const f = fixture(async () => (++requests === 1 ? fault.first || first : fault.final || final));
+    const service = f.make();
+    await assert.rejects(service.probe('command', 'fingerprint', 'runtime'), {
+      code: 'MODEL_CAPABILITY_FAILED',
+    });
+    assert.equal(requests, fault.first ? 1 : 2);
+    assert.equal(f.store.results.size, 0);
+    assert.equal(f.store.requests.get('command')?.status, 'failed');
+    await service.dispose();
+  }
 });

@@ -5,6 +5,7 @@ const os = require('node:os');
 const { randomUUID } = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const { EvaluationBudget, createBudgetedFetch } = require('./lib/live-provider-runner.cjs');
 const exec = promisify(execFile);
 
 if (process.env.BURO_LIVE_OLLAMA !== '1') {
@@ -12,6 +13,126 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
     'Opt-in only: set BURO_LIVE_OLLAMA=1 to run a real Qwen3 4B diagnostic and coding goal.',
   );
   process.exitCode = 1;
+} else if (process.env.BURO_LIVE_OLLAMA_DIAGNOSTIC === '1') {
+  (async () => {
+    const { OllamaProvider } = await import('../adapters/models/ollama.ts');
+    const report = {
+      startedAt: new Date().toISOString(),
+      mode: 'single-generation-codec-diagnostic',
+      model: 'qwen3:4b',
+      status: 'running',
+    };
+    let observation;
+    const provider = new OllamaProvider({
+      id: 'ollama-local-diagnostic',
+      endpoint: 'http://127.0.0.1:11434',
+      think: false,
+      fetch: async (url, init) => {
+        assert.equal(new URL(String(url)).origin, 'http://127.0.0.1:11434');
+        const response = await fetch(url, init);
+        observation = response
+          .clone()
+          .text()
+          .then((body) => {
+            const chunks = body
+              .split('\n')
+              .filter(Boolean)
+              .map((line) => JSON.parse(line));
+            report.wire = {
+              status: response.status,
+              doneReason: chunks.findLast((chunk) => chunk.done)?.done_reason,
+              contentCharacters: chunks.reduce(
+                (total, chunk) => total + (chunk.message?.content?.length || 0),
+                0,
+              ),
+              privateThinkingCharacters: chunks.reduce(
+                (total, chunk) => total + (chunk.message?.thinking?.length || 0),
+                0,
+              ),
+              calls: chunks.flatMap((chunk, frame) =>
+                (chunk.message?.tool_calls || []).map((call, position) => ({
+                  frame,
+                  position,
+                  index: call.index,
+                  functionIndex: call.function?.index,
+                  name: call.function?.name,
+                  argumentsType: typeof call.function?.arguments,
+                  argumentKeys:
+                    call.function?.arguments && typeof call.function.arguments === 'object'
+                      ? Object.keys(call.function.arguments)
+                      : undefined,
+                  exactEcho:
+                    JSON.stringify(call.function?.arguments) ===
+                    JSON.stringify({ value: 'buro-ready' }),
+                })),
+              ),
+            };
+          });
+        return response;
+      },
+    });
+    try {
+      const result = await provider.complete({
+        requestId: 'single-codec-' + randomUUID(),
+        model: report.model,
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Capability diagnostic. First call diagnostic_echo exactly once with value "buro-ready". After its result, return only JSON {"ok":true}. Do not answer before calling the tool.',
+          },
+        ],
+        tools: [
+          {
+            name: 'diagnostic_echo',
+            description: 'Read-only readiness diagnostic',
+            parameters: {
+              type: 'object',
+              properties: { value: { type: 'string', enum: ['buro-ready'] } },
+              required: ['value'],
+              additionalProperties: false,
+            },
+          },
+        ],
+        schema: {
+          type: 'object',
+          properties: { ok: { type: 'boolean' } },
+          required: ['ok'],
+          additionalProperties: false,
+        },
+        maxOutputTokens: 1024,
+        contextTokens: 16384,
+        signal: AbortSignal.timeout(120000),
+        onProgress() {},
+      });
+      report.normalized = {
+        finish: result.finish,
+        contentCharacters: result.message.content.length,
+        calls: (result.message.toolCalls || []).map((call) => ({
+          name: call.name,
+          exactEcho: JSON.stringify(call.arguments) === JSON.stringify({ value: 'buro-ready' }),
+        })),
+        usage: result.usage,
+      };
+      report.status = 'observed';
+    } catch (error) {
+      report.status = 'failed';
+      report.error = { code: error.code || 'DIAGNOSTIC_FAILED', message: error.message };
+      process.exitCode = 1;
+    } finally {
+      await observation;
+      report.finishedAt = new Date().toISOString();
+      await fs.mkdir('artifacts', { recursive: true });
+      await fs.writeFile(
+        'artifacts/live-ollama-stage1-codec.json',
+        JSON.stringify(report, null, 2),
+      );
+      console.log(JSON.stringify(report, null, 2));
+    }
+  })().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
 } else {
   (async () => {
     const { createHost } = await import('../plugins/host.ts');
@@ -32,6 +153,8 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
     const { ProjectProfileSchema } = await import('../protocol/projects.ts');
 
     const model = 'qwen3:4b';
+    const collectAfterProbeFailure = process.env.BURO_LIVE_COLLECT_AFTER_PROBE_FAILURE === '1';
+    const budget = new EvaluationBudget();
     const startedAt = new Date().toISOString();
     const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'buro-live-ollama-')));
     const directory = path.join(root, '.buro');
@@ -42,6 +165,9 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
       live: true,
       status: 'running',
       stage: 'setup',
+      collectAfterProbeFailure,
+      diagnostic: { status: 'not-run' },
+      codingStatus: 'not-run',
       http: { generations: 0, modelDetails: 0 },
       requests: [],
     };
@@ -155,7 +281,11 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
         ],
       });
       const executors = new EnvironmentExecutors();
-      const actualFetch = globalThis.fetch;
+      const actualFetch = createBudgetedFetch({
+        endpoints: { ollama: 'http://127.0.0.1:11434' },
+        budget,
+        stage: () => (report.stage === 'capability-probe' ? 'diagnostic' : 'coding'),
+      });
       const observedFetch = async (url, init) => {
         const endpoint = new URL(String(url));
         assert.equal(
@@ -245,10 +375,27 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
       report.stage = 'capability-probe';
       await saveReport();
       console.log('Live Ollama: bounded capability probe.');
-      report.probe = await command({
-        method: 'resources.probe',
-        params: { runtimeId: 'qwen-local' },
-      });
+      try {
+        report.probe = await command({
+          method: 'resources.probe',
+          params: { runtimeId: 'qwen-local' },
+        });
+        report.diagnostic = { status: 'passed' };
+      } catch (error) {
+        report.diagnostic = {
+          status: 'failed',
+          error: { code: error.code || 'LIVE_PROBE_FAILED', message: error.message },
+        };
+        if (
+          !collectAfterProbeFailure ||
+          error.code !== 'MODEL_CAPABILITY_FAILED' ||
+          budget.signal.aborted
+        )
+          throw error;
+        report.collectionContinued = true;
+        console.log('Live Ollama: probe failed; collecting coding evidence independently.');
+        await saveReport();
+      }
       const workspaces = new GitWorkspaces(host.ctx.projects.registry);
       const checks = new ProjectChecks(
         host.ctx.projects.registry,
@@ -296,6 +443,7 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
         },
       });
       report.stage = 'coding-goal';
+      report.codingStatus = 'running';
       runId = (await command({ method: 'run.start', params: { projectId: 'p', goalId: goal.id } }))
         .runId;
       report.runId = runId;
@@ -365,7 +513,12 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
         await fs.readFile(path.join(run.workspace, 'src/value.mjs'), 'utf8'),
         'export const value=1;\n',
       );
-      report.status = 'passed';
+      report.codingStatus = 'passed';
+      report.status = report.diagnostic.status === 'passed' ? 'passed' : 'failed';
+      if (report.status === 'failed') {
+        report.error = report.diagnostic.error;
+        process.exitCode = 1;
+      }
       report.stage = 'complete';
       await fs.writeFile(
         'artifacts/live-ollama-change.diff',
@@ -380,6 +533,7 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
       );
     } catch (error) {
       report.status = 'failed';
+      if (report.codingStatus === 'running') report.codingStatus = 'failed';
       report.error = { code: error.code || 'LIVE_VALIDATION_FAILED', message: error.message };
       process.exitCode = 1;
       console.error('Live Ollama failed:', report.stage, report.error.code, report.error.message);
@@ -388,7 +542,19 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
       if (host) await host.dispose();
       report.finishedAt = new Date().toISOString();
       await Promise.all(observedResponses);
+      report.budget = budget.snapshot();
+      if (budget.violation) {
+        report.status = 'failed';
+        report.error = { code: budget.violation };
+        process.exitCode = 1;
+      }
       await saveReport();
+      console.log(
+        'Live Ollama outcomes:',
+        'diagnostic=' + report.diagnostic.status,
+        'coding=' + report.codingStatus,
+        'overall=' + report.status,
+      );
       console.log('Sanitized report: artifacts/live-ollama-verification.json');
     }
   })().catch((error) => {

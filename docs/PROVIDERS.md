@@ -4,12 +4,12 @@ Status: implementation contract and acceptance criteria. The daemon supports nat
 
 ## Supported routes in the first milestone
 
-| Route | Agent loop owner | Model connection | Requirement |
-| --- | --- | --- | --- |
-| Codex | Codex through the existing runtime adapter | Configured Codex client | Preserve existing supported execution and verification. |
-| Managed agent with Ollama | Buro | Ollama native API | Complete supported goals without Codex installed. |
-| Managed agent with DeepSeek | Buro | DeepSeek model API | Complete supported goals without another coding CLI. |
-| Hybrid team | Buro coordinates independent sessions | Allowed combination of these routes | Delegate and verify across providers with one saved execution history; expand bounded delegation into a general task graph later. |
+| Route                       | Agent loop owner                           | Model connection                    | Requirement                                                                                                                       |
+| --------------------------- | ------------------------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Codex                       | Codex through the existing runtime adapter | Configured Codex client             | Preserve existing supported execution and verification.                                                                           |
+| Managed agent with Ollama   | Buro                                       | Ollama native API                   | Complete supported goals without Codex installed.                                                                                 |
+| Managed agent with DeepSeek | Buro                                       | DeepSeek model API                  | Complete supported goals without another coding CLI.                                                                              |
+| Hybrid team                 | Buro coordinates independent sessions      | Allowed combination of these routes | Delegate and verify across providers with one saved execution history; expand bounded delegation into a general task graph later. |
 
 DeepSeek means its model API in this milestone. DeepSeek Harness is a reference and possible later client adapter. A DeepSeek model installed in Ollama is an Ollama model selection, not a request to the DeepSeek cloud API.
 
@@ -49,6 +49,10 @@ The initial tools cover repository read/search, bounded edit/patch, scoped comma
 Ollama has its own native message, tool and completion representation. Structured outputs and tool calling are separate capabilities; verify the actual combination needed by a role. Limit concurrent inference according to endpoint capacity and available memory, independently of the number of logical agent sessions. [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs), [Ollama concurrency](https://docs.ollama.com/faq#how-does-ollama-handle-concurrent-requests).
 
 Buro's Ollama route submits tools without `format`, then requests the final JSON in a separate turn with no tools. Both phases consume the same saved request budget; final serialization cannot dispatch tools. This follows observed Qwen3 4B behavior during opt-in probing, where combining the two request features suppressed native tool calls. Truncated output remains a failure and is never accepted as a result envelope.
+
+The tool phase receives task instructions; the final JSON schema is introduced only in the serialization phase. With explicit `think: false`, Ollama's request projection can omit visible commentary from completed, unambiguous tool batches and core-marked intermediate notes. Raw checkpoints, tool arguments/results and private continuation remain unchanged. This is an intentionally lossy request view, not lossless conversation compression. The conservative context guard measures the same projected view that is sent; unresolved tool calls and final structured results are retained.
+
+Capability probing starts with a tool-only request and introduces JSON instructions after the diagnostic result. DeepSeek sets `response_format: json_object` only for schema-bearing requests. Provider protocol revisions invalidate earlier probe receipts after these changes.
 
 For DeepSeek, reconstruct streamed function calls and correlate results with the correct call IDs. Thinking/tool conversations require preserving the provider's required continuation fields: current documentation requires returning prior `reasoning_content` when requests carry tools. Keep this as private provider state, not coordinator decisions, UI messages or ordinary event exports. Normalized visible progress should summarize actions and outcomes. [DeepSeek thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/).
 

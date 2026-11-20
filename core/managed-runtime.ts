@@ -278,6 +278,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
     const { provider, sessions, tools } = this.options;
     const limits = session.limits;
     const signal = controller.signal;
+    const separate = provider.structuredToolMode === 'separate-turn';
     let finalizing = false;
     let sequence = 0,
       calls = 0;
@@ -310,8 +311,10 @@ export class ManagedAgentRuntime implements AgentRuntime {
         role: 'user',
         content:
           text +
-          '\nReturn your final answer as JSON matching this schema: ' +
-          JSON.stringify(options.schema),
+          (separate
+            ? '\nUse the available tools when needed to complete the task. When the work is complete, give a brief completion note; the final response is requested separately.'
+            : '\nReturn your final answer as JSON matching this schema: ' +
+              JSON.stringify(options.schema)),
       });
       await sessions.save(session);
       emit({ type: 'turn.started', turnId });
@@ -325,10 +328,18 @@ export class ManagedAgentRuntime implements AgentRuntime {
           );
         // UTF-8 bytes plus message overhead are a conservative token upper estimate, not metered usage.
         const definitions = finalizing ? [] : tools.definitions(session.scope);
+        const requestMessages = provider.contextMessages
+          ? provider.contextMessages(structuredClone(session.messages), {
+              phase: finalizing ? 'final' : 'work',
+              ...(session.intermediateNotes
+                ? { intermediateMessageIndexes: [...session.intermediateNotes] }
+                : {}),
+            })
+          : session.messages;
         const estimatedInput =
-          new TextEncoder().encode(JSON.stringify([session.messages, definitions, options.schema]))
+          new TextEncoder().encode(JSON.stringify([requestMessages, definitions, options.schema]))
             .length +
-          session.messages.length * 16;
+          requestMessages.length * 16;
         if (estimatedInput + limits.maxOutputTokens > limits.contextTokens)
           throw new DomainError(
             'MODEL_CONTEXT_EXHAUSTED',
@@ -339,9 +350,9 @@ export class ManagedAgentRuntime implements AgentRuntime {
         const response = await provider.complete({
           requestId: `${turnId}:${round}`,
           model: session.requestedModel,
-          messages: session.messages,
+          messages: requestMessages,
           tools: definitions,
-          schema: options.schema,
+          schema: separate && !finalizing ? undefined : options.schema,
           maxOutputTokens: limits.maxOutputTokens,
           contextTokens: limits.contextTokens,
           signal,
@@ -438,14 +449,28 @@ export class ManagedAgentRuntime implements AgentRuntime {
           touch();
         }
         if (!requested.length) {
-          if (!finalizing && provider.structuredToolMode === 'separate-turn') {
+          if (!finalizing && separate) {
             finalizing = true;
-            session.messages.push({
-              role: 'user',
-              content:
-                'Return only the final JSON for the preceding task. No tools are available in this final response.',
-            });
-            await sessions.save(session);
+            const next: ManagedSession = {
+              ...session,
+              intermediateNotes: [
+                ...(session.intermediateNotes || []),
+                session.messages.length - 1,
+              ],
+              messages: [
+                ...session.messages,
+                {
+                  role: 'user',
+                  content:
+                    'Return only the final JSON for the preceding task. Reconstruct it from the original task and recorded tool results; do not serialize or rely on an intermediate completion note. No tools are available in this final response. Match this schema: ' +
+                    JSON.stringify(options.schema),
+                },
+              ],
+            };
+            // The provenance tag and final instruction become usable together, only after durable save.
+            await sessions.save(next);
+            session.messages = next.messages;
+            session.intermediateNotes = next.intermediateNotes;
             continue;
           }
           session.status = 'ready';
