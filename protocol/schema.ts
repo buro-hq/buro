@@ -4,6 +4,12 @@ import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
 import { DeliverySchema, PreviewSchema, ResearchSchema, GoalOutcomeSchema } from './operations.ts';
 import { ContextMaterialSchema } from './context.ts';
 import {
+  WorkerTaskSchema,
+  WorkerEnvelopeSchema,
+  WorkerKnownFailureSchema,
+  WorkerReplanSchema,
+} from './worker-tasks.ts';
+import {
   ResourceSnapshotSchema,
   RuntimePreferenceSchema,
   AssignmentResourceSchema,
@@ -286,6 +292,8 @@ const agentSession = z.object({
     .optional(),
 });
 const run = z.object({
+  workerTasks: z.record(z.string(), WorkerTaskSchema).optional(),
+  workerReplan: WorkerReplanSchema.optional(),
   resources: ResourceSnapshotSchema.optional(),
   assignmentResources: z.record(z.string(), AssignmentResourceSchema).optional(),
   delegation: z.literal('buro').optional(),
@@ -419,7 +427,13 @@ const run = z.object({
       messages: z.array(z.string()),
       commands: z.number(),
       status: z.string(),
-      assignment: z.object({ paths: z.array(z.string()) }).optional(),
+      assignment: z
+        .object({
+          paths: z.array(z.string()),
+          envelope: WorkerEnvelopeSchema.optional(),
+          knownFailure: WorkerKnownFailureSchema.optional(),
+        })
+        .optional(),
     }),
   ),
   events: z.array(

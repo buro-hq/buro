@@ -225,6 +225,16 @@ test('editing a stopped goal is versioned; repair resumes the original coordinat
   const f = await fixture(t);
   f.options.rejectReview = true;
   const before = await f.start();
+  await f.engine.update('p', before.id, (run) => {
+    run.workerTasks = {
+      builder: {
+        objective: 'Old goal only',
+        inputs: ['src/code.mjs'],
+        expectedResult: 'Old behavior',
+        criteria: ['Old acceptance'],
+      },
+    };
+  });
   const edited = await f.goals.update('edit', 'edit', {
     projectId: 'p',
     id: f.goal.id,
@@ -251,6 +261,12 @@ test('editing a stopped goal is versioned; repair resumes the original coordinat
   assert.deepEqual(f.resumed, [before.threadId]);
   assert.equal(after.threadId, before.threadId);
   assert.equal(after.title, 'Updated goal');
+  assert.equal(after.workerTasks, undefined);
+  assert.ok(after.events.some((event) => event.type === 'agent.tasks-invalidated'));
+  const worker = [...after.agents].reverse().find((agent) => agent.session?.roleId === 'builder');
+  assert.equal(worker?.assignment?.envelope?.task.source, 'legacy-goal');
+  assert.ok(worker?.assignment?.envelope?.task.objective.includes('Updated criteria'));
+  assert.equal(worker?.assignment?.envelope?.task.objective.includes('Old goal only'), false);
   assert.ok(
     f.turns.some((turn) => turn.id === before.threadId && turn.text.includes('Revised behavior')),
   );

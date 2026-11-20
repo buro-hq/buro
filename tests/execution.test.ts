@@ -16,6 +16,7 @@ import { CodexRuntime } from '../adapters/codex/runtime.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
 import { applyRuntimeEvent } from '../core/runtime-projection.ts';
 import { assignmentScopePreserved } from '../core/worker-assignments.ts';
+import { DomainError } from '../core/ports.ts';
 
 const policy: ExecutionPolicy = {
   allowedPaths: ['src/'],
@@ -52,6 +53,13 @@ async function fixture(
     noWorkers?: boolean;
     nativeChildren?: boolean;
     direct?: boolean;
+    compactTask?: boolean;
+    workerFailureCode?: string;
+    workerFailures?: number;
+    workerFailureRole?: string;
+    twoWorkers?: boolean;
+    refinement?: unknown;
+    refinementFails?: boolean;
   } = {},
 ) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'goal-execution-')),
@@ -61,27 +69,63 @@ async function fixture(
     }),
     projects = new FileProjectRegistry([store]);
   let n = 0,
-    reviews = 0;
+    reviews = 0,
+    workerFailures = 0;
+  const starts: { id: string; role?: string }[] = [],
+    released: string[] = [];
   const turns: { id: string; text: string }[] = [],
     prepared: (string | undefined)[] = [],
     events = new Set<(e: RuntimeEvent) => void>();
   const runtime = {
     id: 'fake',
-    async start(_input?: any) {
-      return { threadId: 'thread-' + ++n };
+    async start(input?: any) {
+      const threadId = 'thread-' + ++n;
+      const role = input?.assignment?.roleId;
+      if (role && store.snapshot().runs[0]?.workerReplan?.status === 'ready') {
+        const previous = store.snapshot().runs[0].workerReplan!;
+        const failed = store
+          .snapshot()
+          .runs[0].agents.find((a) => a.session?.id === previous.failedSessionId)!;
+        assert.ok(
+          released.includes(failed.threadId),
+          'Previous worker must be released before replacement',
+        );
+      }
+      starts.push({ id: threadId, role });
+      return { threadId };
     },
     async submit() {
       return { turnId: 't' };
     },
     async interrupt() {},
     async dispose() {},
-    async release() {},
+    async release(id: string) {
+      released.push(id);
+    },
     subscribe(fn: (e: RuntimeEvent) => void) {
       events.add(fn);
       return () => events.delete(fn);
     },
     async turn(id: string, text: string, { signal }: any) {
       turns.push({ id, text });
+      if (text.startsWith('Refine the failed worker assignment')) {
+        assert.equal(
+          store.snapshot().runs[0].workerReplan?.status,
+          'requested',
+          'Persist refinement intent before model request',
+        );
+        if (options.refinementFails) throw Error('Refinement transport unavailable');
+        return {
+          turnId: 'refine',
+          text: JSON.stringify(
+            options.refinement || {
+              objective:
+                'Read current src/code.mjs, preserve completed work and finish the assigned edit.',
+              inputs: ['src/code.mjs'],
+            },
+          ),
+        };
+      }
       if (options.pause || (options.pauseWorker && text.startsWith('Execute your assigned work'))) {
         await new Promise<void>((resolve) =>
           signal.addEventListener('abort', () => resolve(), { once: true }),
@@ -104,12 +148,31 @@ async function fixture(
             team: options.direct
               ? []
               : [
-                  {
+                  ...[
+                    worker,
+                    ...(options.twoWorkers
+                      ? [{ ...worker, roleId: 'other_builder', paths: ['src/other.mjs'] }]
+                      : []),
+                  ].map((worker) => ({
                     ...worker,
                     action: store.snapshot().roles.some((r) => r.id === 'builder')
                       ? 'reuse'
                       : 'create',
-                  },
+                    ...(options.compactTask
+                      ? {
+                          assignment: {
+                            objective: 'Implement only the assigned module.',
+                            inputs: [...worker.paths],
+                            expectedResult:
+                              'The assigned module implements the complete requested change.',
+                            criteria: [
+                              'Preserve the protected checks.',
+                              'Keep the public API unchanged.',
+                            ],
+                          },
+                        }
+                      : {}),
+                  })),
                 ],
           }),
         };
@@ -123,6 +186,14 @@ async function fixture(
           ),
         };
       const runId = store.snapshot().runs[0].id;
+      if (
+        text.startsWith('Execute your assigned work') &&
+        options.workerFailureCode &&
+        starts.find((start) => start.id === id)?.role ===
+          (options.workerFailureRole || 'builder') &&
+        workerFailures++ < (options.workerFailures || 1)
+      )
+        throw new DomainError(options.workerFailureCode, 'Synthetic known worker failure');
       if (options.noWorkers && text.startsWith('Execute your assigned work'))
         throw Error('Worker unavailable');
       if (options.nativeChildren)
@@ -193,8 +264,127 @@ async function fixture(
     await engine.jobs.get(runId)?.promise;
     return engine.get('p', runId);
   }
-  return { engine, store, projects, turns, prepared, start, drain, goals, directory, runtime };
+  return {
+    engine,
+    store,
+    projects,
+    turns,
+    prepared,
+    start,
+    drain,
+    goals,
+    directory,
+    runtime,
+    starts,
+    released,
+  };
 }
+test('a known worker limit gets one persisted refinement and a fresh released session with the same contract', async (t) => {
+  const f = await fixture(t, { compactTask: true, workerFailureCode: 'MODEL_CONTEXT_EXHAUSTED' });
+  const { runId } = await f.start();
+  const run = await f.drain(runId);
+  assert.equal(run.status, 'completed');
+  assert.equal(run.workerReplan?.status, 'completed');
+  assert.equal(
+    f.turns.filter((turn) => turn.text.startsWith('Refine the failed worker assignment')).length,
+    1,
+  );
+  const workers = run.agents.filter((agent) => agent.session?.roleId === 'builder');
+  assert.equal(workers.length, 2);
+  assert.notEqual(workers[0].session?.id, workers[1].session?.id);
+  assert.equal(workers[0].status, 'failed');
+  assert.equal(workers[1].status, 'completed');
+  assert.deepEqual(workers[0].assignment?.paths, workers[1].assignment?.paths);
+  assert.deepEqual(
+    workers[0].assignment?.envelope?.task.criteria,
+    workers[1].assignment?.envelope?.task.criteria,
+  );
+  assert.equal(
+    workers[0].assignment?.envelope?.task.expectedResult,
+    workers[1].assignment?.envelope?.task.expectedResult,
+  );
+  assert.equal(run.independentReviewer, true);
+  assert.equal(run.review?.verdict, 'approved');
+});
+test('a second known failure cannot start another automatic refinement', async (t) => {
+  const f = await fixture(t, {
+    compactTask: true,
+    workerFailureCode: 'MODEL_INCOMPLETE',
+    workerFailures: 2,
+  });
+  const { runId } = await f.start();
+  const run = await f.drain(runId);
+  assert.equal(run.status, 'failed');
+  assert.equal(run.workerReplan?.status, 'ready');
+  assert.equal(
+    f.turns.filter((turn) => turn.text.startsWith('Refine the failed worker assignment')).length,
+    1,
+  );
+  assert.equal(run.agents.filter((agent) => agent.session?.roleId === 'builder').length, 2);
+  assert.equal(run.commit, undefined);
+});
+test('unknown outcomes and legacy tasks never trigger an automatic refinement', async (t) => {
+  for (const [compactTask, code] of [
+    [true, 'MODEL_INTERRUPTED'],
+    [true, 'MODEL_BUDGET_EXHAUSTED'],
+    [true, 'MODEL_UNAVAILABLE'],
+    [false, 'MODEL_INCOMPLETE'],
+  ] as const) {
+    const f = await fixture(t, { compactTask, workerFailureCode: code });
+    const { runId } = await f.start();
+    const run = await f.drain(runId);
+    assert.equal(run.status, 'failed');
+    assert.equal(run.workerReplan, undefined);
+    assert.equal(
+      f.turns.some((turn) => turn.text.startsWith('Refine the failed worker assignment')),
+      false,
+    );
+    assert.equal(run.agents.filter((agent) => agent.session?.roleId === 'builder').length, 1);
+  }
+});
+test('a later worker refinement preserves successful roles instead of dispatching them again', async (t) => {
+  const f = await fixture(t, {
+    compactTask: true,
+    twoWorkers: true,
+    workerFailureCode: 'MODEL_INCOMPLETE',
+    workerFailureRole: 'other_builder',
+    refinement: {
+      objective: 'Read current other module and finish the edit.',
+      inputs: ['src/other.mjs'],
+    },
+  });
+  const { runId } = await f.start();
+  const run = await f.drain(runId);
+  assert.equal(run.status, 'completed');
+  assert.equal(f.starts.filter((start) => start.role === 'builder').length, 1);
+  assert.equal(f.starts.filter((start) => start.role === 'other_builder').length, 2);
+  assert.equal(run.workerReplan?.roleId, 'other_builder');
+  const integration = f.turns.find((turn) => turn.text.startsWith('Plan accepted.'))!.text;
+  assert.ok(integration.includes('"roleId":"builder"'));
+  assert.ok(integration.includes('"roleId":"other_builder"'));
+});
+test('a failed or weakening refinement retains its durable intent without a replacement', async (t) => {
+  for (const options of [
+    { refinementFails: true },
+    { refinement: { objective: 'Do less', inputs: ['src/code.mjs'], criteria: [] } },
+    { refinement: { objective: 'Read new files', inputs: ['src/unapproved.mjs'] } },
+  ]) {
+    const f = await fixture(t, {
+      compactTask: true,
+      workerFailureCode: 'MODEL_INCOMPLETE',
+      ...options,
+    });
+    const { runId } = await f.start();
+    const run = await f.drain(runId);
+    assert.equal(run.status, 'failed');
+    assert.equal(run.workerReplan?.status, 'requested');
+    assert.equal(f.starts.filter((start) => start.role === 'builder').length, 1);
+    assert.equal(
+      run.workerTasks?.builder.expectedResult,
+      'The assigned module implements the complete requested change.',
+    );
+  }
+});
 test('following goals reuse roles but begin independently unless a parent run is selected', async (t) => {
   const f = await fixture(t),
     first = await f.start();
@@ -669,8 +859,21 @@ test('run freezes selected context and passes staged paths to planning, workers 
   assert.equal(run.contextMaterials?.[0].active, true);
   assert.equal(preparedMaterials[0][0].id, material.id);
   assert.equal(instructions.length, 3);
+  const workerMaterial = run.agents.find((agent) => agent.session?.roleId === 'builder')?.assignment
+    ?.envelope?.materials[0];
+  assert.equal(workerMaterial?.id, material.id);
+  assert.ok(workerMaterial?.path.includes('/.buro/context/'));
+  assert.equal(
+    instructions[1].includes('requirements.md'),
+    false,
+    'Material references are supplied once in the worker envelope',
+  );
   assert.ok(
-    instructions.every(
+    [
+      instructions[0],
+      instructions[2],
+      f.turns.find((turn) => turn.text.startsWith('Execute your assigned work'))!.text,
+    ].every(
       (text) =>
         text.includes('requirements.md') &&
         text.includes('/.buro/context/') &&

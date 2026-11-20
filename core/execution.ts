@@ -1,4 +1,7 @@
 import { runWorkerAssignments } from './worker-assignments.ts';
+import { validateWorkerTask } from './worker-envelope.ts';
+import { workerFailureForReplan, refineWorkerTask, pendingWorkerRoles } from './worker-recovery.ts';
+import { workerRefinementOutputSchema } from '../protocol/worker-tasks.ts';
 import { resolveWorkerResource, workerResourcePool } from './assignment-resources.ts';
 import type { AssignmentResource } from '../protocol/resources.ts';
 import { sessionResource } from '../protocol/resources.ts';
@@ -391,7 +394,17 @@ ${installation.output || installation.error || ''}`,
         run.independentReviewer = false;
         run.issue = undefined;
         run.title = goal.title;
-        run.goalText = goal.body + '\n\nAcceptance criteria:\n' + goal.criteria;
+        const goalText = goal.body + '\n\nAcceptance criteria:\n' + goal.criteria;
+        if (run.goalText !== goalText) {
+          // A compact task belongs to the planned goal revision, never a later edited goal.
+          run.workerTasks = undefined;
+          run.events.push({
+            at: now,
+            type: 'agent.tasks-invalidated',
+            text: 'The goal changed; workers receive the complete updated goal.',
+          });
+        }
+        run.goalText = goalText;
         run.agents = run.agents.filter((a) => a.threadId !== run.threadId);
         run.events.push({
           at: now,
@@ -827,6 +840,7 @@ Goal: ${run.title}
 ${run.goalText}
 Only these paths may change: ${JSON.stringify(policy.allowedPaths)}. Protected paths: ${JSON.stringify(policy.protectedPaths || [])}. Project context: ${policy.context || ''}.
 For a small coherent change, return an empty team and implement directly as coordinator. Otherwise choose between 1 and ${policy.maxWorkers} workers only when delegation is useful. Reuse suitable catalog roles where possible. If none fits, create a concise reusable role without this goal, filenames or specific test values. New roles also require roleId, for example react_developer or dependency-maintainer: lowercase Latin letters, digits, underscores and hyphens, starting with a letter, up to 64 characters. steps.owner must use the exact roleId, not the title. The coordinator and independent reviewer are supplied by the service; exclude them from team. local_preview/delivery_pr/production_delivery run separately after acceptance; exclude them from team. Assign nonoverlapping paths to workers. Steps may use coordinator/reviewer as owners.
+For each worker, supply a compact assignment with a complete objective, exact public file inputs, expectedResult and concrete criteria. It describes only that worker's coherent subtask, not the whole project. Keep role instructions reusable. Workers receive this assignment instead of the full goal; include every constraint needed for their part. Use assignment null only when the full original goal is needed. File inputs allow reading, not writing outside the assigned paths. Prefer short native tool calls and factual results over long commentary.
 Baseline checks: ${JSON.stringify(checkContext(baseline))}
 ${run.repairEnvironment ? environmentRepairInstructions : ''}
 Catalog: ${JSON.stringify(roleContext(workerCatalog))}
@@ -837,6 +851,11 @@ ${correction}`,
       );
       try {
         const candidatePlan = TeamPlanSchema.parse(answer);
+        const workerTasks = Object.fromEntries(
+          candidatePlan.team
+            .filter((worker) => worker.assignment != null)
+            .map((worker) => [worker.roleId, validateWorkerTask(worker.assignment)]),
+        );
         const candidateTeam = resolveTeam(candidatePlan, planningRoles, policy, this.env.now());
         let assignments: Record<string, AssignmentResource> | undefined;
         if (run.resources)
@@ -884,6 +903,7 @@ ${correction}`,
           r.roleAssignments = Object.fromEntries(
             candidatePlan.team.map((worker) => [worker.roleId, worker.paths]),
           );
+          r.workerTasks = workerTasks;
           if (assignments) r.assignmentResources = assignments;
           for (const role of candidateTeam.roles) {
             r.events.push({
@@ -964,22 +984,92 @@ Use relevant user materials at their staged paths. Return the formal execution r
     threads: string[],
     ask: (threadId: string, text: string, schema: unknown) => Promise<unknown>,
   ) {
-    return runWorkerAssignments({
-      projectId,
-      run: this.get(projectId, runId),
-      roles,
-      workspace,
-      policy,
-      runtime: this.env.runtime,
-      workspaces: this.env.workspaces,
-      signal,
-      now: this.env.now,
-      id: this.env.id,
-      update: (apply) => this.update(projectId, runId, apply),
-      track: (threadId) => threads.push(threadId),
-      flush: () => this.eventQueue,
-      ask,
-    });
+    const dispatch = (selected: Role[]) =>
+      runWorkerAssignments({
+        projectId,
+        run: this.get(projectId, runId),
+        roles: selected,
+        workspace,
+        policy,
+        runtime: this.env.runtime,
+        workspaces: this.env.workspaces,
+        signal,
+        now: this.env.now,
+        id: this.env.id,
+        update: (apply) => this.update(projectId, runId, apply),
+        track: (threadId) => threads.push(threadId),
+        flush: () => this.eventQueue,
+        ask,
+      });
+    try {
+      return await dispatch(roles);
+    } catch (error) {
+      signal.throwIfAborted();
+      const failedRun = this.get(projectId, runId);
+      const eligible = workerFailureForReplan(failedRun, roles, error);
+      if (!eligible) throw error;
+      // The worker call has fully unwound, including release, before any replacement can start.
+      await this.update(projectId, runId, (run) => {
+        if (!workerFailureForReplan(run, roles, error))
+          throw new DomainError('WORKER_REPLAN_UNAVAILABLE', 'The saved worker outcome changed.');
+        run.workerReplan = {
+          roleId: eligible.role.id,
+          failedSessionId: eligible.agent.session!.id,
+          failureCode: eligible.agent.assignment!.knownFailure!.code,
+          requestedAt: this.env.now(),
+          status: 'requested',
+        };
+        run.events.push({
+          at: this.env.now(),
+          type: 'agent.replan-requested',
+          threadId: eligible.agent.threadId,
+          text: `${eligible.role.id}: ${run.workerReplan.failureCode}. One bounded refinement requested.`,
+        });
+      });
+      const changes = await this.env.workspaces.changes(workspace.path, workspace.base);
+      const proposed = await ask(
+        failedRun.threadId,
+        `Refine the failed worker assignment once. Do not implement or start agents in this turn.
+The previous worker stopped with known ${eligible.agent.assignment!.knownFailure!.code}; its workspace scope was independently verified. Completed actions and current edits remain in the workspace. Never replay an unknown action or repeat completed external actions.
+Saved assignment: ${JSON.stringify(eligible.task)}.
+Observed changed files: ${JSON.stringify(changeContext(changes))}.
+Return a shorter complete objective and only needed inputs from the saved input list. The service retains the original expected result and every criterion. Do not change models, roles, write paths or checks. Make the next worker read current state and finish the remaining work with concise tool calls. This is the only automatic refinement for this run.`,
+        workerRefinementOutputSchema,
+      );
+      signal.throwIfAborted();
+      const task = refineWorkerTask(eligible.task, proposed);
+      await this.update(projectId, runId, (run) => {
+        if (
+          run.workerReplan?.status !== 'requested' ||
+          run.workerReplan.failedSessionId !== eligible.agent.session!.id
+        )
+          throw new DomainError(
+            'WORKER_REPLAN_UNAVAILABLE',
+            'The saved worker refinement changed.',
+          );
+        run.workerTasks = { ...run.workerTasks, [eligible.role.id]: task };
+        run.workerReplan = { ...run.workerReplan, status: 'ready', task };
+        run.events.push({ at: this.env.now(), type: 'agent.replan-saved', text: eligible.role.id });
+      });
+      await dispatch(pendingWorkerRoles(this.get(projectId, runId), roles));
+      const observed = this.get(projectId, runId);
+      const results = roles.map((role) => {
+        const agent = [...observed.agents]
+          .reverse()
+          .find((agent) => agent.session?.roleId === role.id);
+        if (agent?.status !== 'completed' || agent.session?.result?.status !== 'success')
+          throw new DomainError(
+            'WORKER_FAILED',
+            `Worker ${role.id} did not complete its assignment.`,
+          );
+        return agent.session;
+      });
+      await this.update(projectId, runId, (run) => {
+        if (run.workerReplan?.status === 'ready')
+          run.workerReplan = { ...run.workerReplan, status: 'completed' };
+      });
+      return results;
+    }
   }
   async validateAndAccept(ctx: {
     projectId: string;

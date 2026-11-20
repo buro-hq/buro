@@ -114,7 +114,14 @@ export type Agent = {
   messages: string[];
   commands: number;
   status: string;
-  assignment?: { paths: string[] };
+  assignment?: {
+    paths: string[];
+    envelope?: import('./worker-tasks.ts').WorkerEnvelopeV1;
+    knownFailure?: {
+      code: 'MODEL_INCOMPLETE' | 'MODEL_CONTEXT_EXHAUSTED';
+      scopeVerified: true;
+    };
+  };
 };
 export type AgentSession = {
   id: string;
@@ -165,6 +172,8 @@ export type RunIssue = {
   checks: string[];
 };
 export type Run = {
+  workerTasks?: Record<string, import('./worker-tasks.ts').WorkerTask>;
+  workerReplan?: import('./worker-tasks.ts').WorkerReplan;
   resources?: import('./resources.ts').ResourceSnapshot;
   assignmentResources?: Record<string, AssignmentResource>;
   delegation?: 'buro';

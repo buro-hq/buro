@@ -1,6 +1,6 @@
 # Next bounded orchestration slice
 
-Proposed after the live evaluation on 20 November 2026. This is a plan, not delivered behavior. See [evaluation evidence](EVALUATION.md), [runtime contracts](RUNTIME-CONTRACTS.md) and [architecture](../ARCHITECTURE.md).
+Agreed after the live evaluation on 20 November 2026. The first compact-task/request-policy/refinement slice is implemented; persistent data grants, aggregate production-run budgets and Java candidate confinement remain proposals. See [implementation status](IMPLEMENTATION.md), [evaluation evidence](EVALUATION.md), [runtime contracts](RUNTIME-CONTRACTS.md) and [architecture](../ARCHITECTURE.md).
 
 ## Immediate priority
 

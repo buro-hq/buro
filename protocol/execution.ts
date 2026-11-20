@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { roleIdPattern } from './domain.ts';
 import { ResourceIdSchema } from './resources.ts';
+import { WorkerTaskSchema } from './worker-tasks.ts';
 export const TeamPlanSchema = z.strictObject({
   summary: z.string(),
   steps: z
@@ -24,6 +25,7 @@ export const TeamPlanSchema = z.strictObject({
         paths: z.array(z.string()),
         runtimeId: ResourceIdSchema.nullable().optional(),
         runtimeReason: z.string().trim().max(1000).optional(),
+        assignment: WorkerTaskSchema.nullable().optional(),
       }),
     )
     .max(2),
@@ -47,6 +49,7 @@ export const teamOutputSchema = z.toJSONSchema(
         TeamPlanSchema.shape.team.element.extend({
           runtimeId: ResourceIdSchema.nullable(),
           runtimeReason: z.string().trim().max(1000),
+          assignment: WorkerTaskSchema.nullable(),
         }),
       )
       .max(2),

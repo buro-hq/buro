@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { AgentRuntime, ProjectRegistry } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
 import { ManagedAgentRuntime } from '../../core/managed-runtime.ts';
+import { conservativeRequestPolicy, type ManagedRequestPolicy } from '../../core/request-policy.ts';
 import { ResourceSelection } from '../../core/resource-selection.ts';
 import { CapabilityProbeService, type ProbeReceipt } from '../../core/capability-probe.ts';
 import type { RuntimeResource } from '../../protocol/resources.ts';
@@ -24,6 +25,7 @@ export async function createRuntimeResources(options: {
   fetch?: typeof fetch;
   codex?: { executable?: string; args?: string[] };
   credentials?: (reference: string) => string | undefined;
+  requestPolicy?: ManagedRequestPolicy;
 }) {
   const local = path.join(options.directory, 'local');
   options.executors.protectPrivatePaths([local]);
@@ -33,6 +35,13 @@ export async function createRuntimeResources(options: {
   const sessions = new FileManagedSessions(path.join(local, 'managed-sessions'));
   const probes = new PrivateJSONFiles(path.join(local, 'resource-probes'));
   const tools = new RepositoryTools(options.executors);
+  const requestPolicy = options.requestPolicy || conservativeRequestPolicy;
+  if (
+    typeof requestPolicy.revision !== 'string' ||
+    !/^[A-Za-z0-9._:-]{1,100}$/.test(requestPolicy.revision) ||
+    typeof requestPolicy.prepare !== 'function'
+  )
+    throw new DomainError('INVALID_REQUEST_POLICY', 'The request policy needs a stable revision.');
   const connectionKey = (connection: (typeof config.connections)[number]) =>
     JSON.stringify([connection.kind, endpointURL(connection.endpoint).href]);
   const capacities = new Map<string, number>();
@@ -92,6 +101,7 @@ export async function createRuntimeResources(options: {
           projects: options.projects,
           idGenerator: randomUUID,
           limits: runtime.limits,
+          requestPolicy,
         }),
       );
       resources.push({
@@ -101,7 +111,14 @@ export async function createRuntimeResources(options: {
         model: runtime.model,
         local: provider.local && !/(?:[:_-]cloud)(?:$|:)/i.test(runtime.model),
         configurationRevision: createHash('sha256')
-          .update(JSON.stringify([provider.revision, runtime.model, runtime.limits]))
+          .update(
+            JSON.stringify([
+              provider.revision,
+              runtime.model,
+              runtime.limits,
+              requestPolicy.revision,
+            ]),
+          )
           .digest('hex'),
       });
     }

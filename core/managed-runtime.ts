@@ -13,6 +13,7 @@ import type {
 } from './model-ports.ts';
 import { inScope } from './execution-ports.ts';
 import { withEnvironmentRepair } from './environment-repair.ts';
+import { prepareManagedRequest, type ManagedRequestPolicy } from './request-policy.ts';
 type EventBody<T = RuntimeEvent> = T extends RuntimeEvent
   ? Omit<T, 'id' | 'threadId' | 'runId'>
   : never;
@@ -25,6 +26,7 @@ export type ManagedRuntimeOptions = {
   tools: ToolBroker;
   projects: ProjectRegistry;
   idGenerator: () => string;
+  requestPolicy?: ManagedRequestPolicy;
   limits: {
     contextTokens: number;
     maxOutputTokens: number;
@@ -326,7 +328,6 @@ export class ManagedAgentRuntime implements AgentRuntime {
             'MODEL_BUDGET_EXHAUSTED',
             'The session request budget is exhausted.',
           );
-        // UTF-8 bytes plus message overhead are a conservative token upper estimate, not metered usage.
         const definitions = finalizing ? [] : tools.definitions(session.scope);
         const requestMessages = provider.contextMessages
           ? provider.contextMessages(structuredClone(session.messages), {
@@ -336,15 +337,17 @@ export class ManagedAgentRuntime implements AgentRuntime {
                 : {}),
             })
           : session.messages;
-        const estimatedInput =
-          new TextEncoder().encode(JSON.stringify([requestMessages, definitions, options.schema]))
-            .length +
-          requestMessages.length * 16;
-        if (estimatedInput + limits.maxOutputTokens > limits.contextTokens)
-          throw new DomainError(
-            'MODEL_CONTEXT_EXHAUSTED',
-            'The conservative context estimate exceeds the configured token budget. Start a focused assignment.',
-          );
+        const requestSchema = separate && !finalizing ? undefined : options.schema;
+        const budget = prepareManagedRequest(
+          {
+            phase: finalizing ? 'final' : 'work',
+            messages: requestMessages,
+            tools: definitions,
+            schema: requestSchema,
+            limits,
+          },
+          this.options.requestPolicy,
+        );
         session.requests++;
         await sessions.save(session);
         const response = await provider.complete({
@@ -352,8 +355,8 @@ export class ManagedAgentRuntime implements AgentRuntime {
           model: session.requestedModel,
           messages: requestMessages,
           tools: definitions,
-          schema: separate && !finalizing ? undefined : options.schema,
-          maxOutputTokens: limits.maxOutputTokens,
+          schema: requestSchema,
+          maxOutputTokens: budget.maxOutputTokens,
           contextTokens: limits.contextTokens,
           signal,
           onProgress: touch,

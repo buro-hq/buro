@@ -6,6 +6,7 @@ import { FileRuntimeRoutes } from '../adapters/files/runtime-routes.ts';
 import type { EnvironmentExecutors } from '../adapters/environments/executors.ts';
 import { RuntimeRouter } from '../core/runtime-router.ts';
 import { runtimePlugin } from './runtime.ts';
+import type { ManagedRequestPolicy } from '../core/request-policy.ts';
 
 export const resourcesPlugin: Plugin.Object<{
   directory: string;
@@ -13,6 +14,7 @@ export const resourcesPlugin: Plugin.Object<{
   fetch?: typeof fetch;
   codex?: { executable?: string; args?: string[] };
   credentials?: (reference: string) => string | undefined;
+  requestPolicy?: ManagedRequestPolicy;
 }> = {
   name: 'execution-resources',
   inject: ['projects', 'commands'],

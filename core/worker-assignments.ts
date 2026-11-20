@@ -1,11 +1,10 @@
 import type { AgentSession, FileChange, Role, Run } from '../protocol/domain.ts';
-import { materialInstructions } from '../protocol/context.ts';
 import { EnvelopeSchema, envelopeOutputSchema } from '../protocol/execution.ts';
 import { DomainError, type AgentRuntime } from './ports.ts';
 import { inScope, type ExecutionPolicy, type WorkspacePort } from './execution-ports.ts';
-import { checkContext } from './agent-context.ts';
 import { sessionResource } from '../protocol/resources.ts';
 import { validateAssignmentResource } from './assignment-routing.ts';
+import { buildWorkerEnvelope, workerInstructions, workerPrompt } from './worker-envelope.ts';
 
 /** Compare observed edits, including a worker reverting an earlier worker's change. */
 export function assignmentScopePreserved(
@@ -61,6 +60,7 @@ export async function runWorkerAssignments(options: {
     const decision = savedDecision
       ? validateAssignmentResource(run.resources!, role, savedDecision)
       : undefined;
+    const envelope = buildWorkerEnvelope({ run, role, paths, policy, workspace: workspace.path });
     const session: AgentSession = {
       id: 'S-' + options.id(),
       roleId: role.id,
@@ -88,7 +88,7 @@ export async function runWorkerAssignments(options: {
         messages: [],
         commands: 0,
         status: 'starting',
-        assignment: { paths: [...paths] },
+        assignment: { paths: [...paths], envelope: structuredClone(envelope) },
       });
       r.events.push({
         at: now(),
@@ -98,9 +98,12 @@ export async function runWorkerAssignments(options: {
       });
     });
     let threadId: string | undefined;
+    let before: FileChange[] | undefined;
+    let failedTurn: unknown;
+    let releaseAttempted = false;
     try {
       abort();
-      const before = await workspaces.changes(workspace.path, workspace.base);
+      before = await workspaces.changes(workspace.path, workspace.base);
       const started = await runtime.start({
         projectId,
         runId: run.id,
@@ -112,11 +115,7 @@ export async function runWorkerAssignments(options: {
           allowedPaths: [...paths],
           protectedPaths: policy.protectedPaths || [],
         },
-        instructions:
-          role.instructions +
-          '\nYou are a worker assigned by Buro. Work only within your assigned paths. Do not start agents, commit, reset, checkout, modify .git or change check definitions. Buro owns other assignments and independent acceptance.\nProject context: ' +
-          (policy.context || '') +
-          materialInstructions(run.contextMaterials || [], workspace.path, true),
+        instructions: workerInstructions(role, policy),
       });
       threadId = started.threadId;
       options.track(threadId);
@@ -132,13 +131,14 @@ export async function runWorkerAssignments(options: {
           text: role.id,
         });
       });
-      const result = EnvelopeSchema.parse(
-        await options.ask(
-          threadId,
-          `Execute your assigned work in the existing workspace.\nGoal: ${run.title}\n${run.goalText}\nRole: ${role.id}. Assigned paths: ${JSON.stringify(paths)}. Protected paths: ${JSON.stringify(policy.protectedPaths || [])}.\nYour plan steps: ${JSON.stringify(run.plan.filter((step) => step.owner === role.id))}.\nCurrent checks: ${JSON.stringify(checkContext(run.acceptance.total ? run.acceptance : run.baseline))}.\n${run.continuation ? 'Continue saved work with this clarification: ' + run.continuation.instructions : ''}\nUse relevant user materials at the supplied staged paths. Do not repeat already completed external actions. Report concrete changes and limitations. Return the formal execution result.`,
-          envelopeOutputSchema,
-        ),
-      );
+      let response: unknown;
+      try {
+        response = await options.ask(threadId, workerPrompt(envelope), envelopeOutputSchema);
+      } catch (error) {
+        failedTurn = error;
+        throw error;
+      }
+      const result = EnvelopeSchema.parse(response);
       abort();
       const after = await workspaces.changes(workspace.path, workspace.base);
       if (!assignmentScopePreserved(before, after, paths, policy.protectedPaths || []))
@@ -164,23 +164,56 @@ export async function runWorkerAssignments(options: {
       if (result.status !== 'success')
         throw new DomainError('WORKER_FAILED', `Worker ${role.id}: ${result.summary}`);
     } catch (error) {
+      let failure = error;
+      let knownFailure:
+        | { code: 'MODEL_INCOMPLETE' | 'MODEL_CONTEXT_EXHAUSTED'; scopeVerified: true }
+        | undefined;
+      if (
+        !signal.aborted &&
+        threadId &&
+        error === failedTurn &&
+        before &&
+        error instanceof DomainError &&
+        (error.code === 'MODEL_INCOMPLETE' || error.code === 'MODEL_CONTEXT_EXHAUSTED')
+      ) {
+        try {
+          const after = await workspaces.changes(workspace.path, workspace.base);
+          if (!assignmentScopePreserved(before, after, paths, policy.protectedPaths || []))
+            failure = new DomainError(
+              'WORKER_SCOPE_VIOLATION',
+              `Worker ${role.id} changed files outside its assignment.`,
+            );
+          else knownFailure = { code: error.code, scopeVerified: true };
+        } catch {
+          failure = new DomainError(
+            'WORKER_OUTCOME_UNVERIFIED',
+            'The failed worker scope could not be independently verified.',
+          );
+        }
+      }
       await options.flush();
+      // A replacement is eligible only after the failed turn and its client have both settled.
+      if (knownFailure && threadId) {
+        releaseAttempted = true;
+        await runtime.release?.(threadId);
+      }
       await update((r) => {
-        if (error instanceof DomainError && error.code === 'WORKER_SCOPE_VIOLATION')
+        if (failure instanceof DomainError && failure.code === 'WORKER_SCOPE_VIOLATION')
           r.scopePreserved = false;
         const agent = r.agents.find((a) => a.session?.id === session.id)!;
+        if (knownFailure) agent.assignment!.knownFailure = knownFailure;
         agent.status = signal.aborted ? 'interrupted' : 'failed';
         agent.completedAt = now();
         r.events.push({
           at: now(),
           type: 'agent.' + agent.status,
           threadId: agent.threadId,
-          text: error instanceof Error ? error.message : String(error),
+          text: failure instanceof Error ? failure.message : String(failure),
         });
       });
-      throw error;
+      throw failure;
     } finally {
-      if (threadId) await runtime.release?.(threadId);
+      if (threadId && !releaseAttempted) await runtime.release?.(threadId);
     }
   }
   return results;
