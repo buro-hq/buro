@@ -60,6 +60,8 @@ export type PlannedWorker = {
   instructions: string;
   kind: 'implementation' | 'testing' | 'general';
   paths: string[];
+  runtimeId?: string | null;
+  runtimeReason?: string;
 };
 export type TeamPlan = {
   summary: string;

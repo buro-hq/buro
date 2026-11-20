@@ -3,7 +3,12 @@ import { roleIdPattern, type DomainEvent, type Snapshot } from './domain.ts';
 import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
 import { DeliverySchema, PreviewSchema, ResearchSchema, GoalOutcomeSchema } from './operations.ts';
 import { ContextMaterialSchema } from './context.ts';
-import { ResourceSnapshotSchema } from './resources.ts';
+import {
+  ResourceSnapshotSchema,
+  RuntimePreferenceSchema,
+  AssignmentResourceSchema,
+  AssignmentSelectionSchema,
+} from './resources.ts';
 
 const id = z
   .string()
@@ -20,6 +25,7 @@ export const RoleInputSchema = z.strictObject({
   instructions: text(),
   kind: z.enum(['implementation', 'testing', 'review', 'coordination', 'general']),
   model: z.string().trim().min(1).max(120).optional(),
+  runtimePreference: RuntimePreferenceSchema.optional(),
   expectedVersion: z.number().int().nonnegative(),
 });
 export const GoalInputSchema = z.strictObject({
@@ -216,6 +222,7 @@ const role = z.object({
   instructions: z.string(),
   kind: z.enum(['implementation', 'testing', 'review', 'coordination', 'general']),
   model: z.string().optional(),
+  runtimePreference: RuntimePreferenceSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -267,6 +274,7 @@ const agentSession = z.object({
   model: z.string().optional(),
   reportedModel: z.string().optional(),
   configurationRevision: z.string().optional(),
+  selection: AssignmentSelectionSchema.optional(),
   parentId: z.string().optional(),
   result: z
     .object({
@@ -279,6 +287,7 @@ const agentSession = z.object({
 });
 const run = z.object({
   resources: ResourceSnapshotSchema.optional(),
+  assignmentResources: z.record(z.string(), AssignmentResourceSchema).optional(),
   delegation: z.literal('buro').optional(),
   coordinatorSession: agentSession.optional(),
   contextMaterials: z.array(ContextMaterialSchema).optional(),

@@ -85,6 +85,32 @@ Add a managed runtime referencing `connectionId: "deepseek"` and a model ID retu
 
 `local-only` rejects remote resources before starting a client. This Ollama adapter also rejects cloud-backed models; a failure never authorizes a remote fallback. `hybrid` explicitly permits the configured providers for that profile. DeepSeek uses its model API, not a separate harness. [DeepSeek API](https://api-docs.deepseek.com/), [tool/thinking continuation](https://api-docs.deepseek.com/guides/thinking_mode/).
 
+## Automatic worker selection
+
+A profile can authorize several configured runtimes for worker assignments through `workerPool`. For the hybrid example above, add:
+
+```json
+{
+  "workerPool": ["local-coder", "cloud-coder"]
+}
+```
+
+This is an additional field on the profile, not a separate configuration object. It must include the profile's default `worker`, contain unique configured runtime IDs, and have at most 16 entries. Local-only profiles reject remote entries before dispatch. Without `workerPool`, only the original default worker is authorized; upgrading does not silently give existing profiles a larger pool.
+
+The coordinator sees this saved pool and can propose a runtime and short reason for each planned specialist. The service validates the proposal and the user's role preference before saving the plan. A global configured runtime is not automatically part of a project's pool. Adding or changing a runtime after a run starts does not expand that run's saved pool.
+
+In **Team → Edit role → Specialist model**, choose:
+
+- **Auto:** the coordinator can select from the pool; an omitted choice uses the profile worker.
+- **Prefer:** use the selected runtime by default. Another permitted choice requires a reason. An unavailable preference uses the profile worker with an explicit saved explanation.
+- **Only this model:** use exactly this runtime. A conflicting proposal or a pin outside the pool blocks the assignment; it does not cause fallback.
+
+The preference is separate from persistent specialist instructions and creates a new role version. It applies to new plans. A choice made by the coordinator does not become a reusable role preference. The old free-form `Role.model` field remains historical metadata and is not interpreted as a runtime ID. Older clients omitting `runtimePreference` preserve an existing preference; explicit `auto` clears the pin.
+
+Coordinator, reviewer and delivery roles continue to use the execution profile; worker preferences are not accepted for those service-owned roles. This increment chooses models for planned workers. Adaptive specialist creation during execution, automatic selection of the initial coordinator, measured quality/cost routing and goal-specific overrides remain future work.
+
+Each accepted plan saves the canonical resource, configuration revision, role version, preference, selection source and reason. Worker dispatch saves its AgentSession before opening a client. Routing checks that recorded session against the saved decision and pool. The inspector shows the actual requested/reported model and the selection reason. Existing sessions continue on their recorded route; switching models requires another assignment rather than replacing provider state inside a conversation.
+
 ## Interface and inheritance
 
 User settings show the default profile, its coordinator/worker/reviewer models, connection metadata, model discovery and explicit diagnostics. Project settings can pin a profile or inherit the machine default. The agent inspector displays the saved runtime/model identity rather than labelling every session Codex.

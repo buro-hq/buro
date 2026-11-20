@@ -204,6 +204,23 @@ export function RunInspector({
                     <b>{a.session.reportedModel || a.session.model || a.session.runtimeId}</b>
                   </div>
                 )}
+                {a.session?.selection && (
+                  <div>
+                    <span>{t('Model selection')}</span>
+                    <b>
+                      {t(
+                        a.session.selection.source === 'fixed'
+                          ? 'Only this model'
+                          : a.session.selection.source === 'preferred'
+                            ? 'Preferred model'
+                            : a.session.selection.source === 'coordinator'
+                              ? 'Chosen by coordinator'
+                              : 'Execution profile',
+                      )}
+                    </b>
+                    <p className="caption">{a.session.selection.reason}</p>
+                  </div>
+                )}
                 <div>
                   <span>{t('Workspace')}</span>
                   <b className="mono">{role.owns}</b>

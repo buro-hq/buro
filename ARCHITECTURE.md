@@ -96,6 +96,8 @@ Acceptance checks run under service ownership. Their definitions and evidence ca
 
 Select models by task requirements, measured capability, data policy, availability and budget. Start with explicit user-selected profiles; add adaptive routing based on evaluation results. Do not equate a role title with a permanent model choice.
 
+The first model-selection increment gives each run a frozen worker pool. The coordinator proposes a runtime for a bounded assignment; a pure service resolver enforces the user's versioned Auto/Prefer/Fixed preference and the saved pool. Persist the canonical decision and reason with the plan, then persist its AgentSession before client dispatch. The router verifies that session against the saved decision rather than trusting an arbitrary runtime ID in an input. A role edited during planning requires a fresh decision; later edits do not change an accepted assignment. Initial coordinator and independent-review resources remain profile choices in this increment.
+
 Support local-only and configured hybrid operation. Endpoint credentials and private settings belong to machine configuration; shared project profiles contain references and constraints. A provider fallback cannot cross the project's data boundary without prior authorization.
 
 Project materials, goal inputs, session briefs and run outputs keep separate provenance. Use token budgets appropriate to the selected model, leaving space for tool results and completion. Provider-native continuation needed for correctness must be preserved privately even when it is not part of the human-readable brief.

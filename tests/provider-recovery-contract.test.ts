@@ -9,6 +9,7 @@ import { RuntimeCatalog } from '../core/runtimes.ts';
 import { RuntimeRouter } from '../core/runtime-router.ts';
 import type { ModelProvider, ToolBroker } from '../core/model-ports.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
+import type { Run } from '../protocol/domain.ts';
 import type { RuntimeResource } from '../protocol/resources.ts';
 import { ProjectProfileSchema } from '../protocol/projects.ts';
 import { OllamaProvider } from '../adapters/models/ollama.ts';
@@ -162,6 +163,47 @@ async function fixture(t: any, kind: Provider) {
     directory: path.join(root, '.buro'),
     project: { id: 'p', name: 'Recovery fixture', root },
     profile,
+  });
+  const run: Run = {
+    id: 'R-fixture',
+    key: 'G-fixture',
+    goalId: 'G-fixture',
+    title: 'Recover a provider turn',
+    summary: '',
+    createdAt: new Date().toISOString(),
+    completedAt: '',
+    threadId: '',
+    status: 'running',
+    phase: 'implementation',
+    agents: [],
+    events: [],
+    commands: [],
+    plan: [],
+    changedFiles: [],
+    baseline: { passed: 0, total: 0, results: [] },
+    acceptance: { passed: 0, total: 0, results: [] },
+    specsUnchanged: false,
+    scopePreserved: false,
+    independentReviewer: false,
+    goalText: 'Exercise provider recovery without claiming acceptance.',
+    result: '',
+    sourceHash: '',
+    workspace: root,
+  };
+  await store.transact('fixture-run', 'fixture-run', (doc) => {
+    const goal = {
+      id: run.goalId,
+      projectId: 'p',
+      title: run.title,
+      body: run.goalText,
+      criteria: '',
+      createdAt: run.createdAt,
+      status: 'running' as const,
+      runId: run.id,
+    };
+    doc.goals.push(goal);
+    doc.runs.push(run);
+    return { result: null, change: { type: 'run.changed', run, goal } };
   });
   const projects = new FileProjectRegistry([store]);
   const directory = path.join(root, '.buro/local');

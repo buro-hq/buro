@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ResourceCatalog } from '../../../protocol/resources.ts';
 import { useProject } from '../../data/provider';
 
-export function useResourceCatalog() {
+export function useResourceCatalog(projectId?: string) {
   const { client, snapshot, connection } = useProject();
   const supported =
     !!client && connection === 'connected' && !!snapshot?.capabilities.includes('resources.list');
@@ -17,7 +17,7 @@ export function useResourceCatalog() {
     try {
       const result = await client.command<ResourceCatalog>({
         method: 'resources.list',
-        params: {},
+        params: projectId ? { projectId } : {},
       });
       if (version === generation.current) {
         setCatalog(result);
@@ -30,8 +30,10 @@ export function useResourceCatalog() {
     } finally {
       if (version === generation.current) setLoading(false);
     }
-  }, [client, supported]);
+  }, [client, supported, projectId]);
   useEffect(() => {
+    setCatalog(null);
+    setError('');
     if (supported) void refresh();
     else setCatalog(null);
     return () => {

@@ -1,5 +1,6 @@
 import type { RuntimeResource } from '../protocol/resources.ts';
 import { resourceForPurpose } from '../protocol/resources.ts';
+import { validateAssignmentResource } from './assignment-routing.ts';
 import {
   DomainError,
   type AgentRuntime,
@@ -98,10 +99,61 @@ export class RuntimeRouter implements AgentRuntime {
     this.assertOpen();
     const snapshot = this.options.projects.get(input.projectId).snapshot();
     const run = snapshot.runs.find((r) => r.id === (input.ownerRunId || input.runId));
+    if (input.assignment && !run)
+      throw new DomainError(
+        'INVALID_ASSIGNMENT',
+        'A worker assignment requires its saved owning run.',
+      );
     if (input.ownerRunId && !run)
       throw new DomainError('NOT_FOUND', 'The owning run is unavailable.');
     const selection = run?.resources || this.options.selection.forProject(input.projectId);
-    const resource = resourceForPurpose(selection, input.purpose);
+    let resource = resourceForPurpose(selection, input.purpose);
+    if (
+      run &&
+      (run.assignmentResources !== undefined || run.resources?.workerPool !== undefined) &&
+      (input.purpose === 'implementation' || input.assignment)
+    ) {
+      const assignment = input.assignment;
+      const decision = assignment && run.assignmentResources?.[assignment.roleId];
+      const agent =
+        assignment && run.agents.find((item) => item.session?.id === assignment.sessionId);
+      const role = assignment && run.roleSnapshots?.find((item) => item.id === assignment.roleId);
+      if (
+        input.purpose !== 'implementation' ||
+        !assignment ||
+        !decision ||
+        !agent?.session ||
+        !role ||
+        !run.resources ||
+        run.status !== 'running' ||
+        run.cancelRequested ||
+        agent.status !== 'starting' ||
+        agent.threadId !== assignment.sessionId ||
+        agent.session.roleId !== assignment.roleId ||
+        agent.session.roleVersion !== role.version ||
+        JSON.stringify([...(agent.assignment?.paths || [])].sort()) !==
+          JSON.stringify([...assignment.allowedPaths].sort())
+      )
+        throw new DomainError(
+          'INVALID_ASSIGNMENT',
+          'Worker dispatch requires its saved role, scope and session intent.',
+        );
+      const validated = validateAssignmentResource(run.resources, role, decision);
+      const session = agent.session;
+      if (
+        session.runtimeId !== validated.resource.id ||
+        session.providerId !== validated.resource.providerId ||
+        session.model !== validated.resource.model ||
+        session.configurationRevision !== validated.resource.configurationRevision ||
+        session.selection?.source !== validated.source ||
+        session.selection?.reason !== validated.reason
+      )
+        throw new DomainError(
+          'INVALID_ASSIGNMENT',
+          'The saved session does not match its resource decision.',
+        );
+      resource = validated.resource;
+    }
     if (selection.policy === 'local-only' && !resource.local)
       throw new DomainError(
         'DATA_POLICY_BLOCKED',

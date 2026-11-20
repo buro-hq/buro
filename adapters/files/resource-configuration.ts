@@ -80,7 +80,14 @@ export const ResourceConfigurationSchema = z
           message: 'Managed runtime needs an existing connection and a nonreserved ID.',
         });
     for (const profile of value.profiles)
-      if (![profile.coordinator, profile.worker, profile.reviewer].every((id) => runtimes.has(id)))
+      if (
+        ![
+          profile.coordinator,
+          profile.worker,
+          profile.reviewer,
+          ...(profile.workerPool || []),
+        ].every((id) => runtimes.has(id))
+      )
         ctx.addIssue({ code: 'custom', message: 'A profile references a missing runtime.' });
   });
 export type ResourceConfiguration = z.infer<typeof ResourceConfigurationSchema>;

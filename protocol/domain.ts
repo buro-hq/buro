@@ -1,6 +1,7 @@
 /** Public data contracts. This module has no Node, Cordis, React or transport imports. */
 import type { EnvironmentConfig } from './environment.ts';
 import type { ContextMaterial } from './context.ts';
+import type { AssignmentResource, AssignmentSelection, RuntimePreference } from './resources.ts';
 export type { ContextMaterial } from './context.ts';
 import type {
   DeliveryConfig,
@@ -67,6 +68,7 @@ export type Role = {
   instructions: string;
   kind: RoleKind;
   model?: string;
+  runtimePreference?: RuntimePreference;
   createdAt: string;
   updatedAt: string;
 };
@@ -123,6 +125,7 @@ export type AgentSession = {
   model?: string;
   reportedModel?: string;
   configurationRevision?: string;
+  selection?: AssignmentSelection;
   parentId?: string;
   result?: {
     status: 'success' | 'fail';
@@ -163,6 +166,7 @@ export type RunIssue = {
 };
 export type Run = {
   resources?: import('./resources.ts').ResourceSnapshot;
+  assignmentResources?: Record<string, AssignmentResource>;
   delegation?: 'buro';
   coordinatorSession?: AgentSession;
   contextMaterials?: ContextMaterial[];
@@ -312,6 +316,7 @@ export type SaveRole = {
   instructions: string;
   kind: RoleKind;
   model?: string;
+  runtimePreference?: RuntimePreference;
   expectedVersion: number;
 };
 

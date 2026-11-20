@@ -21,6 +21,7 @@ Full automatic crash reconciliation, a general task graph and concurrent project
 - [ ] Add durable operator questions and clarifications that block only dependent work.
 - [ ] Add full per-action dispatch reconciliation and resource leases for automatic recovery where the outcome can be established.
 - [ ] Complete in-place resource overrides and the reviewed office/feed/materials interaction model using real service state.
+- [ ] Extend worker resource proposals into measured quality/cost routing, initial coordinator selection and goal-specific overrides.
 
 ## Subsequent runtime integrations
 

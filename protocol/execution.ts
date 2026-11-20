@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { roleIdPattern } from './domain.ts';
+import { ResourceIdSchema } from './resources.ts';
 export const TeamPlanSchema = z.strictObject({
   summary: z.string(),
   steps: z
@@ -21,6 +22,8 @@ export const TeamPlanSchema = z.strictObject({
         instructions: z.string(),
         kind: z.enum(['implementation', 'testing', 'general']),
         paths: z.array(z.string()),
+        runtimeId: ResourceIdSchema.nullable().optional(),
+        runtimeReason: z.string().trim().max(1000).optional(),
       }),
     )
     .max(2),
@@ -36,6 +39,18 @@ export const ReviewSchema = z.strictObject({
   blockingFindings: z.array(z.string()),
   summary: z.string(),
 });
-export const teamOutputSchema = z.toJSONSchema(TeamPlanSchema);
+// Native structured-output clients require every property to be required; null means automatic.
+export const teamOutputSchema = z.toJSONSchema(
+  TeamPlanSchema.extend({
+    team: z
+      .array(
+        TeamPlanSchema.shape.team.element.extend({
+          runtimeId: ResourceIdSchema.nullable(),
+          runtimeReason: z.string().trim().max(1000),
+        }),
+      )
+      .max(2),
+  }),
+);
 export const envelopeOutputSchema = z.toJSONSchema(EnvelopeSchema);
 export const reviewOutputSchema = z.toJSONSchema(ReviewSchema);

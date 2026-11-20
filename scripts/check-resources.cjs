@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { chromium } = require('@playwright/test');
+const { chromium, expect } = require('@playwright/test');
 (async () => {
   const { createServer } = await import('vite');
   const { createHost } = await import('../plugins/host.ts');
@@ -50,6 +50,7 @@ const { chromium } = require('@playwright/test');
           coordinator: 'local-coder',
           worker: 'local-coder',
           reviewer: 'local-coder',
+          workerPool: ['local-coder'],
         },
       ],
     });
@@ -73,6 +74,22 @@ const { chromium } = require('@playwright/test');
           directory: path.join(root, 'project'),
           project: { id: 'codex-panel', name: 'Resource settings fixture', root, managed: true },
           profile,
+          roles: [
+            ...['legacy_worker', 'retired_worker', 'coordinator'].map((id) => ({
+              id,
+              version: 1,
+              title: id,
+              description: 'Fixture specialist',
+              instructions: 'Keep these instructions exactly. No model metadata.',
+              kind: id === 'coordinator' ? 'coordination' : 'implementation',
+              createdAt: '2026-11-20T00:00:00.000Z',
+              updatedAt: '2026-11-20T00:00:00.000Z',
+              ...(id === 'legacy_worker' ? { model: 'legacy-opaque-name' } : {}),
+              ...(id === 'retired_worker'
+                ? { runtimePreference: { mode: 'prefer', runtimeId: 'retired-runtime' } }
+                : {}),
+            })),
+          ],
         },
       ],
     });
@@ -314,6 +331,99 @@ const { chromium } = require('@playwright/test');
       'Inherit default profile',
     );
     assert.equal(generations, 2, 'Settings saves and reloads must not generate model responses');
+    // Role selection uses the effective project pool, never the global runtime catalog.
+    await projectProfile.click();
+    await page.getByRole('option', { name: 'Local team', exact: true }).click();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await page.getByText('Settings saved', { exact: true }).waitFor();
+    failNextCatalog = true;
+    await page.locator('.sidebar').getByRole('button', { name: 'Team', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit role legacy_worker', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByText('Fixture catalog unavailable', { exact: true }).waitFor();
+    failNextCatalog = false;
+    await dialog.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await dialog
+      .getByText('Fixture catalog unavailable', { exact: true })
+      .waitFor({ state: 'hidden' });
+    assert.equal(
+      await dialog.getByRole('radio', { name: 'Auto', exact: true }).isChecked(),
+      true,
+      'Legacy role.model is not interpreted as a runtime preference',
+    );
+    await dialog.getByRole('button', { name: 'Save version 2', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    const savedRole = () =>
+      host.ctx.projects.registry
+        .get('codex-panel')
+        .snapshot()
+        .roles.find((role) => role.id === 'legacy_worker');
+    assert.deepEqual(savedRole().runtimePreference, { mode: 'auto' });
+    assert.equal(savedRole().model, 'legacy-opaque-name');
+    const roleModes = ['auto'];
+    for (const [mode, label] of [
+      ['prefer', 'Prefer'],
+      ['fixed', 'Only this model'],
+      ['auto', 'Auto'],
+    ]) {
+      const nextVersion = savedRole().version + 1;
+      await page.getByRole('button', { name: 'Edit role legacy_worker', exact: true }).click();
+      await dialog.getByText(label, { exact: true }).click();
+      if (mode !== 'auto') {
+        const select = dialog.getByRole('textbox', {
+          name: 'Model from project pool',
+          exact: true,
+        });
+        await select.click();
+        await page.getByRole('option', { name: 'fixture-coder · ollama', exact: true }).waitFor();
+        assert.deepEqual(await page.getByRole('option').allTextContents(), [
+          'fixture-coder · ollama',
+        ]);
+        await page.getByRole('option', { name: 'fixture-coder · ollama', exact: true }).click();
+      }
+      await dialog
+        .getByRole('button', { name: 'Save version ' + nextVersion, exact: true })
+        .click();
+      await dialog.waitFor({ state: 'hidden' });
+      assert.equal(savedRole().version, nextVersion);
+      assert.deepEqual(
+        savedRole().runtimePreference,
+        mode === 'auto' ? { mode } : { mode, runtimeId: 'local-coder' },
+      );
+      assert.equal(savedRole().model, 'legacy-opaque-name');
+      assert.equal(savedRole().instructions, 'Keep these instructions exactly. No model metadata.');
+      await page.reload();
+      await page.locator('.sidebar').getByRole('button', { name: 'Team', exact: true }).click();
+      await page.getByRole('button', { name: 'Edit role legacy_worker', exact: true }).click();
+      assert.equal(await dialog.getByRole('radio', { name: label, exact: true }).isChecked(), true);
+      if (mode !== 'auto')
+        await expect(
+          dialog.getByRole('textbox', { name: 'Model from project pool', exact: true }),
+        ).toHaveValue('fixture-coder · ollama');
+      await dialog.locator('.mantine-Modal-close').click();
+      roleModes.push(mode);
+    }
+    await page.getByRole('button', { name: 'Edit role retired_worker', exact: true }).click();
+    assert.equal(
+      await dialog
+        .getByRole('textbox', { name: 'Model from project pool', exact: true })
+        .inputValue(),
+      'retired-runtime · Unavailable',
+    );
+    await dialog.locator('.mantine-Modal-close').click();
+    await page.getByRole('button', { name: 'Edit role coordinator', exact: true }).click();
+    await dialog.getByText('Configured in execution profile', { exact: true }).waitFor();
+    assert.equal(await dialog.getByRole('radio').count(), 0);
+    await dialog.locator('.mantine-Modal-close').click();
+    await page.getByRole('button', { name: 'Edit role legacy_worker', exact: true }).click();
+    await dialog.getByText('Prefer', { exact: true }).click();
+    await expect(
+      dialog.getByRole('textbox', { name: 'Model from project pool', exact: true }),
+    ).toBeEnabled();
+    await page.screenshot({ path: 'artifacts/role-model-preference.png', fullPage: true });
+    await dialog.locator('.mantine-Modal-close').click();
+    assert.equal(modelsRequested, 1, 'Role editing never discovers provider models');
+    assert.equal(generations, 2, 'Role editing, model selection and role.save never run inference');
     assert.deepEqual(errors, []);
     await fs.writeFile(
       'artifacts/resources-ui-verification.json',
@@ -328,6 +438,12 @@ const { chromium } = require('@playwright/test');
           projectOverrideReloaded: true,
           inheritedDefaultPersisted: true,
           catalogRetryRecovered: true,
+          roleModes,
+          projectPoolFiltered: true,
+          legacyModelPreserved: true,
+          instructionsPreserved: true,
+          unavailableRuntimeVisible: true,
+          reservedRoleUsesProfile: true,
           errors,
         },
         null,

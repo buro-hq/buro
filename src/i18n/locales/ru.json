@@ -978,5 +978,20 @@
   "Execution resource": "Ресурс выполнения",
   "Research project": "Исследовать проект",
   "Separate coordinator session · planning before execution": "Отдельная сессия координатора · планирование перед работой",
-  "Refresh": "Обновить"
+  "Refresh": "Обновить",
+  "Specialist model": "Модель специалиста",
+  "Model selection": "Выбор модели",
+  "Auto": "Авто",
+  "Prefer": "Предпочитать",
+  "Only this model": "Только эта модель",
+  "Model from project pool": "Модель из пула проекта",
+  "No models in this project pool": "В пуле проекта нет моделей",
+  "Loading project models…": "Загружаем модели проекта…",
+  "New plans use this preference. Existing assignments keep their resources.": "Новые планы учитывают это предпочтение. Уже созданные назначения сохраняют свои ресурсы.",
+  "Configured in execution profile": "Настраивается в профиле выполнения",
+  "Auto model": "Модель: авто",
+  "Only: {p0}": "Только: {p0}",
+  "Prefer: {p0}": "Предпочтительно: {p0}",
+  "Preferred model": "Предпочтительная модель",
+  "Chosen by coordinator": "Выбор координатора"
 }

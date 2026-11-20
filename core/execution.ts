@@ -1,4 +1,6 @@
 import { runWorkerAssignments } from './worker-assignments.ts';
+import { resolveWorkerResource, workerResourcePool } from './assignment-resources.ts';
+import type { AssignmentResource } from '../protocol/resources.ts';
 import { sessionResource } from '../protocol/resources.ts';
 import { recordableRuntimeEvent } from './runtime-events.ts';
 import { applyRuntimeEvent } from './runtime-projection.ts';
@@ -716,9 +718,12 @@ ${installation.output || installation.error || ''}`,
         signal.aborted || (error instanceof DOMException && error.name === 'AbortError')
           ? 'interrupted'
           : error instanceof DomainError &&
-              ['BASELINE_CHECKS_FAILED', 'ENVIRONMENT_FAILED', 'ENVIRONMENT_UNAVAILABLE'].includes(
-                error.code,
-              )
+              [
+                'BASELINE_CHECKS_FAILED',
+                'ENVIRONMENT_FAILED',
+                'ENVIRONMENT_UNAVAILABLE',
+                'FIXED_RUNTIME_UNAVAILABLE',
+              ].includes(error.code)
             ? 'needs-attention'
             : 'failed',
         error instanceof Error ? error.message : String(error),
@@ -758,9 +763,6 @@ ${installation.output || installation.error || ''}`,
       run = this.get(projectId, runId);
     await this.phase(projectId, runId, 'planning', 'Coordinator is planning and selecting roles');
     const coordinator = initial.roles.find((r) => r.id === 'coordinator');
-    const workerCatalog = initial.roles.filter(
-      (r) => !['local_preview', 'delivery_pr', 'production_delivery'].includes(r.id),
-    );
     const input = {
       projectId,
       runId,
@@ -811,8 +813,13 @@ ${installation.output || installation.error || ''}`,
       );
     let plan: TeamPlan | undefined,
       team: ReturnType<typeof resolveTeam> | undefined,
-      correction = '';
+      correction = '',
+      planningRoles = initial.roles;
     for (let attempt = 0; attempt < 2; attempt++) {
+      const workerCatalog = planningRoles.filter(
+        (role) => !['local_preview', 'delivery_pr', 'production_delivery'].includes(role.id),
+      );
+      const pool = run.resources ? workerResourcePool(run.resources) : [];
       const answer = await ask(
         root.threadId,
         `First, only inspect the project and create a plan; do not edit files or start agents.
@@ -823,14 +830,84 @@ For a small coherent change, return an empty team and implement directly as coor
 Baseline checks: ${JSON.stringify(checkContext(baseline))}
 ${run.repairEnvironment ? environmentRepairInstructions : ''}
 Catalog: ${JSON.stringify(roleContext(workerCatalog))}
+Permitted worker runtimes: ${JSON.stringify(pool.map(({ id, client, providerId, model, local }) => ({ id, client, providerId, model, local })))}.
+Choose a runtime for each worker only from this pool when that improves its assignment. Use runtimeId null and runtimeReason "" to follow its user preference or the profile default. Respect fixed user preferences. Explain a different choice when a user prefers another runtime. A runtime selection applies only to this assignment; never put it in reusable role instructions or create a new connection. Runtime metadata is not evidence of coding quality; the service still checks capabilities, scope, tests and independent review.
 ${correction}`,
         teamOutputSchema,
       );
       try {
-        plan = TeamPlanSchema.parse(answer);
-        team = resolveTeam(plan, initial.roles, policy, this.env.now());
+        const candidatePlan = TeamPlanSchema.parse(answer);
+        const candidateTeam = resolveTeam(candidatePlan, planningRoles, policy, this.env.now());
+        let assignments: Record<string, AssignmentResource> | undefined;
+        if (run.resources)
+          assignments = Object.fromEntries(
+            candidateTeam.roles.map((role) => [
+              role.id,
+              resolveWorkerResource(
+                run.resources!,
+                role,
+                candidatePlan.team.find((worker) => worker.roleId === role.id),
+              ),
+            ]),
+          );
+        else if (
+          candidatePlan.team.some((worker) => worker.runtimeId != null) ||
+          candidateTeam.roles.some(
+            (role) => role.runtimePreference && role.runtimePreference.mode !== 'auto',
+          )
+        )
+          throw new DomainError(
+            'RESOURCE_PROFILE_REQUIRED',
+            'Model selection requires a saved execution resource profile.',
+          );
+        await this.update(projectId, runId, (r, _goal, doc) => {
+          // A user changing a pin while the model plans must get a fresh decision, not stale dispatch.
+          for (const role of candidateTeam.roles) {
+            const current = doc.roleVersions.filter((item) => item.id === role.id).at(-1);
+            if (
+              (candidateTeam.origins[role.id] === 'reused' && current?.version !== role.version) ||
+              (candidateTeam.origins[role.id] === 'created' && current)
+            )
+              throw new DomainError(
+                'ROLE_CHANGED',
+                `Role ${role.id} changed during planning. Choose from the updated catalog.`,
+              );
+          }
+          r.plan = candidatePlan.steps;
+          r.planSavedAt = this.env.now();
+          r.summary = candidatePlan.summary;
+          r.roleSnapshots = [
+            ...initial.roles.filter((role) => ['coordinator', 'reviewer'].includes(role.id)),
+            ...candidateTeam.roles,
+          ];
+          r.roleOrigins = candidateTeam.origins;
+          r.roleAssignments = Object.fromEntries(
+            candidatePlan.team.map((worker) => [worker.roleId, worker.paths]),
+          );
+          if (assignments) r.assignmentResources = assignments;
+          for (const role of candidateTeam.roles) {
+            r.events.push({
+              at: this.env.now(),
+              type: candidateTeam.origins[role.id] === 'created' ? 'role.proposed' : 'role.reused',
+              text: `${role.id}: ${role.title}`,
+            });
+            const selected = assignments?.[role.id];
+            if (selected)
+              r.events.push({
+                at: this.env.now(),
+                type: 'agent.resource-selected',
+                text: `${role.id}: ${selected.resource.model || selected.resource.id}. ${selected.reason}`,
+              });
+          }
+          r.events.push({ at: this.env.now(), type: 'plan.saved', text: candidatePlan.summary });
+        });
+        plan = candidatePlan;
+        team = candidateTeam;
         break;
       } catch (e) {
+        if (e instanceof DomainError && e.code === 'FIXED_RUNTIME_UNAVAILABLE') throw e;
+        if (e instanceof DomainError && e.code === 'ROLE_CHANGED')
+          planningRoles = this.env.projects.get(projectId).snapshot().roles;
         correction = 'Correct the previous plan: ' + String(e);
         await this.update(projectId, runId, (r) =>
           r.events.push({ at: this.env.now(), type: 'plan.rejected', text: correction }),
@@ -839,24 +916,6 @@ ${correction}`,
     }
     if (!plan || !team) throw Error('The revised plan did not pass validation. ' + correction);
     const proposed = team.roles.filter((r) => team!.origins[r.id] === 'created');
-    await this.update(projectId, runId, (r) => {
-      r.plan = plan!.steps;
-      r.planSavedAt = this.env.now();
-      r.summary = plan!.summary;
-      r.roleSnapshots = [
-        ...initial.roles.filter((r) => ['coordinator', 'reviewer'].includes(r.id)),
-        ...team!.roles,
-      ];
-      r.roleOrigins = team!.origins;
-      r.roleAssignments = Object.fromEntries(plan!.team.map((w) => [w.roleId, w.paths]));
-      for (const role of team!.roles)
-        r.events.push({
-          at: this.env.now(),
-          type: team!.origins[role.id] === 'created' ? 'role.proposed' : 'role.reused',
-          text: `${role.id}: ${role.title}`,
-        });
-      r.events.push({ at: this.env.now(), type: 'plan.saved', text: plan!.summary });
-    });
     await this.phase(projectId, runId, 'implementation', 'Workers are implementing the plan');
     const workerResults = await this.dispatchWorkers(
       projectId,

@@ -43,6 +43,8 @@ The user can pin a role, change future defaults, clarify an active goal, pause w
 
 Provider choice is subordinate to project policy. A local-only goal stays local. A hybrid goal can use DeepSeek or Codex for permitted context and tasks within its budget. A provider failure does not silently authorize sending local material to a remote service.
 
+Specialists default to automatic resource selection. A user can prefer a model or require one explicitly without changing the role's instructions. The coordinator proposes an allowed model for the assignment; Buro checks the policy and records the choice and reason. Several workers in one goal can use different models. A model change creates another assignment/session and preserves the earlier evidence.
+
 ## Quality with smaller models
 
 Assignments have a narrow objective, known inputs, file boundaries, expected artifacts and a verification contract. Workers receive the context needed for that assignment instead of the entire team's conversation. Context budgets use model tokens and include room for responses and tools.

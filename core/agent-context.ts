@@ -36,11 +36,12 @@ export function changeContext(changes: FileChange[]) {
 }
 
 export function roleContext(roles: Role[]) {
-  return roles.map(({ id, version, title, description, kind }) => ({
+  return roles.map(({ id, version, title, description, kind, runtimePreference }) => ({
     id,
     version,
     title,
     description,
     kind,
+    ...(runtimePreference ? { runtimePreference } : {}),
   }));
 }

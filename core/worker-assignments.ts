@@ -5,6 +5,7 @@ import { DomainError, type AgentRuntime } from './ports.ts';
 import { inScope, type ExecutionPolicy, type WorkspacePort } from './execution-ports.ts';
 import { checkContext } from './agent-context.ts';
 import { sessionResource } from '../protocol/resources.ts';
+import { validateAssignmentResource } from './assignment-routing.ts';
 
 /** Compare observed edits, including a worker reverting an earlier worker's change. */
 export function assignmentScopePreserved(
@@ -52,11 +53,27 @@ export async function runWorkerAssignments(options: {
       throw new DomainError('INVALID_ASSIGNMENT', `No saved paths for ${role.id}.`);
     if (paths.some((path) => !inScope(path, policy.allowedPaths, policy.protectedPaths)))
       throw new DomainError('INVALID_ASSIGNMENT', `Assignment exceeds current scope: ${role.id}.`);
+    const savedDecision = run.assignmentResources?.[role.id];
+    if (run.resources?.workerPool && !savedDecision)
+      throw new DomainError('INVALID_ASSIGNMENT', `No saved resource decision for ${role.id}.`);
+    if (savedDecision && !run.resources)
+      throw new DomainError('INVALID_ASSIGNMENT', 'A resource decision requires its saved pool.');
+    const decision = savedDecision
+      ? validateAssignmentResource(run.resources!, role, savedDecision)
+      : undefined;
     const session: AgentSession = {
       id: 'S-' + options.id(),
       roleId: role.id,
       roleVersion: role.version,
-      ...sessionResource(run.resources, 'implementation', runtime.id),
+      ...(decision
+        ? {
+            runtimeId: decision.resource.id,
+            providerId: decision.resource.providerId,
+            model: decision.resource.model,
+            configurationRevision: decision.resource.configurationRevision,
+            selection: { source: decision.source, reason: decision.reason },
+          }
+        : sessionResource(run.resources, 'implementation', runtime.id)),
       parentId: run.coordinatorSession?.id,
     };
     // Persist dispatch intent before opening a client. An unknown outcome is never replayed on restart.

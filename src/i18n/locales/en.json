@@ -978,5 +978,20 @@
   "Execution resource": "Execution resource",
   "Research project": "Research project",
   "Separate coordinator session · planning before execution": "Separate coordinator session · planning before execution",
-  "Refresh": "Refresh"
+  "Refresh": "Refresh",
+  "Specialist model": "Specialist model",
+  "Model selection": "Model selection",
+  "Auto": "Auto",
+  "Prefer": "Prefer",
+  "Only this model": "Only this model",
+  "Model from project pool": "Model from project pool",
+  "No models in this project pool": "No models in this project pool",
+  "Loading project models…": "Loading project models…",
+  "New plans use this preference. Existing assignments keep their resources.": "New plans use this preference. Existing assignments keep their resources.",
+  "Configured in execution profile": "Configured in execution profile",
+  "Auto model": "Auto model",
+  "Only: {p0}": "Only: {p0}",
+  "Prefer: {p0}": "Prefer: {p0}",
+  "Preferred model": "Preferred model",
+  "Chosen by coordinator": "Chosen by coordinator"
 }
