@@ -17,6 +17,7 @@ const { runLiveProviderEvaluation } = require('./lib/live-provider-runner.cjs');
       ollama: process.env.BURO_OLLAMA_ENDPOINT || 'http://127.0.0.1:11434',
     },
     credentials,
+    forceWorker: process.env.BURO_LIVE_FORCE_WORKER === '1',
     sourceCase: process.env.BURO_LIVE_CASE
       ? require('./lib/source-evaluation-cases.cjs').getSourceEvaluationCase(
           process.env.BURO_LIVE_CASE,

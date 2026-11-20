@@ -755,6 +755,7 @@ async function runLiveProviderEvaluation(options = {}) {
     status: 'blocked',
     stage: 'preflight',
     caseId: options.sourceCase?.id || 'synthetic-value',
+    forceWorker: !!options.forceWorker,
     ...(options.segmentPolicy
       ? { segmentPolicy: { revision: options.segmentPolicy.revision } }
       : {}),
@@ -996,7 +997,20 @@ async function runLiveProviderEvaluation(options = {}) {
     });
     const goal = await command({
       method: 'goal.create',
-      params: { projectId: 'p', ...fixture.goal },
+      params: {
+        projectId: 'p',
+        ...fixture.goal,
+        ...(options.forceWorker
+          ? {
+              body:
+                fixture.goal.body +
+                '\nDelegate the implementation to one real worker. The coordinator plans and integrates; Buro starts the worker and fresh reviewer. An empty team does not satisfy this evaluation. The worker must make the actual change in its own session.',
+              criteria:
+                fixture.goal.criteria +
+                ' A distinct worker session implements the change successfully.',
+            }
+          : {}),
+      },
     });
     report.stage = 'coding-goal';
     codingTimer = setTimeout(() => {
