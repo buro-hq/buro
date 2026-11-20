@@ -1,6 +1,6 @@
 # First provider integrations
 
-Status: implementation contract for the next milestone. The current production runtime is Codex CLI; Ollama, DeepSeek and the managed runtime described here are not shipped yet. [Product vision](../VISION.md), [architecture](../ARCHITECTURE.md) and [roadmap](../ROADMAP.md) share this scope.
+Status: implementation contract for the next milestone. The production daemon still selects Codex CLI. The shared managed runtime and Ollama/DeepSeek HTTP adapters are implemented and covered by deterministic contracts; resource-profile wiring and live-provider acceptance remain pending. [Implementation progress](IMPLEMENTATION.md), [product vision](../VISION.md), [architecture](../ARCHITECTURE.md) and [roadmap](../ROADMAP.md) share this scope.
 
 ## Supported routes in the first milestone
 

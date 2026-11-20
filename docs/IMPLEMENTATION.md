@@ -55,4 +55,8 @@ The fake-provider acceptance case performs real file reading/editing and a sandb
 
 Validation after the managed-runtime increment: all 133 default tests, type checking and the production build pass. No live model calls are part of this evidence.
 
-Next: Ollama and DeepSeek adapters, followed by per-session resource selection, capability probes and daemon integration for research, environment setup and goal execution.
+Both provider transports are implemented in `adapters/models/`. Ollama uses native model discovery/details and NDJSON chat, checks advertised tools/context/thinking settings, and rejects cloud-backed routes. DeepSeek uses Chat Completions SSE with fragmented multi-tool calls and preserves required private reasoning continuation. Both report observed usage when available, bound response sizes, reject incomplete streams and share an abortable endpoint-capacity gate. Credentials are injected privately and never copied into model checkpoints. No automatic retry or provider fallback is performed after an interrupted response.
+
+Validation after the transport increment: 138 default tests passed, including chunk boundaries/UTF-8, continuation across tool rounds, missing credentials, malformed/truncated responses, remote-model rejection and queued cancellation. Type checking and the production build passed; subsequent endpoint/thinking validation changes passed focused provider contracts and type checking. These are deterministic HTTP fixtures, not live-provider acceptance.
+
+Next: per-session resource profiles, durable routing and daemon/CLI integration for research, environment setup and goal execution. Preserve the configured profile and data policy for each run, use Buro handles for client thread references, and never change an existing session's provider by following a newly selected default. Add end-to-end HTTP-fixture goals for each route and a mixed team before opt-in live probes.
