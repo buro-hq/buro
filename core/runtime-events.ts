@@ -17,6 +17,8 @@ export type RuntimeEvent = EventBase &
         legacyAssignment?: { path?: string; prompt?: string; name?: string };
       }
     | { type: 'message.completed'; text: string }
+    | { type: 'tool.started'; actionId: string; toolName: string }
+    | { type: 'tool.completed'; actionId: string; toolName: string; isError: boolean }
     | { type: 'command.started'; commandId: string; command: string }
     | {
         type: 'command.completed';

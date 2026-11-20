@@ -43,6 +43,14 @@ export function applyRuntimeEvent(run: Run, event: RuntimeEvent, now: string) {
     return;
   }
   const agent = run.agents.find((a) => a.threadId === tid);
+  if (event.type === 'tool.started' || event.type === 'tool.completed') {
+    run.events.push({
+      at: now,
+      type: event.type,
+      threadId: tid,
+      text: event.toolName + (event.type === 'tool.completed' && event.isError ? ': failed' : ''),
+    });
+  }
   if (event.type === 'message.completed') {
     const text = event.text.slice(0, 12000);
     agent?.messages.push(text);

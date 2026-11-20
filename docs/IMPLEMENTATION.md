@@ -47,4 +47,12 @@ Buro now persists worker dispatch intents and session IDs before opening clients
 
 Validation after the event/catalog increment: 124 default tests passed. After Buro-owned delegation: all 128 default tests pass, including dispatch persistence, independent worker/coordinator sessions, impersonation rejection, worker cancellation, assignment scope, native adapter fixtures, event normalization, redelivery after failed persistence, registry selection/disposal, independent review, recovery, storage and transport. Type checking and the production build pass. Tests use synthetic repositories and adapters, not paid model calls or the user's example project source.
 
-Next: shared managed-runtime/tool contracts and private checkpoints, followed by Ollama and DeepSeek adapters. Per-session resource selection, capability probes and live-provider acceptance are still pending.
+The shared managed runtime is implemented in `core/managed-runtime.ts`, with ModelProvider/ToolBroker/checkpoint ports in `core/model-ports.ts`. It persists request budgets, tool intents and results before continuing the conversation; duplicate tool IDs, exhausted budgets and unreconciled actions stop execution. Cancellation intent and private provider continuation survive in separate checkpoints. Context uses a conservative UTF-8-byte token upper estimate, not billed usage. Provider-reported usage is recorded separately when available.
+
+`RepositoryTools` provides bounded reads, listing, literal search, exact edits, actual tracked/untracked diffs and exact configured check commands. Read-only sessions cannot edit or run commands. Writes validate assignment paths, symlinks and protected package fields; commands use the existing confinement executor and do not fall back to the host. Private metadata/secrets are excluded; only explicitly selected material files can be read from private context storage. Checkpoints use private atomic files with serialized writes, outside public project events.
+
+The fake-provider acceptance case performs real file reading/editing and a sandboxed check in an isolated worktree, then passes independent service checks and fresh review without loading Codex. Additional contracts cover persistence failures at action boundaries, duplicate IDs, context limits, cancellation and scope restrictions. Live-provider acceptance is still pending.
+
+Validation after the managed-runtime increment: all 133 default tests, type checking and the production build pass. No live model calls are part of this evidence.
+
+Next: Ollama and DeepSeek adapters, followed by per-session resource selection, capability probes and daemon integration for research, environment setup and goal execution.
