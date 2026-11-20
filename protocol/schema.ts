@@ -243,7 +243,24 @@ const verification = z.object({
   total: z.number(),
   results: z.array(check),
 });
+const agentSession = z.object({
+  id: z.string(),
+  roleId: z.string(),
+  roleVersion: z.number().int().nonnegative(),
+  runtimeId: z.string(),
+  parentId: z.string().optional(),
+  result: z
+    .object({
+      status: z.enum(['success', 'fail']),
+      summary: z.string(),
+      artifacts: z.array(z.string()),
+      notesForNextAgent: z.string(),
+    })
+    .optional(),
+});
 const run = z.object({
+  delegation: z.literal('buro').optional(),
+  coordinatorSession: agentSession.optional(),
   contextMaterials: z.array(ContextMaterialSchema).optional(),
   id: z.string(),
   key: z.string(),
@@ -364,6 +381,7 @@ const run = z.object({
     .optional(),
   agents: z.array(
     z.object({
+      session: agentSession.optional(),
       threadId: z.string(),
       name: z.string(),
       agentPath: z.string(),

@@ -102,6 +102,7 @@ export type Command = {
   output?: string;
 };
 export type Agent = {
+  session?: AgentSession;
   threadId: string;
   name: string;
   agentPath: string;
@@ -111,6 +112,19 @@ export type Agent = {
   commands: number;
   status: string;
   assignment?: { paths: string[] };
+};
+export type AgentSession = {
+  id: string;
+  roleId: string;
+  roleVersion: number;
+  runtimeId: string;
+  parentId?: string;
+  result?: {
+    status: 'success' | 'fail';
+    summary: string;
+    artifacts: string[];
+    notesForNextAgent: string;
+  };
 };
 export type FileChange = { path: string; before: string; after: string };
 export type Check = {
@@ -143,6 +157,8 @@ export type RunIssue = {
   checks: string[];
 };
 export type Run = {
+  delegation?: 'buro';
+  coordinatorSession?: AgentSession;
   contextMaterials?: ContextMaterial[];
   id: string;
   key: string;

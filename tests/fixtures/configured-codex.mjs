@@ -10,6 +10,10 @@ if (args.includes('mcp')) {
     console.error('Discover servers after disabling plugin-provided transports');
     process.exit(1);
   }
+  if (!args.includes('features.multi_agent=false') || !args.includes('agents.enabled=false')) {
+    console.error('Buro owns worker dispatch; native child tools must be disabled');
+    process.exit(1);
+  }
   if (args.some((a) => a.includes('mcp_servers."'))) {
     console.error('Quoted override path');
     process.exit(1);

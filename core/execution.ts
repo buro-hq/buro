@@ -1,3 +1,4 @@
+import { runWorkerAssignments } from './worker-assignments.ts';
 import { recordableRuntimeEvent } from './runtime-events.ts';
 import { applyRuntimeEvent } from './runtime-projection.ts';
 import { checkContext, changeContext, roleContext } from './agent-context.ts';
@@ -243,6 +244,7 @@ ${installation.output || installation.error || ''}`,
             threadId: '',
             status: 'queued',
             phase: 'queued',
+            delegation: 'buro',
             goalId: goal.id,
             contextMaterials: goalMaterials(doc, goal),
             parentRunId: goal.parentRunId,
@@ -443,7 +445,7 @@ ${installation.output || installation.error || ''}`,
       };
     if (run.continuation?.mode === 'repair') {
       const instructions =
-        'Continue the existing goal in its saved workspace. Do not commit or modify protected files. Project context: ' +
+        'Continue the existing goal in its saved workspace. Do not start agents: Buro dispatches workers. Do not commit or modify protected files. Project context: ' +
         (policy.context || '') +
         materialInstructions(run.contextMaterials || [], workspace.path, true) +
         (run.repairEnvironment ? '\n' + environmentRepairInstructions : '');
@@ -487,10 +489,23 @@ ${installation.output || installation.error || ''}`,
         'repair',
         'Continuing the saved session with user clarification',
       );
+      await this.update(projectId, runId, (r) => {
+        r.delegation = 'buro';
+      });
+      const workerResults = await this.dispatchWorkers(
+        projectId,
+        runId,
+        roles,
+        workspace,
+        policy,
+        signal,
+        threads,
+        ask,
+      );
       envelope = EnvelopeSchema.parse(
         await ask(
           root.threadId,
-          `Continue without restarting the implementation. Goal: ${run.goalText}. Clarification: ${run.continuation.instructions}. Previous result: ${run.result}. Checks: ${JSON.stringify(checkContext(run.acceptance))}. Allowed paths: ${JSON.stringify(policy.allowedPaths)}. Plan: ${JSON.stringify(run.plan)}. ${run.repairEnvironment ? environmentRepairInstructions : ''} Use the saved team when needed and wait for workers. The service starts an independent reviewer.`,
+          `Continue without restarting the implementation. Goal: ${run.goalText}. Clarification: ${run.continuation.instructions}. Previous result: ${run.result}. Checks: ${JSON.stringify(checkContext(run.acceptance))}. Allowed paths: ${JSON.stringify(policy.allowedPaths)}. Plan: ${JSON.stringify(run.plan)}. ${run.repairEnvironment ? environmentRepairInstructions : ''} Buro has dispatched the saved team. Worker results: ${JSON.stringify(workerResults)}. Integrate these changes; do not start agents. The service starts an independent reviewer.`,
           envelopeOutputSchema,
         ),
       );
@@ -729,11 +744,20 @@ ${installation.output || installation.error || ''}`,
       workspace: workspace.path,
       instructions:
         (coordinator?.instructions || 'Coordinate work on the goal.') +
-        '\nDo not run Git commit/reset/checkout. An external service accepts changes. Modify only allowed files. Do not touch .git. Network use is limited to preparing project tools and dependencies when a managed environment is provided.\nProject context: ' +
+        '\nDo not start agents: Buro dispatches workers. Do not run Git commit/reset/checkout. An external service accepts changes. Modify only allowed files. Do not touch .git. Network use is limited to preparing project tools and dependencies when a managed environment is provided.\nProject context: ' +
         (policy.context || '') +
         materialInstructions(run.contextMaterials || [], workspace.path, true) +
         (run.repairEnvironment ? '\n' + environmentRepairInstructions : ''),
     };
+    await this.update(projectId, runId, (r) => {
+      r.delegation = 'buro';
+      r.coordinatorSession ||= {
+        id: 'S-' + this.env.id(),
+        roleId: 'coordinator',
+        roleVersion: coordinator?.version || 0,
+        runtimeId: this.env.runtime.id,
+      };
+    });
     const root =
       restoreThread && run.threadId && this.env.runtime.resume
         ? await this.env.runtime.resume({ ...input, threadId: run.threadId })
@@ -815,18 +839,24 @@ ${correction}`,
       r.events.push({ at: this.env.now(), type: 'plan.saved', text: plan!.summary });
     });
     await this.phase(projectId, runId, 'implementation', 'Workers are implementing the plan');
-    const assignments = plan.team.map((w) => ({
-      role: team!.roles.find((r) => r.id === w.roleId),
-      paths: w.paths,
-    }));
-    let envelope = EnvelopeSchema.parse(
+    const workerResults = await this.dispatchWorkers(
+      projectId,
+      runId,
+      team.roles,
+      workspace,
+      policy,
+      signal,
+      threads,
+      ask,
+    );
+    const envelope = EnvelopeSchema.parse(
       await ask(
         root.threadId,
-        `Plan accepted. Implement the goal. If team is empty, implement directly without starting child agents. For every assigned worker you MUST spawn a real child agent using spawn_agent; give them the planned names/role_id, saved role instructions, owned paths and relevant user material references. Run independent tasks in parallel and dependent tasks sequentially. Wait for every worker. Integrate and repair the result as needed. Do not create a reviewer: the service starts one independently after you. Do not commit. Prefer targeted local verification; the service runs the full registered acceptance commands, so do not repeat a full successful suite without a reason.
+        `Plan accepted. Buro has executed the assigned workers. If team is empty, implement directly. Integrate the current changes and repair inconsistencies. Do not start agents: worker dispatch and independent review belong to Buro. Do not commit. Prefer targeted local verification; the service runs the registered acceptance commands, so do not repeat a full successful suite without a reason.
 Plan: ${JSON.stringify(plan)}
-Assignments: ${JSON.stringify(assignments)}
+Worker results: ${JSON.stringify(workerResults)}
 Baseline checks: ${JSON.stringify(checkContext(baseline))}
-Return the formal execution result.`,
+Use relevant user materials at their staged paths. Return the formal execution result.`,
         envelopeOutputSchema,
       ),
     );
@@ -843,6 +873,33 @@ Return the formal execution result.`,
       proposed,
       root,
       envelope,
+      ask,
+    });
+  }
+  async dispatchWorkers(
+    projectId: string,
+    runId: string,
+    roles: Role[],
+    workspace: { path: string; base: string },
+    policy: ExecutionPolicy,
+    signal: AbortSignal,
+    threads: string[],
+    ask: (threadId: string, text: string, schema: unknown) => Promise<unknown>,
+  ) {
+    return runWorkerAssignments({
+      projectId,
+      run: this.get(projectId, runId),
+      roles,
+      workspace,
+      policy,
+      runtime: this.env.runtime,
+      workspaces: this.env.workspaces,
+      signal,
+      now: this.env.now,
+      id: this.env.id,
+      update: (apply) => this.update(projectId, runId, apply),
+      track: (threadId) => threads.push(threadId),
+      flush: () => this.eventQueue,
       ask,
     });
   }
@@ -942,7 +999,7 @@ Return the formal execution result.`,
         envelope = EnvelopeSchema.parse(
           await ask(
             root.threadId,
-            `Repair the result in this same workspace. Goal: ${run.goalText}. Boundaries respected: ${scope}. Checks: ${JSON.stringify(checkContext(checks))}. Do not modify protected instructions or check commands. ${run.repairEnvironment ? environmentRepairInstructions : ''} Return the formal result.`,
+            `Repair the result in this same workspace. Goal: ${run.goalText}. Boundaries respected: ${scope}. Checks: ${JSON.stringify(checkContext(checks))}. Do not start agents. Do not modify protected instructions or check commands. ${run.repairEnvironment ? environmentRepairInstructions : ''} Return the formal result.`,
             envelopeOutputSchema,
           ),
         );
@@ -950,6 +1007,32 @@ Return the formal execution result.`,
       }
       await this.phase(projectId, runId, 'review', 'Independent reviewer is checking the result');
       const reviewerRole = initial.roles.find((r) => r.id === 'reviewer');
+      const reviewerSession = {
+        id: 'S-' + this.env.id(),
+        roleId: 'reviewer',
+        roleVersion: reviewerRole?.version || 0,
+        runtimeId: this.env.runtime.id,
+        parentId: this.get(projectId, runId).coordinatorSession?.id,
+      };
+      await this.update(projectId, runId, (r) => {
+        r.agents.push({
+          session: reviewerSession,
+          threadId: reviewerSession.id,
+          name: 'reviewer',
+          agentPath: '/root/reviewer',
+          startedAt: this.env.now(),
+          completedAt: '',
+          messages: [],
+          commands: 0,
+          status: 'starting',
+        });
+        r.events.push({
+          at: this.env.now(),
+          type: 'agent.dispatch-requested',
+          threadId: reviewerSession.id,
+          text: 'Independent reviewer',
+        });
+      });
       const reviewer = await this.startRuntime({
         projectId,
         runId,
@@ -964,16 +1047,9 @@ Return the formal execution result.`,
       });
       threads.push(reviewer.threadId);
       await this.update(projectId, runId, (r) => {
-        r.agents.push({
-          threadId: reviewer.threadId,
-          name: 'reviewer',
-          agentPath: '/root/reviewer',
-          startedAt: this.env.now(),
-          completedAt: '',
-          messages: [],
-          commands: 0,
-          status: 'running',
-        });
+        const agent = r.agents.find((a) => a.session?.id === reviewerSession.id)!;
+        agent.threadId = reviewer.threadId;
+        agent.status = 'running';
         r.events.push({
           at: this.env.now(),
           type: 'agent.started',
@@ -1015,11 +1091,17 @@ Read relevant sources and verify actual correctness, including preservation of e
       });
       await this.env.runtime.release?.(reviewer.threadId);
       await this.eventQueue;
-      const workersReady = team.roles.every((role) =>
-        this.get(projectId, runId).agents.some(
-          (a) => a.name === role.id && a.status === 'completed',
-        ),
-      );
+      const observed = this.get(projectId, runId);
+      const workersReady = team.roles.every((role) => {
+        if (observed.delegation !== 'buro')
+          return observed.agents.some((a) => a.name === role.id && a.status === 'completed');
+        const assignment = [...observed.agents]
+          .reverse()
+          .find((a) => a.session?.roleId === role.id);
+        return (
+          assignment?.status === 'completed' && assignment.session?.result?.status === 'success'
+        );
+      });
       accepted =
         workersReady &&
         envelope.status === 'success' &&
@@ -1047,7 +1129,7 @@ Read relevant sources and verify actual correctness, including preservation of e
           `Repair the result in this same session. Acceptance failed. Boundaries respected: ${scope}. All assigned workers actually started and finished: ${workersReady}.
 Checks: ${JSON.stringify(checkContext(checks))}
 Independent review: ${JSON.stringify(review)}
-Do not modify checks or instructions, and do not commit. Return a new formal result.`,
+Do not start agents. Do not modify checks or instructions, and do not commit. Return a new formal result.`,
           envelopeOutputSchema,
         ),
       );

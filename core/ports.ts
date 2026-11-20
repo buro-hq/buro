@@ -62,6 +62,12 @@ export interface AgentRuntime {
     workspace?: string;
     readOnly?: boolean;
     runId?: string;
+    assignment?: {
+      sessionId: string;
+      roleId: string;
+      allowedPaths: string[];
+      protectedPaths: string[];
+    };
   }): Promise<{ threadId: string }>;
   resume?(input: {
     projectId: string;

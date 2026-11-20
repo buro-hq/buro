@@ -16,8 +16,8 @@ Agreed on 20 November 2026: preserve the product decisions, refactor the existin
 - [x] Translate native Codex events in the adapter; give core a typed, provider-independent event contract.
 - [x] Extract runtime-event projection from execution decisions without changing saved run/history formats.
 - [x] Introduce a runtime registry independent of Codex composition, preserving existing consumers and explicit lifecycle cleanup.
-- [ ] Move worker creation and assignment identity under Buro ownership. Remove native spawn-agent requirements and prompt-based role matching.
-- [ ] Preserve trusted checks, fresh read-only review, role promotion, workspace isolation, cancellation and conservative recovery throughout.
+- [x] Move worker creation and assignment identity under Buro ownership. Remove native spawn-agent requirements and prompt-based role matching.
+- [x] Preserve trusted checks, fresh read-only review, role promotion, workspace isolation, cancellation and conservative recovery throughout.
 
 Keep each step usable and verified. A registry alone does not implement provider routing, durable sessions or cross-provider delegation.
 
@@ -43,6 +43,8 @@ The first increment normalizes Codex activity in `adapters/codex/events.ts`, def
 
 `core/runtimes.ts` provides an explicit process-local catalog with duplicate/missing-route errors and coordinated disposal. `plugins/runtime.ts` composes it independently of Codex. Existing consumers retain the selected default adapter. This does not yet implement per-session model routing, capability probes or provider integrations.
 
-Native child spawning and legacy role matching remain compatibility behavior in this increment. Buro-owned worker dispatch and assignment identity are the next refactor step, before adding direct providers.
+Buro now persists worker dispatch intents and session IDs before opening clients, starts independent worker sessions itself, snapshots role/runtime identity, and saves formal results. A worker's observed edits must stay inside its assignment, including not reverting another worker's edits. Workers run sequentially in one run worktree. The coordinator integrates their results; the service still owns checks and fresh review. Native child tools are disabled in the production Codex configuration. Undeclared children can appear as unassigned activity but cannot satisfy planned roles. Existing historical runs can still be rechecked; explicit repair dispatches new Buro-owned assignments.
 
-Validation: all 124 default tests pass, including native adapter fixtures, event normalization, redelivery after failed persistence, registry selection/disposal, execution, independent review, recovery, storage and transport. Type checking and the production build pass. Tests use synthetic repositories and adapters, not paid model calls or the user's example project source.
+Validation after the event/catalog increment: 124 default tests passed. After Buro-owned delegation: all 128 default tests pass, including dispatch persistence, independent worker/coordinator sessions, impersonation rejection, worker cancellation, assignment scope, native adapter fixtures, event normalization, redelivery after failed persistence, registry selection/disposal, independent review, recovery, storage and transport. Type checking and the production build pass. Tests use synthetic repositories and adapters, not paid model calls or the user's example project source.
+
+Next: shared managed-runtime/tool contracts and private checkpoints, followed by Ollama and DeepSeek adapters. Per-session resource selection, capability probes and live-provider acceptance are still pending.

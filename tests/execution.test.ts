@@ -14,6 +14,8 @@ import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { NodeChecks } from '../adapters/checks/node-checks.ts';
 import { CodexRuntime } from '../adapters/codex/runtime.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
+import { applyRuntimeEvent } from '../core/runtime-projection.ts';
+import { assignmentScopePreserved } from '../core/worker-assignments.ts';
 
 const policy: ExecutionPolicy = {
   allowedPaths: ['src/'],
@@ -46,7 +48,9 @@ async function fixture(
     rejectReview?: number;
     outOfScope?: boolean;
     pause?: boolean;
+    pauseWorker?: boolean;
     noWorkers?: boolean;
+    nativeChildren?: boolean;
     direct?: boolean;
   } = {},
 ) {
@@ -78,7 +82,7 @@ async function fixture(
     },
     async turn(id: string, text: string, { signal }: any) {
       turns.push({ id, text });
-      if (options.pause) {
+      if (options.pause || (options.pauseWorker && text.startsWith('Execute your assigned work'))) {
         await new Promise<void>((resolve) =>
           signal.addEventListener('abort', () => resolve(), { once: true }),
         );
@@ -119,7 +123,9 @@ async function fixture(
           ),
         };
       const runId = store.snapshot().runs[0].id;
-      if (!options.noWorkers)
+      if (options.noWorkers && text.startsWith('Execute your assigned work'))
+        throw Error('Worker unavailable');
+      if (options.nativeChildren)
         for (const kind of ['started', 'completed'])
           for (const listener of events)
             listener({
@@ -242,11 +248,144 @@ test('each run freezes its execution policy and passes project context to coordi
   assert.equal(run.status, 'completed');
   assert.deepEqual(run.executionPolicySnapshot?.allowedPaths, ['src/']);
   assert.equal(run.executionPolicySnapshot?.context, 'Original project context');
-  assert.equal(instructions.length, 2);
+  assert.equal(instructions.length, 3);
   assert.ok(
     instructions.every(
       (text) => text.includes('Original project context') && !text.includes('Changed context'),
     ),
+  );
+});
+test('Buro persists assignments before client dispatch and completes workers without native children', async (t) => {
+  const f = await fixture(t);
+  const start = f.runtime.start;
+  let dispatched = 0;
+  f.runtime.start = async (input?: any) => {
+    if (input.assignment) {
+      dispatched++;
+      const run = f.store.snapshot().runs[0];
+      const pending = run.agents.find((agent) => agent.session?.id === input.assignment.sessionId)!;
+      assert.equal(pending.status, 'starting');
+      assert.equal(pending.session?.roleId, 'builder');
+      assert.equal(pending.session?.roleVersion, 1);
+      assert.equal(pending.session?.runtimeId, 'fake');
+      assert.equal(pending.session?.parentId, run.coordinatorSession?.id);
+      assert.deepEqual(input.assignment.allowedPaths, ['src/code.mjs']);
+      const saved = JSON.parse(
+        await fs.readFile(path.join(f.directory, 'control-state.json'), 'utf8'),
+      );
+      assert.ok(
+        saved.runs[0].agents.some((agent: any) => agent.session?.id === pending.session?.id),
+      );
+    }
+    return start(input);
+  };
+  const started = await f.start();
+  const result = await f.drain(started.runId);
+  assert.equal(result.status, 'completed', result.result);
+  assert.equal(dispatched, 1);
+  const worker = result.agents.find((agent) => agent.session?.roleId === 'builder')!;
+  assert.equal(worker.session?.result?.status, 'success');
+  assert.notEqual(worker.session?.id, worker.threadId);
+  const implementation = f.turns.find((turn) =>
+    turn.text.startsWith('Execute your assigned work'),
+  )!;
+  const coordinator = f.turns.find((turn) => turn.text.startsWith('Plan accepted'))!;
+  assert.equal(implementation.id, worker.threadId);
+  assert.equal(coordinator.id, result.threadId);
+  assert.notEqual(implementation.id, coordinator.id);
+  assert.equal(result.agents.filter((agent) => agent.name.startsWith('native:')).length, 0);
+});
+
+test('native child names and prompts cannot claim or complete Buro assignments', async (t) => {
+  const f = await fixture(t);
+  const started = await f.start(),
+    run = await f.drain(started.runId);
+  const assigned = run.agents.find((agent) => agent.session?.roleId === 'builder')!;
+  assigned.status = 'running';
+  assigned.session!.result = undefined;
+  applyRuntimeEvent(
+    run,
+    {
+      id: 'spoof',
+      runId: run.id,
+      type: 'agent.activity',
+      threadId: 'undeclared',
+      parentThreadId: run.threadId,
+      completed: true,
+      legacyAssignment: { path: '/root/builder', name: 'builder', prompt: 'builder' },
+    },
+    'now',
+  );
+  const undeclared = run.agents.find((agent) => agent.threadId === 'undeclared')!;
+  assert.equal(undeclared.name, 'native:builder');
+  assert.equal(undeclared.session, undefined);
+  assert.equal(undeclared.assignment, undefined);
+  applyRuntimeEvent(
+    run,
+    {
+      id: 'spoof-known',
+      runId: run.id,
+      type: 'agent.activity',
+      threadId: assigned.threadId,
+      parentThreadId: run.threadId,
+      completed: true,
+    },
+    'now',
+  );
+  assert.equal(assigned.status, 'running');
+});
+
+test('cancelling a service-owned worker preserves its session and never promotes its role', async (t) => {
+  const f = await fixture(t, { pauseWorker: true });
+  const started = await f.start();
+  while (!f.turns.some((turn) => turn.text.startsWith('Execute your assigned work')))
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  await f.engine.cancel('stop-worker', 'stop-worker', { projectId: 'p', runId: started.runId });
+  const result = await f.drain(started.runId);
+  assert.equal(result.status, 'interrupted');
+  const worker = result.agents.find((agent) => agent.session?.roleId === 'builder')!;
+  assert.equal(worker.status, 'interrupted');
+  assert.equal(worker.session?.result, undefined);
+  assert.equal(
+    f.store.snapshot().roles.some((role) => role.id === 'builder'),
+    false,
+  );
+  assert.equal(
+    f.turns.some((turn) => turn.text.startsWith('Review goal')),
+    false,
+  );
+});
+
+test('worker scope checks detect edits and reversions outside its assignment', () => {
+  const previous = [{ path: 'src/first.ts', before: 'old', after: 'earlier worker' }];
+  assert.equal(assignmentScopePreserved(previous, [], ['src/second.ts'], []), false);
+  assert.equal(assignmentScopePreserved(previous, previous, ['src/second.ts'], []), true);
+  assert.equal(
+    assignmentScopePreserved(
+      [],
+      [{ path: 'src/second.ts', before: '', after: 'work' }],
+      ['src/second.ts'],
+      [],
+    ),
+    true,
+  );
+  assert.equal(
+    assignmentScopePreserved(
+      [],
+      [{ path: 'src/second.ts', before: '', after: '[symlink outside]' }],
+      ['src/second.ts'],
+      [],
+    ),
+    false,
+  );
+  assert.equal(
+    assignmentScopePreserved(
+      [],
+      [{ path: 'src/protected.ts', before: '', after: 'work' }],
+      ['src/'],
+      ['src/protected.ts'],
+    ),
+    false,
   );
 });
 test('blocking reviewer sends repair to the same coordinator session, then rechecks', async (t) => {
@@ -529,7 +668,7 @@ test('run freezes selected context and passes staged paths to planning, workers 
   assert.equal(run.contextMaterials?.[0].id, material.id);
   assert.equal(run.contextMaterials?.[0].active, true);
   assert.equal(preparedMaterials[0][0].id, material.id);
-  assert.equal(instructions.length, 2);
+  assert.equal(instructions.length, 3);
   assert.ok(
     instructions.every(
       (text) =>

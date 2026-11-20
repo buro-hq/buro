@@ -93,17 +93,6 @@ async function fixture(t: any) {
               : { verdict: 'approved', blockingFindings: [], summary: 'OK' },
           ),
         };
-      for (const kind of ['started', 'completed'])
-        for (const listener of listeners)
-          listener({
-            id: 'child-' + kind + '-' + turns.length,
-            runId: input.runId,
-            type: 'agent.activity',
-            threadId: 'child-' + id,
-            parentThreadId: id,
-            completed: kind === 'completed',
-            legacyAssignment: { path: '/root/builder' },
-          });
       await fs.writeFile(path.join(input.workspace, 'src/code.mjs'), 'export const value=2;');
       return {
         turnId: 'work',
@@ -273,14 +262,14 @@ test('unchanged dependency declaration failures stop at needs-attention without 
   const before = await f.start();
   assert.equal(before.status, 'needs-attention', before.result);
   assert.equal(before.issue?.code, 'BASELINE_CHECKS_FAILED');
-  assert.equal(f.turns.length, 2);
+  assert.equal(f.turns.length, 3);
   assert.equal(
     before.events.some((e) => e.type === 'phase.repair'),
     false,
   );
   const after = await f.resume(before.id);
   assert.equal(after.status, 'needs-attention');
-  assert.equal(f.turns.length, 2);
+  assert.equal(f.turns.length, 3);
   assert.equal(after.attempts?.length, 1);
 });
 test('workspace restoration validates project identity/base and reconstructs its diff after adapter restart', async (t) => {

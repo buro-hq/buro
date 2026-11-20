@@ -124,7 +124,7 @@ checks/ tests/ scripts/
 
 Core has no React, Node, Cordis or transport imports. UI and clients do not import backend modules. Cordis composes trusted plugins; it does not sandbox them.
 
-Runtime activity is typed in `core/runtime-events.ts`. The Codex adapter normalizes native notifications before publishing them; `core/runtime-projection.ts` applies public activity to saved runs. `core/runtimes.ts` holds available adapters, while `plugins/runtime.ts` owns generic composition and cleanup. Production still selects Codex as its only default route. Native child identity remains a compatibility path until Buro-owned dispatch replaces it; see [implementation progress](IMPLEMENTATION.md).
+Runtime activity is typed in `core/runtime-events.ts`. The Codex adapter normalizes native notifications before publishing them; `core/runtime-projection.ts` applies public activity to saved runs. `core/runtimes.ts` holds available adapters, while `plugins/runtime.ts` owns generic composition and cleanup. Production still selects Codex as its only default route. `core/worker-assignments.ts` records and dispatches independent workers; native child tools are disabled and native activity cannot establish role identity. See [implementation progress](IMPLEMENTATION.md).
 
 The protocol uses versioned requests, IDs and validated parameters. Metadata, receipts and events are written before publication. Retries reuse receipts; conflicting payloads are rejected. Reconnecting clients catch up from a sequence number. Git operations and delivery are separate from metadata transactions.
 

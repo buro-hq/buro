@@ -8,16 +8,9 @@ export function applyRuntimeEvent(run: Run, event: RuntimeEvent, now: string) {
     if (tid === run.threadId) return;
     let child = run.agents.find((a) => a.threadId === tid);
     if (!child) {
-      // Compatibility for Codex-created children until Buro owns worker dispatch.
+      // Undeclared native children remain visible, but cannot impersonate an assignment.
       const hints = event.legacyAssignment;
-      const candidates =
-        run.roleSnapshots?.filter((r) => !['coordinator', 'reviewer'].includes(r.id)) || [];
-      const name =
-        candidates.find((r) => hints?.path?.endsWith('/' + r.id) || hints?.prompt?.includes(r.id))
-          ?.id ||
-        candidates.find((r) => !run.agents.some((a) => a.name === r.id))?.id ||
-        hints?.name ||
-        'worker';
+      const name = 'native:' + (hints?.name || 'worker');
       child = {
         threadId: tid,
         name,
@@ -27,9 +20,6 @@ export function applyRuntimeEvent(run: Run, event: RuntimeEvent, now: string) {
         messages: [],
         commands: 0,
         status: 'running',
-        ...(run.roleAssignments?.[name]
-          ? { assignment: { paths: run.roleAssignments[name] } }
-          : {}),
       };
       run.agents.push(child);
       run.events.push({
@@ -39,6 +29,7 @@ export function applyRuntimeEvent(run: Run, event: RuntimeEvent, now: string) {
         text: hints?.prompt || name,
       });
     }
+    if (child.session) return;
     if (event.completed && child.status !== 'completed') {
       child.status = 'completed';
       child.completedAt = now;

@@ -88,19 +88,7 @@ const exec = promisify(execFile);
         return () => listeners.delete(fn);
       },
       async turn(threadId, text) {
-        const input = threads.get(threadId),
-          send = (kind) => {
-            for (const listener of listeners)
-              listener({
-                id: kind + '-' + threadId,
-                runId: input.runId,
-                type: 'agent.activity',
-                threadId: 'worker-' + threadId,
-                parentThreadId: threadId,
-                completed: kind === 'completed',
-                legacyAssignment: { path: '/root/js_developer' },
-              });
-          };
+        const input = threads.get(threadId);
         if (text.startsWith('First,'))
           return {
             turnId: 'plan',
@@ -140,9 +128,7 @@ const exec = promisify(execFile);
                   },
             ),
           };
-        send('started');
         await fs.writeFile(path.join(input.workspace, 'src/value.mjs'), 'export const value=2;\n');
-        send('completed');
         return {
           turnId: 'work',
           text: JSON.stringify({

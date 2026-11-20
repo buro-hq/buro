@@ -122,17 +122,6 @@ async function fixture(t: any, enabled = true, tamper = false) {
         await fs.writeFile(path.join(input.workspace, 'package.json'), JSON.stringify(next));
       }
       await fs.writeFile(path.join(input.workspace, 'src/main.mjs'), 'export const value=2;');
-      for (const kind of ['started', 'completed'])
-        for (const listener of listeners)
-          listener({
-            id: `${kind}-${prompts.length}`,
-            runId: input.runId,
-            type: 'agent.activity',
-            threadId: 'worker',
-            parentThreadId: threadId,
-            completed: kind === 'completed',
-            legacyAssignment: { path: '/root/builder' },
-          });
       return {
         turnId: 'work',
         text: JSON.stringify({
@@ -271,7 +260,7 @@ test('without the checkbox, unchanged baseline failures remain needs-attention a
   assert.equal(f.run.issue?.code, 'BASELINE_CHECKS_FAILED');
   assert.equal(f.installations.length, 0);
   assert.equal(f.reviews, 0);
-  assert.equal(f.prompts.length, 2);
+  assert.equal(f.prompts.length, 3);
 });
 test('the opt-in never permits changing test scripts and does not execute a tampered manifest', async (t) => {
   const f = await fixture(t, true, true);

@@ -11,7 +11,7 @@ flowchart TD
   Workspace --> Baseline[Baseline checks]
   Baseline --> Plan[Coordinator plans and selects roles]
   Plan --> Validate[Validate ownership and role definitions]
-  Validate --> Workers[Run real child agents]
+  Validate --> Workers[Buro starts independent worker sessions]
   Workers --> Checks[Service checks diff and commands]
   Checks --> Review[Fresh independent reviewer]
   Checks --> Repair[Repair in the same coordinator session]
@@ -23,11 +23,13 @@ flowchart TD
   Accept --> Delivery[Configured delivery and verification]
 ```
 
-The coordinator is not the acceptance authority. Actual worker lifecycle events, scope preservation, protected instructions, configured check results and reviewer approval are required. A successful message alone cannot accept a result. Coordinator/reviewer are supplied by the service; proposed worker roles have validated stable IDs and nonoverlapping paths. New reusable role definitions are saved only after acceptance.
+The coordinator is not the acceptance authority. Saved Buro-owned worker assignments and results, scope preservation, protected instructions, configured check results and reviewer approval are required. A successful message alone cannot accept a result. Coordinator/reviewer are supplied by the service; proposed worker roles have validated stable IDs and nonoverlapping paths. New reusable role definitions are saved only after acceptance.
+
+Buro records each worker's dispatch intent and session ID before starting the client. Sessions snapshot the role version and runtime. Workers execute sequentially in one run worktree; observed edits are compared before and after each assignment. Scope violations and worker failures preserve the workspace and stop acceptance. This is post-execution observation for the native client, not a per-worker filesystem sandbox. The managed ToolBroker will additionally validate writes before dispatch. The coordinator integrates worker results and handles bounded repairs. Native child tools are disabled; undeclared child activity cannot claim a planned role by name, path or prompt.
 
 The Codex adapter uses isolated stdio JSON-RPC sessions, completed-turn structured outputs and real lifecycle events. It normalizes native payloads before publishing typed activity to core. Execution and project research consume this contract; run projection is separate from execution decisions. A generic Cordis runtime plugin composes a process-local registry with an explicitly selected default route. Trusted checks run outside editable agent scope. Runtime, checks and workspace ports are replaceable. Deterministic fixture tests verify integration without billing model calls; native adapter contract tests separately verify CLI behavior.
 
-Current limits include one unfinished run per project, a plan schema capped at two workers, Codex-owned child spawning and legacy role matching for native children. The registry currently selects one default runtime; per-session client/provider/model routing is not implemented. The next steps introduce Buro-owned assignments, a persistent task scheduler and managed provider sessions. See [implementation progress](docs/IMPLEMENTATION.md).
+Current limits include one unfinished run per project, a plan schema capped at two workers and a team chosen before implementation. The registry currently selects one default runtime; per-session client/provider/model routing is not implemented. The next steps introduce managed provider sessions and richer coordinator decisions. See [implementation progress](docs/IMPLEMENTATION.md).
 
 Workspace policies, roles and materials are snapshots. Independent goals start from the base branch; explicit parents start from an accepted commit. Source branches and uncommitted changes are preserved until an explicit apply action. Saved threads/worktrees support repair and check-only recovery.
 

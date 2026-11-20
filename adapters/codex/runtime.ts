@@ -46,7 +46,6 @@ export class CodexRuntime implements AgentRuntime {
       this.options.args ||
       (await safeArguments(
         this.options.executable || 'codex',
-        !!input.readOnly,
         root,
         launch,
         world?.variables,
@@ -369,16 +368,14 @@ class Connection {
 }
 async function safeArguments(
   executable: string,
-  readOnly: boolean,
   cwd: string,
   launch: (argv: string[]) => Launch,
   variables?: Record<string, string>,
   container = false,
 ) {
   const config: Record<string, unknown> = {
-    'features.multi_agent': true,
-    'agents.enabled': !readOnly,
-    'agents.max_concurrent_threads_per_session': 2,
+    'features.multi_agent': false,
+    'agents.enabled': false,
     'features.apps': false,
     'apps._default.enabled': false,
     'features.remote_plugin': false,
