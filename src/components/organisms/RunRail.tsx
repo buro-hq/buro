@@ -2,6 +2,7 @@ import { getFormattingLocale, t } from '../../i18n/index.ts';
 import { activeDuration } from '../../../protocol/timing.ts';
 import { Check, Network, ShieldCheck, SquareTerminal } from 'lucide-react';
 import { getRunViewState } from '../../features/runs/view-model';
+import { getCheckViewState, type CheckState } from '../../features/runs/check-state.ts';
 import { clock, isTerminal, seconds, type Agent, type RoleView, type Run } from '../../model';
 
 import { AgentCard } from '../molecules/AgentCard';
@@ -17,7 +18,22 @@ export function RunRail({
   roles: Record<string, RoleView>;
   onAgent: (id: string) => void;
 }) {
-  const { complete, active, test, testCounts } = getRunViewState(run, cursor);
+  const { active } = getRunViewState(run, cursor);
+  const evidence = getCheckViewState(run, cursor);
+  const stateLabel = (state: CheckState) =>
+    state === 'passed'
+      ? t('All checks passed')
+      : state === 'failed'
+        ? t('Some checks failed')
+        : state === 'unavailable'
+          ? t('Evidence unavailable')
+          : state === 'running'
+            ? t('Checks running')
+            : state === 'not-run'
+              ? t('Not run yet')
+              : t('awaiting checks');
+  const color = (state: CheckState) =>
+    state === 'passed' ? 'green-text' : state === 'failed' ? 'orange-text' : 'muted';
   const agentCard = (a: Agent) => (
     <AgentCard
       key={a.threadId}
@@ -66,14 +82,13 @@ export function RunRail({
         </div>
         <div className="metric-row">
           <span>{t('Project tests')}</span>
-          <b className={testCounts.failed ? 'orange-text' : test ? 'green-text' : ''}>
-            {test ? `${testCounts.passed} / ${testCounts.total}` : t('Not started yet')}
-          </b>
+          <b className={color(evidence.project)}>{stateLabel(evidence.project)}</b>
         </div>
         <div className="metric-row">
           <span>{t('External acceptance')}</span>
-          <b className={complete ? 'green-text' : ''}>
-            {complete ? `${run.acceptance.passed} / ${run.acceptance.total}` : t('Waiting')}
+          <b className={color(evidence.acceptance)}>
+            {stateLabel(evidence.acceptance)}
+            {evidence.rows.length ? ` · ${evidence.passed} / ${evidence.total}` : ''}
           </b>
         </div>
       </div>

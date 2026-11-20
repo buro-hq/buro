@@ -5,6 +5,8 @@ import type { Run, RunPreview } from '../../../protocol/domain';
 import type { ClientCommand } from '../../../protocol/schema';
 import { useProject } from '../../data/provider';
 import { Notice } from '../atoms/Notice';
+import { getCheckViewState } from '../../features/runs/check-state.ts';
+import { wallDuration } from '../../../protocol/timing.ts';
 
 const deliveryLabels = {
   get pending() {
@@ -110,7 +112,9 @@ export function RunResultActions({ run }: { run: Run }) {
     <div className="result-operations">
       <h3>{t('Inspect and verify the result')}</h3>
       <p className="caption">
-        {t('Implementation is ready. Preview and delivery do not change its acceptance status.')}
+        {getCheckViewState(run, wallDuration(run)).implementationReady
+          ? t('Implementation is ready. Preview and delivery do not change its acceptance status.')
+          : t('Acceptance evidence is incomplete. Inspect checks and review.')}
       </p>
       {!!run.resultAgents?.length && (
         <div className="team-grid">

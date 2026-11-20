@@ -1038,5 +1038,12 @@
   "Awaiting restart": "Ожидает перезапуска",
   "Edit connection {p0}": "Изменить подключение {p0}",
   "Remote DeepSeek endpoints require HTTPS.": "Для удалённого API DeepSeek требуется HTTPS.",
-  "Connection saved.": "Подключение сохранено."
+  "Connection saved.": "Подключение сохранено.",
+  "Review approved": "Ревью одобрено",
+  "Evidence unavailable": "Нет подтверждённого результата",
+  "Review running": "Ревью выполняется",
+  "Checks running": "Проверки выполняются",
+  "No independent check results are available at this point.": "На этом моменте нет результатов независимых проверок.",
+  "Result recorded": "Результат сохранён",
+  "Acceptance evidence is incomplete. Inspect checks and review.": "Подтверждение приёмки неполное. Изучите проверки и ревью."
 }

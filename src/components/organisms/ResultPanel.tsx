@@ -1,6 +1,7 @@
 import { t } from '../../i18n/index.ts';
 import { ArrowDownToLine, CheckCheck, CircleAlert, ShieldCheck } from 'lucide-react';
 import { getRunViewState } from '../../features/runs/view-model';
+import { getCheckViewState } from '../../features/runs/check-state.ts';
 import { type Run } from '../../model';
 import { ApplyRunResult } from './ApplyRunResult';
 import { RunRecoveryPanel } from './RunRecoveryPanel';
@@ -8,25 +9,38 @@ import { RunResultActions } from './RunResultActions';
 
 export function ResultPanel({ run, cursor }: { run: Run; cursor: number }) {
   const { complete, currentPhase } = getRunViewState(run, cursor);
+  const evidence = getCheckViewState(run, cursor);
   const runIndex = Math.max(0, Number(run.key.match(/(\d+)$/)?.[1] || 1) - 1);
-  const failed = complete && !!run.status && run.status !== 'completed';
+  const terminalFailure = complete && !!run.status && run.status !== 'completed';
+  const failed = terminalFailure || (complete && evidence.overall === 'failed');
   return (
     <div className="content-panel">
-      <div className={`result-icon ${failed ? 'result-failed' : ''}`}>
-        {failed ? <CircleAlert size={26} /> : <CheckCheck size={26} />}
+      <div
+        className={`result-icon ${failed ? 'result-failed' : ''}`}
+        style={
+          !evidence.implementationReady && !failed
+            ? { color: 'var(--muted)', background: 'transparent' }
+            : undefined
+        }
+      >
+        {evidence.implementationReady ? <CheckCheck size={26} /> : <CircleAlert size={26} />}
       </div>
       <h2>
         {complete
-          ? run.status && run.status !== 'completed'
+          ? terminalFailure
             ? currentPhase
-            : t('Implementation ready')
+            : evidence.implementationReady
+              ? t('Implementation ready')
+              : t('Result recorded')
           : t('Work in progress')}
       </h2>
       <p className="caption">
         {complete
-          ? run.status && run.status !== 'completed'
+          ? terminalFailure
             ? t('The run ended without acceptance.')
-            : t('Implementation, tests and independent review are complete.')
+            : evidence.implementationReady
+              ? t('Implementation, tests and independent review are complete.')
+              : t('Acceptance evidence is incomplete. Inspect checks and review.')
           : t('The result will appear after checks and review.')}
       </p>
       {complete && (
@@ -50,14 +64,18 @@ export function ResultPanel({ run, cursor }: { run: Run; cursor: number }) {
           <div className="result-receipt">
             <ShieldCheck size={17} />
             <span>
-              {run.scopePreserved
+              {evidence.scope === 'passed'
                 ? t('Change boundaries respected.')
-                : t('Change boundaries were violated.')}{' '}
-              {run.review
-                ? t('Review: {p0}', { p0: run.review.verdict })
-                : run.independentReviewer
-                  ? t('Independent review completed.')
-                  : t('Independent review is incomplete.')}
+                : evidence.scope === 'failed'
+                  ? t('Change boundaries were violated.')
+                  : t('Evidence unavailable')}{' '}
+              {evidence.review === 'reviewed'
+                ? t('Review approved')
+                : evidence.review === 'failed'
+                  ? t('Changes requested')
+                  : evidence.review === 'unavailable'
+                    ? t('Evidence unavailable')
+                    : t('Independent review is incomplete.')}
             </span>
           </div>
           {!run.goalId && (

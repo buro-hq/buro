@@ -1038,5 +1038,12 @@
   "Awaiting restart": "Awaiting restart",
   "Edit connection {p0}": "Edit connection {p0}",
   "Remote DeepSeek endpoints require HTTPS.": "Remote DeepSeek endpoints require HTTPS.",
-  "Connection saved.": "Connection saved."
+  "Connection saved.": "Connection saved.",
+  "Review approved": "Review approved",
+  "Evidence unavailable": "Evidence unavailable",
+  "Review running": "Review running",
+  "Checks running": "Checks running",
+  "No independent check results are available at this point.": "No independent check results are available at this point.",
+  "Result recorded": "Result recorded",
+  "Acceptance evidence is incomplete. Inspect checks and review.": "Acceptance evidence is incomplete. Inspect checks and review."
 }
