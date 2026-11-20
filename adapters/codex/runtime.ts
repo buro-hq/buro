@@ -248,15 +248,42 @@ class Connection {
   send(value: unknown) {
     if (!this.closed) this.process.stdin.write(JSON.stringify(value) + '\n');
   }
-  call(method: string, params: unknown): Promise<unknown> {
-    if (this.closed) return Promise.reject(Error('Codex app-server is closed.'));
+  call(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+    if (signal?.aborted) return Promise.reject(new DOMException('Interrupted', 'AbortError'));
+    if (this.closed || this.closePromise)
+      return Promise.reject(Error('Codex app-server is closed.'));
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
+      };
+      const abort = () => {
+        if (!this.pending.delete(id)) return;
+        cleanup();
+        reject(new DOMException('Interrupted', 'AbortError'));
+      };
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        cleanup();
         reject(Error(`Codex timeout: ${method}`));
       }, 45000);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, {
+        resolve: (value) => {
+          cleanup();
+          resolve(value);
+        },
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+        timer,
+      });
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
       this.send({ id, method, params });
     });
   }
@@ -293,27 +320,34 @@ class Connection {
     this.turnListeners.add(listener);
     const abort = () => {
       if (turnId) void this.call('turn/interrupt', { threadId, turnId }).catch(() => {});
+      // The server may have accepted the request before replying with an ID. Close this
+      // owned transport rather than retrying an operation with an unknown native outcome.
+      else void this.close().catch(() => {});
       settle({ status: 'interrupted' });
     };
     options.signal.addEventListener('abort', abort, { once: true });
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const result = (await this.call('turn/start', {
-        threadId,
-        input: [{ type: 'text', text, text_elements: [] }],
-        outputSchema: options.schema,
-        ...(!this.readOnly
-          ? {
-              sandboxPolicy: {
-                type: 'workspaceWrite',
-                writableRoots: [this.cwd, ...this.environmentRoots],
-                networkAccess: this.environmentRoots.length > 0,
-                excludeTmpdirEnvVar: true,
-                excludeSlashTmp: true,
-              },
-            }
-          : { sandboxPolicy: { type: 'readOnly', networkAccess: false } }),
-      })) as { turn: { id: string } };
+      const result = (await this.call(
+        'turn/start',
+        {
+          threadId,
+          input: [{ type: 'text', text, text_elements: [] }],
+          outputSchema: options.schema,
+          ...(!this.readOnly
+            ? {
+                sandboxPolicy: {
+                  type: 'workspaceWrite',
+                  writableRoots: [this.cwd, ...this.environmentRoots],
+                  networkAccess: this.environmentRoots.length > 0,
+                  excludeTmpdirEnvVar: true,
+                  excludeSlashTmp: true,
+                },
+              }
+            : { sandboxPolicy: { type: 'readOnly', networkAccess: false } }),
+        },
+        options.signal,
+      )) as { turn: { id: string } };
       turnId = result.turn.id;
       if (options.signal.aborted) abort();
       const ended = await Promise.race([
