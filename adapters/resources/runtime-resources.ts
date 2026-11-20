@@ -22,7 +22,11 @@ import { RepositoryTools } from '../tools/repository-tools.ts';
 import type { EnvironmentExecutors } from '../environments/executors.ts';
 import { ProjectRunBudgets } from '../files/project-run-budgets.ts';
 import type { ManagedRunBudgetPort } from '../../core/run-budget.ts';
-import type { WorkspacePort } from '../../core/execution-ports.ts';
+import type { CheckPort, WorkspacePort } from '../../core/execution-ports.ts';
+import {
+  WORKER_STEP_CHECK_REVISION,
+  type WorkerStepCheckPort,
+} from '../../core/worker-step-checks.ts';
 import {
   boundedWorkSegmentPolicy,
   validateSegmentLimits,
@@ -30,6 +34,7 @@ import {
   type WorkSegmentPolicy,
 } from '../../core/work-segments.ts';
 import { RepositorySegmentEvidence } from '../tools/segment-evidence.ts';
+import { WorkerStepChecks } from '../checks/worker-step-checks.ts';
 
 export async function createRuntimeResources(options: {
   directory: string;
@@ -43,6 +48,8 @@ export async function createRuntimeResources(options: {
   workspaces?: Pick<WorkspacePort, 'changes'>;
   segmentPolicy?: WorkSegmentPolicy;
   segmentEvidence?: SegmentEvidencePort;
+  checks?: CheckPort;
+  workerStepChecks?: WorkerStepCheckPort;
 }) {
   const local = path.join(options.directory, 'local');
   options.executors.protectPrivatePaths([local]);
@@ -64,6 +71,16 @@ export async function createRuntimeResources(options: {
     if (!segmentEvidence || segmentPolicy.revision !== segmentPolicy.limits.revision)
       throw new DomainError('INVALID_SEGMENT_POLICY', 'The work segment policy is incomplete.');
   }
+  const workerStepChecks =
+    options.workerStepChecks ||
+    (segmentEvidence && options.checks
+      ? new WorkerStepChecks({
+          projects: options.projects,
+          checks: options.checks,
+          evidence: segmentEvidence,
+          executors: options.executors,
+        })
+      : undefined);
   if (
     typeof requestPolicy.revision !== 'string' ||
     !/^[A-Za-z0-9._:-]{1,100}$/.test(requestPolicy.revision) ||
@@ -133,6 +150,7 @@ export async function createRuntimeResources(options: {
           budgets,
           segmentPolicy,
           segmentEvidence,
+          workerStepChecks,
         }),
       );
       resources.push({
@@ -149,6 +167,7 @@ export async function createRuntimeResources(options: {
               runtime.limits,
               requestPolicy.revision,
               ...(segmentPolicy ? [[segmentPolicy.revision, segmentPolicy.limits]] : []),
+              ...(workerStepChecks ? [WORKER_STEP_CHECK_REVISION] : []),
             ]),
           )
           .digest('hex'),

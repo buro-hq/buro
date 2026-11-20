@@ -23,7 +23,7 @@ The immediate bounded-assignment and plugin boundary proposal is in [next orches
 - [ ] Expand the delegation protocol into a versioned task graph with bounded replanning and targeted evidence invalidation.
 - [x] Add a durable aggregate managed-API run budget with protected review capacity and private atomic receipts. Preserve charges through replacement/recovery; expose native accounting limitations explicitly.
 - [x] Add safe managed-worker work segments through a core-validated `WorkSegmentPolicy`, preserving logical identity, private history, actual action receipts and cumulative limits across fresh conversation windows. Coordinator, reviewer and native rotation remain unsupported; add a whole-workflow time policy separately.
-- [ ] Add a short check-backed work loop with service-owned evidence and a fresh focused step after a real failure. Preserve independent final checks/review and do not expand permissions to satisfy model claims.
+- [x] Add a short check-backed managed-worker loop with service-owned evidence and a fresh focused step after a real failure. Initially apply goal-wide feedback only to the sole assigned worker. Preserve independent final checks/review and the original permissions.
 - [ ] Replace PROJECT_BUSY and the fixed two-worker plan schema with queued runs, multiple runs per goal, resource budgets and one writer per run worktree initially.
 - [ ] Add durable operator questions and clarifications that block only dependent work.
 - [ ] Add full per-action dispatch reconciliation and resource leases for automatic recovery where the outcome can be established.

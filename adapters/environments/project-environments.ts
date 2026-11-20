@@ -47,9 +47,12 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
     const resources = owner?.resources || this.selection?.forProject(input.projectId);
     const privateDataIsolation =
       !!resources &&
-      [resources.coordinator, resources.worker, resources.reviewer].some(
-        (resource) => resource.client === 'managed',
-      );
+      [
+        resources.coordinator,
+        resources.worker,
+        resources.reviewer,
+        ...(resources.workerPool || []),
+      ].some((resource) => resource.client === 'managed');
     let world;
     try {
       world = await this.executors.register(input.workspace, root, config, input.signal, {

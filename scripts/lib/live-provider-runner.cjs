@@ -668,10 +668,25 @@ function classifyEvaluationFailure(run) {
   if (terminalFailure) {
     if (message === 'The saved work segment limit is exhausted.')
       return classified('workSegmentLimit', 'resource-blocked', 'LIVE_WORK_SEGMENT_LIMIT');
+    if (message === 'The saved worker check feedback limit is exhausted.')
+      return classified(
+        'stepCheckFeedbackLimit',
+        'resource-blocked',
+        'LIVE_STEP_CHECK_FEEDBACK_LIMIT',
+      );
+    if (
+      message === 'A registered worker check is unavailable. No automatic repair was started.' ||
+      message === 'The saved worker scope, checks or prepared environment is unavailable.' ||
+      message === 'The workspace changed while its worker checks were running.'
+    )
+      return classified('stepCheckUnavailable', 'resource-blocked', 'LIVE_STEP_CHECK_UNAVAILABLE');
     if (
       message ===
         'A saved model generation has an unknown outcome. It cannot be automatically repeated.' ||
-      message === 'A saved tool action has an unknown outcome. It cannot be automatically repeated.'
+      message ===
+        'A saved tool action has an unknown outcome. It cannot be automatically repeated.' ||
+      message ===
+        'A saved service check has an unknown outcome. It cannot be automatically repeated.'
     )
       return classified('unknownOutcome', 'resource-blocked', 'LIVE_RECONCILIATION_REQUIRED');
     if (/^Acceptance failed: [0-9]+\/[0-9]+ checks;/.test(message))
@@ -906,10 +921,23 @@ async function runLiveProviderEvaluation(options = {}) {
     });
     const executors = new EnvironmentExecutors();
     const workspaces = new GitWorkspaces(host.ctx.projects.registry);
+    const checks = fixture.createChecks
+      ? await fixture.createChecks({ projects: host.ctx.projects.registry, executors })
+      : new ProjectChecks(
+          host.ctx.projects.registry,
+          {
+            async run() {
+              throw new LiveEvaluationError('LIVE_FALLBACK_CHECKS_FORBIDDEN');
+            },
+          },
+          executors,
+        );
+    if (typeof checks?.run !== 'function') throw new LiveEvaluationError('LIVE_INVALID_CHECK_PORT');
     await host.ctx.plugin(resourcesPlugin, {
       directory,
       executors,
       workspaces,
+      checks,
       segmentPolicy: options.segmentPolicy,
       fetch: observedFetch,
       credentials: options.credentials,
@@ -949,18 +977,6 @@ async function runLiveProviderEvaluation(options = {}) {
       structured: probe.structured,
     };
     clearTimeout(diagnosticTimer);
-    const checks = fixture.createChecks
-      ? await fixture.createChecks({ projects: host.ctx.projects.registry, executors })
-      : new ProjectChecks(
-          host.ctx.projects.registry,
-          {
-            async run() {
-              throw new LiveEvaluationError('LIVE_FALLBACK_CHECKS_FORBIDDEN');
-            },
-          },
-          executors,
-        );
-    if (typeof checks?.run !== 'function') throw new LiveEvaluationError('LIVE_INVALID_CHECK_PORT');
     const environments = new ProjectEnvironments(
       host.ctx.projects.registry,
       host.ctx.agentRuntime.adapter,
@@ -1052,6 +1068,24 @@ async function runLiveProviderEvaluation(options = {}) {
                   archiveCount: saved.workSegments.archives.length,
                   activeIndex: saved.workSegments.active.index,
                   policyRevision: saved.workSegments.limits.revision,
+                },
+              }
+            : {}),
+          ...(saved.workerStepChecks
+            ? {
+                workerStepChecks: {
+                  revision: saved.workerStepChecks.revision,
+                  feedbackSteps: saved.workerStepChecks.feedbackSteps,
+                  entries: saved.workerStepChecks.entries.map((entry) => ({
+                    status: entry.status,
+                    ...(entry.result
+                      ? {
+                          outcome: entry.result.outcome,
+                          passed: entry.result.passed,
+                          total: entry.result.total,
+                        }
+                      : {}),
+                  })),
                 },
               }
             : {}),

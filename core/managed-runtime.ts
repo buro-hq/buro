@@ -19,6 +19,8 @@ import {
   type ManagedRequestPolicy,
 } from './request-policy.ts';
 import type { ManagedRunBudgetPort } from './run-budget.ts';
+import { checkManagedWorkerStep } from './managed-worker-checks.ts';
+import type { WorkerStepCheckPort } from './worker-step-checks.ts';
 import {
   assertSegmentScope,
   decideWorkSegment,
@@ -48,6 +50,7 @@ export type ManagedRuntimeOptions = {
   budgets?: ManagedRunBudgetPort;
   segmentPolicy?: WorkSegmentPolicy;
   segmentEvidence?: SegmentEvidencePort;
+  workerStepChecks?: WorkerStepCheckPort;
   limits: {
     contextTokens: number;
     maxOutputTokens: number;
@@ -645,13 +648,60 @@ export class ManagedAgentRuntime implements AgentRuntime {
           await sessions.save(session);
         }
         if (!requested.length) {
+          if (closing && response.finish !== 'stop')
+            throw new DomainError(
+              'INVALID_WORK_SEGMENT',
+              'A work step requires a complete tools-free closing response.',
+            );
+          const closingDecision = closing
+            ? parseSegmentClosing(response.message.content)
+            : undefined;
+          if (
+            !finalizing &&
+            (!closing || closingDecision?.status === 'complete') &&
+            this.options.workerStepChecks &&
+            this.options.segmentEvidence
+          ) {
+            const checked = await checkManagedWorkerStep({
+              session,
+              turnId,
+              checks: this.options.workerStepChecks,
+              evidence: this.options.segmentEvidence,
+              budgets,
+              budgetOwner,
+              remainingToolCalls: limits.maxToolCallsPerTurn - calls,
+              signal,
+              id: this.options.idGenerator,
+              availableTools: tools.definitions(session.scope).map((tool) => tool.name),
+              commit: async (next) => {
+                await sessions.save(next);
+                session = next;
+                this.loaded.set(threadId, session);
+              },
+            });
+            calls += checked.disposition === 'skipped' ? 0 : checked.toolCallsUsed;
+            check();
+            if (checked.disposition === 'feedback') {
+              emit({
+                type: 'segment.completed',
+                turnId,
+                segmentIndex: checked.previousIndex,
+                reason: 'continue',
+                workspaceFingerprint: checked.entry.before.workspaceFingerprint,
+              });
+              emit({
+                type: 'segment.started',
+                turnId,
+                segmentIndex: checked.nextIndex,
+              });
+              closing = false;
+              finalizing = false;
+              segmentCompleteEmitted = false;
+              continue;
+            }
+          }
           if (closing) {
-            if (response.finish !== 'stop')
-              throw new DomainError(
-                'INVALID_WORK_SEGMENT',
-                'A work step requires a complete tools-free closing response.',
-              );
-            const decision = parseSegmentClosing(response.message.content);
+            const decision = closingDecision!;
             this.assertReconciled(session);
             const step = session.workSegments!;
             const evidence = await this.options.segmentEvidence!.inspect(session.scope, signal);
@@ -669,6 +719,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
                 evidence,
                 completedActions: session.actions.length,
                 receipts: segmentActionReceipts(session.actions),
+                availableTools: tools.definitions(session.scope).map((tool) => tool.name),
               };
               const next = structuredClone(session);
               next.workSegments!.archives.push({
@@ -807,6 +858,11 @@ export class ManagedAgentRuntime implements AgentRuntime {
     return { projectId: scope.projectId, ownerRunId };
   }
   private assertReconciled(session: ManagedSession) {
+    if (session.workerStepChecks?.entries.some((entry) => entry.status !== 'completed'))
+      throw new DomainError(
+        'WORKER_CHECK_RECONCILIATION_REQUIRED',
+        'A saved service check has an unknown outcome. It cannot be automatically repeated.',
+      );
     if (session.generation && session.generation.outcome !== 'completed')
       throw new DomainError(
         'GENERATION_RECONCILIATION_REQUIRED',
@@ -845,6 +901,11 @@ export class ManagedAgentRuntime implements AgentRuntime {
         throw new DomainError(
           'SEGMENT_POLICY_CHANGED',
           'The saved work segment policy is unavailable or changed.',
+        );
+      if (session.workerStepChecks && !this.options.workerStepChecks)
+        throw new DomainError(
+          'WORKER_CHECK_CHANGED',
+          'The saved worker check service is unavailable.',
         );
       this.loaded.set(id, session);
     }

@@ -208,6 +208,18 @@ test('evaluation separates known context, incomplete output and unavailable reso
       'LIVE_WORK_SEGMENT_LIMIT',
     ],
     [
+      'The saved worker check feedback limit is exhausted.',
+      'stepCheckFeedbackLimit',
+      'resource-blocked',
+      'LIVE_STEP_CHECK_FEEDBACK_LIMIT',
+    ],
+    [
+      'A registered worker check is unavailable. No automatic repair was started.',
+      'stepCheckUnavailable',
+      'resource-blocked',
+      'LIVE_STEP_CHECK_UNAVAILABLE',
+    ],
+    [
       'A saved model generation has an unknown outcome. It cannot be automatically repeated.',
       'unknownOutcome',
       'resource-blocked',

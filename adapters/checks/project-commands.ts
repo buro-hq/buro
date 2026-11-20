@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import os from 'node:os';
 import type { Launch, EnvironmentExecutors } from '../environments/executors.ts';
 import type { CheckPort } from '../../core/execution-ports.ts';
-import type { ProjectRegistry } from '../../core/ports.ts';
+import { DomainError, type ProjectRegistry } from '../../core/ports.ts';
 import type { ProjectCommand, ProjectProfile } from '../../protocol/domain.ts';
 /** Commands are chosen by the user in the protected profile, never by an agent. */
 export async function runProjectCommand(
@@ -109,7 +109,13 @@ export class ProjectChecks implements CheckPort {
     ids: string[],
     signal: AbortSignal,
     profile?: ProjectProfile,
+    options: { requirePreparedIsolation?: boolean } = {},
   ) {
+    if (options.requirePreparedIsolation && !profile)
+      throw new DomainError(
+        'STEP_CHECK_UNAVAILABLE',
+        'Worker checks require their frozen profile and prepared isolation.',
+      );
     if (!profile) return this.fallback.run(projectId, workspace, ids, signal);
     // Independent checks may opt into bounded concurrency. Default remains serial for scripts that share outputs.
     const commands = ids.map((id) => {
@@ -124,17 +130,33 @@ export class ProjectChecks implements CheckPort {
         const index = next++,
           check = commands[index];
         signal.throwIfAborted();
-        const launch = this.executors?.get(workspace)
-          ? this.executors.launch(workspace, ['/bin/sh', '-c', check.command])
-          : undefined;
-        const result = await runProjectCommand(
-          check,
-          workspace,
-          this.projects.get(projectId).snapshot().project.root,
-          signal,
-          {},
-          launch,
-        );
+        const root = this.projects.get(projectId).snapshot().project.root;
+        let launch: Launch | undefined;
+        if (options.requirePreparedIsolation) {
+          const world = this.executors?.get(workspace);
+          if (
+            !this.executors ||
+            !world ||
+            world.workspace !== workspace ||
+            world.root !== root ||
+            !world.privateDataIsolation ||
+            JSON.stringify(world.config) !==
+              JSON.stringify(profile.environment || { provider: 'native' })
+          )
+            throw new DomainError(
+              'STEP_CHECK_UNAVAILABLE',
+              'The prepared worker check isolation is unavailable.',
+            );
+          // Validate at the dispatch boundary, including each subsequent command. Never fall back to the host.
+          launch = this.executors.launch(workspace, ['/bin/sh', '-c', check.command], {
+            privateDataIsolation: true,
+          });
+        } else {
+          launch = this.executors?.get(workspace)
+            ? this.executors.launch(workspace, ['/bin/sh', '-c', check.command])
+            : undefined;
+        }
+        const result = await runProjectCommand(check, workspace, root, signal, {}, launch);
         const passed = result.exitCode === 0;
         results[index] = {
           name: check.title,

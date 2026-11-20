@@ -47,6 +47,7 @@ export interface CheckPort {
     checkIds: string[],
     signal: AbortSignal,
     profile?: ProjectProfile,
+    options?: { requirePreparedIsolation?: boolean },
   ): Promise<{ passed: number; total: number; results: Check[] }>;
 }
 export type ExecutionPolicy = ExecutionPolicyView & {

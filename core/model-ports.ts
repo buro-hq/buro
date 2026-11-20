@@ -1,5 +1,6 @@
 import type { RuntimePurpose } from '../protocol/resources.ts';
 import type { ManagedWorkSegments } from './work-segments.ts';
+import type { ManagedWorkerStepChecks } from './worker-step-checks.ts';
 
 export type ToolDefinition = {
   name: string;
@@ -92,6 +93,7 @@ export type ManagedSession = {
   intermediateNotes?: number[];
   /** Atomic private archive and active context; never part of a public session DTO. */
   workSegments?: ManagedWorkSegments;
+  workerStepChecks?: ManagedWorkerStepChecks;
   /** Segmented sessions fail closed after an unknown generation, including a lost closing reply. */
   generation?: { requestId: string; outcome: 'pending' | 'completed' | 'unknown' };
   status: 'ready' | 'running' | 'interrupted' | 'failed';

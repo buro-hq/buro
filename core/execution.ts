@@ -157,6 +157,16 @@ ${installation.output || installation.error || ''}`,
         if (!safe()) return blocked();
       }
     }
+    const resources = this.get(projectId, runId).resources;
+    const requirePreparedIsolation =
+      !!policy.profile &&
+      !!resources &&
+      [
+        resources.coordinator,
+        resources.worker,
+        resources.reviewer,
+        ...(resources.workerPool || []),
+      ].some((resource) => resource.client === 'managed');
     const checks = await this.measure(projectId, runId, 'checks', () =>
       this.env.checks.run(
         projectId,
@@ -164,6 +174,7 @@ ${installation.output || installation.error || ''}`,
         this.get(projectId, runId).checkIds!,
         signal,
         policy.profile,
+        { requirePreparedIsolation },
       ),
     );
     return { changes, scope: true, checks };

@@ -475,6 +475,7 @@ async function fixture(
       root,
       { provider: 'native' },
       new AbortController().signal,
+      { privateDataIsolation: true },
     );
     return workspace;
   };

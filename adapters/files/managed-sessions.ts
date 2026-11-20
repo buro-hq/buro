@@ -11,6 +11,11 @@ import {
   validateSegmentEvidence,
   validateSegmentLimits,
 } from '../../core/work-segments.ts';
+import {
+  validateWorkerStepCheckPlan,
+  validateWorkerStepCheckResult,
+  workerStepFeedback,
+} from '../../core/worker-step-checks.ts';
 
 const call = z.object({ id: z.string(), name: z.string(), arguments: z.unknown() });
 const result = z.object({
@@ -52,6 +57,49 @@ const evidence = z.strictObject({
   workspaceFingerprint: z.string(),
   files: z.array(z.strictObject({ path: z.string(), fingerprint: z.string() })).max(256),
 });
+const workerStepCheckPlan = z.strictObject({
+  version: z.literal(1),
+  checkIds: z.array(z.string().min(1).max(100)).min(1).max(8),
+  configurationRevision: z.string(),
+});
+const workerStepCheckResult = z.strictObject({
+  version: z.literal(1),
+  outcome: z.enum(['completed', 'unavailable']),
+  workspaceFingerprint: z.string(),
+  checkIds: z.array(z.string().min(1).max(100)).min(1).max(8),
+  passed: z.number().int().nonnegative(),
+  total: z.number().int().positive().max(8),
+  results: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1).max(100),
+        name: z.string().min(1).max(200),
+        status: z.enum(['passed', 'failed', 'unavailable']),
+        exitCode: z.number().int().nullable().optional(),
+        diagnostic: z.string().max(512),
+      }),
+    )
+    .min(1)
+    .max(8),
+});
+const workerStepChecks = z.strictObject({
+  version: z.literal(1),
+  revision: z.literal('worker-step-checks-v1'),
+  maxFeedbackSteps: z.literal(2),
+  feedbackSteps: z.number().int().nonnegative().max(2),
+  entries: z.array(
+    z.strictObject({
+      id: z.string().min(1),
+      turnId: z.string().min(1),
+      scopeRevision: z.number().int().positive(),
+      requestedAtRequest: z.number().int().positive(),
+      plan: workerStepCheckPlan,
+      before: evidence,
+      status: z.enum(['pending', 'completed', 'unknown']),
+      result: workerStepCheckResult.optional(),
+    }),
+  ),
+});
 const workSegments = z.strictObject({
   version: z.literal(1),
   limits: z.strictObject({
@@ -81,6 +129,14 @@ const workSegments = z.strictObject({
           nextTask: z.string().min(1).max(1000),
           evidence,
           completedActions: z.number().int().nonnegative(),
+          kind: z.literal('check-feedback').optional(),
+          checkFeedback: z
+            .strictObject({
+              receiptId: z.string().min(1),
+              result: workerStepCheckResult,
+            })
+            .optional(),
+          availableTools: z.array(z.string().min(1).max(100)).max(32).optional(),
           receipts: z
             .array(
               z.strictObject({
@@ -131,6 +187,7 @@ const schema = z
     messages: z.array(message),
     intermediateNotes: z.array(z.number().int().nonnegative()).optional(),
     workSegments: workSegments.optional(),
+    workerStepChecks: workerStepChecks.optional(),
     generation: z
       .strictObject({
         requestId: z.string().min(1).max(256),
@@ -196,7 +253,40 @@ function validateNotes(messages: ManagedSession['messages'], notes: number[] = [
   )
     invalidSegment('An archived intermediate note has invalid provenance.');
 }
+function validateWorkerCheckCheckpoint(session: ManagedSession) {
+  const journal = session.workerStepChecks;
+  const feedback =
+    session.workSegments?.archives.filter((archive) => archive.handoff.kind === 'check-feedback') ||
+    [];
+  if (!journal) {
+    if (feedback.length)
+      invalidSegment('Check feedback requires its private service-check journal.');
+    return;
+  }
+  if (!session.workSegments || journal.feedbackSteps !== feedback.length)
+    invalidSegment('The worker check feedback counter must match its archived steps.');
+  const ids = new Set<string>();
+  let requested = 0;
+  for (const [index, entry] of journal.entries.entries()) {
+    validateWorkerStepCheckPlan(entry.plan);
+    validateSegmentEvidence(entry.before);
+    if (
+      ids.has(entry.id) ||
+      entry.requestedAtRequest < requested ||
+      entry.requestedAtRequest > session.requests ||
+      !session.scopeRevisions?.some((revision) => revision.revision === entry.scopeRevision) ||
+      (entry.status === 'completed') !== !!entry.result ||
+      (entry.status !== 'completed' && index !== journal.entries.length - 1)
+    )
+      invalidSegment('The worker check journal has invalid identity, counters or outcome.');
+    if (entry.result)
+      validateWorkerStepCheckResult(entry.plan, entry.before.workspaceFingerprint, entry.result);
+    ids.add(entry.id);
+    requested = entry.requestedAtRequest;
+  }
+}
 function validateSegmentCheckpoint(session: ManagedSession) {
+  validateWorkerCheckCheckpoint(session);
   const state = session.workSegments;
   if (!state) return;
   validateSegmentLimits(state.limits);
@@ -227,6 +317,7 @@ function validateSegmentCheckpoint(session: ManagedSession) {
   }
   let ended = 0,
     completed = 0;
+  const feedbackReceipts = new Set<string>();
   for (const [position, archive] of state.archives.entries()) {
     validateAnchor(archive.anchor);
     validateSegmentEvidence(archive.handoff.evidence);
@@ -253,6 +344,11 @@ function validateSegmentCheckpoint(session: ManagedSession) {
       )
     )
       invalidSegment('A handoff receipt must match its completed tool action.');
+    if (
+      archive.handoff.availableTools &&
+      new Set(archive.handoff.availableTools).size !== archive.handoff.availableTools.length
+    )
+      invalidSegment('The handoff tool names must be unique.');
     const pending = new Map<string, ManagedSession['actions'][number]>();
     const seen = new Set<string>();
     for (const item of archive.messages) {
@@ -289,9 +385,35 @@ function validateSegmentCheckpoint(session: ManagedSession) {
     const last = archive.messages.at(-1);
     if (pending.size || last?.role !== 'assistant' || last.toolCalls?.length)
       invalidSegment('A work segment was archived before its model round settled.');
-    const closing = parseSegmentClosing(last.content);
-    if (closing.status !== 'continue' || closing.nextTask !== archive.handoff.nextTask)
-      invalidSegment('The archived closing reply does not match its next-task proposal.');
+    if (archive.handoff.kind === 'check-feedback') {
+      const feedback = archive.handoff.checkFeedback;
+      const entry = session.workerStepChecks?.entries.find(
+        (item) => item.id === feedback?.receiptId,
+      );
+      if (
+        !feedback ||
+        !entry ||
+        entry.status !== 'completed' ||
+        !entry.result ||
+        entry.turnId !== archive.anchor.turnId ||
+        entry.scopeRevision !== archive.anchor.scopeRevision ||
+        entry.requestedAtRequest !== archive.endedAtRequest ||
+        !same(entry.before, archive.handoff.evidence) ||
+        !same(entry.result, feedback.result) ||
+        feedbackReceipts.has(entry.id) ||
+        archive.handoff.nextTask !== workerStepFeedback(entry)
+      )
+        invalidSegment(
+          'A focused repair must reference one actual failed service check on the archived workspace.',
+        );
+      feedbackReceipts.add(entry.id);
+    } else {
+      if (archive.handoff.checkFeedback)
+        invalidSegment('Service check evidence requires an explicit check-feedback boundary.');
+      const closing = parseSegmentClosing(last.content);
+      if (closing.status !== 'continue' || closing.nextTask !== archive.handoff.nextTask)
+        invalidSegment('The archived closing reply does not match its next-task proposal.');
+    }
     ended = archive.endedAtRequest;
     completed = archive.handoff.completedActions;
   }
@@ -299,9 +421,60 @@ function validateSegmentCheckpoint(session: ManagedSession) {
     invalidSegment('The active segment rewound the archived request count.');
 }
 
+function validateWorkerCheckTransition(previous: ManagedSession, next: ManagedSession) {
+  const before = previous.workerStepChecks,
+    after = next.workerStepChecks;
+  if (!before && !after) return;
+  if (
+    !after ||
+    (before &&
+      (before.revision !== after.revision ||
+        before.maxFeedbackSteps !== after.maxFeedbackSteps ||
+        after.feedbackSteps < before.feedbackSteps ||
+        after.entries.length < before.entries.length))
+  )
+    invalidSegment('The private service-check journal and its feedback allowance cannot be reset.');
+  const oldEntries = before?.entries || [];
+  if (after.entries.length > oldEntries.length + 1)
+    invalidSegment('Service checks must persist each intent before dispatch.');
+  for (const [index, entry] of oldEntries.entries()) {
+    const candidate = after.entries[index];
+    const { status: oldStatus, result: oldResult, ...oldContract } = entry;
+    const { status: newStatus, result: newResult, ...newContract } = candidate;
+    if (
+      !same(oldContract, newContract) ||
+      (oldStatus !== 'pending' && !same(entry, candidate)) ||
+      (oldStatus === 'pending' && newStatus === 'pending' && !same(oldResult, newResult))
+    )
+      invalidSegment(
+        'An observed or unknown service-check receipt cannot be rewritten or replayed.',
+      );
+  }
+  if (after.entries.length > oldEntries.length) {
+    const entry = after.entries.at(-1)!,
+      anchor = next.workSegments?.anchor;
+    if (
+      oldEntries.some((item) => item.status !== 'completed') ||
+      entry.status !== 'pending' ||
+      entry.result ||
+      next.cancelRequested ||
+      next.generation?.outcome !== 'completed' ||
+      next.actions.some((action) => action.status !== 'completed') ||
+      entry.requestedAtRequest !== next.requests ||
+      entry.turnId !== anchor?.turnId ||
+      entry.scopeRevision !== anchor?.scopeRevision
+    )
+      invalidSegment(
+        'A service check requires a fresh durable intent and a settled worker generation.',
+      );
+  }
+}
+
 /** Segmentation may rotate context, but never rewrite completed private history or lifetime charges. */
 function validateTransition(previous: ManagedSession | undefined, next: ManagedSession) {
-  if (!previous || (!previous.workSegments && !next.workSegments)) return;
+  if (!previous) return;
+  validateWorkerCheckTransition(previous, next);
+  if (!previous.workSegments && !next.workSegments) return;
   if (previous.workSegments && !next.workSegments)
     invalidSegment('The work segment archive cannot be removed.');
   if (
