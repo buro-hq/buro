@@ -1,0 +1,133 @@
+# Buro target architecture
+
+Status: agreed implementation direction, 20 November 2026. [VISION.md](VISION.md) owns the product model. This document describes the target; [GOAL-EXECUTION-POC.md](GOAL-EXECUTION-POC.md) describes current execution.
+
+## Architecture decision
+
+Keep a TypeScript modular monolith with an independent core and Cordis composition. Buro owns a persistent scheduler, the coordinator's decision protocol, verification and acceptance. Existing agent clients connect through runtime adapters. Direct model APIs connect through a shared Buro-managed runtime and provider-specific transports.
+
+Ollama and the DeepSeek model API are required in the first multi-provider milestone. Codex continues through its adapter. Claude, ACP and other providers are later integrations, not prerequisites. SQLite is a target storage adapter; its migration is a separate change from the first provider vertical slice.
+
+```mermaid
+flowchart TB
+  UI[Web UI] --> API[Application commands and queries]
+  CLI[CLI] --> API
+  MCP[MCP automation] --> API
+  API --> APP[Projects goals tasks and orchestration]
+  HOST[Cordis host] -. constructs .-> APP
+  APP --> CORE[Domain decisions and acceptance rules]
+  APP --> PORTS[Explicit ports]
+  PORTS --> STORE[State events artifacts and checkpoints]
+  PORTS --> EXEC[Workspaces environments and trusted checks]
+  PORTS --> RR[Runtime registry]
+  RR --> CX[Codex adapter]
+  RR --> MR[Buro managed runtime]
+  MR --> TOOLS[Scoped tool broker]
+  MR --> MP[Model provider registry]
+  MP --> O[Ollama native API]
+  MP --> D[DeepSeek API]
+```
+
+## Boundaries
+
+`core/` contains domain rules and application modules that receive explicit ports. Pure decision functions do not start processes or depend on clocks without injected values. Core does not import Cordis, Node, React, provider SDKs or native event payloads.
+
+`protocol/` contains public commands, events, projections and schemas. A transport DTO is not the whole internal workflow object. `plugins/` composes trusted implementations through Cordis. `adapters/` owns platform and provider details. UI, CLI and external automation use the same application API and authorization rules.
+
+Organize modules by responsibility: projects, goals/runs, tasks/orchestration, roles, context, runtime routing, verification, operator requests and results. Keep related code together without requiring an npm package or service for every module.
+
+Cordis owns registration, dependency readiness and resource disposal. Its process-local notifications are separate from durable domain events. Persist a domain transition before publishing it. Unloading a runtime stops new assignments and drains or explicitly interrupts existing ones; production execution must not depend on hot reload.
+
+## Domain ownership
+
+| Entity | Meaning |
+| --- | --- |
+| Goal | Versioned user intent, acceptance criteria and input selection. |
+| Run | One independent attempt to satisfy a goal, with its own base and worktree. |
+| Task | Bounded objective, dependencies, allowed writes, required outputs and checks. |
+| Attempt | A particular execution of a task, including retries or reassignment. |
+| AgentSession | Concrete role, runtime configuration, context and lifecycle for an assignment. |
+| RoleVersion | Reusable instructions and skill requirements with provenance. |
+| Evidence | An observed result tied to input revision, workspace commit, command and environment. |
+| OperatorRequest | A durable question or action request and the work it blocks. |
+
+Buro IDs identify these entities. Native thread IDs are external references scoped to a runtime and client configuration. Role names and logical agent paths are display/navigation data rather than proof of identity or filesystem isolation.
+
+A run snapshots its criteria, base commit and initial policy. Each session snapshots the role, client/provider/model selection and context version actually used. Plan revisions append decisions; they do not rewrite finished attempts. A clarification can invalidate dependent evidence while preserving unaffected work.
+
+## Coordinator and scheduler
+
+The coordinator proposes structured decisions: investigate, delegate, propose a role, verify, replan, ask the user or finish. The scheduler validates decisions, reserves resources and dispatches work. The acceptance service determines success from evidence and policy.
+
+The coordinator can add a specialist after discovering a risk. It does not have to predict the entire team at launch. Role candidates remain within existing permissions; reusable promotion follows evaluation or explicit user action.
+
+Buro starts worker sessions itself. Native subagents may become an optional optimization after their lifecycle and permissions can be mapped reliably. They are not required for cross-provider orchestration. An undeclared native child cannot silently become a trusted assignment just because its prompt resembles a role name.
+
+Start with a small versioned decision schema and bounded graph edits. Reject cycles, invalid dependency references, unsupported tools, ownership violations and policy expansion. A rejected decision returns a concrete correction; invalid output consumes a bounded retry budget.
+
+## Runtime and provider contracts
+
+| Port | Responsibility |
+| --- | --- |
+| RuntimeRegistry | Available clients, configuration revisions and probed capabilities. |
+| AgentRuntime | Create a session, execute a turn, cancel, observe state and recover when supported. |
+| ModelProvider | Model discovery, provider capabilities and streamed normalized responses. |
+| ToolBroker | Validate and execute a scoped tool request with a durable action ID. |
+| ContextAssembler | Build a bounded session input from permitted, versioned sources. |
+| ResourceScheduler | Host, endpoint/model, project and run capacity. |
+| VerificationPort | Execute trusted checks and return independently observed evidence. |
+| StateStore | Transactional state, events, command receipts and dispatch intents. |
+
+The managed runtime implements AgentRuntime once. Ollama and DeepSeek implement ModelProvider separately. They share task execution and tool semantics, while preserving provider-specific request formats, streaming behavior and continuation state. [Provider integration](docs/PROVIDERS.md) owns these details.
+
+Normalize lifecycle, tool calls, progress, usage and terminal outcomes at the adapter boundary. Keep raw wire payloads and private provider continuation outside domain events and normal exports. A text delta is not a transaction or proof that a task advanced.
+
+Capabilities are attached to a concrete client/model/endpoint combination: structured decisions, tool calling, context capacity, streaming, cancellation and recovery mode. Native resume, Buro checkpoint continuation and starting a new session are distinct operations. A capability can be unavailable without making the whole client unusable for other roles.
+
+## Managed tools
+
+The initial tool set is repository read/search, bounded file edit/patch, scoped command execution and artifact access. Coordinator delegation and operator questions use the application decision protocol. Keep the exposed schema small for smaller models.
+
+A model requests tools; the service executes them. Validate arguments, workspace identity, path scope, output bounds and cancellation before dispatch. Writes and commands use the existing execution environment; they do not gain a host bypass because an API provider lacks a native sandbox.
+
+Acceptance checks run under service ownership. Their definitions and evidence cannot be silently replaced by worker edits. Reviewers use fresh read-only sessions and the actual goal, diff and check results. A final assistant message is never an acceptance receipt.
+
+## Context and routing
+
+Select models by task requirements, measured capability, data policy, availability and budget. Start with explicit user-selected profiles; add adaptive routing based on evaluation results. Do not equate a role title with a permanent model choice.
+
+Support local-only and configured hybrid operation. Endpoint credentials and private settings belong to machine configuration; shared project profiles contain references and constraints. A provider fallback cannot cross the project's data boundary without prior authorization.
+
+Project materials, goal inputs, session briefs and run outputs keep separate provenance. Use token budgets appropriate to the selected model, leaving space for tool results and completion. Provider-native continuation needed for correctness must be preserved privately even when it is not part of the human-readable brief.
+
+## Parallelism and workspaces
+
+Permit multiple runs for a project and a goal, each with its own base and worktree. Replace the current PROJECT_BUSY restriction with queueing and explicit capacity. Keep latest-run pointers as conveniences, not exclusive ownership of a goal's history.
+
+Initially use one writer per run worktree with independent read-only tasks where useful. Add separate task worktrees and serialized integration only after measuring the benefit. Nonoverlapping file names alone do not prove semantic independence.
+
+Limit inference separately from logical sessions. Several agents may share one local model sequentially. Endpoint capacity, local memory, heavy checks and native graphics can each constrain parallelism. A blocked native test should not stop unrelated ready tasks.
+
+## Persistence and recovery
+
+Persist task state, command receipt and dispatch intent before executing an external action. Give every tool action a stable Buro ID. Store tool results before continuing the model turn. On restart, reconcile actual process/workspace state before retrying an action whose outcome is unknown.
+
+File state remains an initial adapter. Add bounded private session checkpoints and external action reconciliation without pretending that a JSON transcript alone provides exactly-once execution. SQLite can later commit state, events, outbox and receipts atomically behind StateStore. Large logs and provider checkpoints belong in separate private artifacts with versioned references.
+
+Cancellation first records intent, then aborts provider requests, stops owned tool processes and releases resources after observation. Disconnecting a stream alone does not prove that remote inference stopped. Unknown outcomes remain visible and are not automatically repeated.
+
+Closing the UI leaves the daemon responsible for work. Questions, answers and clarifications survive transport loss. Apply, PR and deployment effects remain separate from implementation acceptance and reconcile their own external state.
+
+## First vertical slice
+
+1. Normalize the existing Codex adapter and introduce RuntimeRegistry without changing accepted-result behavior.
+2. Implement the managed runtime, small ToolBroker and fake-provider contract tests.
+3. Add Ollama native API and DeepSeek API adapters in the same milestone, including their private continuation and capability handling.
+4. Let Buro delegate between independently recorded managed/native sessions, run trusted checks and obtain fresh review.
+5. Expose minimal resource profiles and inherited defaults, preserving work and action IDs on interruption. Expand into in-place overrides, queued runs, a general task graph and durable questions in the next orchestration slice.
+
+The milestone is complete when a goal works through either direct provider without Codex, a mixed-provider goal works under Buro's scheduler, and failures/cancellation/recovery preserve honest evidence. Conservative interruption with saved work is acceptable before full automatic reconciliation. A general task graph, concurrent project runs and SQLite migration must not delay the first provider vertical slice. A chat response from each provider alone is insufficient.
+
+## Later decisions
+
+Claude and ACP adapters, DeepSeek Harness as an optional runtime, SQLite migration, parallel task writers, richer retrieval and distributed execution can follow the first verified slice. LangGraph remains an alternative if a focused comparison shows that it simplifies recovery; Temporal becomes relevant for multiple execution hosts. There must be one owner of workflow state rather than two competing schedulers.

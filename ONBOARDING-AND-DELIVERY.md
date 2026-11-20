@@ -1,5 +1,7 @@
 # Project setup and result delivery
 
+The workflows below describe current production behavior. [VISION.md](VISION.md) defines the target automated experience and [provider integration](docs/PROVIDERS.md) defines Ollama/DeepSeek onboarding for the next milestone. Execution resource selection, a model capability probe and a configured data policy will precede use of a new provider; the coordinator will inherit project defaults and request user input only where needed.
+
 ## Project setup
 
 The default flow is directory selection → read-only research → editable proposal → saved profile. Research inspects source/configuration and suggests component types, paths, startup commands, checks and missing infrastructure. It does not install dependencies, run servers/migrations, mutate Git or deploy. The user can disable research and configure manually.

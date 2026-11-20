@@ -5,11 +5,15 @@
   <img src="branding/logo.svg" alt="Buro Links logo" width="240">
 </picture>
 
-Buro is a local app for running coding tasks with Codex CLI. Connect a Git repository, describe a change, and choose the checks it must pass. Each task keeps its goal, plan, agent sessions, commands, diff and review in one place.
+Buro is a local workspace for automating coding goals with a coordinator, focused agent sessions and independent checks. Connect a Git repository and describe the outcome. Each goal keeps its plan, agent sessions, commands, diff and review in one place.
 
 Work happens in a separate Git worktree. You can inspect the result, apply it to your branch, or have Buro open a draft PR. A coordinator plans the work and selects workers when needed; a separate reviewer checks the result.
 
-Buro is still in development. It runs on your machine and uses your installed, signed-in Codex CLI.
+Buro is still in development. The current production runtime uses your installed, signed-in Codex CLI. The first multi-provider milestone adds **Ollama and the DeepSeek model API** through a Buro-managed agent runtime; these integrations are planned, not available in the current release.
+
+The [product vision](VISION.md), [target architecture](ARCHITECTURE.md) and [provider integration contract](docs/PROVIDERS.md) define that milestone: Buro manages the team, tools and verification across selected clients and models. The instructions below describe the currently shipped Codex route.
+
+The [implementation sequence](docs/IMPLEMENTATION.md) tracks the transition from the existing route to that vision.
 
 ![Buro project office with the coordinator, developer, test author and reviewer](docs/images/office.png)
 
@@ -87,7 +91,7 @@ Use the project and goal IDs returned by the preceding commands. See [developmen
 
 ## Current limits
 
-- Codex CLI is the only agent runtime included.
+- Codex CLI is the only agent runtime included. Ollama and DeepSeek API support are required in the next milestone; a configured model name alone does not add those capabilities today.
 - A run stops after 10 minutes without coordinator or child-agent progress. Checks, environment setup and delivery have their own timeouts.
 - Worktrees, past attachments and dependency caches are retained. Automatic cleanup only removes stale temporary writes.
 - This is a local tool. The service listens on loopback; it is not a hosted or shared team service.
@@ -99,7 +103,7 @@ npm test
 npm run build
 ```
 
-[Development and configuration](docs/DEVELOPMENT.md) · [Project setup](USER-PROJECTS.md) · [Execution flow](GOAL-EXECUTION-POC.md) · [Recovery](RECOVERY.md) · [UI architecture](UI-ARCHITECTURE.md) · [Roadmap](ROADMAP.md) · [Branding](branding/README.md)
+[Product vision](VISION.md) · [Target architecture](ARCHITECTURE.md) · [Providers](docs/PROVIDERS.md) · [Development and configuration](docs/DEVELOPMENT.md) · [Project setup](USER-PROJECTS.md) · [Current execution flow](GOAL-EXECUTION-POC.md) · [Recovery](RECOVERY.md) · [UI architecture](UI-ARCHITECTURE.md) · [Roadmap](ROADMAP.md) · [Branding](branding/README.md)
 
 ## License
 

@@ -2,6 +2,8 @@
 
 A stopped run preserves its workspace, coordinator thread ID, policy, role definitions, checks and timeline. Restarting the service marks unfinished work interrupted; it does not automatically replay implementation, installs or delivery.
 
+This is current Codex behavior. The target in [ARCHITECTURE.md](ARCHITECTURE.md) adds per-task action reconciliation and private Buro-managed checkpoints for Ollama and the DeepSeek API. Native client resume and checkpoint continuation are distinct; neither permits blindly replaying a tool action whose external result is unknown. Provider-specific recovery criteria are in [providers](docs/PROVIDERS.md).
+
 ## Operator flow
 
 - **Rerun checks** verifies the saved implementation without replanning or rewriting files. A saved plan/team is required.

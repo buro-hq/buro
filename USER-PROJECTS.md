@@ -2,6 +2,8 @@
 
 Buro connects existing Git repository roots; it does not copy the source project into its own checkout. Every connected repository owns `.buro/` metadata and isolated worktrees. The service checkout stores a catalog of linked paths.
 
+This guide describes current behavior. The next milestone adds resource profiles for Ollama, the DeepSeek API and native clients, as defined in [VISION.md](VISION.md), [ARCHITECTURE.md](ARCHITECTURE.md) and [providers](docs/PROVIDERS.md). API credentials and endpoint details will remain private machine settings; project profiles will reference resources and data constraints rather than embed credentials. These target fields are not yet accepted by the current profile schema.
+
 ## Connect and configure
 
 1. Inspect a repository with the directory picker or an absolute path. Inspection is read-only and rejects non-Git/nested roots and unsafe metadata symlinks.

@@ -2,6 +2,18 @@
 
 The project is the entry point. Each project has an office, goals, runs, team, files and settings, including projects without a first run. Replay and live service use the same interface through `ProjectClient`.
 
+## Product direction
+
+[VISION.md](VISION.md) governs the agreed interaction model; [ARCHITECTURE.md](ARCHITECTURE.md) and [providers](docs/PROVIDERS.md) govern the next implementation milestone. The current production runtime is Codex-only. Resource selection for Ollama/DeepSeek and the reviewed UX prototype remain target behavior until backed by the service.
+
+The target run overview combines a compact coordinator/agent map, timeline and an agent-focused feed on the right, with agent details below the map. Goals use dense navigation and concurrent runs keep visible context. Team cards describe role definitions and their concrete sessions; materials use a scope tree and list.
+
+The primary flow asks for the desired outcome. Project research proposes contextual defaults, the coordinator recruits or creates specialists during work, and technical overrides open in place. Project rules own check configuration; run verification owns evidence and problems. A separate quality score is not the acceptance model.
+
+Resource profiles distinguish local-only, configured hybrid and native client execution. Show actual client/model, capability readiness, queue state and data-policy blockers without implying that a selected provider has already passed a coding capability probe.
+
+UI, CLI and external automation read the same saved task/session events. Provider reasoning/continuation payloads stay private; visible progress presents actions, decisions and evidence. Simulated prototype activity must not be presented as real execution.
+
 ## Boundaries
 
 - `core/`: pure domain services and ports.
