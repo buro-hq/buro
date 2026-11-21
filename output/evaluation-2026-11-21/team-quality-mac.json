@@ -1,0 +1,391 @@
+{
+  "version": 1,
+  "researchOnly": true,
+  "productionAcceptanceEnabled": false,
+  "syntheticOnly": true,
+  "fixture": {
+    "caseId": "synthetic-ready-queue-v1",
+    "caseHash": "a4972e8be97d657c33c55aa3e949462dfefc2993708a49ff402798115d2965ce",
+    "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+    "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+    "taskHash": "dfedfa67f2f8f28845498eeef9a9f8de4a7d1c6821f786d3b9cdc8d3eea9a2b9",
+    "oracleHash": "ffc074a31214cdae4bfb1df834738629f734b581ec333f78c38b578862781040",
+    "allowedPaths": [
+      "src/priority.mjs",
+      "src/queue.mjs"
+    ],
+    "publicChecks": 3,
+    "holdoutChecks": 5
+  },
+  "startedAt": "2026-11-21T10:53:21.170Z",
+  "model": "qwen3:4b-instruct-2507-q4_K_M",
+  "endpoint": "http://127.0.0.1:11434/",
+  "limits": {
+    "maxGenerationRequests": 24,
+    "maxReservedOutputTokens": 65536,
+    "maxDiagnosticRequests": 2,
+    "diagnosticWallTimeMs": 120000,
+    "codingWallTimeMs": 300000,
+    "contextTokens": 16384,
+    "maxOutputTokens": 2048,
+    "maxToolCalls": 64,
+    "maxToolCallsPerTurn": 24
+  },
+  "repetitions": 1,
+  "comparability": {
+    "sameRequestedModel": true,
+    "sameFixture": true,
+    "sameTask": true,
+    "sameOracle": true,
+    "sameContext": true,
+    "sameGlobalCaps": true,
+    "sequentialInference": true,
+    "noInferenceDiagnostics": true,
+    "reviewReserves": {
+      "baseline": {
+        "requests": 0,
+        "outputTokens": 0,
+        "toolCalls": 0
+      },
+      "reviewed": {
+        "requests": 4,
+        "outputTokens": 8192,
+        "toolCalls": 8
+      }
+    },
+    "order": "rotate selected variant order by repetition",
+    "limitations": [
+      "one synthetic case",
+      "correlated errors across sessions of the same model",
+      "small sample; no reliability ranking",
+      "baseline omits independent model review and is not production Buro acceptance"
+    ],
+    "sameWeightsVerified": true
+  },
+  "results": [
+    {
+      "variant": "executor-checks",
+      "repetition": 1,
+      "sequence": 1,
+      "productionAccepted": false,
+      "commonCodePassed": false,
+      "experimentPassed": false,
+      "reviewRequired": false,
+      "canonical": {
+        "public": {
+          "passed": false,
+          "checks": 3,
+          "passedChecks": 2,
+          "sourceHash": "e5651c3f6d0e2e9db938f2e00f3a3d7e7768ac9350442f344cb9ef2f449007dc",
+          "scopePreserved": true
+        },
+        "holdout": {
+          "passed": false,
+          "checks": 5,
+          "passedChecks": 4,
+          "sourceHash": "e5651c3f6d0e2e9db938f2e00f3a3d7e7768ac9350442f344cb9ef2f449007dc",
+          "scopePreserved": true
+        }
+      },
+      "status": "failed",
+      "errorCode": "MODEL_CONTEXT_EXHAUSTED",
+      "cleanupDone": true,
+      "experimentSuccess": false,
+      "reviewApproved": false,
+      "repairs": 2,
+      "reviewRounds": 0,
+      "generatedProbeCount": 0,
+      "checkRuns": 3,
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "reportedModelCount": 1,
+      "reportedModelMatchesRequested": true,
+      "modelDigest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+      "budget": {
+        "version": 1,
+        "coverage": "managed-api",
+        "policy": {
+          "version": 1,
+          "maxRequests": 24,
+          "maxReservedOutputTokens": 65536,
+          "maxToolCalls": 64,
+          "reviewReserve": {
+            "requests": 0,
+            "outputTokens": 0,
+            "toolCalls": 0
+          }
+        },
+        "status": "open",
+        "used": {
+          "requests": 12,
+          "reservedOutputTokens": 16409,
+          "toolCalls": 9
+        },
+        "workUsed": {
+          "requests": 12,
+          "reservedOutputTokens": 16409,
+          "toolCalls": 9
+        },
+        "reviewUsed": {
+          "requests": 0,
+          "reservedOutputTokens": 0,
+          "toolCalls": 0
+        },
+        "observed": {
+          "inputTokens": 25444,
+          "outputTokens": 1552,
+          "completeUsageRequests": 12,
+          "unknownUsageRequests": 0
+        }
+      },
+      "budgetMatchesConfiguration": true,
+      "stages": [
+        {
+          "role": "executor",
+          "durationMs": 47323,
+          "status": "completed"
+        },
+        {
+          "role": "executor",
+          "durationMs": 24864,
+          "status": "completed"
+        },
+        {
+          "role": "executor",
+          "durationMs": 14,
+          "status": "failed"
+        }
+      ],
+      "actions": {
+        "total": 6,
+        "completed": 6,
+        "failed": 0,
+        "edits": 1
+      },
+      "canonicalOrigin": "candidate-worktree",
+      "finalEvidenceStable": true,
+      "elapsedMs": 77562,
+      "trialReport": "team-quality-comparison-trials/1-executor-checks.json"
+    },
+    {
+      "variant": "executor-review",
+      "repetition": 1,
+      "sequence": 2,
+      "productionAccepted": false,
+      "commonCodePassed": false,
+      "experimentPassed": false,
+      "reviewRequired": true,
+      "canonical": {
+        "public": {
+          "passed": false,
+          "checks": 3,
+          "passedChecks": 0,
+          "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+          "scopePreserved": true
+        },
+        "holdout": {
+          "passed": false,
+          "checks": 5,
+          "passedChecks": 3,
+          "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+          "scopePreserved": true
+        }
+      },
+      "status": "failed",
+      "errorCode": "WORK_SEGMENT_LIMIT",
+      "cleanupDone": true,
+      "experimentSuccess": false,
+      "reviewApproved": false,
+      "repairs": 0,
+      "reviewRounds": 0,
+      "generatedProbeCount": 0,
+      "checkRuns": 1,
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "reportedModelCount": 1,
+      "reportedModelMatchesRequested": true,
+      "modelDigest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+      "budget": {
+        "version": 1,
+        "coverage": "managed-api",
+        "policy": {
+          "version": 1,
+          "maxRequests": 24,
+          "maxReservedOutputTokens": 65536,
+          "maxToolCalls": 64,
+          "reviewReserve": {
+            "requests": 4,
+            "outputTokens": 8192,
+            "toolCalls": 8
+          }
+        },
+        "status": "open",
+        "used": {
+          "requests": 10,
+          "reservedOutputTokens": 14336,
+          "toolCalls": 10
+        },
+        "workUsed": {
+          "requests": 10,
+          "reservedOutputTokens": 14336,
+          "toolCalls": 10
+        },
+        "reviewUsed": {
+          "requests": 0,
+          "reservedOutputTokens": 0,
+          "toolCalls": 0
+        },
+        "observed": {
+          "inputTokens": 17003,
+          "outputTokens": 717,
+          "completeUsageRequests": 10,
+          "unknownUsageRequests": 0
+        }
+      },
+      "budgetMatchesConfiguration": true,
+      "stages": [
+        {
+          "role": "executor",
+          "durationMs": 37925,
+          "status": "failed"
+        }
+      ],
+      "actions": {
+        "total": 9,
+        "completed": 9,
+        "failed": 0,
+        "edits": 0
+      },
+      "canonicalOrigin": "candidate-worktree",
+      "finalEvidenceStable": true,
+      "elapsedMs": 39691,
+      "trialReport": "team-quality-comparison-trials/1-executor-review.json"
+    },
+    {
+      "variant": "team-review",
+      "repetition": 1,
+      "sequence": 3,
+      "productionAccepted": false,
+      "commonCodePassed": false,
+      "experimentPassed": false,
+      "reviewRequired": true,
+      "canonical": {
+        "public": {
+          "passed": false,
+          "checks": 3,
+          "passedChecks": 0,
+          "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+          "scopePreserved": true
+        },
+        "holdout": {
+          "passed": false,
+          "checks": 5,
+          "passedChecks": 3,
+          "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+          "scopePreserved": true
+        }
+      },
+      "status": "failed",
+      "errorCode": "WORK_SEGMENT_LIMIT",
+      "cleanupDone": true,
+      "experimentSuccess": false,
+      "reviewApproved": false,
+      "repairs": 0,
+      "reviewRounds": 0,
+      "generatedProbeCount": 5,
+      "checkRuns": 1,
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "reportedModelCount": 1,
+      "reportedModelMatchesRequested": true,
+      "modelDigest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+      "budget": {
+        "version": 1,
+        "coverage": "managed-api",
+        "policy": {
+          "version": 1,
+          "maxRequests": 24,
+          "maxReservedOutputTokens": 65536,
+          "maxToolCalls": 64,
+          "reviewReserve": {
+            "requests": 4,
+            "outputTokens": 8192,
+            "toolCalls": 8
+          }
+        },
+        "status": "open",
+        "used": {
+          "requests": 11,
+          "reservedOutputTokens": 16384,
+          "toolCalls": 9
+        },
+        "workUsed": {
+          "requests": 11,
+          "reservedOutputTokens": 16384,
+          "toolCalls": 9
+        },
+        "reviewUsed": {
+          "requests": 0,
+          "reservedOutputTokens": 0,
+          "toolCalls": 0
+        },
+        "observed": {
+          "inputTokens": 18746,
+          "outputTokens": 1295,
+          "completeUsageRequests": 11,
+          "unknownUsageRequests": 0
+        }
+      },
+      "budgetMatchesConfiguration": true,
+      "stages": [
+        {
+          "role": "coordinator",
+          "durationMs": 9609,
+          "status": "completed"
+        },
+        {
+          "role": "test-author",
+          "durationMs": 4882,
+          "status": "completed"
+        },
+        {
+          "role": "executor",
+          "durationMs": 39798,
+          "status": "failed"
+        }
+      ],
+      "actions": {
+        "total": 8,
+        "completed": 8,
+        "failed": 0,
+        "edits": 0
+      },
+      "canonicalOrigin": "candidate-worktree",
+      "finalEvidenceStable": true,
+      "elapsedMs": 57545,
+      "trialReport": "team-quality-comparison-trials/1-team-review.json"
+    }
+  ],
+  "finishedAt": "2026-11-21T10:56:15.976Z",
+  "interrupted": false,
+  "summary": [
+    {
+      "variant": "executor-checks",
+      "trials": 1,
+      "codePassed": 0,
+      "experimentPassed": 0,
+      "reviewApproved": 0
+    },
+    {
+      "variant": "executor-review",
+      "trials": 1,
+      "codePassed": 0,
+      "experimentPassed": 0,
+      "reviewApproved": 0
+    },
+    {
+      "variant": "team-review",
+      "trials": 1,
+      "codePassed": 0,
+      "experimentPassed": 0,
+      "reviewApproved": 0
+    }
+  ]
+}

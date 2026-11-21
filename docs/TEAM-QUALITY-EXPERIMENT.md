@@ -23,3 +23,17 @@ BURO_TEAM_QUALITY=1 BURO_LIVE_OLLAMA=1 node scripts/check-team-quality.cjs
 Optional arguments select comma-separated variants and 1–3 repetitions. Repetition order rotates. The default model is the installed Mac `qwen3:4b-instruct-2507-q4_K_M`, context16K/output2K, literal loopback Ollama only. RTX/cloud endpoints and user source cases are rejected. Credentials are not loaded. The report goes to ignored `artifacts/team-quality-comparison.json`; `BURO_TEAM_REPORT` overrides the destination.
 
 These are experimental ceilings, not a proposed product default. The user requests no aggregate hard stop by default in production; optional user-configured ceilings, usage accounting, physical context/memory limits and correctness/permission guards must be designed separately after the architecture research. Existing production defaults are unchanged in this implementation.
+
+## Initial Mac smoke
+
+Implementation commit `77a016e`; one trial per variant, same installed Mac Qwen4B and settings. [Full sanitized evidence](../output/evaluation-2026-11-21/team-quality-mac.json).
+
+| Variant | Generations | Successful edit actions | End-to-end | Outcome |
+| --- | --- | --- | --- | --- |
+| Executor/checks | 12 | 1 | 78s | Conservative context admission stopped the worker; final code failed |
+| Executor/review | 10 | 0 | 40s | Four-window worker ceiling; final code failed |
+| Coordinator/test-author/executor/review | 11 | 0 | 58s | Four-window worker ceiling; final code failed |
+
+No variant reached the independent-review stage. This cannot establish that review improves or harms quality: implementation did not complete. The first variant's edit did not establish common code correctness. Ceilings were unchanged. There was no manual candidate repair, no production acceptance and no RTX call.
+
+The `MODEL_CONTEXT_EXHAUSTED` outcome is our conservative admission estimate, not proof Ollama filled its actual token window. The four-window ceiling is a harness policy, not a physical GPU limit. These failures reinforce the need to separate optional product quotas from context projection, progress control and permissions. The research runner remains a tool for controlled comparisons; its finite ceilings are not proposed product defaults.

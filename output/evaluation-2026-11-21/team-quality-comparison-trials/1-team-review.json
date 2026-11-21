@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "researchOnly": true,
+  "fixture": {
+    "caseId": "synthetic-ready-queue-v1",
+    "caseHash": "a4972e8be97d657c33c55aa3e949462dfefc2993708a49ff402798115d2965ce",
+    "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+    "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+    "taskHash": "dfedfa67f2f8f28845498eeef9a9f8de4a7d1c6821f786d3b9cdc8d3eea9a2b9",
+    "oracleHash": "ffc074a31214cdae4bfb1df834738629f734b581ec333f78c38b578862781040",
+    "allowedPaths": [
+      "src/priority.mjs",
+      "src/queue.mjs"
+    ],
+    "publicChecks": 3,
+    "holdoutChecks": 5
+  },
+  "fixtureDirectory": "/tmp/buro-team-quality-9NkTj0",
+  "candidateWorkspace": "/tmp/buro-team-quality-9NkTj0/.buro/worktrees/R-experiment-adc79995-62c8-4bb1-85bd-14fb89361e3a",
+  "variant": "team-review",
+  "repetition": 1,
+  "sequence": 3,
+  "productionAccepted": false,
+  "commonCodePassed": false,
+  "experimentPassed": false,
+  "reviewRequired": true,
+  "canonical": {
+    "public": {
+      "passed": false,
+      "checks": 3,
+      "passedChecks": 0,
+      "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+      "scopePreserved": true
+    },
+    "holdout": {
+      "passed": false,
+      "checks": 5,
+      "passedChecks": 3,
+      "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+      "scopePreserved": true
+    }
+  },
+  "status": "failed",
+  "errorCode": "WORK_SEGMENT_LIMIT",
+  "cleanupDone": true,
+  "experimentSuccess": false,
+  "reviewApproved": false,
+  "repairs": 0,
+  "reviewRounds": 0,
+  "generatedProbeCount": 5,
+  "checkRuns": 1,
+  "model": "qwen3:4b-instruct-2507-q4_K_M",
+  "reportedModelCount": 1,
+  "reportedModelMatchesRequested": true,
+  "modelDigest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+  "budget": {
+    "version": 1,
+    "coverage": "managed-api",
+    "policy": {
+      "version": 1,
+      "maxRequests": 24,
+      "maxReservedOutputTokens": 65536,
+      "maxToolCalls": 64,
+      "reviewReserve": {
+        "requests": 4,
+        "outputTokens": 8192,
+        "toolCalls": 8
+      }
+    },
+    "status": "open",
+    "used": {
+      "requests": 11,
+      "reservedOutputTokens": 16384,
+      "toolCalls": 9
+    },
+    "workUsed": {
+      "requests": 11,
+      "reservedOutputTokens": 16384,
+      "toolCalls": 9
+    },
+    "reviewUsed": {
+      "requests": 0,
+      "reservedOutputTokens": 0,
+      "toolCalls": 0
+    },
+    "observed": {
+      "inputTokens": 18746,
+      "outputTokens": 1295,
+      "completeUsageRequests": 11,
+      "unknownUsageRequests": 0
+    }
+  },
+  "budgetMatchesConfiguration": true,
+  "stages": [
+    {
+      "role": "coordinator",
+      "durationMs": 9609,
+      "status": "completed"
+    },
+    {
+      "role": "test-author",
+      "durationMs": 4882,
+      "status": "completed"
+    },
+    {
+      "role": "executor",
+      "durationMs": 39798,
+      "status": "failed"
+    }
+  ],
+  "actions": {
+    "total": 8,
+    "completed": 8,
+    "failed": 0,
+    "edits": 0
+  },
+  "canonicalOrigin": "candidate-worktree",
+  "finalEvidenceStable": true,
+  "elapsedMs": 57545,
+  "trialReport": "team-quality-comparison-trials/1-team-review.json"
+}

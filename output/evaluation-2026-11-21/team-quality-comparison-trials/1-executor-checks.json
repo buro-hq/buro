@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "researchOnly": true,
+  "fixture": {
+    "caseId": "synthetic-ready-queue-v1",
+    "caseHash": "a4972e8be97d657c33c55aa3e949462dfefc2993708a49ff402798115d2965ce",
+    "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+    "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+    "taskHash": "dfedfa67f2f8f28845498eeef9a9f8de4a7d1c6821f786d3b9cdc8d3eea9a2b9",
+    "oracleHash": "ffc074a31214cdae4bfb1df834738629f734b581ec333f78c38b578862781040",
+    "allowedPaths": [
+      "src/priority.mjs",
+      "src/queue.mjs"
+    ],
+    "publicChecks": 3,
+    "holdoutChecks": 5
+  },
+  "fixtureDirectory": "/tmp/buro-team-quality-KHZtw4",
+  "candidateWorkspace": "/tmp/buro-team-quality-KHZtw4/.buro/worktrees/R-experiment-d1c30e64-2cc2-411f-b7dd-02c80b857cfb",
+  "variant": "executor-checks",
+  "repetition": 1,
+  "sequence": 1,
+  "productionAccepted": false,
+  "commonCodePassed": false,
+  "experimentPassed": false,
+  "reviewRequired": false,
+  "canonical": {
+    "public": {
+      "passed": false,
+      "checks": 3,
+      "passedChecks": 2,
+      "sourceHash": "e5651c3f6d0e2e9db938f2e00f3a3d7e7768ac9350442f344cb9ef2f449007dc",
+      "scopePreserved": true
+    },
+    "holdout": {
+      "passed": false,
+      "checks": 5,
+      "passedChecks": 4,
+      "sourceHash": "e5651c3f6d0e2e9db938f2e00f3a3d7e7768ac9350442f344cb9ef2f449007dc",
+      "scopePreserved": true
+    }
+  },
+  "status": "failed",
+  "errorCode": "MODEL_CONTEXT_EXHAUSTED",
+  "cleanupDone": true,
+  "experimentSuccess": false,
+  "reviewApproved": false,
+  "repairs": 2,
+  "reviewRounds": 0,
+  "generatedProbeCount": 0,
+  "checkRuns": 3,
+  "model": "qwen3:4b-instruct-2507-q4_K_M",
+  "reportedModelCount": 1,
+  "reportedModelMatchesRequested": true,
+  "modelDigest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+  "budget": {
+    "version": 1,
+    "coverage": "managed-api",
+    "policy": {
+      "version": 1,
+      "maxRequests": 24,
+      "maxReservedOutputTokens": 65536,
+      "maxToolCalls": 64,
+      "reviewReserve": {
+        "requests": 0,
+        "outputTokens": 0,
+        "toolCalls": 0
+      }
+    },
+    "status": "open",
+    "used": {
+      "requests": 12,
+      "reservedOutputTokens": 16409,
+      "toolCalls": 9
+    },
+    "workUsed": {
+      "requests": 12,
+      "reservedOutputTokens": 16409,
+      "toolCalls": 9
+    },
+    "reviewUsed": {
+      "requests": 0,
+      "reservedOutputTokens": 0,
+      "toolCalls": 0
+    },
+    "observed": {
+      "inputTokens": 25444,
+      "outputTokens": 1552,
+      "completeUsageRequests": 12,
+      "unknownUsageRequests": 0
+    }
+  },
+  "budgetMatchesConfiguration": true,
+  "stages": [
+    {
+      "role": "executor",
+      "durationMs": 47323,
+      "status": "completed"
+    },
+    {
+      "role": "executor",
+      "durationMs": 24864,
+      "status": "completed"
+    },
+    {
+      "role": "executor",
+      "durationMs": 14,
+      "status": "failed"
+    }
+  ],
+  "actions": {
+    "total": 6,
+    "completed": 6,
+    "failed": 0,
+    "edits": 1
+  },
+  "canonicalOrigin": "candidate-worktree",
+  "finalEvidenceStable": true,
+  "elapsedMs": 77562,
+  "trialReport": "team-quality-comparison-trials/1-executor-checks.json"
+}
