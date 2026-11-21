@@ -23,7 +23,7 @@ const input = (variant: TeamExperimentInput['variant']): TeamExperimentInput => 
     body: 'The public API must return value two.',
     criteria: 'Preserve the public API and frozen checks.',
   },
-  scope: { allowedPaths: ['src/value.ts'], protectedPaths: ['checks/'] },
+  scope: { mode: 'strict', plannedPaths: ['src/value.ts'], protectedPaths: ['checks/'] },
   publicCheckIds: ['public'],
   generatedProbeSchema: {
     type: 'object',
@@ -187,6 +187,40 @@ test('executor-checks is a research control without a reviewer or production acc
   assert.equal(f.turns[0].toolPolicy, undefined);
 });
 
+test('research adapters preserve explicit scope mode while advisory discovery can exceed the planned files', async () => {
+  const advisoryInput = input('executor-review');
+  advisoryInput.scope = { ...advisoryInput.scope, mode: 'advisory', plannedPaths: [] };
+  const advisory = fixture();
+  const result = await runTeamExperiment(
+    advisoryInput,
+    advisory.ports,
+    new AbortController().signal,
+  );
+  assert.equal(result.experimentSuccess, true);
+  assert.equal(result.reviewRounds, 2);
+  assert.ok(advisory.starts.every((session) => session.scope.mode === 'advisory'));
+  assert.deepEqual(
+    advisory.starts.find((session) => session.role === 'executor')!.scope.plannedPaths,
+    [],
+  );
+  assert.match(
+    advisory.starts.find((session) => session.role === 'executor')!.instructions,
+    /necessary adjacent edits/,
+  );
+  assert.ok(
+    advisory.starts
+      .filter((session) => session.role === 'reviewer')
+      .every((session) => session.readOnly),
+  );
+
+  const strict = fixture();
+  const strictInput = input('executor-review');
+  strictInput.scope.plannedPaths = ['src/different.ts'];
+  const denied = await runTeamExperiment(strictInput, strict.ports, new AbortController().signal);
+  assert.equal(denied.errorCode, 'TEAM_EXPERIMENT_INVALID_EVIDENCE');
+  assert.equal(strict.starts.length, 0);
+});
+
 test('independent review finds a check-passing defect, repairs the same executor and freshly re-reviews', async () => {
   const f = fixture();
   const result = await runTeamExperiment(
@@ -209,7 +243,7 @@ test('independent review finds a check-passing defect, repairs the same executor
   assert.ok(
     f.starts
       .filter((t) => t.role === 'reviewer')
-      .every((t) => t.readOnly && !t.allowedPaths.length),
+      .every((t) => t.readOnly && t.scope.mode === 'strict'),
   );
   assert.equal(f.released.length, 3);
 });

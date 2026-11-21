@@ -1,7 +1,14 @@
 import type { AgentSession, FileChange, Role, Run } from '../protocol/domain.ts';
 import { EnvelopeSchema, envelopeOutputSchema } from '../protocol/execution.ts';
 import { DomainError, type AgentRuntime } from './ports.ts';
-import { inScope, type ExecutionPolicy, type WorkspacePort } from './execution-ports.ts';
+import {
+  matchesPlannedPath,
+  writeAllowed,
+  planPathAllowed,
+  type ExecutionPolicy,
+  type WorkspacePort,
+} from './execution-ports.ts';
+import type { WorkScope } from '../protocol/work-scope.ts';
 import { sessionResource } from '../protocol/resources.ts';
 import { validateAssignmentResource } from './assignment-routing.ts';
 import { buildWorkerEnvelope, workerInstructions, workerPrompt } from './worker-envelope.ts';
@@ -10,16 +17,34 @@ import { buildWorkerEnvelope, workerInstructions, workerPrompt } from './worker-
 export function assignmentScopePreserved(
   before: FileChange[],
   after: FileChange[],
-  paths: string[],
-  protectedPaths: string[],
+  scope: WorkScope,
 ) {
   const previous = new Map(before.map((f) => [f.path, f.after]));
   const current = new Map(after.map((f) => [f.path, f.after]));
   return [...new Set([...previous.keys(), ...current.keys()])].every(
     (path) =>
       previous.get(path) === current.get(path) ||
-      (inScope(path, paths, protectedPaths) && !current.get(path)?.startsWith('[symlink ')),
+      (writeAllowed(path, scope) && !current.get(path)?.startsWith('[symlink ')),
   );
+}
+
+/** Advisory deviations and earlier edits reverted by this serial worker remain review evidence. */
+export function assignmentScopeObservations(
+  before: FileChange[],
+  after: FileChange[],
+  scope: WorkScope,
+) {
+  const previous = new Map(before.map((file) => [file.path, file.after]));
+  const current = new Map(after.map((file) => [file.path, file.after]));
+  const changed = [...new Set([...previous.keys(), ...current.keys()])]
+    .filter((file) => previous.get(file) !== current.get(file))
+    .sort();
+  return {
+    additionalPaths: scope.plannedPaths.length
+      ? changed.filter((file) => !matchesPlannedPath(file, scope.plannedPaths))
+      : [],
+    revertedPaths: changed.filter((file) => previous.has(file) && !current.has(file)),
+  };
 }
 
 /** One writer at a time. The service owns identity, dispatch and completion evidence. */
@@ -47,11 +72,19 @@ export async function runWorkerAssignments(options: {
   };
   for (const role of roles) {
     abort();
-    const paths = run.roleAssignments?.[role.id];
-    if (!paths?.length)
+    const paths =
+      run.roleAssignments && Object.hasOwn(run.roleAssignments, role.id)
+        ? run.roleAssignments[role.id]
+        : undefined;
+    if (!paths || (policy.scope.mode === 'strict' && !paths.length))
       throw new DomainError('INVALID_ASSIGNMENT', `No saved paths for ${role.id}.`);
-    if (paths.some((path) => !inScope(path, policy.allowedPaths, policy.protectedPaths)))
+    if (paths.some((path) => !planPathAllowed(path, policy.scope)))
       throw new DomainError('INVALID_ASSIGNMENT', `Assignment exceeds current scope: ${role.id}.`);
+    const scope: WorkScope = {
+      ...policy.scope,
+      plannedPaths: [...paths],
+      protectedPaths: [...policy.scope.protectedPaths],
+    };
     const savedDecision = run.assignmentResources?.[role.id];
     if (run.resources?.workerPool && !savedDecision)
       throw new DomainError('INVALID_ASSIGNMENT', `No saved resource decision for ${role.id}.`);
@@ -101,6 +134,22 @@ export async function runWorkerAssignments(options: {
     let before: FileChange[] | undefined;
     let failedTurn: unknown;
     let releaseAttempted = false;
+    let observations: ReturnType<typeof assignmentScopeObservations> | undefined;
+    const recordObservations = (current: Run, thread: string) => {
+      if (
+        observations &&
+        (observations.additionalPaths.length || observations.revertedPaths.length) &&
+        !current.events.some(
+          (event) => event.type === 'agent.scope-observed' && event.threadId === thread,
+        )
+      )
+        current.events.push({
+          at: now(),
+          type: 'agent.scope-observed',
+          threadId: thread,
+          text: JSON.stringify({ mode: scope.mode, ...observations }),
+        });
+    };
     try {
       abort();
       before = await workspaces.changes(workspace.path, workspace.base);
@@ -112,8 +161,7 @@ export async function runWorkerAssignments(options: {
         assignment: {
           sessionId: session.id,
           roleId: role.id,
-          allowedPaths: [...paths],
-          protectedPaths: policy.protectedPaths || [],
+          scope: structuredClone(scope),
         },
         instructions: workerInstructions(role, policy),
       });
@@ -141,10 +189,11 @@ export async function runWorkerAssignments(options: {
       const result = EnvelopeSchema.parse(response);
       abort();
       const after = await workspaces.changes(workspace.path, workspace.base);
-      if (!assignmentScopePreserved(before, after, paths, policy.protectedPaths || []))
+      observations = assignmentScopeObservations(before, after, scope);
+      if (!assignmentScopePreserved(before, after, scope))
         throw new DomainError(
           'WORKER_SCOPE_VIOLATION',
-          `Worker ${role.id} changed files outside its assignment.`,
+          `Worker ${role.id} changed files forbidden by its ${scope.mode} scope.`,
         );
       await options.flush();
       await update((r) => {
@@ -153,6 +202,7 @@ export async function runWorkerAssignments(options: {
         agent.status = result.status === 'success' ? 'completed' : 'failed';
         agent.completedAt = now();
         agent.messages.push(result.summary);
+        recordObservations(r, started.threadId);
         r.events.push({
           at: now(),
           type: result.status === 'success' ? 'agent.completed' : 'agent.failed',
@@ -178,10 +228,11 @@ export async function runWorkerAssignments(options: {
       ) {
         try {
           const after = await workspaces.changes(workspace.path, workspace.base);
-          if (!assignmentScopePreserved(before, after, paths, policy.protectedPaths || []))
+          observations = assignmentScopeObservations(before, after, scope);
+          if (!assignmentScopePreserved(before, after, scope))
             failure = new DomainError(
               'WORKER_SCOPE_VIOLATION',
-              `Worker ${role.id} changed files outside its assignment.`,
+              `Worker ${role.id} changed files forbidden by its ${scope.mode} scope.`,
             );
           else knownFailure = { code: error.code, scopeVerified: true };
         } catch {
@@ -204,6 +255,7 @@ export async function runWorkerAssignments(options: {
         if (knownFailure) agent.assignment!.knownFailure = knownFailure;
         agent.status = signal.aborted ? 'interrupted' : 'failed';
         agent.completedAt = now();
+        recordObservations(r, agent.threadId);
         r.events.push({
           at: now(),
           type: 'agent.' + agent.status,

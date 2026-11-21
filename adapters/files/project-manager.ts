@@ -29,8 +29,7 @@ import { findProjectDirectory, migrateProjectDirectory } from './project-directo
 const ignoredMetadata = ['.', ':(exclude).buro', ':(exclude)' + LEGACY_PROJECT_DIRECTORY];
 export function executionPolicy(profile: ProjectProfile): ExecutionPolicy {
   return {
-    allowedPaths: profile.allowedPaths,
-    protectedPaths: profile.protectedPaths,
+    scope: structuredClone(profile.scope),
     checks: profile.checks.map(({ id, title }) => ({ id, title })),
     defaultCheckIds: profile.defaultCheckIds,
     maxWorkers: profile.maxWorkers,
@@ -203,8 +202,7 @@ export class ProjectManager {
       revision: 0,
       context:
         'Follow AGENTS.md and project documentation. Modify only the files required for the current goal.',
-      allowedPaths: (await exists('src')) ? ['src/'] : ['./'],
-      protectedPaths: ['AGENTS.md'],
+      scope: { mode: 'advisory', plannedPaths: [], protectedPaths: ['AGENTS.md'] },
       checks,
       defaultCheckIds: checks.length ? [checks[0].id] : [],
       setup: [],

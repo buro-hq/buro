@@ -178,9 +178,9 @@ async function runTeamExperimentTrial(options = {}) {
       Array.isArray(a) && JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
     if (
       digest(fixture.goal) !== IDENTITY.taskHash ||
-      !sameSet(fixture.profile?.allowedPaths, IDENTITY.allowedPaths) ||
+      !sameSet(fixture.profile?.scope?.plannedPaths, IDENTITY.allowedPaths) ||
       !sameSet(
-        fixture.profile?.protectedPaths,
+        fixture.profile?.scope?.protectedPaths,
         Object.keys(original).filter((file) => !IDENTITY.allowedPaths.includes(file)),
       ) ||
       JSON.stringify(fixture.profile?.defaultCheckIds) !== '[\"test\"]' ||
@@ -207,7 +207,7 @@ async function runTeamExperimentTrial(options = {}) {
       { boundedWorkSegmentPolicy },
       { OllamaProvider },
       { PrivateJSONFiles },
-      { inScope },
+      { writeAllowed, planPathAllowed },
       probes,
       core,
     ] = await Promise.all([
@@ -257,6 +257,7 @@ async function runTeamExperimentTrial(options = {}) {
       status: 'running',
       createdAt: now,
     };
+    const { executionPolicy } = await import('../../adapters/files/project-manager.ts');
     const run = {
       id: ownerRunId,
       key: goal.id,
@@ -270,11 +271,7 @@ async function runTeamExperimentTrial(options = {}) {
       workspace,
       baseCommit: prepared.base,
       checkIds: [...profile.defaultCheckIds],
-      executionPolicySnapshot: {
-        ...profile,
-        profile,
-        checks: profile.checks.map(({ id, title }) => ({ id, title })),
-      },
+      executionPolicySnapshot: executionPolicy(profile),
       agents: [],
       events: [],
       commands: [],
@@ -364,8 +361,7 @@ async function runTeamExperimentTrial(options = {}) {
       sessionId: 'experiment-evidence',
       workspace,
       readOnly: false,
-      allowedPaths: [...profile.allowedPaths],
-      protectedPaths: [...profile.protectedPaths],
+      writeScope: structuredClone(profile.scope),
       materials: [],
       commands: profile.checks,
       baseCommit: prepared.base,
@@ -374,14 +370,10 @@ async function runTeamExperimentTrial(options = {}) {
       activeSignal.throwIfAborted();
       const before = await evidence.inspect(ownerScope, activeSignal);
       const changes = await workspaces.changes(workspace, prepared.base);
-      if (
-        changes.some(
-          (change) => !inScope(change.path, profile.allowedPaths, profile.protectedPaths),
-        )
-      )
+      if (changes.some((change) => !writeAllowed(change.path, profile.scope)))
         throw codeError('TEAM_EXPERIMENT_SCOPE_CHANGED');
       const files = await Promise.all(
-        profile.allowedPaths.map(async (file) => ({
+        profile.scope.plannedPaths.map(async (file) => ({
           path: file,
           content: await readOwnedFile(workspace, file),
         })),
@@ -440,11 +432,12 @@ async function runTeamExperimentTrial(options = {}) {
         if (
           !ROLES.includes(input.role) ||
           input.readOnly !== (input.role !== 'executor') ||
-          !Array.isArray(input.allowedPaths) ||
-          (input.role === 'executor' && !input.allowedPaths.length) ||
-          input.allowedPaths.some(
-            (file) => !inScope(file, profile.allowedPaths, profile.protectedPaths),
-          )
+          !input.scope ||
+          input.scope.mode !== profile.scope.mode ||
+          !Array.isArray(input.scope.plannedPaths) ||
+          (input.scope.mode === 'strict' && !input.scope.plannedPaths.length) ||
+          input.scope.plannedPaths.some((file) => !planPathAllowed(file, profile.scope)) ||
+          !sameSet(input.scope.protectedPaths, profile.scope.protectedPaths)
         )
           throw codeError('TEAM_EXPERIMENT_STAGE_SCOPE');
         if (input.role === 'executor' && [...sessionsByRole.values()].includes('executor'))
@@ -468,8 +461,7 @@ async function runTeamExperimentTrial(options = {}) {
                 assignment: {
                   sessionId: 'executor-' + randomUUID(),
                   roleId: 'executor',
-                  allowedPaths: [...input.allowedPaths],
-                  protectedPaths: [...profile.protectedPaths],
+                  scope: structuredClone(input.scope),
                 },
               }
             : {}),
@@ -518,10 +510,7 @@ async function runTeamExperimentTrial(options = {}) {
       {
         variant,
         goal: structuredClone(fixture.goal),
-        scope: {
-          allowedPaths: [...profile.allowedPaths],
-          protectedPaths: [...profile.protectedPaths],
-        },
+        scope: structuredClone(profile.scope),
         publicCheckIds: [...profile.defaultCheckIds],
         readablePaths: Object.keys(original),
         generatedProbeSchema: probes.PROBE_SCHEMA,

@@ -62,8 +62,7 @@ async function fixture(t: any, frozen: ResourceSnapshot | undefined) {
     version: 1,
     revision: 1,
     context: '',
-    allowedPaths: ['src/'],
-    protectedPaths: [],
+    scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
     setup: [],
     dependencies: 'none',
     checks: [

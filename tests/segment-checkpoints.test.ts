@@ -28,8 +28,7 @@ function checkpoint(): ManagedSession {
     sessionId: 'S-worker',
     workspace: '/workspace',
     readOnly: false,
-    allowedPaths: ['src/owned.ts'],
-    protectedPaths: ['checks/'],
+    writeScope: { mode: 'strict', plannedPaths: ['src/owned.ts'], protectedPaths: ['checks/'] },
     materials: [],
     commands: [],
     baseCommit: 'a'.repeat(40),
@@ -59,8 +58,7 @@ function checkpoint(): ManagedSession {
     scope,
     assignment: {
       roleId: 'builder',
-      allowedPaths: scope.allowedPaths,
-      protectedPaths: scope.protectedPaths,
+      scope: structuredClone(scope.writeScope),
     },
     scopeRevisions: [
       { revision: 1, scope: structuredClone(scope), instructions: anchor.instructions },
@@ -447,7 +445,11 @@ test('explicit manual turns and scope revisions preserve the lifetime archive an
   await f.sessions.save(original);
   await f.sessions.save(next);
   const continuation = structuredClone(next);
-  continuation.scope.allowedPaths = [];
+  continuation.scope.writeScope = {
+    ...continuation.scope.writeScope,
+    mode: 'advisory',
+    plannedPaths: [],
+  };
   continuation.scopeRevisions!.push({
     revision: 2,
     scope: structuredClone(continuation.scope),

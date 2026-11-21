@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ProjectRegistry } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
 import type { CheckPort } from '../../core/execution-ports.ts';
-import { inScope, terminal } from '../../core/execution-ports.ts';
+import { writeAllowed, terminal } from '../../core/execution-ports.ts';
 import type { ToolScope } from '../../core/model-ports.ts';
 import type { SegmentEvidencePort } from '../../core/work-segments.ts';
 import { validateSegmentEvidence } from '../../core/work-segments.ts';
@@ -41,6 +41,9 @@ export class WorkerStepChecks implements WorkerStepCheckPort {
   }
 
   private selection(scope: ToolScope) {
+    // Candidate-controlled checks can write anywhere in the live worktree. Strict
+    // workers leave execution to final immutable acceptance checks instead.
+    if (scope.writeScope.mode === 'strict') return;
     const snapshot = this.options.projects.get(scope.projectId).snapshot();
     const owner = scope.ownerRunId || scope.runId;
     const run = snapshot.runs.find((item) => item.id === owner);
@@ -76,10 +79,11 @@ export class WorkerStepChecks implements WorkerStepCheckPort {
     const paths = run.roleAssignments?.[session.roleId];
     if (
       !paths?.length ||
-      !same(paths, scope.allowedPaths) ||
+      !same(paths, scope.writeScope.plannedPaths) ||
       !same(paths, agent.assignment.paths) ||
-      !same(policy.protectedPaths || [], scope.protectedPaths) ||
-      paths.some((file) => !inScope(file, policy.allowedPaths, policy.protectedPaths)) ||
+      policy.scope.mode !== scope.writeScope.mode ||
+      !same(policy.scope.protectedPaths, scope.writeScope.protectedPaths) ||
+      paths.some((file) => !writeAllowed(file, policy.scope)) ||
       !same(
         scope.commands.map(({ id, command, timeoutMs }) => ({ id, command, timeoutMs })),
         profile.checks.map(({ id, command, timeoutMs }) => ({ id, command, timeoutMs })),

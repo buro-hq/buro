@@ -12,7 +12,7 @@ import { FileProjectRegistry } from '../adapters/files/registry.ts';
 import { ExecutionService } from '../core/execution.ts';
 import { GoalService } from '../core/services.ts';
 import { dependencyManifestPreserved, withEnvironmentRepair } from '../core/environment-repair.ts';
-import { inScope } from '../core/execution-ports.ts';
+import { writeAllowed } from '../core/execution-ports.ts';
 import type { AgentRuntime, RuntimeEvent } from '../core/ports.ts';
 import type { ExecutionPolicy } from '../core/execution-ports.ts';
 const exec = promisify(execFile);
@@ -134,7 +134,7 @@ async function fixture(t: any, enabled = true, tamper = false) {
     },
   };
   const policy: ExecutionPolicy = {
-    allowedPaths: ['src/'],
+    scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: [] },
     checks: [{ id: 'types', title: 'Types' }],
     defaultCheckIds: ['types'],
     maxWorkers: 1,
@@ -144,8 +144,7 @@ async function fixture(t: any, enabled = true, tamper = false) {
       version: 1,
       revision: 1,
       context: '',
-      allowedPaths: ['src/'],
-      protectedPaths: [],
+      scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: [] },
       checks: [{ id: 'types', title: 'Types', command: 'tsc', timeoutMs: 1000 }],
       defaultCheckIds: ['types'],
       setup: [],
@@ -224,8 +223,8 @@ test('per-goal opt-in repairs baseline dependencies, installs in isolation, and 
   assert.ok(f.prompts[0].includes('The user authorized'));
   assert.ok(f.run.events.some((e) => e.type === 'phase.repair'));
   assert.ok(f.run.events.some((e) => e.type === 'environment.install-completed'));
-  assert.deepEqual(f.run.executionPolicySnapshot?.allowedPaths, ['src/']);
-  assert.deepEqual(f.policy.allowedPaths, ['src/']);
+  assert.deepEqual(f.run.executionPolicySnapshot?.scope.plannedPaths, ['src/']);
+  assert.deepEqual(f.policy.scope.plannedPaths, ['src/']);
   assert.deepEqual(
     JSON.parse(await fs.readFile(path.join(f.root, 'package.json'), 'utf8')),
     f.manifest,
@@ -272,8 +271,7 @@ test('the opt-in never permits changing test scripts and does not execute a tamp
 });
 test('dependency scope preserves protected paths and rejects tsconfig or script bypasses', () => {
   const policy: ExecutionPolicy = {
-    allowedPaths: ['app/'],
-    protectedPaths: ['package.json'],
+    scope: { mode: 'strict', plannedPaths: ['app/'], protectedPaths: ['package.json'] },
     checks: [],
     defaultCheckIds: [],
     maxWorkers: 1,
@@ -281,9 +279,9 @@ test('dependency scope preserves protected paths and rejects tsconfig or script 
     turnTimeoutMs: 10000,
   };
   const expanded = withEnvironmentRepair(policy, true);
-  assert.equal(inScope('yarn.lock', expanded.allowedPaths, expanded.protectedPaths), true);
-  assert.equal(inScope('package.json', expanded.allowedPaths, expanded.protectedPaths), false);
-  assert.equal(inScope('tsconfig.json', expanded.allowedPaths), false);
+  assert.equal(writeAllowed('yarn.lock', expanded.scope), true);
+  assert.equal(writeAllowed('package.json', expanded.scope), false);
+  assert.equal(writeAllowed('tsconfig.json', expanded.scope), false);
   assert.equal(
     dependencyManifestPreserved([
       {

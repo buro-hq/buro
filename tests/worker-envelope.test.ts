@@ -2,6 +2,7 @@ import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { FileChange, Role, Run } from '../protocol/domain.ts';
+import type { WorkScope } from '../protocol/work-scope.ts';
 import { DomainError, type AgentRuntime } from '../core/ports.ts';
 import type { ExecutionPolicy, WorkspacePort } from '../core/execution-ports.ts';
 import {
@@ -11,7 +12,13 @@ import {
   workerInstructions,
   workerPrompt,
 } from '../core/worker-envelope.ts';
-import { runWorkerAssignments } from '../core/worker-assignments.ts';
+import {
+  assignmentScopeObservations,
+  assignmentScopePreserved,
+  runWorkerAssignments,
+} from '../core/worker-assignments.ts';
+import { WorkerEnvelopeSchema } from '../protocol/worker-tasks.ts';
+import { workerFailureForReplan } from '../core/worker-recovery.ts';
 
 const role: Role = {
   id: 'builder',
@@ -24,8 +31,7 @@ const role: Role = {
   updatedAt: 'now',
 };
 const policy: ExecutionPolicy = {
-  allowedPaths: ['src/'],
-  protectedPaths: ['checks/'],
+  scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
   checks: [{ id: 'unit', title: 'Unit' }],
   defaultCheckIds: ['unit'],
   maxWorkers: 1,
@@ -52,6 +58,7 @@ function fixture(changes: Partial<Run> = {}): Run {
     ],
     roleAssignments: { builder: ['src/session.ts'] },
     roleSnapshots: [structuredClone(role)],
+    executionPolicySnapshot: structuredClone(policy),
     workerTasks: {
       builder: {
         objective: 'Replace this session JSON atomically.',
@@ -101,7 +108,8 @@ test('saved compact task carries every assigned criterion without global goal or
   assert.deepEqual(envelope.task.criteria, run.workerTasks!.builder.criteria);
   assert.equal(envelope.task.expectedResult, run.workerTasks!.builder.expectedResult);
   assert.deepEqual(envelope.task.inputs, ['src/session.ts', 'src/shared/types.ts']);
-  assert.deepEqual(envelope.scope.allowedPaths, ['src/session.ts']);
+  assert.equal(envelope.scope.mode, 'strict');
+  assert.deepEqual(envelope.scope.plannedPaths, ['src/session.ts']);
   assert.deepEqual(envelope.scope.protectedPaths, ['checks/']);
   assert.deepEqual(envelope.steps, ['Make replacement atomic.']);
   const prompt = workerPrompt(envelope);
@@ -152,7 +160,41 @@ test('envelope is detached and deeply immutable while source snapshots remain ed
   run.workerTasks!.builder.criteria.push('A later change');
   run.roleAssignments!.builder[0] = 'src/later.ts';
   assert.equal(envelope.task.criteria.includes('A later change'), false);
-  assert.deepEqual(envelope.scope.allowedPaths, ['src/session.ts']);
+  assert.deepEqual(envelope.scope.plannedPaths, ['src/session.ts']);
+});
+
+test('advisory envelopes allow adjacent or undiscovered planned work while strict scope stays explicit', () => {
+  const advisory: ExecutionPolicy = { ...policy, scope: { ...policy.scope, mode: 'advisory' } };
+  const adjacent = fixture({ roleAssignments: { builder: ['tests/session.test.ts'] } });
+  const envelope = build(adjacent, { paths: ['tests/session.test.ts'], policy: advisory });
+  assert.deepEqual(WorkerEnvelopeSchema.parse(envelope).scope, {
+    mode: 'advisory',
+    plannedPaths: ['tests/session.test.ts'],
+    protectedPaths: ['checks/'],
+  });
+  assert.match(workerPrompt(envelope), /not a write boundary/);
+  assert.match(
+    workerInstructions(role, advisory),
+    /edit additional files inside this working copy/,
+  );
+  assert.throws(() => build(adjacent, { paths: ['tests/session.test.ts'] }), {
+    code: 'INVALID_ASSIGNMENT',
+  });
+
+  const discovery = fixture({ roleAssignments: { builder: [] } });
+  const empty = build(discovery, { paths: [], policy: advisory });
+  assert.deepEqual(WorkerEnvelopeSchema.parse(empty).scope.plannedPaths, []);
+  assert.throws(() => build(discovery, { paths: [] }), { code: 'INVALID_ASSIGNMENT' });
+  assert.equal(
+    WorkerEnvelopeSchema.safeParse({ ...empty, scope: { ...empty.scope, mode: 'strict' } }).success,
+    false,
+  );
+  assert.match(workerInstructions(role, policy), /final immutable acceptance checks/);
+  assert.match(workerInstructions(role, policy), /intermediate worker checks are unavailable/);
+  const blocked = fixture({ roleAssignments: { builder: ['checks/trusted.mjs'] } });
+  assert.throws(() => build(blocked, { paths: ['checks/trusted.mjs'], policy: advisory }), {
+    code: 'INVALID_ASSIGNMENT',
+  });
 });
 
 test('file inputs can reference shared public files but never expand writes or name private paths', () => {
@@ -198,7 +240,10 @@ test('file inputs can reference shared public files but never expand writes or n
     },
   );
   assert.throws(
-    () => build(fixture(), { policy: { ...policy, protectedPaths: ['src/session.ts'] } }),
+    () =>
+      build(fixture(), {
+        policy: { ...policy, scope: { ...policy.scope, protectedPaths: ['src/session.ts'] } },
+      }),
     { code: 'INVALID_ASSIGNMENT' },
   );
 });
@@ -298,6 +343,10 @@ async function dispatchFailure(
     flushFailure?: boolean;
     releaseFailure?: boolean;
     rejectFailureSave?: boolean;
+    mode?: WorkScope['mode'];
+    success?: boolean;
+    previous?: FileChange[];
+    observed?: FileChange[];
   } = {},
 ) {
   const run = fixture(
@@ -306,6 +355,10 @@ async function dispatchFailure(
       : {},
   );
   const controller = new AbortController();
+  run.executionPolicySnapshot = {
+    ...policy,
+    scope: { ...policy.scope, mode: options.mode || 'strict' },
+  };
   let starts = 0,
     asks = 0,
     updates = 0,
@@ -320,7 +373,8 @@ async function dispatchFailure(
         run.agents[0].assignment!.envelope!.task.criteria,
         run.workerTasks!.builder.criteria,
       );
-      assert.deepEqual(input.assignment!.allowedPaths, ['src/session.ts']);
+      assert.deepEqual(input.assignment!.scope.plannedPaths, ['src/session.ts']);
+      assert.equal(input.assignment!.scope.mode, options.mode || 'strict');
       if (options.startFailure)
         throw new DomainError('MODEL_INCOMPLETE', 'Client opening outcome is not known.');
       return { threadId: 'worker' };
@@ -341,8 +395,9 @@ async function dispatchFailure(
     },
     async changes(): Promise<FileChange[]> {
       diffs++;
-      if (diffs === 1) return [];
+      if (diffs === 1) return options.previous || [];
       if (options.unverifiable) throw Error('Diff unavailable');
+      if (options.observed) return options.observed;
       return [
         {
           path: options.outOfScope ? 'README.md' : 'src/session.ts',
@@ -363,7 +418,7 @@ async function dispatchFailure(
     run,
     roles: [role],
     workspace: { path: '/temporary/workspace', base: 'base' },
-    policy,
+    policy: { ...policy, scope: { ...policy.scope, mode: options.mode || 'strict' } },
     runtime,
     workspaces,
     signal: controller.signal,
@@ -383,6 +438,8 @@ async function dispatchFailure(
       asks++;
       assert.ok(prompt.includes('Saved assignment v1'));
       if (options.abort) controller.abort();
+      if (options.success)
+        return { status: 'success', summary: 'Implemented', artifacts: [], notesForNextAgent: '' };
       throw new DomainError(options.code || 'MODEL_INCOMPLETE', 'Known model limit');
     },
   });
@@ -406,6 +463,117 @@ test('known incomplete and context failures qualify only after actual diff scope
     assert.equal(result.asks, 1);
     assert.equal(result.releases, 1);
   }
+});
+
+test('advisory adjacent edits complete or retain known-failure recovery with persisted review evidence', async () => {
+  for (const success of [false, true]) {
+    const result = await dispatchFailure({ mode: 'advisory', outOfScope: true, success });
+    assert.equal(
+      (result.error as DomainError | undefined)?.code,
+      success ? undefined : 'MODEL_INCOMPLETE',
+    );
+    assert.equal(result.run.scopePreserved, true);
+    assert.equal(result.run.agents[0].status, success ? 'completed' : 'failed');
+    assert.equal(result.run.agents[0].assignment!.envelope!.scope.mode, 'advisory');
+    assert.deepEqual(
+      result.run.agents[0].assignment!.knownFailure,
+      success ? undefined : { code: 'MODEL_INCOMPLETE', scopeVerified: true },
+    );
+    const events = result.run.events.filter((event) => event.type === 'agent.scope-observed');
+    assert.equal(events.length, 1);
+    assert.deepEqual(JSON.parse(events[0].text!), {
+      mode: 'advisory',
+      additionalPaths: ['README.md'],
+      revertedPaths: [],
+    });
+    assert.equal(result.releases, 1);
+  }
+});
+
+test('worker replan binds the observed failure to its original mode, protected paths and saved allocation', async () => {
+  for (const mode of ['advisory', 'strict'] as const) {
+    const result = await dispatchFailure({ mode });
+    assert.equal(workerFailureForReplan(result.run, [role], result.error)?.role.id, role.id);
+    const unchanged = structuredClone(result.run);
+    for (const change of [
+      (run: Run) => {
+        run.executionPolicySnapshot!.scope.mode = mode === 'strict' ? 'advisory' : 'strict';
+      },
+      (run: Run) => {
+        run.executionPolicySnapshot!.scope.protectedPaths = ['another-protected/'];
+      },
+      (run: Run) => {
+        run.agents[0].assignment!.envelope!.scope.plannedPaths = ['src/different.ts'];
+      },
+      (run: Run) => {
+        run.executionPolicySnapshot = undefined;
+      },
+    ]) {
+      const changed = structuredClone(unchanged);
+      change(changed);
+      assert.equal(workerFailureForReplan(changed, [role], result.error), undefined);
+      assert.deepEqual(changed.agents[0].assignment!.knownFailure, {
+        code: 'MODEL_INCOMPLETE',
+        scopeVerified: true,
+      });
+    }
+  }
+});
+
+test('recovery keeps advisory plans advisory and never grants a strict assignment outside the user scope', async () => {
+  const advisory = await dispatchFailure({ mode: 'advisory', outOfScope: true });
+  advisory.run.executionPolicySnapshot!.scope.plannedPaths = ['docs/'];
+  assert.equal(workerFailureForReplan(advisory.run, [role], advisory.error)?.role.id, role.id);
+  const strict = await dispatchFailure();
+  strict.run.executionPolicySnapshot!.scope.plannedPaths = ['docs/'];
+  assert.equal(workerFailureForReplan(strict.run, [role], strict.error), undefined);
+  assert.deepEqual(
+    assignmentScopeObservations([], [{ path: 'src/discovered.ts', before: '', after: 'found' }], {
+      mode: 'advisory',
+      plannedPaths: [],
+      protectedPaths: [],
+    }),
+    { additionalPaths: [], revertedPaths: [] },
+  );
+});
+
+test('reverting a previous worker edit is advisory review evidence and a strict violation', async () => {
+  const previous = [{ path: 'src/previous.ts', before: 'original', after: 'earlier worker edit' }];
+  const observed = [{ path: 'src/session.ts', before: 'original', after: 'current worker edit' }];
+  const scope: WorkScope = {
+    mode: 'advisory',
+    plannedPaths: ['src/session.ts'],
+    protectedPaths: ['checks/'],
+  };
+  assert.equal(assignmentScopePreserved(previous, observed, scope), true);
+  assert.deepEqual(assignmentScopeObservations(previous, observed, scope), {
+    additionalPaths: ['src/previous.ts'],
+    revertedPaths: ['src/previous.ts'],
+  });
+  const advisory = await dispatchFailure({ mode: 'advisory', previous, observed, success: true });
+  assert.equal(advisory.error, undefined);
+  const evidence = advisory.run.events.find((event) => event.type === 'agent.scope-observed')!;
+  assert.deepEqual(JSON.parse(evidence.text!).revertedPaths, ['src/previous.ts']);
+  const strict = await dispatchFailure({ previous, observed, success: true });
+  assert.equal((strict.error as DomainError).code, 'WORKER_SCOPE_VIOLATION');
+  assert.equal(strict.run.scopePreserved, false);
+});
+
+test('advisory worker recovery never authorizes protected, service or symlink changes', async () => {
+  for (const file of ['checks/trusted.mjs', '.git/config', '.buro/state.json']) {
+    const result = await dispatchFailure({
+      mode: 'advisory',
+      observed: [{ path: file, before: '', after: 'changed' }],
+    });
+    assert.equal((result.error as DomainError).code, 'WORKER_SCOPE_VIOLATION', file);
+    assert.equal(result.run.agents[0].assignment!.knownFailure, undefined);
+  }
+  const result = await dispatchFailure({
+    mode: 'advisory',
+    observed: [{ path: 'src/session.ts', before: '', after: '[symlink /outside]' }],
+  });
+  assert.equal((result.error as DomainError).code, 'WORKER_SCOPE_VIOLATION');
+  assert.equal(result.run.agents[0].assignment!.knownFailure, undefined);
 });
 
 test('scope violation, unknown outcome and cancellation cannot acquire a recovery marker', async () => {

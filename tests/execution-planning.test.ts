@@ -221,8 +221,7 @@ async function fixture(
     id: () => crypto.randomUUID(),
     policies: {
       p: {
-        allowedPaths: ['src/'],
-        protectedPaths: ['checks/'],
+        scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
         context: options.managed16K
           ? 'Preserve the public API. '.repeat(60)
           : 'Preserve the public API.',

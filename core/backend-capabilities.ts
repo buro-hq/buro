@@ -5,6 +5,19 @@ import {
 } from '../protocol/backend-capabilities.ts';
 import { DomainError, type RegisteredRuntime } from './ports.ts';
 
+const unavailable: Record<keyof BackendRequirements, string> = {
+  structuredTurns: 'This backend cannot complete structured requests.',
+  toolsFreeTurns: 'This backend cannot run a turn without tools.',
+  readOnlySessions: 'This backend cannot enforce read-only work.',
+  immutableReview: 'This backend cannot review the isolated source snapshot.',
+  strictPlannedWrites:
+    'This backend cannot prevent changes outside planned paths. Choose a backend with strict scope support or turn off strict scope.',
+  hostToolLifecycle: 'This backend cannot use service-managed tool execution.',
+  usage: 'This backend cannot provide the requested usage accounting.',
+  resumeSessions: 'This backend cannot restore the saved session.',
+  cancellation: 'This backend does not support cancellation.',
+};
+
 /** Registry-owned flat copy; the adapter's original object cannot revise an active identity. */
 export function freezeBackendCapabilities(value: unknown): BackendCapabilities {
   const parsed = BackendCapabilitiesSchema.safeParse(value);
@@ -31,7 +44,7 @@ export function requireBackendCapabilities(
     if (value !== undefined && trusted[key as keyof BackendRequirements] !== value)
       throw new DomainError(
         'BACKEND_CAPABILITY_UNAVAILABLE',
-        `The configured backend does not support the required ${key} capability.`,
+        unavailable[key as keyof BackendRequirements],
       );
 }
 

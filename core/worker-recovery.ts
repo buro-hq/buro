@@ -3,6 +3,9 @@ import type { WorkerTask } from '../protocol/worker-tasks.ts';
 import { WorkerRefinementSchema } from '../protocol/worker-tasks.ts';
 import { DomainError } from './ports.ts';
 import { validateWorkerTask } from './worker-envelope.ts';
+import { WorkScopeSchema } from '../protocol/work-scope.ts';
+import { planPathAllowed } from './execution-ports.ts';
+import { withEnvironmentRepair } from './environment-repair.ts';
 
 /** Only a completely known, scope-checked managed failure can request one new assignment. */
 export function workerFailureForReplan(run: Run, roles: Role[], error: unknown) {
@@ -17,6 +20,12 @@ export function workerFailureForReplan(run: Run, roles: Role[], error: unknown) 
   const role = roles.find((role) => role.id === agent?.session?.roleId);
   const saved = agent?.assignment;
   const task = role && run.workerTasks?.[role.id];
+  const policyScope = WorkScopeSchema.safeParse(
+    run.executionPolicySnapshot
+      ? withEnvironmentRepair(run.executionPolicySnapshot, !!run.repairEnvironment).scope
+      : undefined,
+  );
+  const envelopeScope = WorkScopeSchema.safeParse(saved?.envelope?.scope);
   if (
     !agent ||
     !role ||
@@ -31,6 +40,13 @@ export function workerFailureForReplan(run: Run, roles: Role[], error: unknown) 
     saved.envelope.role.version !== role.version ||
     saved.envelope.task.source !== 'coordinator' ||
     JSON.stringify(saved.paths) !== JSON.stringify(run.roleAssignments?.[role.id]) ||
+    !policyScope.success ||
+    !envelopeScope.success ||
+    envelopeScope.data.mode !== policyScope.data.mode ||
+    JSON.stringify(envelopeScope.data.plannedPaths) !== JSON.stringify(saved.paths) ||
+    JSON.stringify(envelopeScope.data.protectedPaths) !==
+      JSON.stringify(policyScope.data.protectedPaths) ||
+    envelopeScope.data.plannedPaths.some((file) => !planPathAllowed(file, policyScope.data)) ||
     JSON.stringify(validateWorkerTask(task)) !==
       JSON.stringify(
         validateWorkerTask({

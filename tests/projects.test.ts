@@ -130,6 +130,11 @@ test('inspect is read-only, detects dirty files, and rejects a nested or non-Git
   assert.equal(f.info.branch, 'master');
   assert.equal(f.info.dirty, false);
   assert.equal(f.info.profile.checks[0].id, 'test');
+  assert.deepEqual(f.info.profile.scope, {
+    mode: 'advisory',
+    plannedPaths: [],
+    protectedPaths: ['AGENTS.md'],
+  });
   await fs.writeFile(path.join(f.root, 'src/value.mjs'), 'dirty');
   assert.equal((await f.manager.inspect(f.root)).dirty, true);
   await assert.rejects(f.manager.inspect(path.join(f.root, 'src')), {
@@ -617,7 +622,7 @@ test('quick research application adds missing launch settings and preserves manu
   assert.deepEqual(applied.components, [component]);
   assert.equal(applied.context, initial.context);
   assert.deepEqual(applied.checks, initial.checks);
-  assert.deepEqual(applied.allowedPaths, initial.allowedPaths);
+  assert.deepEqual(applied.scope, initial.scope);
   assert.deepEqual(applied.defaultCheckIds, initial.defaultCheckIds);
   assert.equal(store.snapshot().research?.appliedProfileRevision, 2);
   assert.deepEqual(

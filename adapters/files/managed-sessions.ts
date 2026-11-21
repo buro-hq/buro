@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { WorkScopeSchema } from '../../protocol/work-scope.ts';
 import { DomainError } from '../../core/ports.ts';
 import type { ManagedSession, ManagedSessionStore } from '../../core/model-ports.ts';
 import {
@@ -35,8 +36,7 @@ const scope = z.object({
     .regex(/^[a-f0-9]{40}$/)
     .optional(),
   readOnly: z.boolean(),
-  allowedPaths: z.array(z.string()),
-  protectedPaths: z.array(z.string()),
+  writeScope: WorkScopeSchema,
   materials: z.array(z.string()),
   commands: z.array(z.object({ id: z.string(), command: z.string(), timeoutMs: z.number() })),
   baseCommit: z.string().optional(),
@@ -182,8 +182,7 @@ const schema = z
     assignment: z
       .object({
         roleId: z.string(),
-        allowedPaths: z.array(z.string()),
-        protectedPaths: z.array(z.string()),
+        scope: WorkScopeSchema,
       })
       .optional(),
     scopeRevisions: z
@@ -594,15 +593,6 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
   // accounting still require the same protection as implementation checkpoints.
   if (previous.turnAuthorities || next.turnAuthorities)
     validateTurnAuthorityTransition(previous, next);
-  if (
-    !previous.workSegments &&
-    !next.workSegments &&
-    !previous.turnAuthorities &&
-    !next.turnAuthorities &&
-    !previous.scope.verificationViewId &&
-    !next.scope.verificationViewId
-  )
-    return;
   if (previous.workSegments && !next.workSegments)
     invalidSegment('The work segment archive cannot be removed.');
   if (

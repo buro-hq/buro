@@ -9,7 +9,13 @@ export const dependencyFiles = [
 ];
 export function withEnvironmentRepair(policy: ExecutionPolicy, enabled: boolean): ExecutionPolicy {
   return enabled
-    ? { ...policy, allowedPaths: [...new Set([...policy.allowedPaths, ...dependencyFiles])] }
+    ? {
+        ...policy,
+        scope: {
+          ...policy.scope,
+          plannedPaths: [...new Set([...policy.scope.plannedPaths, ...dependencyFiles])],
+        },
+      }
     : policy;
 }
 const dependencyFields = new Set([

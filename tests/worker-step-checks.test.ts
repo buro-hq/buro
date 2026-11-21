@@ -30,8 +30,7 @@ function fixture() {
     workspace: '/workspace/r',
     baseCommit: 'a'.repeat(40),
     readOnly: false,
-    allowedPaths: ['src/'],
-    protectedPaths: ['spec/'],
+    writeScope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['spec/'] },
     materials: [],
     commands: [check],
   };
@@ -49,7 +48,10 @@ function fixture() {
       reviewer: resource,
       workerPool: [resource],
     },
-    executionPolicySnapshot: { allowedPaths: ['src/'], protectedPaths: ['spec/'], profile },
+    executionPolicySnapshot: {
+      scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['spec/'] },
+      profile,
+    },
     roleAssignments: { coder: ['src/'] },
     assignmentResources: { coder: { resource } },
     checkIds: ['contract'],
@@ -205,10 +207,10 @@ test('forged owner, assignment, protected paths, check commands and resource rev
       f.scope.ownerRunId = 'another';
     },
     (f: any) => {
-      f.scope.allowedPaths = ['.'];
+      f.scope.writeScope.plannedPaths = ['.'];
     },
     (f: any) => {
-      f.scope.protectedPaths = [];
+      f.scope.writeScope.protectedPaths = [];
     },
     (f: any) => {
       f.scope.commands = [];
@@ -392,4 +394,21 @@ test('abort is propagated without dispatch or without presenting a late result a
     name: 'AbortError',
   });
   assert.equal(f.calls.length, 1);
+});
+
+test('strict workers defer checks to immutable acceptance before any check intent or process', async () => {
+  const f = fixture();
+  f.scope.writeScope.mode = 'strict';
+  f.run.executionPolicySnapshot.scope.mode = 'strict';
+  assert.equal(f.adapter.plan(f.scope), undefined);
+  await assert.rejects(
+    f.adapter.run(
+      f.scope,
+      { version: 1, checkIds: ['contract'], configurationRevision: 'c'.repeat(64) },
+      f.fingerprint,
+      signal(),
+    ),
+    { code: 'STEP_CHECK_UNAVAILABLE' },
+  );
+  assert.equal(f.calls.length, 0);
 });

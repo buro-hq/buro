@@ -56,7 +56,9 @@ const { execFile } = require('node:child_process'),
     const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(
-      'http://127.0.0.1:4317/?daemon=' + encodeURIComponent('ws://127.0.0.1:' + port),
+      (process.env.BURO_UI_BASE_URL || 'http://127.0.0.1:4317') +
+        '/?daemon=' +
+        encodeURIComponent('ws://127.0.0.1:' + port),
     );
     await page.getByRole('heading', { name: 'Control', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Projects', exact: true }).click();
@@ -93,14 +95,14 @@ const { execFile } = require('node:child_process'),
     passed.push('component working folder is stored relative to the repository');
     const allowed = page
       .locator('.profile-paths')
-      .filter({ has: page.getByRole('textbox', { name: 'Allowed paths', exact: true }) });
+      .filter({ has: page.getByRole('textbox', { name: 'Planned paths', exact: true }) });
     await allowed.getByRole('button', { name: 'Choose files and directories' }).first().click();
-    const paths = page.getByRole('dialog', { name: 'Allowed paths', exact: true });
+    const paths = page.getByRole('dialog', { name: 'Planned paths', exact: true });
     await paths.getByRole('checkbox', { name: 'Select src', exact: true }).check();
     await paths.getByRole('button', { name: 'Select', exact: true }).click();
     assert.ok(
       (
-        await page.getByRole('textbox', { name: 'Allowed paths', exact: true }).inputValue()
+        await page.getByRole('textbox', { name: 'Planned paths', exact: true }).inputValue()
       ).includes('src/'),
     );
     passed.push('scope paths can be selected as files and folders');

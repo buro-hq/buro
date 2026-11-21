@@ -21,8 +21,8 @@ export function ProjectProfileForm({
   submitLabel: string;
 }) {
   const [profile, setProfile] = useState(initial),
-    [paths, setPaths] = useState(initial.allowedPaths.join('\n')),
-    [protectedPaths, setProtectedPaths] = useState(initial.protectedPaths.join('\n')),
+    [paths, setPaths] = useState(initial.scope.plannedPaths.join('\n')),
+    [protectedPaths, setProtectedPaths] = useState(initial.scope.protectedPaths.join('\n')),
     [setup, setSetup] = useState(initial.setup.map((c) => c.command).join('\n')),
     [checkOutputs, setCheckOutputs] = useState<Record<string, string>>(
       Object.fromEntries(
@@ -43,8 +43,11 @@ export function ProjectProfileForm({
     try {
       await onSave({
         ...profile,
-        allowedPaths: list(paths),
-        protectedPaths: list(protectedPaths),
+        scope: {
+          mode: profile.scope.mode,
+          plannedPaths: list(paths),
+          protectedPaths: list(protectedPaths),
+        },
         checks: profile.checks.map((check) => ({
           ...check,
           outputPaths: list(checkOutputs[check.id] ?? (check.outputPaths || []).join('\n')),
@@ -90,8 +93,10 @@ export function ProjectProfileForm({
         <PathListInput
           root={root}
           projectId={projectId}
-          label={t('Allowed paths')}
-          description={t('One per line. ./ means the entire project')}
+          label={t('Planned paths')}
+          description={t(
+            'Optional guidance for the team. Leave empty for automatic discovery. One path per line; ./ means the entire project.',
+          )}
           value={paths}
           onChange={setPaths}
         />
@@ -99,11 +104,33 @@ export function ProjectProfileForm({
           root={root}
           projectId={projectId}
           label={t('Protected paths')}
-          description={t('.git and .buro are always protected')}
+          description={t(
+            'Always blocked in both modes. Service metadata and dependencies are protected automatically.',
+          )}
           value={protectedPaths}
           onChange={setProtectedPaths}
         />
       </div>
+      <Checkbox
+        label={t('Forbid changes outside planned paths')}
+        description={t(
+          'Requires selected paths and a compatible execution backend. Agent commands and intermediate checks are deferred; final isolated checks and an independent review still run.',
+        )}
+        checked={profile.scope.mode === 'strict'}
+        onChange={(event) =>
+          update({
+            scope: { ...profile.scope, mode: event.currentTarget.checked ? 'strict' : 'advisory' },
+          })
+        }
+      />
+      {profile.scope.mode === 'strict' && !list(paths).length && (
+        <p className="caption" role="status">
+          {t('Choose at least one planned path to enable this restriction.')}
+        </p>
+      )}
+      <p className="caption">
+        {t('Check definitions and protected package.json fields remain protected in both modes.')}
+      </p>
       <div className="section-heading">
         <h3>{t('Result checks')}</h3>
         <Button
@@ -262,7 +289,10 @@ export function ProjectProfileForm({
       )}
       <Button
         loading={saving}
-        disabled={!paths.trim() || profile.checks.some((c) => !c.command.trim() || !c.title.trim())}
+        disabled={
+          (profile.scope.mode === 'strict' && !list(paths).length) ||
+          profile.checks.some((c) => !c.command.trim() || !c.title.trim())
+        }
         onClick={() => void save()}
       >
         {submitLabel}

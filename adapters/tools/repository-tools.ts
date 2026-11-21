@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { DomainError } from '../../core/ports.ts';
-import { inScope } from '../../core/execution-ports.ts';
+import { writeAllowed } from '../../core/execution-ports.ts';
 import { dependencyManifestPreserved } from '../../core/environment-repair.ts';
 import type { ToolBroker, ToolResult, ToolScope } from '../../core/model-ports.ts';
 import type { ModelToolCall, ToolDefinition } from '../../agent/contracts/model.ts';
@@ -40,7 +40,7 @@ const descriptions: Record<keyof typeof schemas, string> = {
   search_text:
     'Find literal text in a repository file or directory, with file names and line numbers. Not a regular expression.',
   edit_file:
-    'Replace one exact, unique oldText occurrence in an assigned file. To create a new file, use empty oldText. Existing files require a nonempty exact match.',
+    'Replace one exact, unique oldText occurrence in a permitted file. To create a new file, use empty oldText. Existing files require a nonempty exact match.',
   run_command:
     'Run one of the exact configured project check commands. Arbitrary shell commands are not accepted.',
   read_diff:
@@ -91,8 +91,9 @@ export class RepositoryTools implements ToolBroker {
       'read_diff',
     ] as (keyof typeof schemas)[];
     if (!scope.readOnly) {
-      if (scope.allowedPaths.length) names.push('edit_file');
-      if (scope.commands.length) names.push('run_command');
+      if (scope.writeScope.mode === 'advisory' || scope.writeScope.plannedPaths.length)
+        names.push('edit_file');
+      if (scope.writeScope.mode !== 'strict' && scope.commands.length) names.push('run_command');
     }
     return names.map((name) => ({
       name,
@@ -256,7 +257,7 @@ export class RepositoryTools implements ToolBroker {
         if (scope.readOnly) throw new DomainError('TOOL_SCOPE', 'This session is read only.');
         const input = parsed.data as z.infer<typeof schemas.edit_file>;
         const relative = this.relative(scope, input.path);
-        if (!inScope(relative, scope.allowedPaths, scope.protectedPaths))
+        if (!writeAllowed(relative, scope.writeScope))
           throw new DomainError('TOOL_SCOPE', 'This file is outside the assignment.');
         const filename = await this.filename(scope, relative, true);
         let before = '',
@@ -302,6 +303,11 @@ export class RepositoryTools implements ToolBroker {
       }
       if (call.name === 'run_command') {
         if (scope.readOnly) throw new DomainError('TOOL_SCOPE', 'This session is read only.');
+        if (scope.writeScope.mode === 'strict')
+          throw new DomainError(
+            'TOOL_SCOPE',
+            'Strict scope disables agent commands; final immutable checks still run.',
+          );
         const input = parsed.data as z.infer<typeof schemas.run_command>;
         const command = scope.commands.find((c) => c.command === input.command);
         if (!command)

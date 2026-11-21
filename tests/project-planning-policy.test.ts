@@ -192,7 +192,7 @@ test('resume archives the frozen planning policy despite changed current plannin
       planningMode: original.mode === 'bounded' ? 'legacy' : 'bounded',
       policies: {
         p: {
-          allowedPaths: ['src/'],
+          scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
           checks: [{ id: 'suite', title: 'Suite' }],
           defaultCheckIds: ['suite'],
           maxWorkers: 1,

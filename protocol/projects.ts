@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { ManagedRunBudgetPolicySchema } from './run-budget.ts';
 import { EnvironmentConfigSchema } from './environment.ts';
-import { RelativePathSchema } from './projects-paths.ts';
 import { ComponentSchema, DeliveryConfigSchema } from './operations.ts';
 import { CheckOutputPathsSchema } from './verification.ts';
+import { WorkScopeSchema } from './work-scope.ts';
 export { RelativePathSchema } from './projects-paths.ts';
 const name = z.string().trim().min(1).max(120);
 export const ProjectCommandSchema = z.strictObject({
@@ -23,8 +23,7 @@ export const ProjectProfileSchema = z
       .regex(/^[a-z][a-z0-9_-]{0,63}$/)
       .optional(),
     context: z.string().max(16000),
-    allowedPaths: z.array(RelativePathSchema).min(1).max(40),
-    protectedPaths: z.array(RelativePathSchema).max(40),
+    scope: WorkScopeSchema,
     checks: z.array(ProjectCommandSchema).max(8),
     defaultCheckIds: z.array(z.string()).max(8),
     setup: z.array(ProjectCommandSchema).max(4),

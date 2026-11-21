@@ -31,8 +31,7 @@ const profile: ProjectProfile = {
   version: 1,
   revision: 1,
   context: 'Manual context',
-  allowedPaths: ['./'],
-  protectedPaths: ['AGENTS.md'],
+  scope: { mode: 'advisory', plannedPaths: ['./'], protectedPaths: ['AGENTS.md'] },
   checks: [],
   defaultCheckIds: [],
   setup: [],
@@ -229,7 +228,7 @@ test('disabled delivery waits for configuration, then retries without rebuilding
         type: 'project.configured',
         profile: doc.profile!,
         executionPolicy: {
-          allowedPaths: ['./'],
+          scope: { mode: 'advisory', plannedPaths: ['./'], protectedPaths: [] },
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 2,
@@ -249,7 +248,7 @@ test('disabled delivery waits for configuration, then retries without rebuilding
         type: 'project.configured',
         profile: doc.profile!,
         executionPolicy: {
-          allowedPaths: ['./'],
+          scope: { mode: 'advisory', plannedPaths: ['./'], protectedPaths: [] },
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 2,
@@ -504,7 +503,7 @@ test('redeploy respects newly required confirmation and cannot repeat a pull req
         type: 'project.configured',
         profile: doc.profile!,
         executionPolicy: {
-          allowedPaths: ['./'],
+          scope: { mode: 'advisory', plannedPaths: ['./'], protectedPaths: [] },
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 2,
@@ -524,7 +523,7 @@ test('redeploy respects newly required confirmation and cannot repeat a pull req
         type: 'project.configured',
         profile: doc.profile!,
         executionPolicy: {
-          allowedPaths: ['./'],
+          scope: { mode: 'advisory', plannedPaths: ['./'], protectedPaths: [] },
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 2,

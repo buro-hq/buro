@@ -1,6 +1,7 @@
 import { PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
 import { roleIdPattern } from '../protocol/domain.ts';
 import type { TeamPlan } from '../protocol/execution.ts';
+import type { WorkScope } from '../protocol/work-scope.ts';
 import type { WorkspaceRevision } from './workspace-revision.ts';
 import type { VerificationView, OpenVerificationViewOptions } from './verification-view.ts';
 export type { TeamPlan } from '../protocol/execution.ts';
@@ -68,19 +69,57 @@ export type ExecutionPolicy = ExecutionPolicyView & {
 export type PlannedWorker = TeamPlan['team'][number];
 export const terminal = (run: Run) =>
   !run.status || ['completed', 'failed', 'interrupted', 'needs-attention'].includes(run.status);
-const matches = (file: string, p: string) =>
-  p === '.' || p === './' || (p.endsWith('/') ? file.startsWith(p) : file === p);
-export function inScope(file: string, allowed: string[], protectedPaths: string[] = []) {
+const normalizedPath = (value: string) =>
+  value
+    .split('/')
+    .filter((part) => part && part !== '.')
+    .join('/');
+const matches = (file: string, planned: string) => {
+  const candidate = normalizedPath(file),
+    selected = normalizedPath(planned);
   return (
-    !file.startsWith('/') &&
-    !file.split('/').includes('..') &&
-    !file.includes('\\') &&
-    !['.git', PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY, 'node_modules'].some(
-      (p) => file === p || file.startsWith(p + '/'),
-    ) &&
-    !protectedPaths.some((p) => matches(file, p)) &&
-    allowed.some((p) => matches(file, p))
+    !selected ||
+    (planned.endsWith('/')
+      ? candidate === selected || candidate.startsWith(selected + '/')
+      : candidate === selected)
   );
+};
+/** Hard authorization is independent of the user's planned-path preference. */
+export function hardPathAllowed(file: string, protectedPaths: readonly string[] = []) {
+  const segments = file.replace(/\/$/, '').split('/');
+  return (
+    !!file.trim() &&
+    !file.startsWith('/') &&
+    !/^[a-z]:/i.test(normalizedPath(file)) &&
+    !/[\x00-\x1f\x7f]/.test(file) &&
+    !segments.includes('..') &&
+    !file.includes('\\') &&
+    !['.git', PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY, 'node_modules'].some((p) =>
+      segments.some((part) => part.toLowerCase() === p.toLowerCase()),
+    ) &&
+    !protectedPaths.some((p) => matches(file, p))
+  );
+}
+export function matchesPlannedPath(file: string, plannedPaths: readonly string[]) {
+  return plannedPaths.some((planned) => matches(file, planned));
+}
+export function writeAllowed(file: string, scope: WorkScope) {
+  return (
+    hardPathAllowed(file, scope.protectedPaths) &&
+    (scope.mode === 'advisory' || matchesPlannedPath(file, scope.plannedPaths))
+  );
+}
+/** A selector grants future file access, so an exact file cannot authorize a directory grant. */
+export function planPathAllowed(selector: string, parentScope: WorkScope) {
+  if (!hardPathAllowed(selector, parentScope.protectedPaths)) return false;
+  if (parentScope.mode === 'advisory') return true;
+  const selected = normalizedPath(selector);
+  if (selected && !selector.endsWith('/')) return writeAllowed(selector, parentScope);
+  return parentScope.plannedPaths.some((parent) => {
+    const boundary = normalizedPath(parent);
+    if (!boundary) return true;
+    return parent.endsWith('/') && (selected === boundary || selected.startsWith(boundary + '/'));
+  });
 }
 export function resolveTeam(
   plan: TeamPlan,
@@ -107,27 +146,19 @@ export function resolveTeam(
       throw Error(`Duplicate roleId ${worker.roleId}. Every worker needs a separate ID.`);
     ids.add(worker.roleId);
     if (
-      !worker.paths.length ||
-      worker.paths.some(
-        (p) =>
-          p.startsWith('/') ||
-          p.includes('..') ||
-          p.includes('\\') ||
-          !inScope(p, policy.allowedPaths, policy.protectedPaths),
-      )
+      (policy.scope.mode === 'strict' && !worker.paths.length) ||
+      worker.paths.some((p) => !planPathAllowed(p, policy.scope))
     )
-      throw Error('The plan exceeds the allowed scope.');
+      throw Error('The plan contains an unauthorized path or exceeds the strict work scope.');
     for (const p of worker.paths) {
+      const path = normalizedPath(p);
       if (
         owned.some(
-          (q) =>
-            p === q ||
-            p.startsWith(q.endsWith('/') ? q : q + '/') ||
-            q.startsWith(p.endsWith('/') ? p : p + '/'),
+          (q) => !path || !q || path === q || path.startsWith(q + '/') || q.startsWith(path + '/'),
         )
       )
         throw Error('Workers have overlapping file ownership.');
-      owned.push(p);
+      owned.push(path);
     }
     const existing = catalog.find((r) => r.id === worker.roleId);
     if (worker.action === 'reuse') {

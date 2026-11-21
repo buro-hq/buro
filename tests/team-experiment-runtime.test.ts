@@ -46,7 +46,8 @@ async function fixture(t: any) {
 
 function providerWithRepair(repair: boolean) {
   let executorCalls = 0,
-    reviewCalls = 0;
+    reviewCalls = 0,
+    closingCalls = 0;
   const roles: string[] = [],
     authorities: { role: string; tools: number }[] = [];
   const provider: ModelProvider = {
@@ -100,12 +101,14 @@ function providerWithRepair(repair: boolean) {
         );
       }
       assert.equal(role, 'executor');
-      if ((input.schema as any)?.properties?.status?.enum?.includes('continue'))
+      if ((input.schema as any)?.properties?.status?.enum?.includes('continue')) {
+        closingCalls++;
         return json({
           status: 'continue',
           nextTask:
             'Apply the scoped reviewer correction to the existing queue source; do not redo completed edits.',
         });
+      }
       executorCalls++;
       if (executorCalls === 1)
         return tool(
@@ -128,7 +131,7 @@ function providerWithRepair(repair: boolean) {
       });
     },
   };
-  return { provider, roles, authorities };
+  return { provider, roles, authorities, closingCalls: () => closingCalls };
 }
 
 test('team runtime rejects missing opt-in, remote endpoints and cloud models before touching a fixture', async () => {
@@ -329,7 +332,8 @@ test('test author proposes data before edits and generated cases are checked by 
   assert.equal(result.reviewApproved, true);
   assert.deepEqual(fake.roles.slice(0, 2), ['coordinator', 'test-author']);
   assert.ok(fake.authorities.filter((x) => x.role !== 'executor').every((x) => x.tools === 0));
-  assert.equal(result.budget.used.requests, 6);
+  assert.equal(result.budget.used.requests, 6 + fake.closingCalls());
+  assert.equal(result.budget.used.requests, fake.roles.length);
   assert.equal(result.originalFixturePreserved, true);
 });
 

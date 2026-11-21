@@ -15,8 +15,11 @@ const input = () => ({
   title: 'Preserve session data',
   goalText:
     'Make session writes atomic.\nAcceptance criteria:\nKeep the synchronous API.\nRetain old bytes after failed rename.',
-  allowedPaths: ['src/session.ts'],
-  protectedPaths: ['checks/', 'AGENTS.md'],
+  scope: {
+    mode: 'advisory' as const,
+    plannedPaths: ['src/session.ts'],
+    protectedPaths: ['checks/', 'AGENTS.md'],
+  },
   projectContext: 'Keep compatibility with the installed runtime.',
   maxWorkers: 2,
   roles: [
@@ -104,8 +107,7 @@ test('bounded planning disables tools explicitly and retains goal, constraints a
   assert.match(request.text, /Discovery is for implementation/);
   assert.equal(saved.goal, source.goalText);
   assert.equal(saved.projectContext, source.projectContext);
-  assert.deepEqual(saved.scope.allowedPaths, source.allowedPaths);
-  assert.deepEqual(saved.scope.protectedPaths, source.protectedPaths);
+  assert.deepEqual(saved.scope, source.scope);
   assert.equal(saved.roles[0].id, 'builder');
   assert.equal(saved.roles[0].version, 3);
   assert.deepEqual(saved.roles[0].runtimePreference, source.roles[0].runtimePreference);
@@ -113,6 +115,20 @@ test('bounded planning disables tools explicitly and retains goal, constraints a
     { id: 'local-qwen', client: 'managed', providerId: 'ollama', model: 'qwen3:4b', local: true },
   ]);
   assert.deepEqual(input(), source, 'Building the brief must not mutate its frozen inputs');
+});
+
+test('planning instructions describe advisory discovery and explicit strict authority without changing tools-free behavior', () => {
+  const source = input();
+  const advisory = boundedPlanningTurn({ ...source, scope: { ...source.scope, plannedPaths: [] } });
+  assert.match(advisory.text, /Scope is advisory/);
+  assert.match(advisory.text, /empty list when discovery is needed/);
+  assert.deepEqual(brief(advisory.text).scope.plannedPaths, []);
+  assert.equal(advisory.toolPolicy, 'none');
+  const strict = boundedPlanningTurn({ ...source, scope: { ...source.scope, mode: 'strict' } });
+  assert.match(strict.text, /Scope is strict/);
+  assert.match(strict.text, /Protected paths are forbidden/);
+  assert.deepEqual(brief(strict.text).scope, { ...source.scope, mode: 'strict' });
+  assert.equal(strict.toolPolicy, 'none');
 });
 
 test('planning bounds baseline diagnostics, prioritizes failures and marks omitted evidence', () => {
@@ -144,7 +160,12 @@ test('planning preserves required input or fails before a model request instead 
     { goalText: 'Required criterion '.repeat(MAX_PLANNING_INPUT_BYTES) },
     { projectContext: 'Required project instruction '.repeat(MAX_PLANNING_INPUT_BYTES) },
     { sessionInstructions: 'Reusable coordinator instruction '.repeat(MAX_PLANNING_INPUT_BYTES) },
-    { allowedPaths: Array.from({ length: MAX_PLANNING_INPUT_BYTES }, (_, i) => 'src/' + i) },
+    {
+      scope: {
+        ...input().scope,
+        plannedPaths: Array.from({ length: MAX_PLANNING_INPUT_BYTES }, (_, i) => 'src/' + i),
+      },
+    },
   ])
     assert.throws(
       () => boundedPlanningTurn({ ...input(), ...oversized }),

@@ -202,8 +202,7 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
         resourceProfile: 'local',
         context:
           'A tiny synthetic JavaScript module. The trusted check is outside the editable source area.',
-        allowedPaths: ['src/'],
-        protectedPaths: ['checks/'],
+        scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
         checks: [
           {
             id: 'test',
@@ -412,11 +411,8 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
         executors,
         host.ctx.agentRuntime.selection,
       );
-      const policy = {
-        ...profile,
-        profile,
-        checks: profile.checks.map(({ id, title }) => ({ id, title })),
-      };
+      const { executionPolicy } = await import('../adapters/files/project-manager.ts');
+      const policy = executionPolicy(profile);
       await host.ctx.plugin(executionPlugin, {
         policies: { p: policy },
         workspaces,

@@ -47,7 +47,11 @@ test('metadata migration preserves user text and history while repairing real wo
         workspace,
         goalText: userText,
         executionPolicySnapshot: {
-          protectedPaths: [LEGACY_PROJECT_DIRECTORY + '/'],
+          scope: {
+            mode: 'advisory',
+            plannedPaths: [],
+            protectedPaths: [LEGACY_PROJECT_DIRECTORY + '/'],
+          },
           profile: { context: userText },
         },
       },
@@ -71,7 +75,10 @@ test('metadata migration preserves user text and history while repairing real wo
     workspace.replace(LEGACY_PROJECT_DIRECTORY, PROJECT_DIRECTORY),
   );
   assert.equal(after.events[1].change.fields.workspace, after.runs[0].workspace);
-  assert.equal(after.runs[0].executionPolicySnapshot.protectedPaths[0], PROJECT_DIRECTORY + '/');
+  assert.equal(
+    after.runs[0].executionPolicySnapshot.scope.protectedPaths[0],
+    PROJECT_DIRECTORY + '/',
+  );
   assert.equal(after.runs[0].executionPolicySnapshot.profile.context, userText);
   assert.deepEqual(
     JSON.parse(

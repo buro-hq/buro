@@ -317,8 +317,11 @@ async function prepareComparisonFixture({ temporaryDirectory }) {
       resourceProfile: 'evaluation',
       context:
         'A small dependency-free JavaScript task queue with two source modules. The service owns independent checks.',
-      allowedPaths: [...ALLOWED],
-      protectedPaths: Object.keys(FILES).filter((file) => !ALLOWED.includes(file)),
+      scope: {
+        mode: 'advisory',
+        plannedPaths: [...ALLOWED],
+        protectedPaths: Object.keys(FILES).filter((file) => !ALLOWED.includes(file)),
+      },
       checks: [
         {
           id: 'test',
@@ -502,7 +505,7 @@ async function runDirectCodex({ fixture, config, codex = {} }) {
       workspace: fixture.root,
       instructions:
         'Implement the user task in this isolated evaluation repository. Native subagents, MCP, apps, hooks, web search and network project tools are disabled. Finish after implementation; independent checks decide acceptance.' +
-        `\nProject context: ${fixture.profile.context || ''}\nEditable paths: ${fixture.profile.allowedPaths.join(', ')}\nProtected paths: ${fixture.profile.protectedPaths.join(', ')}`,
+        `\nProject context: ${fixture.profile.context || ''}\nEditable paths: ${fixture.profile.scope.plannedPaths.join(', ')}\nProtected paths: ${fixture.profile.scope.protectedPaths.join(', ')}`,
     });
     const goal = fixture.goal;
     await runtime.turn(threadId, `${goal.title}\n\n${goal.body}\n\nAcceptance: ${goal.criteria}`, {

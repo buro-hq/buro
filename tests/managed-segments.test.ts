@@ -69,6 +69,7 @@ async function fixture(
   options: {
     script?: Script;
     separate?: boolean;
+    scopeMode?: 'advisory' | 'strict';
     limits?: Partial<ManagedRuntimeOptions['limits']>;
     policy?: WorkSegmentPolicy;
     inspect?: (index: number, signal: AbortSignal) => Promise<SegmentEvidence> | SegmentEvidence;
@@ -91,6 +92,13 @@ async function fixture(
   const events: RuntimeEvent[] = [];
   const snapshot = {
     project: { id: 'p', root: '/fixture' },
+    profile: {
+      scope: {
+        mode: options.scopeMode || 'advisory',
+        plannedPaths: ['src/'],
+        protectedPaths: ['checks/'],
+      },
+    },
     runs: [{ id: 'R-owner', workspace: '/fixture', baseCommit: 'a'.repeat(40) }],
     contextMaterials: [],
   };
@@ -203,8 +211,11 @@ async function fixture(
       assignment: {
         sessionId: 'S-worker',
         roleId: 'builder',
-        allowedPaths: ['src/'],
-        protectedPaths: ['checks/'],
+        scope: {
+          mode: options.scopeMode || 'advisory',
+          plannedPaths: ['src/'],
+          protectedPaths: ['checks/'],
+        },
       },
       ...changes,
     });
@@ -545,6 +556,7 @@ test('scope validation rejects an unassigned edit or a reversion of a previous w
   for (const revert of [false, true]) {
     const previous = { path: 'other.ts', fingerprint: 'c'.repeat(64) };
     const f = await fixture(t, {
+      scopeMode: 'strict',
       script: sequence(tool('read-1'), closing()),
       inspect(index) {
         return evidence(index === 1 ? (revert ? [previous] : []) : revert ? [] : [previous]);

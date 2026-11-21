@@ -24,7 +24,7 @@ const tool = (id: string, name: string, args: unknown) => ({
   message: { role: 'assistant' as const, content: '', toolCalls: [{ id, name, arguments: args }] },
 });
 
-test('file search feeds real edits and check-feedback repair without widening a managed worker assignment', async (t) => {
+test('file search feeds real edits and check-feedback repair while preserving protected checks', async (t) => {
   const directory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-managed-search-')),
   );
@@ -121,6 +121,9 @@ test('file search feeds real edits and check-feedback repair without widening a 
         snapshot: () => ({
           project: { id: 'p', root: directory },
           runs: [{ id: 'R-owner', workspace: directory, baseCommit: 'a'.repeat(40) }],
+          profile: {
+            scope: { mode: 'advisory', plannedPaths: [owned], protectedPaths: ['checks/'] },
+          },
         }),
       }),
     } as unknown as ProjectRegistry,
@@ -223,8 +226,7 @@ test('file search feeds real edits and check-feedback repair without widening a 
     assignment: {
       sessionId: 'S-worker',
       roleId: 'builder',
-      allowedPaths: [owned],
-      protectedPaths: ['checks/'],
+      scope: { mode: 'advisory', plannedPaths: [owned], protectedPaths: ['checks/'] },
     },
   });
   const original = (await sessions.load(threadId))!;

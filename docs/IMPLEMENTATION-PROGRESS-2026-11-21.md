@@ -46,7 +46,19 @@ Registered backends provide explicit immutable capability descriptors. Resources
 
 Original runtime/thread leases preserve stop and idempotent cleanup after view/configuration revocation. Released sessions need explicit resume. [Independent review](../output/research/stage2a-review-2026-11-22.md).
 
-The new execution record format requires capability and route-admission metadata. Prototype records are intentionally not silently upgraded or resumed; archive old execution state before the operational cutover. Validation uses fresh synthetic state. Advisory scope, read-only planning strategy, common role routing, default-none quotas, plugin contributions, durable SQLite authority and packaged AgentBackend remain subsequent work.
+The new execution record format requires capability and route-admission metadata. Prototype records are intentionally not silently upgraded or resumed; archive old execution state before the operational cutover. Validation uses fresh synthetic state. The advisory/strict scope cutover follows in 2B below; read-only planning strategy, common role routing, default-none quotas, plugin contributions, durable SQLite authority and packaged AgentBackend remain subsequent work.
+
+### Substep 2B — advisory scope and optional strict prevention
+
+Status: complete. Final full suite **739/739 passed**, with no skips; build/typecheck and formatting passed. Browser checks passed project onboarding/settings with real strict/advisory persistence, planned-path/material selection and desktop/mobile production smoke. Five agent roles contributed implementation, fixture/contract verification and independent review. [Validation receipt](../output/research/stage2b-validation-2026-11-22.json).
+
+Project profiles and frozen policies now carry explicit WorkScope: mode, planned paths and protected paths. New discovery is advisory with no required advance file list. Additional permitted edits are verified and reported against the captured source tree rather than rejected as a planning violation. The mode reaches workers, envelopes, private checkpoints, context rotation and explicit resume. Prior-worker reversions in advisory mode are review evidence rather than an invented file-permission failure.
+
+Strict mode uses actual managed-tool prevention: bounded edits validate the target before writing; agent commands and mutable-input intermediate checks are unavailable. Final immutable checks and a fresh reviewer remain required. Native or other unsupported writable backends reject before session dispatch, including coordinator work and an explicit strict-policy change on resume. A shared selector-containment rule prevents exact-file grants from expanding into directories through path aliases. Protected/service paths, read-only review, check integrity and unknown-effect recovery remain independent of advisory planning.
+
+Run.scopeObservation binds the mode and observed additional files to the accepted Git tree and check/review evidence. The UI renders that service evidence and the actual policy setting. Planning boilerplate was shortened to retain the same 16K correction headroom without removing the goal or canonical response history. [Independent architecture/code/boundary review](../output/research/stage2b-review-2026-11-22.md).
+
+Default aggregate quotas, finite lower-level counters and the remaining client-specific planning/role rules are unchanged. Full automatic role/model selection, the neutral AgentBackend loop, SDK adoption, plugin contributions, SQLite authority and controlled state archive are still pending; these scope changes are not evidence of live-model coding quality.
 
 ## Remaining authorized stages
 

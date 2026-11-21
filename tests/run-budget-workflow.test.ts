@@ -1,4 +1,3 @@
-import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import {
   virtualWorkspaceRevision,
   virtualVerificationViews,
@@ -17,6 +16,7 @@ import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
 import { ProjectRunBudgets } from '../adapters/files/project-run-budgets.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { ProjectProfileSchema } from '../protocol/projects.ts';
+import { executionPolicy } from '../adapters/files/project-manager.ts';
 import { parseDomainEvent, parseSnapshot } from '../protocol/schema.ts';
 import type { ToolBroker } from '../core/model-ports.ts';
 import type { ModelProvider } from '../agent/contracts/model.ts';
@@ -53,8 +53,7 @@ async function fixture(
     version: 1,
     revision: 1,
     context: '',
-    allowedPaths: ['src/'],
-    protectedPaths: [],
+    scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
     checks: [
       {
         id: 'value',
@@ -189,7 +188,7 @@ async function fixture(
           ],
     async execute(_call, scope) {
       assert.equal(scope.readOnly, false);
-      assert.deepEqual(scope.allowedPaths, ['src/value.mjs']);
+      assert.deepEqual(scope.writeScope.plannedPaths, ['src/value.mjs']);
       tools++;
       await fs.writeFile(path.join(root, 'src/value.mjs'), 'export const value=2;\n');
       return { content: 'Updated the fixture module.' };
@@ -213,7 +212,7 @@ async function fixture(
     },
   });
   const resource = {
-    capabilities: fixtureCapabilities(),
+    capabilities: structuredClone(runtime.capabilities),
     id: 'managed',
     client: 'managed' as const,
     providerId: provider.id,
@@ -260,7 +259,7 @@ async function fixture(
     projects,
     runtime,
     selection: { forProject: () => structuredClone(selection) },
-    policies: { p: { ...profile, profile, checks: [{ id: 'value', title: 'Value contract' }] } },
+    policies: { p: executionPolicy(profile) },
     now: () => new Date().toISOString(),
     id: randomUUID,
     workspaces: {

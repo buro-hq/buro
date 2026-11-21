@@ -118,7 +118,7 @@ test('source evaluation exports frozen hashes and bounded receipts without priva
   const digest = 'a'.repeat(64);
   const fixture = {
     goal: { title: 'Synthetic source case' },
-    profile: { allowedPaths: ['src/value.ts'] },
+    profile: { scope: { mode: 'advisory', plannedPaths: ['src/value.ts'], protectedPaths: [] } },
     evidence: {
       source: {
         root: '/private/source-location',

@@ -10,7 +10,7 @@ const pathFields = new Set([
   'command',
   'path',
   'paths',
-  'allowedPaths',
+  'plannedPaths',
   'protectedPaths',
   'relativePath',
   'textPath',

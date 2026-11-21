@@ -49,6 +49,9 @@ export async function checkManagedWorkerStep(options: {
       'WORKER_CHECK_RECONCILIATION_REQUIRED',
       'A saved service check has an unknown outcome. It cannot be automatically repeated.',
     );
+  // Never run candidate-controlled code in a strict live worktree. Unknown
+  // receipts above still require reconciliation; final immutable checks remain.
+  if (session.scope.writeScope.mode === 'strict') return { disposition: 'skipped' as const };
   const plan = options.checks.plan(structuredClone(session.scope));
   if (!plan) return { disposition: 'skipped' as const };
   validateWorkerStepCheckPlan(plan);

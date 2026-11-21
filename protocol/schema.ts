@@ -6,6 +6,8 @@ import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
 import { DeliverySchema, PreviewSchema, ResearchSchema, GoalOutcomeSchema } from './operations.ts';
 import { ContextMaterialSchema } from './context.ts';
 import { PendingRunTurnSchema, RunReconciliationSchema } from './reconciliation.ts';
+import { ExecutionPolicySchema } from './execution-policy.ts';
+import { ScopeObservationSchema } from './work-scope.ts';
 import {
   WorkerTaskSchema,
   WorkerEnvelopeSchema,
@@ -455,19 +457,11 @@ const run = z
       .optional(),
     appliedAt: z.string().optional(),
     appliedBranch: z.string().optional(),
-    executionPolicySnapshot: z
-      .object({
-        allowedPaths: z.array(z.string()),
-        protectedPaths: z.array(z.string()).optional(),
-        checks: z.array(z.object({ id: z.string(), title: z.string() })),
-        defaultCheckIds: z.array(z.string()),
-        maxWorkers: z.number(),
-        maxRepairs: z.number(),
-        turnTimeoutMs: z.number(),
-        context: z.string().optional(),
-        profile: ProjectProfileSchema.optional(),
-      })
-      .optional(),
+    executionPolicySnapshot: ExecutionPolicySchema.extend({
+      turnTimeoutMs: z.number(),
+      context: z.string().optional(),
+      profile: ProjectProfileSchema.optional(),
+    }).optional(),
     agents: z.array(
       z.object({
         session: agentSession.optional(),
@@ -518,6 +512,7 @@ const run = z
     acceptance: checks,
     specsUnchanged: z.boolean(),
     scopePreserved: z.boolean(),
+    scopeObservation: ScopeObservationSchema.optional(),
     independentReviewer: z.boolean(),
     goalText: z.string(),
     result: z.string(),
@@ -570,14 +565,7 @@ export const DomainEventSchema = z
         type: z.literal('project.configured'),
         research: ResearchSchema.optional(),
         profile: ProjectProfileSchema,
-        executionPolicy: z.object({
-          allowedPaths: z.array(z.string()),
-          protectedPaths: z.array(z.string()).optional(),
-          checks: z.array(z.object({ id: z.string(), title: z.string() })),
-          defaultCheckIds: z.array(z.string()),
-          maxWorkers: z.number(),
-          maxRepairs: z.number(),
-        }),
+        executionPolicy: ExecutionPolicySchema,
       }),
       z.object({ type: z.literal('run.changed'), run, goal, roles: z.array(role).optional() }),
     ]),
@@ -610,16 +598,7 @@ export const SnapshotSchema = z
     goals: z.array(goal),
     runs: z.array(run),
     capabilities: z.array(z.string()),
-    executionPolicy: z
-      .object({
-        allowedPaths: z.array(z.string()),
-        protectedPaths: z.array(z.string()).optional(),
-        checks: z.array(z.object({ id: z.string(), title: z.string() })),
-        defaultCheckIds: z.array(z.string()),
-        maxWorkers: z.number(),
-        maxRepairs: z.number(),
-      })
-      .optional(),
+    executionPolicy: ExecutionPolicySchema.optional(),
     profile: ProjectProfileSchema.optional(),
     verification: verification.optional(),
     research: ResearchSchema.optional(),

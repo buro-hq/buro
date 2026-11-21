@@ -600,8 +600,7 @@ async function prepareSyntheticFixture(temporaryDirectory, mode) {
       resourceProfile: 'evaluation',
       context:
         'A tiny synthetic JavaScript module. The trusted check is outside the editable source area.',
-      allowedPaths: ['src/'],
-      protectedPaths: ['checks/'],
+      scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
       checks: [
         {
           id: 'test',
@@ -1040,11 +1039,8 @@ async function runLiveProviderEvaluation(options = {}) {
       executors,
       host.ctx.agentRuntime.selection,
     );
-    const policy = {
-      ...profile,
-      profile,
-      checks: profile.checks.map(({ id, title }) => ({ id, title })),
-    };
+    const { executionPolicy } = await import('../../adapters/files/project-manager.ts');
+    const policy = executionPolicy(profile);
     await host.ctx.plugin(executionPlugin, {
       policies: { p: policy },
       planningMode: options.planningMode,

@@ -21,8 +21,11 @@ const scope: ToolScope = {
   sessionId: 'worker',
   workspace: '/fixture',
   readOnly: false,
-  allowedPaths: ['src/'],
-  protectedPaths: ['src/protected.ts', 'checks/'],
+  writeScope: {
+    mode: 'strict',
+    plannedPaths: ['src/'],
+    protectedPaths: ['src/protected.ts', 'checks/'],
+  },
   materials: [],
   commands: [],
 };
@@ -153,7 +156,9 @@ test('fresh handoff repeats the immutable task and permissions and labels the pr
       completedActions: 2,
     },
   );
-  assert.equal(messages[0].content, 'Frozen role');
+  assert.equal(messages[0].content.split('\n')[0], 'Frozen role');
+  assert.match(messages[0].content, /Current write scope:.*"mode":"strict"/);
+  assert.match(messages[0].content, /final immutable acceptance checks still run/);
   assert.equal(messages[1].content, 'Frozen task and criteria');
   assert.match(messages[2].content, /Untrusted next-task proposal/);
   assert.match(messages[2].content, /not acceptance/);
@@ -220,5 +225,24 @@ test('step lifecycle records progress without completing the logical worker or c
   assert.deepEqual(
     run.events.map((event) => event.type),
     ['agent.segment.started', 'agent.segment.completed'],
+  );
+});
+
+test('advisory context rotation accepts adjacent source changes and preserves exact scope mode', () => {
+  const advisory = { ...scope, writeScope: { ...scope.writeScope, mode: 'advisory' as const } };
+  const baseline = evidence();
+  const observed = evidence([{ path: 'docs/adjacent.md', fingerprint: 'c'.repeat(64) }]);
+  assert.doesNotThrow(() => assertSegmentScope(baseline, observed, advisory));
+  assert.throws(() => assertSegmentScope(baseline, observed, scope), {
+    code: 'SEGMENT_SCOPE_CHANGED',
+  });
+  assert.throws(
+    () =>
+      assertSegmentScope(
+        baseline,
+        evidence([{ path: 'checks/contract.ts', fingerprint: 'c'.repeat(64) }]),
+        advisory,
+      ),
+    { code: 'SEGMENT_SCOPE_CHANGED' },
   );
 });

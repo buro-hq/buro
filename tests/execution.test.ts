@@ -25,7 +25,7 @@ import { assignmentScopePreserved } from '../core/worker-assignments.ts';
 import { DomainError } from '../core/ports.ts';
 
 const policy: ExecutionPolicy = {
-  allowedPaths: ['src/'],
+  scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
   checks: [{ id: 'suite', title: 'Suite' }],
   defaultCheckIds: ['suite'],
   maxWorkers: 2,
@@ -231,7 +231,9 @@ async function fixture(
     engine = new ExecutionService({
       ...env,
       runtime,
-      policies: { p: policy },
+      policies: {
+        p: options.outOfScope ? { ...policy, scope: { ...policy.scope, mode: 'strict' } } : policy,
+      },
       workspaces: {
         ...virtualVerificationViews,
         async prepare(_p, _r, base) {
@@ -448,10 +450,14 @@ test('each run freezes its execution policy and passes project context to coordi
     return original(input);
   };
   const first = await f.start();
-  f.engine.env.policies.p = { ...policy, allowedPaths: ['elsewhere/'], context: 'Changed context' };
+  f.engine.env.policies.p = {
+    ...policy,
+    scope: { ...policy.scope, plannedPaths: ['elsewhere/'] },
+    context: 'Changed context',
+  };
   const run = await f.drain(first.runId);
   assert.equal(run.status, 'completed');
-  assert.deepEqual(run.executionPolicySnapshot?.allowedPaths, ['src/']);
+  assert.deepEqual(run.executionPolicySnapshot?.scope.plannedPaths, ['src/']);
   assert.equal(run.executionPolicySnapshot?.context, 'Original project context');
   assert.equal(instructions.length, 3);
   assert.ok(
@@ -474,7 +480,12 @@ test('Buro persists assignments before client dispatch and completes workers wit
       assert.equal(pending.session?.roleVersion, 1);
       assert.equal(pending.session?.runtimeId, 'fake');
       assert.equal(pending.session?.parentId, run.coordinatorSession?.id);
-      assert.deepEqual(input.assignment.allowedPaths, ['src/code.mjs']);
+      assert.deepEqual(input.assignment.scope.plannedPaths, ['src/code.mjs']);
+      assert.equal(input.assignment.scope.mode, run.executionPolicySnapshot?.scope.mode);
+      assert.deepEqual(
+        input.assignment.scope.protectedPaths,
+        run.executionPolicySnapshot?.scope.protectedPaths,
+      );
       const saved = JSON.parse(
         await fs.readFile(path.join(f.directory, 'control-state.json'), 'utf8'),
       );
@@ -563,33 +574,27 @@ test('cancelling a service-owned worker preserves its session and never promotes
 
 test('worker scope checks detect edits and reversions outside its assignment', () => {
   const previous = [{ path: 'src/first.ts', before: 'old', after: 'earlier worker' }];
-  assert.equal(assignmentScopePreserved(previous, [], ['src/second.ts'], []), false);
-  assert.equal(assignmentScopePreserved(previous, previous, ['src/second.ts'], []), true);
+  const scope = { mode: 'strict' as const, plannedPaths: ['src/second.ts'], protectedPaths: [] };
+  assert.equal(assignmentScopePreserved(previous, [], scope), false);
+  assert.equal(assignmentScopePreserved(previous, previous, scope), true);
   assert.equal(
-    assignmentScopePreserved(
-      [],
-      [{ path: 'src/second.ts', before: '', after: 'work' }],
-      ['src/second.ts'],
-      [],
-    ),
+    assignmentScopePreserved([], [{ path: 'src/second.ts', before: '', after: 'work' }], scope),
     true,
   );
   assert.equal(
     assignmentScopePreserved(
       [],
       [{ path: 'src/second.ts', before: '', after: '[symlink outside]' }],
-      ['src/second.ts'],
-      [],
+      scope,
     ),
     false,
   );
   assert.equal(
-    assignmentScopePreserved(
-      [],
-      [{ path: 'src/protected.ts', before: '', after: 'work' }],
-      ['src/'],
-      ['src/protected.ts'],
-    ),
+    assignmentScopePreserved([], [{ path: 'src/protected.ts', before: '', after: 'work' }], {
+      mode: 'strict',
+      plannedPaths: ['src/'],
+      protectedPaths: ['src/protected.ts'],
+    }),
     false,
   );
 });
@@ -669,7 +674,7 @@ test('team validation rejects overlapping ownership, missing reuse and escaping 
   assert.throws(
     () =>
       resolveTeam({ ...plan, team: [{ ...worker, paths: ['src/../README.md'] }] }, [], policy, ''),
-    /allowed scope/,
+    /unauthorized path|strict work scope/,
   );
 });
 test('native JSONL completed-turn contract captures final structured answer and sandbox', async (t) => {
@@ -928,8 +933,7 @@ test('environment failure preserves the workspace and stops before planning or s
       version: 1,
       revision: 1,
       context: '',
-      allowedPaths: ['src/'],
-      protectedPaths: [],
+      scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
       setup: [],
       dependencies: 'none',
       checks: [{ id: 'suite', title: 'Suite', command: 'make test', timeoutMs: 1000 }],

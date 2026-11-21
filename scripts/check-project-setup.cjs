@@ -1,4 +1,4 @@
-const { chromium } = require('@playwright/test');
+const { chromium, expect } = require('@playwright/test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises'),
   os = require('node:os'),
@@ -137,7 +137,8 @@ const exec = promisify(execFile);
     const page = await browser.newPage({ viewport: { width: 1512, height: 1080 } });
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(
-      'http://127.0.0.1:4317/?project=control&daemon=' +
+      (process.env.BURO_UI_BASE_URL || 'http://127.0.0.1:4317') +
+        '/?project=control&daemon=' +
         encodeURIComponent('ws://127.0.0.1:' + port),
     );
     await page.getByRole('heading', { name: 'Setup control', exact: true }).waitFor();
@@ -183,6 +184,23 @@ const exec = promisify(execFile);
       store.snapshot().profile.revision,
     );
     assert.equal(store.snapshot().research.appliedProfileRevision, undefined);
+    const strict = page.getByRole('checkbox', {
+      name: 'Forbid changes outside planned paths',
+      exact: true,
+    });
+    const planned = page.getByRole('textbox', { name: 'Planned paths', exact: true });
+    assert.equal(await strict.isChecked(), false);
+    await planned.fill('server.mjs');
+    await strict.check();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await expect.poll(() => store.snapshot().profile.scope.mode).toBe('strict');
+    assert.deepEqual(store.snapshot().profile.scope.plannedPaths, ['server.mjs']);
+    await strict.uncheck();
+    await planned.fill('');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await expect.poll(() => store.snapshot().profile.scope.mode).toBe('advisory');
+    assert.deepEqual(store.snapshot().profile.scope.plannedPaths, []);
+    passed.push('strict scope persists and advisory discovery accepts an empty plan');
     await page.locator('.sidebar').getByRole('button', { name: 'Office', exact: true }).click();
     assert.equal(
       await page
@@ -252,6 +270,7 @@ const exec = promisify(execFile);
       specsUnchanged: true,
       scopePreserved: true,
       independentReviewer: true,
+      review: { verdict: 'approved', blockingFindings: [], summary: 'Synthetic review fixture' },
       goalText: 'Show API',
       result: 'API ready',
       sourceHash: '',

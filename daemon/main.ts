@@ -45,8 +45,8 @@ const checks = [
     sourceRoot: root,
   },
 ];
-const policy = {
-  allowedPaths: ['experiments/goals/'],
+const policy: ExecutionPolicy = {
+  scope: { mode: 'advisory', plannedPaths: ['experiments/goals/'], protectedPaths: [] },
   checks: checks.map(({ id, title }) => ({ id, title })),
   defaultCheckIds: ['session_list'],
   maxWorkers: 2,

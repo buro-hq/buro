@@ -175,8 +175,7 @@ test('unknown usage remains charged and budget policy survives continuation or d
       version: 1,
       revision: 2,
       context: '',
-      allowedPaths: ['src/'],
-      protectedPaths: [],
+      scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
       checks: [],
       defaultCheckIds: [],
       setup: [],
@@ -188,7 +187,7 @@ test('unknown usage remains charged and budget policy survives continuation or d
     });
     draft.profile = changedProfile;
     run.executionPolicySnapshot = {
-      allowedPaths: ['src/'],
+      scope: structuredClone(changedProfile.scope),
       checks: [],
       defaultCheckIds: [],
       maxWorkers: 1,

@@ -17,7 +17,7 @@ The [implementation sequence](docs/IMPLEMENTATION.md) tracks the transition from
 
 The [selected execution design](docs/EXECUTION-DESIGN-DECISION-2026-11-21.md) turns the [workflow research](docs/ARCHITECTURE-RESEARCH-2026-11-21.md) into a concrete plan: audited hidden constraints, optional quotas, a clean pre-release cutover and [reusable agent packages](docs/REUSABLE-AGENT-PACKAGES-2026-11-21.md).
 
-The [full project architecture review](docs/PROJECT-ARCHITECTURE-REVIEW-2026-11-21.md) records fresh verification, reproduced gaps, SDK reuse choices and the revised implementation order. [Autonomy policy](docs/AUTONOMY-POLICY-2026-11-21.md) defines the target defaults and transparent stop/continuation behavior; those changes are not implemented yet.
+The [full project architecture review](docs/PROJECT-ARCHITECTURE-REVIEW-2026-11-21.md) records fresh verification, reproduced gaps, SDK reuse choices and the revised implementation order. [Autonomy policy](docs/AUTONOMY-POLICY-2026-11-21.md) defines the target defaults: advisory file scope and optional strict scope are implemented; opt-in aggregate quotas and broader stop/continuation behavior remain planned.
 
 [Implementation progress](docs/IMPLEMENTATION-PROGRESS-2026-11-21.md) distinguishes completed refactor steps and their checks from the remaining target design.
 
@@ -61,7 +61,7 @@ Project setup research reads the repository and proposes settings. Saving a prop
 - **Refactor code with existing tests.** For example: “Move CSV parsing into a helper without changing the public API.” Run the existing checks against the result.
 - **Continue a stopped task.** Add clarification to the saved goal, repair the same worktree, or rerun checks without starting implementation again. A new goal can also build on a completed parent run.
 
-Keep a goal small enough to review as one change. The project settings control which paths agents may edit and which checks Buro runs.
+Keep a goal small enough to review as one change. Planned paths guide work by default; additional public files can change and are reported with the verified result. Project settings offer an explicit strict option and configure protected paths and acceptance checks.
 
 ## Inspect the result
 

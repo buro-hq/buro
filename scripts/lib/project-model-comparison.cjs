@@ -60,7 +60,7 @@ function fixtureIdentity(fixture, manifest) {
     taskHash: digest(fixture.goal),
     oracleHash: digest(stableEntries(evidence.controllerHashes)),
     contractHash: evidence.fixtureContractHash,
-    allowedPaths: [...fixture.profile.allowedPaths],
+    allowedPaths: [...fixture.profile.scope.plannedPaths],
   };
 }
 
@@ -68,7 +68,7 @@ async function compareScope(fixture, workspace, initial) {
   const current = await candidateFiles(workspace);
   const names = [...new Set([...Object.keys(initial), ...Object.keys(current)])].sort();
   const changed = names.filter((file) => initial[file] !== current[file]);
-  const allowed = fixture.profile.allowedPaths;
+  const allowed = fixture.profile.scope.plannedPaths;
   const unexpected = changed.filter((file) => !allowed.includes(file));
   return {
     passed: unexpected.length === 0,

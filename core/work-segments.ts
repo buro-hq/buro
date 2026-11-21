@@ -1,7 +1,7 @@
 import type { ManagedSession, ToolScope } from './model-ports.ts';
 import type { ModelMessage } from '../agent/contracts/model.ts';
 import { DomainError } from './ports.ts';
-import { inScope } from './execution-ports.ts';
+import { writeAllowed } from './execution-ports.ts';
 import type { WorkerStepCheckResult } from './worker-step-checks.ts';
 
 /** Service observations only; source text and provider continuation never enter the handoff. */
@@ -225,16 +225,33 @@ export function assertSegmentScope(
   const after = new Map(observed.files.map((file) => [file.path, file.fingerprint]));
   for (const path of new Set([...before.keys(), ...after.keys()]))
     if (
-      !inScope(path, scope.allowedPaths, scope.protectedPaths) &&
+      (scope.readOnly || !writeAllowed(path, scope.writeScope)) &&
       before.get(path) !== after.get(path)
     )
-      throw new DomainError('SEGMENT_SCOPE_CHANGED', 'The work step changed an unassigned path.');
+      throw new DomainError(
+        'SEGMENT_SCOPE_CHANGED',
+        'The work step changed a protected or disallowed path.',
+      );
+}
+
+/** The model sees the exact host-enforced grant after start, resume and context rotation. */
+export function toolScopeInstructions(scope: Pick<ToolScope, 'readOnly' | 'writeScope'>) {
+  return (
+    'Current write scope: ' +
+    JSON.stringify(scope.writeScope) +
+    '. ' +
+    (scope.readOnly
+      ? 'This session is read only; source edits and commands are unavailable.'
+      : scope.writeScope.mode === 'strict'
+        ? 'Edit only planned paths. Agent commands and intermediate worker checks are unavailable; final immutable acceptance checks still run.'
+        : 'Planned paths guide the task; adjacent source edits are allowed. Protected paths and private data remain forbidden.')
+  );
 }
 
 /** Frozen task and observed receipts are authoritative; nextTask remains an untrusted proposal. */
 export function segmentMessages(anchor: SegmentAnchor, scope: ToolScope, handoff: SegmentHandoff) {
   return [
-    { role: 'system' as const, content: anchor.instructions },
+    { role: 'system' as const, content: anchor.instructions + '\n' + toolScopeInstructions(scope) },
     { role: 'user' as const, content: anchor.task },
     {
       role: 'user' as const,
@@ -252,8 +269,7 @@ export function segmentMessages(anchor: SegmentAnchor, scope: ToolScope, handoff
           historicalToolReceipts: handoff.receipts || [],
           ...(handoff.checkFeedback ? { serviceCheckFeedback: handoff.checkFeedback.result } : {}),
           ...(handoff.availableTools ? { availableTools: handoff.availableTools } : {}),
-          allowedPaths: scope.allowedPaths,
-          protectedPaths: scope.protectedPaths,
+          writeScope: scope.writeScope,
           readOnly: scope.readOnly,
         }) +
         '\nTool receipts are actual historical outputs, not proof of current file content or acceptance; re-read only when the next edit or changed state requires it. ' +

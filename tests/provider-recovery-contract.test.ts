@@ -150,8 +150,7 @@ async function fixture(t: any, kind: Provider) {
     version: 1,
     revision: 1,
     context: '',
-    allowedPaths: ['src/'],
-    protectedPaths: [],
+    scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
     checks: [],
     defaultCheckIds: [],
     setup: [],
@@ -324,7 +323,7 @@ async function fixture(t: any, kind: Provider) {
         workspace: root,
         purpose: 'implementation',
         instructions: 'Perform only the requested fixture edit.',
-        assignment: { sessionId, roleId: 'builder', allowedPaths: ['src/'], protectedPaths: [] },
+        assignment: { sessionId, roleId: 'builder', scope: structuredClone(profile.scope) },
       });
       const route = await routes.load(started.threadId);
       nativeByAssignment.set(sessionId, route!.externalThreadId!);

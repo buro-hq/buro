@@ -138,7 +138,7 @@ async function fixture(t: any) {
       checks,
       policies: {
         p: {
-          allowedPaths: ['src/'],
+          scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
           checks: [{ id: 'suite', title: 'Suite' }],
           defaultCheckIds: ['suite'],
           maxWorkers: 1,
@@ -348,8 +348,7 @@ function verificationProfile(command: string, outputPaths: string[] = []): Proje
     version: 1,
     revision: 1,
     context: '',
-    allowedPaths: ['src/'],
-    protectedPaths: [],
+    scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
     checks: [{ id: 'suite', title: 'Frozen check', command, timeoutMs: 5000, outputPaths }],
     defaultCheckIds: ['suite'],
     setup: [],

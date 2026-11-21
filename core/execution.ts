@@ -29,7 +29,8 @@ import {
   type ProjectDocument,
 } from './ports.ts';
 import {
-  inScope,
+  writeAllowed,
+  matchesPlannedPath,
   resolveTeam,
   terminal,
   type ExecutionPolicy,
@@ -216,15 +217,14 @@ export class ExecutionService {
     options: { keepView?: boolean } = {},
   ) {
     let changes = await this.env.workspaces.changes(workspace.path, workspace.base);
-    const safe = () =>
-      changes.every(
-        (f) =>
-          inScope(f.path, policy.allowedPaths, policy.protectedPaths) &&
-          !f.after.startsWith('[symlink '),
-      ) && dependencyManifestPreserved(changes);
+    const pathsSafe = () =>
+      changes.every((f) => writeAllowed(f.path, policy.scope) && !f.after.startsWith('[symlink '));
+    const safe = () => pathsSafe() && dependencyManifestPreserved(changes);
     const blocked = () => ({
       changes,
-      scope: false,
+      scope: pathsSafe(),
+      specsUnchanged: dependencyManifestPreserved(changes),
+      scopeObservation: undefined,
       revision: undefined,
       view: undefined,
       checks: {
@@ -234,8 +234,9 @@ export class ExecutionService {
           {
             name: 'Change boundaries and check commands',
             passed: false,
-            error:
-              'Changes exceed the allowed scope or modify protected package.json fields. Preserve scripts and check configuration.',
+            error: !pathsSafe()
+              ? 'Changes violate the file policy. Protected paths are always forbidden; strict mode also forbids changes outside planned paths.'
+              : 'The protected package.json definition changed. This check-integrity rule is separate from the planned file scope.',
           },
         ],
       },
@@ -264,6 +265,8 @@ ${installation.output || installation.error || ''}`,
           return {
             changes,
             scope: true,
+            specsUnchanged: true,
+            scopeObservation: undefined,
             checks: { passed: 0, total: 1, results: [installation] },
             revision: undefined,
             view: undefined,
@@ -308,7 +311,24 @@ ${installation.output || installation.error || ''}`,
         };
       });
       retained = !!options.keepView;
-      return { changes, scope: true, checks, revision, view: retained ? view : undefined };
+      return {
+        changes,
+        scope: true,
+        specsUnchanged: true,
+        checks,
+        revision,
+        scopeObservation: {
+          mode: policy.scope.mode,
+          tree: revision.tree,
+          additionalPaths: policy.scope.plannedPaths.length
+            ? changes
+                .filter((file) => !matchesPlannedPath(file.path, policy.scope.plannedPaths))
+                .map((file) => file.path)
+            : [],
+          violations: [],
+        },
+        view: retained ? view : undefined,
+      };
     } finally {
       if (!retained) await this.closeVerificationView(projectId, runId);
     }
@@ -778,7 +798,7 @@ ${installation.output || installation.error || ''}`,
       envelope = EnvelopeSchema.parse(
         await ask(
           root.threadId,
-          `Continue without restarting the implementation. Goal: ${run.goalText}. Clarification: ${run.continuation.instructions}. Previous result: ${run.result}. Checks: ${JSON.stringify(checkContext(run.acceptance))}. Allowed paths: ${JSON.stringify(policy.allowedPaths)}. Plan: ${JSON.stringify(run.plan)}. ${run.repairEnvironment ? environmentRepairInstructions : ''} Buro has dispatched the saved team. Worker results: ${JSON.stringify(workerResults)}. Integrate these changes; do not start agents. The service starts an independent reviewer.`,
+          `Continue without restarting the implementation. Goal: ${run.goalText}. Clarification: ${run.continuation.instructions}. Previous result: ${run.result}. Checks: ${JSON.stringify(checkContext(run.acceptance))}. File policy: ${JSON.stringify(policy.scope)}. Plan: ${JSON.stringify(run.plan)}. ${run.repairEnvironment ? environmentRepairInstructions : ''} Buro has dispatched the saved team. Worker results: ${JSON.stringify(workerResults)}. Integrate these changes; do not start agents. The service starts an independent reviewer.`,
           envelopeOutputSchema,
         ),
       );
@@ -1015,6 +1035,9 @@ ${installation.output || installation.error || ''}`,
                     'ENVIRONMENT_FAILED',
                     'ENVIRONMENT_UNAVAILABLE',
                     'FIXED_RUNTIME_UNAVAILABLE',
+                    'BACKEND_CAPABILITY_UNAVAILABLE',
+                    'BACKEND_CAPABILITIES_CHANGED',
+                    'SESSION_SCOPE_CHANGED',
                     'CHECK_DEFINITION_CHANGED',
                     'VERIFICATION_REVISION_CHANGED',
                     'VERIFICATION_UNAVAILABLE',
@@ -1036,6 +1059,9 @@ ${installation.output || installation.error || ''}`,
             : error instanceof DomainError &&
                 [
                   'CHECK_DEFINITION_CHANGED',
+                  'BACKEND_CAPABILITY_UNAVAILABLE',
+                  'BACKEND_CAPABILITIES_CHANGED',
+                  'SESSION_SCOPE_CHANGED',
                   'VERIFICATION_REVISION_CHANGED',
                   'VERIFICATION_UNAVAILABLE',
                   'VERIFICATION_VIEW_UNAVAILABLE',
@@ -1168,8 +1194,7 @@ ${installation.output || installation.error || ''}`,
             roleCatalogChanged,
             title: run.title,
             goalText: run.goalText,
-            allowedPaths: policy.allowedPaths,
-            protectedPaths: policy.protectedPaths,
+            scope: policy.scope,
             projectContext: policy.context,
             maxWorkers: policy.maxWorkers,
             roles: workerCatalog,
@@ -1185,7 +1210,7 @@ ${installation.output || installation.error || ''}`,
         : `First, only inspect the project and create a plan; do not edit files or start agents.
 Goal: ${run.title}
 ${run.goalText}
-Only these paths may change: ${JSON.stringify(policy.allowedPaths)}. Protected paths: ${JSON.stringify(policy.protectedPaths || [])}. Project context: ${policy.context || ''}.
+File policy: ${JSON.stringify(policy.scope)}. ${policy.scope.mode === 'advisory' ? 'Planned paths are guidance; edit additional public project files when needed and report them.' : 'Only the selected planned paths may change.'} Protected paths are always forbidden. Project context: ${policy.context || ''}.
 For a small coherent change, return an empty team and implement directly as coordinator. Otherwise choose between 1 and ${policy.maxWorkers} workers only when delegation is useful. Reuse suitable catalog roles where possible. If none fits, create a concise reusable role without this goal, filenames or specific test values. New roles also require roleId, for example react_developer or dependency-maintainer: lowercase Latin letters, digits, underscores and hyphens, starting with a letter, up to 64 characters. steps.owner must use the exact roleId, not the title. The coordinator and independent reviewer are supplied by the service; exclude them from team. local_preview/delivery_pr/production_delivery run separately after acceptance; exclude them from team. Assign nonoverlapping paths to workers. Steps may use coordinator/reviewer as owners.
 For each worker, supply a compact assignment with a complete objective, exact public file inputs, expectedResult and concrete criteria. It describes only that worker's coherent subtask, not the whole project. Keep role instructions reusable. Workers receive this assignment instead of the full goal; include every constraint needed for their part. Use assignment null only when the full original goal is needed. File inputs allow reading, not writing outside the assigned paths. Prefer short native tool calls and factual results over long commentary.
 Baseline checks: ${JSON.stringify(checkContext(baseline))}
@@ -1490,18 +1515,13 @@ Return a shorter complete objective and only needed inputs from the saved input 
         'checking',
         'The service is verifying changes and running independent checks',
       );
-      const { changes, scope, checks, revision, view } = await this.verify(
-        projectId,
-        runId,
-        workspace,
-        policy,
-        signal,
-        { keepView: true },
-      );
+      const { changes, scope, specsUnchanged, scopeObservation, checks, revision, view } =
+        await this.verify(projectId, runId, workspace, policy, signal, { keepView: true });
       await this.update(projectId, runId, (r) => {
         r.changedFiles = changes;
         r.scopePreserved = scope;
-        r.specsUnchanged = scope;
+        r.specsUnchanged = specsUnchanged;
+        r.scopeObservation = scopeObservation;
         r.acceptance = checks;
         r.events.push({
           at: this.env.now(),
@@ -1612,7 +1632,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
           reviewer.threadId,
           `Review goal: ${run.title}
 ${run.goalText}
-Allowed paths: ${JSON.stringify(policy.allowedPaths)}.
+File policy: ${JSON.stringify(policy.scope)}.
 Executor result: ${JSON.stringify(envelope)}
 Independent checks: ${JSON.stringify(checkContext(checks))}
 Changed files: ${JSON.stringify(changeContext(changes))}. Read the actual diff against ${workspace.base} and relevant files in the workspace; the file list is not a substitute for inspecting changes.
@@ -1672,7 +1692,7 @@ Read relevant sources and verify actual correctness, including preservation of e
         canAccept({
           testsPassed: checks.total > 0 && checks.passed === checks.total,
           scopePreserved: scope,
-          specsUnchanged: scope,
+          specsUnchanged,
           review: { verdict: review.verdict, blockingFindings: review.blockingFindings.length },
         });
       finalText = envelope.summary;
@@ -1736,6 +1756,18 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
           !r.verificationEvidence ||
           r.verificationEvidence.tree !== acceptedRevision!.tree ||
           r.verificationEvidence.base !== acceptedRevision!.base ||
+          !r.scopeObservation ||
+          r.scopeObservation.tree !== acceptedRevision!.tree ||
+          r.scopeObservation.mode !== policy.scope.mode ||
+          r.scopeObservation.violations.length > 0 ||
+          JSON.stringify(r.scopeObservation.additionalPaths) !==
+            JSON.stringify(
+              policy.scope.plannedPaths.length
+                ? acceptedRevision!.changes
+                    .filter((file) => !matchesPlannedPath(file.path, policy.scope.plannedPaths))
+                    .map((file) => file.path)
+                : [],
+            ) ||
           !r.verificationEvidence.reviewedAt ||
           !r.verificationEvidence.reviewerSessionId ||
           JSON.stringify(r.verificationEvidence.checkIds) !== JSON.stringify(r.checkIds || [])

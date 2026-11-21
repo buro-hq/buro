@@ -1,3 +1,4 @@
+import type { WorkScope } from '../protocol/work-scope.ts';
 import type {
   Project,
   Role,
@@ -73,8 +74,7 @@ export interface AgentRuntime {
     assignment?: {
       sessionId: string;
       roleId: string;
-      allowedPaths: string[];
-      protectedPaths: string[];
+      scope: WorkScope;
     };
   }): Promise<{ threadId: string }>;
   resume?(input: {

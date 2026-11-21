@@ -55,8 +55,7 @@ async function fixture(t: any) {
     workspace: directory,
     baseCommit: 'a'.repeat(40),
     readOnly: false,
-    allowedPaths: ['src/'],
-    protectedPaths: [],
+    writeScope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
     materials: [],
     commands: checks,
   };
@@ -78,7 +77,7 @@ async function fixture(t: any) {
         },
         checkIds: ['first'],
         roleAssignments: { coder: ['src/'] },
-        executionPolicySnapshot: { allowedPaths: ['src/'], protectedPaths: [], profile },
+        executionPolicySnapshot: { scope: structuredClone(scope.writeScope), profile },
         agents: [
           {
             status: 'running',

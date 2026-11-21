@@ -2,6 +2,7 @@
 import type { EnvironmentConfig } from './environment.ts';
 import type { ContextMaterial } from './context.ts';
 import type { AssignmentResource, AssignmentSelection, RuntimePreference } from './resources.ts';
+import type { WorkScope, ScopeObservation } from './work-scope.ts';
 export type { ContextMaterial } from './context.ts';
 import type {
   DeliveryConfig,
@@ -38,8 +39,7 @@ export type ProjectProfile = {
   version: 1;
   revision: number;
   context: string;
-  allowedPaths: string[];
-  protectedPaths: string[];
+  scope: WorkScope;
   checks: ProjectCommand[];
   defaultCheckIds: string[];
   environment?: EnvironmentConfig;
@@ -275,6 +275,7 @@ export type Run = {
   acceptance: { passed: number; total: number; results: Check[] };
   specsUnchanged: boolean;
   scopePreserved: boolean;
+  scopeObservation?: ScopeObservation;
   independentReviewer: boolean;
   goalText: string;
   result: string;
@@ -304,8 +305,7 @@ export type DomainEvent = {
     | { type: 'run.changed'; run: Run; goal: Goal; roles?: Role[] };
 };
 export type ExecutionPolicyView = {
-  allowedPaths: string[];
-  protectedPaths?: string[];
+  scope: WorkScope;
   checks: { id: string; title: string }[];
   defaultCheckIds: string[];
   maxWorkers: number;

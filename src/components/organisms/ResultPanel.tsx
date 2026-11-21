@@ -13,6 +13,14 @@ export function ResultPanel({ run, cursor }: { run: Run; cursor: number }) {
   const runIndex = Math.max(0, Number(run.key.match(/(\d+)$/)?.[1] || 1) - 1);
   const terminalFailure = complete && !!run.status && run.status !== 'completed';
   const failed = terminalFailure || (complete && evidence.overall === 'failed');
+  const scopeObservation =
+    run.scopeObservation &&
+    run.scopeObservation.tree === run.verificationEvidence?.tree &&
+    run.verificationEvidence.base === run.baseCommit &&
+    run.scopeObservation.mode === run.executionPolicySnapshot?.scope.mode &&
+    (!run.verificationView || run.verificationView.tree === run.scopeObservation.tree)
+      ? run.scopeObservation
+      : undefined;
   return (
     <div className="content-panel">
       <div
@@ -51,6 +59,23 @@ export function ResultPanel({ run, cursor }: { run: Run; cursor: number }) {
             </p>
           )}
           <pre className="result-text">{run.result}</pre>
+          {!!scopeObservation?.additionalPaths.length && (
+            <details>
+              <summary>
+                {t('Observed changes beyond the initial plan ({p0})', {
+                  p0: scopeObservation.additionalPaths.length,
+                })}
+              </summary>
+              <p className="caption">{t('Confirmed against the checked source revision.')}</p>
+              <ul className="caption">
+                {scopeObservation.additionalPaths.map((path) => (
+                  <li key={path} style={{ overflowWrap: 'anywhere' }}>
+                    <code>{path}</code>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <RunRecoveryPanel run={run} />
           <RunResultActions run={run} />
           <ApplyRunResult run={run} />

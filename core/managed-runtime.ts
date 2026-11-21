@@ -7,8 +7,10 @@ import {
 } from './ports.ts';
 import type { BackendCapabilities } from '../agent/contracts/capabilities.ts';
 import type { ManagedSession, ManagedSessionStore, ToolBroker, ToolScope } from './model-ports.ts';
-import type { ModelProvider } from '../agent/contracts/model.ts';
-import { inScope } from './execution-ports.ts';
+import type { ModelProvider, ToolDefinition } from '../agent/contracts/model.ts';
+import { planPathAllowed } from './execution-ports.ts';
+import type { WorkScope } from '../protocol/work-scope.ts';
+import { WorkScopeSchema } from '../protocol/work-scope.ts';
 import type { Run } from '../protocol/domain.ts';
 import { VerificationViewSchema } from '../protocol/verification.ts';
 import { withEnvironmentRepair } from './environment-repair.ts';
@@ -33,6 +35,7 @@ import {
   segmentClosingInstruction,
   segmentClosingSchema,
   segmentMessages,
+  toolScopeInstructions,
   validateSegmentEvidence,
   validateSegmentLimits,
   type SegmentEvidencePort,
@@ -69,14 +72,13 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
   readonly id: string;
   readonly capabilities: BackendCapabilities = Object.freeze({
     version: 1,
-    revision: 'managed-host-tools-v1',
+    revision: 'managed-host-tools-scope-v2',
     structuredTurns: true,
     toolsFreeTurns: true,
     readOnlySessions: true,
     immutableReview: true,
-    // Registered commands still have worktree-wide write access; edit_file alone
-    // does not establish prevention for every indirect tool effect.
-    strictPlannedWrites: false,
+    // Strict sessions expose only bounded source tools, never candidate-controlled commands.
+    strictPlannedWrites: true,
     hostToolLifecycle: true,
     usage: 'reported',
     resumeSessions: true,
@@ -142,6 +144,20 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
     const policy = run?.executionPolicySnapshot
       ? withEnvironmentRepair(run.executionPolicySnapshot, !!run.repairEnvironment)
       : undefined;
+    const policyScope = WorkScopeSchema.parse(
+      policy?.scope ||
+        snapshot.profile?.scope || {
+          mode: 'advisory',
+          plannedPaths: [],
+          protectedPaths: [],
+        },
+    );
+    const writeScope = input.assignment
+      ? WorkScopeSchema.parse(input.assignment.scope)
+      : policyScope;
+    if (input.assignment) {
+      this.assertScopeGrant(policyScope, writeScope);
+    }
     const session: ManagedSession = {
       version: 1,
       id,
@@ -164,8 +180,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
             }
           : {}),
         readOnly: !!input.readOnly,
-        allowedPaths: [...(input.assignment?.allowedPaths || policy?.allowedPaths || [])],
-        protectedPaths: [...(input.assignment?.protectedPaths || policy?.protectedPaths || [])],
+        writeScope: structuredClone(writeScope),
         materials: materials
           .flatMap((m) => [m.relativePath, ...(m.textPath ? [m.textPath] : [])])
           .map(
@@ -178,7 +193,15 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
         ),
         baseCommit: run?.baseCommit,
       },
-      messages: [{ role: 'system', content: input.instructions }],
+      messages: [
+        {
+          role: 'system',
+          content:
+            input.instructions +
+            '\n' +
+            toolScopeInstructions({ readOnly: !!input.readOnly, writeScope }),
+        },
+      ],
       status: 'ready',
       requests: 0,
       usage: { requestsWithUsage: 0, inputTokens: 0, outputTokens: 0 },
@@ -187,8 +210,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
         ? {
             assignment: {
               roleId: input.assignment.roleId,
-              allowedPaths: [...input.assignment.allowedPaths],
-              protectedPaths: [...input.assignment.protectedPaths],
+              scope: WorkScopeSchema.parse(input.assignment.scope),
             },
           }
         : {}),
@@ -245,20 +267,16 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
       : undefined;
     const assignmentBound = !!session.assignment || session.scope.sessionId !== session.id;
     if (policy) {
-      // A role assignment never inherits the entire project's write scope on continuation.
-      scope.allowedPaths = assignmentBound
-        ? session.scope.allowedPaths.filter((path) =>
-            inScope(path, policy.allowedPaths, policy.protectedPaths),
-          )
-        : [...policy.allowedPaths];
-      scope.protectedPaths = [
-        ...new Set([
-          ...(policy.protectedPaths || []),
-          ...(assignmentBound
-            ? session.assignment?.protectedPaths || session.scope.protectedPaths
-            : []),
-        ]),
-      ];
+      // Explicit resume adopts the saved owning policy revision. Role paths remain the plan,
+      // but advisory mode never carries an old hidden allowlist into the new context.
+      const revised = WorkScopeSchema.parse({
+        ...policy.scope,
+        plannedPaths: assignmentBound
+          ? session.assignment?.scope.plannedPaths || session.scope.writeScope.plannedPaths
+          : policy.scope.plannedPaths,
+      });
+      this.assertScopeGrant(policy.scope, revised);
+      scope.writeScope = revised;
       scope.commands = structuredClone(policy.profile?.checks || []);
     }
     const materials = run
@@ -291,7 +309,11 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
     next.scope = scope;
     next.messages.push({
       role: 'system',
-      content: 'Updated instructions for continuing saved work:\n' + input.instructions,
+      content:
+        'Updated instructions for continuing saved work:\n' +
+        input.instructions +
+        '\n' +
+        toolScopeInstructions(scope),
     });
     next.cancelRequested = false;
     next.status = 'ready';
@@ -483,7 +505,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
               segmentCount: step.active.index,
               estimatedInput: estimateManagedRequest({
                 messages: session.messages,
-                tools: tools.definitions(session.scope),
+                tools: this.toolDefinitions(session.scope),
                 schema: separate ? undefined : options.schema,
               }),
               contextTokens: limits.contextTokens,
@@ -502,7 +524,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
           }
         }
         const definitions =
-          noTools || finalizing || closing ? [] : tools.definitions(session.scope);
+          noTools || finalizing || closing ? [] : this.toolDefinitions(session.scope);
         const requestMessages = provider.contextMessages
           ? provider.contextMessages(structuredClone(session.messages), {
               phase: finalizing || closing ? 'final' : 'work',
@@ -648,7 +670,13 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
         }
         // Checking the exact request definitions also rejects hidden tools on ordinary turns.
         const advertised = new Set(definitions.map((definition) => definition.name));
-        if (requested.some((call) => !advertised.has(call.name)))
+        if (
+          requested.some(
+            (call) =>
+              !advertised.has(call.name) ||
+              (session.scope.writeScope.mode === 'strict' && call.name === 'run_command'),
+          )
+        )
           throw new DomainError(
             'TOOL_POLICY_VIOLATION',
             'The model requested a tool that this turn did not authorize.',
@@ -751,7 +779,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
               remainingToolCalls: limits.maxToolCallsPerTurn - calls,
               signal,
               id: this.options.idGenerator,
-              availableTools: tools.definitions(session.scope).map((tool) => tool.name),
+              availableTools: this.toolDefinitions(session.scope).map((tool) => tool.name),
               commit: async (next) => {
                 await sessions.save(next);
                 session = next;
@@ -798,7 +826,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
                 evidence,
                 completedActions: session.actions.length,
                 receipts: segmentActionReceipts(session.actions),
-                availableTools: tools.definitions(session.scope).map((tool) => tool.name),
+                availableTools: this.toolDefinitions(session.scope).map((tool) => tool.name),
               };
               const next = structuredClone(session);
               next.workSegments!.archives.push({
@@ -976,6 +1004,32 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
 
   private assertOpen() {
     if (this.closed) throw new DomainError('RUNTIME_CLOSED', 'The runtime stopped.');
+  }
+  private toolDefinitions(scope: ToolScope): ToolDefinition[] {
+    return this.options.tools
+      .definitions(scope)
+      .filter(
+        (definition) =>
+          !(
+            definition.name === 'run_command' &&
+            (scope.readOnly || scope.writeScope.mode === 'strict')
+          ) && !(definition.name === 'edit_file' && scope.readOnly),
+      );
+  }
+  private assertScopeGrant(policy: WorkScope, assigned: WorkScope) {
+    const protections = (scope: WorkScope) =>
+      JSON.stringify([...new Set(scope.protectedPaths)].sort());
+    if (
+      policy.mode !== assigned.mode ||
+      protections(policy) !== protections(assigned) ||
+      assigned.plannedPaths.some((file) => !planPathAllowed(file, policy))
+    )
+      throw observedTurnFailure(
+        new DomainError(
+          'SESSION_SCOPE_CHANGED',
+          'The assignment no longer matches its owning write policy. Revise the assignment before continuing.',
+        ),
+      );
   }
   private assertRunWorkspace(
     run: Run,

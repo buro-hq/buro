@@ -48,8 +48,7 @@ async function fixture(t: any) {
     workspace: workspace.path,
     baseCommit: workspace.base,
     readOnly: false,
-    allowedPaths: ['src/worker.txt'],
-    protectedPaths: [],
+    writeScope: { mode: 'strict', plannedPaths: ['src/worker.txt'], protectedPaths: [] },
     materials: [],
     commands: [],
   };

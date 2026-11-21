@@ -139,6 +139,14 @@ const turnOptions = () => ({
   timeoutMs: 1000,
   toolPolicy: 'none' as const,
 });
+const filePolicy = (mode: 'advisory' | 'strict') => ({
+  scope: { mode, plannedPaths: ['src/value.ts'], protectedPaths: ['checks/'] },
+  checks: [],
+  defaultCheckIds: [],
+  maxWorkers: 1,
+  maxRepairs: 0,
+  turnTimeoutMs: 10000,
+});
 async function rejectionOf(work: Promise<unknown>) {
   try {
     await work;
@@ -306,4 +314,65 @@ test('a historical Codex thread without a durable route cannot acquire a fallbac
   );
   assert.equal(f.routes.saves, 0);
   assert.deepEqual(f.backends[0].effects, { starts: 0, resumes: 0, turns: 0 });
+});
+
+test('strict writable work rejects unsupported backends before intent regardless of the client label', async (t) => {
+  for (const client of ['managed', 'codex'] as const) {
+    const f = fixture(t, [{ id: 'unsupported', client, capabilities: fixtureCapabilities() }]);
+    f.state.runs.push({
+      ...sampleRun(),
+      id: 'R-synthetic',
+      executionPolicySnapshot: filePolicy('strict'),
+    });
+    knownRejection(
+      await rejectionOf(f.create().start(startInput())),
+      'BACKEND_CAPABILITY_UNAVAILABLE',
+    );
+    assert.equal(f.routes.saves, 0);
+    assert.equal(f.backends[0].effects.starts, 0);
+  }
+});
+
+test('an explicit change to strict policy cannot resume an existing unsupported writable session', async (t) => {
+  const f = fixture(t, [
+    {
+      id: 'opaque-client',
+      client: 'codex',
+      capabilities: fixtureCapabilities({ resumeSessions: true }),
+    },
+  ]);
+  const owner = {
+    ...sampleRun(),
+    id: 'R-synthetic',
+    workspace: '/synthetic/run',
+    executionPolicySnapshot: filePolicy('advisory'),
+  };
+  f.state.runs.push(owner);
+  const router = f.create();
+  const started = await router.start(startInput());
+  await router.release(started.threadId);
+  owner.executionPolicySnapshot = filePolicy('strict');
+  knownRejection(
+    await rejectionOf(router.resume({ ...startInput(), threadId: started.threadId })),
+    'BACKEND_CAPABILITY_UNAVAILABLE',
+  );
+  assert.equal(f.backends[0].effects.resumes, 0);
+  assert.equal(f.backends[0].effects.turns, 0);
+});
+
+test('strict project scope still permits an eligible read-only inspection session', async (t) => {
+  const f = fixture(t, [
+    {
+      id: 'inspector',
+      client: 'codex',
+      capabilities: fixtureCapabilities({ readOnlySessions: true }),
+    },
+  ]);
+  f.state.runs.push({
+    ...sampleRun(),
+    id: 'R-synthetic',
+    executionPolicySnapshot: filePolicy('strict'),
+  });
+  await f.create().start({ ...startInput(), purpose: 'research', readOnly: true });
+  assert.equal(f.backends[0].effects.starts, 1);
 });

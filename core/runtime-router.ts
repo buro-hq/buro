@@ -1,5 +1,8 @@
 import type { RuntimeResource } from '../protocol/resources.ts';
 import { resourceForPurpose } from '../protocol/resources.ts';
+import { WorkScopeSchema } from '../protocol/work-scope.ts';
+import { planPathAllowed } from './execution-ports.ts';
+import { withEnvironmentRepair } from './environment-repair.ts';
 import { validateAssignmentResource } from './assignment-routing.ts';
 import { assertBackendAdmission, requireBackendCapabilities } from './backend-capabilities.ts';
 import type { BackendRequirements } from '../agent/contracts/capabilities.ts';
@@ -96,6 +99,14 @@ export class RuntimeRouter implements AgentRuntime {
     const runtime = this.options.registry.get(route.resource.id);
     assertBackendAdmission(current, runtime, route.requirements);
     assertBackendAdmission(route.resource, runtime, route.requirements);
+    const snapshot = this.options.projects.get(route.projectId).snapshot();
+    const owner = snapshot.runs.find((run) => run.id === (route.ownerRunId || route.runId));
+    const scope =
+      owner?.executionPolicySnapshot?.scope ||
+      snapshot.profile?.scope ||
+      snapshot.executionPolicy?.scope;
+    if (!route.readOnly && scope?.mode === 'strict')
+      requireBackendCapabilities(runtime.capabilities, { strictPlannedWrites: true });
     if (route.requirements.immutableReview) {
       const run = this.options.projects
         .get(route.projectId)
@@ -221,6 +232,12 @@ export class RuntimeRouter implements AgentRuntime {
       const agent =
         assignment && run.agents.find((item) => item.session?.id === assignment.sessionId);
       const role = assignment && run.roleSnapshots?.find((item) => item.id === assignment.roleId);
+      const policyScope = WorkScopeSchema.safeParse(
+        run.executionPolicySnapshot
+          ? withEnvironmentRepair(run.executionPolicySnapshot, !!run.repairEnvironment).scope
+          : undefined,
+      );
+      const assignedScope = WorkScopeSchema.safeParse(assignment?.scope);
       if (
         input.purpose !== 'implementation' ||
         !assignment ||
@@ -228,6 +245,12 @@ export class RuntimeRouter implements AgentRuntime {
         !agent?.session ||
         !role ||
         !run.resources ||
+        !policyScope.success ||
+        !assignedScope.success ||
+        assignedScope.data.mode !== policyScope.data.mode ||
+        assignedScope.data.plannedPaths.some((path) => !planPathAllowed(path, policyScope.data)) ||
+        JSON.stringify([...assignedScope.data.protectedPaths].sort()) !==
+          JSON.stringify([...policyScope.data.protectedPaths].sort()) ||
         run.status !== 'running' ||
         run.cancelRequested ||
         agent.status !== 'starting' ||
@@ -235,7 +258,9 @@ export class RuntimeRouter implements AgentRuntime {
         agent.session.roleId !== assignment.roleId ||
         agent.session.roleVersion !== role.version ||
         JSON.stringify([...(agent.assignment?.paths || [])].sort()) !==
-          JSON.stringify([...assignment.allowedPaths].sort())
+          JSON.stringify([...assignedScope.data.plannedPaths].sort()) ||
+        JSON.stringify([...(run.roleAssignments?.[assignment.roleId] || [])].sort()) !==
+          JSON.stringify([...assignedScope.data.plannedPaths].sort())
       )
         throw new DomainError(
           'INVALID_ASSIGNMENT',
@@ -279,6 +304,14 @@ export class RuntimeRouter implements AgentRuntime {
       requirements: {
         ...(input.readOnly ? { readOnlySessions: true } : {}),
         ...(immutableReview ? { immutableReview: true } : {}),
+        ...(!input.readOnly &&
+        (
+          run?.executionPolicySnapshot?.scope ||
+          snapshot.profile?.scope ||
+          snapshot.executionPolicy?.scope
+        )?.mode === 'strict'
+          ? { strictPlannedWrites: true }
+          : {}),
       },
       ...(input.readOnly !== undefined ? { readOnly: input.readOnly } : {}),
       ...(input.purpose ? { purpose: input.purpose } : {}),

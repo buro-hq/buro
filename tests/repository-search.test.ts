@@ -24,8 +24,7 @@ async function fixture(t: any) {
     sessionId: 's',
     workspace: root,
     readOnly: true,
-    allowedPaths: ['src/'],
-    protectedPaths: ['checks/'],
+    writeScope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
     materials: [],
     commands: [],
   };

@@ -29,8 +29,7 @@ const material = (letter: string): ContextMaterial => ({
   createdAt: '2026-11-20T00:00:00.000Z',
 });
 const policy = (allowedPaths = ['src/'], command = 'node old-check') => ({
-  allowedPaths,
-  protectedPaths: ['checks/'],
+  scope: { mode: 'advisory' as const, plannedPaths: allowedPaths, protectedPaths: ['checks/'] },
   checks: [{ id: 'check', title: 'Check' }],
   defaultCheckIds: ['check'],
   maxWorkers: 1,
@@ -200,8 +199,8 @@ test('manual managed continuation snapshots revised scope and materials without 
   await f.resume(runtime, threadId);
   const after = (await f.sessions.load(threadId))!;
   assert.deepEqual(after.scope.materials, ['.buro/context/' + 'b'.repeat(64) + '.txt']);
-  assert.ok(after.scope.allowedPaths.includes('docs/'));
-  assert.ok(after.scope.allowedPaths.includes('package.json'));
+  assert.ok(after.scope.writeScope.plannedPaths.includes('docs/'));
+  assert.ok(after.scope.writeScope.plannedPaths.includes('package.json'));
   assert.equal(after.scope.commands[0].command, 'node new-check');
   assert.deepEqual(after.actions, before.actions);
   assert.deepEqual(after.messages.slice(0, before.messages.length), before.messages);
@@ -293,52 +292,52 @@ test('a resumed managed session can actually read a newly selected staged attach
   assert.equal((await f.sessions.load(threadId))?.actions[0].result?.isError, undefined);
 });
 
-test('worker continuation never widens assignment scope and honors newly restricted project policy', async (t) => {
-  const f = await fixture(t);
-  const runtime = f.make();
+test('explicit worker continuation adopts advisory policy without an old hidden fence and rejects incompatible strict replan', async (t) => {
+  const f = await fixture(t, true),
+    runtime = f.make();
   const { threadId } = await f.start(runtime, {
     assignment: {
       sessionId: 'S-worker',
       roleId: 'builder',
-      allowedPaths: ['src/owned.ts'],
-      protectedPaths: ['src/private.ts'],
+      scope: { mode: 'advisory', plannedPaths: ['src/owned.ts'], protectedPaths: ['checks/'] },
     },
   });
   f.run.executionPolicySnapshot = policy(['./']) as Run['executionPolicySnapshot'];
-  f.run.repairEnvironment = true;
   await f.resume(runtime, threadId);
   let saved = (await f.sessions.load(threadId))!;
-  assert.deepEqual(saved.scope.allowedPaths, ['src/owned.ts']);
-  assert.ok(saved.scope.protectedPaths.includes('src/private.ts'));
-  assert.ok(!saved.scope.allowedPaths.includes('package.json'));
-  f.run.executionPolicySnapshot = policy(['docs/']) as Run['executionPolicySnapshot'];
+  assert.deepEqual(saved.scope.writeScope, {
+    mode: 'advisory',
+    plannedPaths: ['src/owned.ts'],
+    protectedPaths: ['checks/'],
+  });
+  f.run.executionPolicySnapshot = {
+    ...policy(['docs/']),
+    scope: { mode: 'strict', plannedPaths: ['docs/'], protectedPaths: ['checks/'] },
+  } as Run['executionPolicySnapshot'];
+  await assert.rejects(f.resume(runtime, threadId), { code: 'SESSION_SCOPE_CHANGED' });
+  assert.equal((await f.sessions.load(threadId))!.scopeRevisions!.length, 2);
+  f.run.executionPolicySnapshot = {
+    ...policy(['src/']),
+    scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
+  } as Run['executionPolicySnapshot'];
   await f.resume(runtime, threadId);
   saved = (await f.sessions.load(threadId))!;
-  assert.deepEqual(saved.scope.allowedPaths, []);
+  assert.equal(saved.scope.writeScope.mode, 'strict');
+  assert.deepEqual(saved.scope.writeScope.plannedPaths, ['src/owned.ts']);
+  assert.equal(saved.scopeRevisions![0].scope.writeScope.mode, 'advisory');
 });
 
-test('legacy assignment checkpoints remain bounded when no assignment marker was previously saved', async (t) => {
-  const f = await fixture(t);
-  const runtime = f.make();
-  const { threadId } = await f.start(runtime, {
-    assignment: {
-      sessionId: 'S-old',
-      roleId: 'builder',
-      allowedPaths: ['src/owned.ts'],
-      protectedPaths: [],
-    },
-  });
-  await runtime.release(threadId);
-  const legacy = (await f.sessions.load(threadId))!;
-  delete legacy.assignment;
-  delete legacy.scopeRevisions;
-  await f.sessions.save(legacy);
-  f.run.executionPolicySnapshot = policy(['./']) as Run['executionPolicySnapshot'];
-  await f.resume(runtime, threadId);
-  const after = (await f.sessions.load(threadId))!;
-  assert.deepEqual(after.scope.allowedPaths, ['src/owned.ts']);
-  assert.deepEqual(after.scopeRevisions?.[0].scope, legacy.scope);
-  assert.equal(after.scopeRevisions?.length, 2);
+test('private checkpoints reject changes to previously saved scope history', async (t) => {
+  const f = await fixture(t, true),
+    runtime = f.make();
+  const { threadId } = await f.start(runtime);
+  const checkpoint = (await f.sessions.load(threadId))!;
+  checkpoint.scopeRevisions![0].scope.writeScope.mode = 'strict';
+  await assert.rejects(f.sessions.save(checkpoint), { code: 'INVALID_CHECKPOINT' });
+  assert.equal(
+    (await f.sessions.load(threadId))!.scopeRevisions![0].scope.writeScope.mode,
+    'advisory',
+  );
 });
 
 test('failed scope-revision persistence cannot grant uncommitted permissions to later turns', async (t) => {
@@ -357,11 +356,11 @@ test('failed scope-revision persistence cannot grant uncommitted permissions to 
   f.run.executionPolicySnapshot = policy(['./']) as Run['executionPolicySnapshot'];
   await assert.rejects(f.resume(runtime, threadId), /disk failed/);
   await runtime.turn(threadId, 'Still original', turnOptions());
-  assert.ok(f.scopes.every((scope) => !scope.allowedPaths.includes('./')));
+  assert.ok(f.scopes.every((scope) => !scope.writeScope.plannedPaths.includes('./')));
   assert.equal((await f.memory.load(threadId))?.scopeRevisions?.length, 1);
   reject = false;
   await f.resume(runtime, threadId);
-  assert.deepEqual((await f.memory.load(threadId))?.scope.allowedPaths, ['./']);
+  assert.deepEqual((await f.memory.load(threadId))?.scope.writeScope.plannedPaths, ['./']);
 });
 
 test('unknown tool outcomes and identity changes cannot be repaired by replacing scope', async (t) => {
@@ -464,4 +463,82 @@ test('failed cancellation persistence still aborts inference and cleanup observe
   await rejected;
   assert.equal(aborted, true);
   await runtime.release(threadId);
+});
+
+test('strict start rejects an exact-file plan expanded to a directory before saving or generating', async (t) => {
+  const f = await fixture(t);
+  let generated = 0;
+  const runtime = f.make(f.sessions, {
+    id: 'provider',
+    revision: '1',
+    local: true,
+    async complete() {
+      generated++;
+      throw Error('No generation expected');
+    },
+  });
+  f.run.executionPolicySnapshot = {
+    ...policy(['src']),
+    scope: { mode: 'strict', plannedPaths: ['src'], protectedPaths: ['checks/'] },
+  } as Run['executionPolicySnapshot'];
+  await assert.rejects(
+    f.start(runtime, {
+      assignment: {
+        sessionId: 'S-worker',
+        roleId: 'builder',
+        scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
+      },
+    }),
+    { code: 'SESSION_SCOPE_CHANGED' },
+  );
+  assert.equal(f.records.size, 0);
+  assert.equal(generated, 0);
+  assert.equal(f.scopes.length, 0);
+});
+
+test('strict resume cannot retain a directory grant after the parent policy becomes an exact-file selector', async (t) => {
+  const f = await fixture(t, true);
+  let generated = 0;
+  const runtime = f.make(f.sessions, {
+    id: 'provider',
+    revision: '1',
+    local: true,
+    async complete() {
+      generated++;
+      throw Error('No generation expected');
+    },
+  });
+  f.run.executionPolicySnapshot = {
+    ...policy(['src/']),
+    scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
+  } as Run['executionPolicySnapshot'];
+  const { threadId } = await f.start(runtime, {
+    assignment: {
+      sessionId: 'S-worker',
+      roleId: 'builder',
+      scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
+    },
+  });
+  const before = (await f.sessions.load(threadId))!;
+  f.run.executionPolicySnapshot.scope.plannedPaths = ['src'];
+  await assert.rejects(f.resume(runtime, threadId), { code: 'SESSION_SCOPE_CHANGED' });
+  const after = (await f.sessions.load(threadId))!;
+  assert.deepEqual(after.scope, before.scope);
+  assert.deepEqual(after.scopeRevisions, before.scopeRevisions);
+  assert.equal(generated, 0);
+  assert.equal(f.scopes.length, 0);
+});
+
+test('advisory assignment selectors remain guidance when the parent plan names an exact file', async (t) => {
+  const f = await fixture(t),
+    runtime = f.make();
+  f.run.executionPolicySnapshot = policy(['src']) as Run['executionPolicySnapshot'];
+  const { threadId } = await f.start(runtime, {
+    assignment: {
+      sessionId: 'S-worker',
+      roleId: 'builder',
+      scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
+    },
+  });
+  assert.deepEqual((await f.sessions.load(threadId))!.scope.writeScope.plannedPaths, ['src/']);
 });

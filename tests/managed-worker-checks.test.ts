@@ -151,6 +151,7 @@ async function fixture(
   const generationReservations: Parameters<ManagedRunBudgetPort['reserveGeneration']>[0][] = [];
   const snapshot = {
     project: { id: 'p', root: '/fixture' },
+    profile: { scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] } },
     runs: [
       {
         id: 'R-owner',
@@ -280,8 +281,7 @@ async function fixture(
       assignment: {
         sessionId: 'S-worker',
         roleId: 'builder',
-        allowedPaths: ['src/'],
-        protectedPaths: ['checks/'],
+        scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
       },
       ...changes,
     });
@@ -829,4 +829,73 @@ test('service-check action charges accumulate with model tools across a feedback
     );
     assert.equal(f.requests.length, maxToolCalls + 1);
   }
+});
+
+test('strict managed workers skip even an injected live check service without inventing a passed receipt', async (t) => {
+  const f = await fixture(t);
+  f.snapshot.profile.scope.mode = 'strict';
+  const runtime = f.make();
+  const { threadId } = await f.start(runtime, {
+    assignment: {
+      sessionId: 'S-worker',
+      roleId: 'builder',
+      scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
+    },
+  });
+  await runtime.turn(threadId, 'Finish bounded work', turnOptions());
+  assert.equal(f.checkRuns, 0);
+  assert.ok(!f.order.includes('plan'));
+  assert.equal((await f.files.load(threadId))!.workerStepChecks, undefined);
+  assert.equal(f.snapshot.runs[0].status, 'running');
+});
+
+test('strict mode never clears an existing unknown worker-check receipt on restart or resume', async (t) => {
+  const f = await fixture(t);
+  f.snapshot.profile.scope.mode = 'strict';
+  const runtime = f.make();
+  const { threadId } = await f.start(runtime, {
+    assignment: {
+      sessionId: 'S-worker',
+      roleId: 'builder',
+      scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
+    },
+  });
+  await runtime.turn(threadId, 'Finish bounded work', turnOptions());
+  const pending = (await f.files.load(threadId))!;
+  pending.workerStepChecks = {
+    version: 1,
+    revision: 'worker-step-checks-v1',
+    maxFeedbackSteps: 2,
+    feedbackSteps: 0,
+    entries: [
+      {
+        id: 'C-prior',
+        turnId: pending.workSegments!.anchor.turnId,
+        scopeRevision: 1,
+        requestedAtRequest: pending.requests,
+        plan: structuredClone(plan),
+        before: evidence(),
+        status: 'pending',
+      },
+    ],
+  };
+  await f.files.save(pending);
+  pending.workerStepChecks.entries[0].status = 'unknown';
+  await f.files.save(pending);
+  await runtime.release(threadId);
+  const restored = f.make();
+  const requests = f.requests.length;
+  await assert.rejects(
+    restored.resume({
+      projectId: 'p',
+      runId: 'R-owner',
+      workspace: '/fixture',
+      threadId,
+      instructions: 'Continue strict work',
+    }),
+    { code: 'WORKER_CHECK_RECONCILIATION_REQUIRED' },
+  );
+  assert.equal(f.requests.length, requests);
+  assert.equal(f.checkRuns, 0);
+  assert.equal((await f.files.load(threadId))!.workerStepChecks!.entries[0].status, 'unknown');
 });

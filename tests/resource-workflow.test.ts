@@ -21,6 +21,7 @@ import { ProjectResearchService } from '../core/project-research.ts';
 import { ResultService, type ResultOperations } from '../core/results.ts';
 import { operationalRoles } from '../core/operational-roles.ts';
 import { ProjectProfileSchema } from '../protocol/projects.ts';
+import { executionPolicy } from '../adapters/files/project-manager.ts';
 import type { ClientCommand } from '../protocol/schema.ts';
 import type { Goal } from '../protocol/domain.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
@@ -316,8 +317,7 @@ async function fixture(
     revision: 1,
     resourceProfile: inheritDefault ? undefined : mode,
     context: 'A synthetic checked module',
-    allowedPaths: ['src/'],
-    protectedPaths: ['checks/'],
+    scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
     checks: [{ id: 'test', title: 'Tests', command: checkCommand, timeoutMs: 10000 }],
     defaultCheckIds: ['test'],
     setup: [],
@@ -336,8 +336,7 @@ async function fixture(
         type: 'project.configured',
         profile,
         executionPolicy: {
-          allowedPaths: profile.allowedPaths,
-          protectedPaths: profile.protectedPaths,
+          scope: structuredClone(profile.scope),
           checks: profile.checks.map(({ id, title }) => ({ id, title })),
           defaultCheckIds: profile.defaultCheckIds,
           maxWorkers: profile.maxWorkers,
@@ -494,11 +493,7 @@ async function fixture(
     },
     executors,
   );
-  const policy = {
-    ...profile,
-    profile,
-    checks: profile.checks.map(({ id, title }) => ({ id, title })),
-  };
+  const policy = executionPolicy(profile);
   await host.ctx.plugin(executionPlugin, { policies: { p: policy }, workspaces, checks });
   let sequence = 0;
   const command = <T>(command: ClientCommand) =>

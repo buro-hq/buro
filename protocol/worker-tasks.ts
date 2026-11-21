@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WorkScopeSchema } from './work-scope.ts';
 
 /** A coordinator proposal for one assignment; it never expands the worker's tool authority. */
 export const WorkerTaskSchema = z.strictObject({
@@ -47,10 +48,7 @@ export const WorkerEnvelopeSchema = z.strictObject({
     WorkerTaskSchema.extend({ source: z.literal('coordinator') }),
     legacyTask,
   ]),
-  scope: z.strictObject({
-    allowedPaths: z.array(z.string()).min(1),
-    protectedPaths: z.array(z.string()),
-  }),
+  scope: WorkScopeSchema,
   steps: z.array(z.string()),
   checks: z.strictObject({
     collection: z.enum(['baseline', 'acceptance']),

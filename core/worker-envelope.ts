@@ -6,7 +6,7 @@ import {
   type WorkerTask,
 } from '../protocol/worker-tasks.ts';
 import { DomainError } from './ports.ts';
-import { inScope, type ExecutionPolicy } from './execution-ports.ts';
+import { planPathAllowed, type ExecutionPolicy } from './execution-ports.ts';
 
 export const DEFAULT_WORKER_ENVELOPE_BYTES = 128 * 1024;
 const CHECK_DIAGNOSTIC_BYTES = 2048;
@@ -74,20 +74,32 @@ function freeze<T>(value: T): T {
 }
 
 export function workerInstructions(role: Role, policy: ExecutionPolicy) {
+  const scopeInstructions =
+    policy.scope.mode === 'strict'
+      ? 'Write only within your assigned planned paths. Protected paths are always forbidden. Exploratory commands and intermediate worker checks are unavailable in strict mode because they could write outside those paths; the service still runs final immutable acceptance checks.'
+      : 'Your assigned paths describe planned work. You may edit additional files inside this working copy when needed to complete the task. Explain additional edits and interactions with existing changes. Protected paths are always forbidden.';
   return (
     role.instructions +
-    '\nYou are a worker assigned by Buro. Work only within your assigned write paths. Do not start agents, commit, reset, checkout, modify .git or change check definitions. Buro owns other assignments and independent acceptance. Make native tool calls directly; do not print internal planning or <think> blocks. Finish with a brief factual result.' +
+    '\nYou are a worker assigned by Buro. ' +
+    scopeInstructions +
+    ' Do not start agents, commit, reset, checkout, modify .git or change check definitions. Buro owns other assignments and independent acceptance. Make native tool calls directly; do not print internal planning or <think> blocks. Finish with a brief factual result.' +
     (policy.context ? '\nProject context: ' + policy.context : '')
   );
 }
 
 export function workerPrompt(envelope: WorkerEnvelopeV1) {
+  const scopeInstructions =
+    envelope.scope.mode === 'strict'
+      ? 'Do not write outside scope.plannedPaths or modify protected paths.'
+      : 'scope.plannedPaths are the plan, not a write boundary. Make necessary adjacent edits inside this working copy and report them; protected paths remain forbidden.';
   return (
     'Execute your assigned work in the existing workspace.\n' +
     `Role: ${envelope.role.id}.\n` +
     'Saved assignment v1 (file inputs are references, not extra write authority):\n' +
     JSON.stringify(envelope) +
-    '\nInspect the listed inputs and relevant read-only materials when needed. Complete only this task within its write scope. Do not repeat completed external actions. Return the formal execution result with concrete changes, evidence and limitations; the service runs independent acceptance.'
+    '\nInspect the listed inputs and relevant read-only materials when needed. Complete only this task. ' +
+    scopeInstructions +
+    ' Do not repeat completed external actions. Return the formal execution result with concrete changes, evidence and limitations; the service runs independent acceptance.'
   );
 }
 
@@ -106,10 +118,11 @@ export function buildWorkerEnvelope(options: {
       ? run.roleAssignments[role.id]
       : undefined;
   if (
-    !savedPaths?.length ||
+    !savedPaths ||
+    (policy.scope.mode === 'strict' && !savedPaths.length) ||
     savedPaths.length !== paths.length ||
     savedPaths.some((file, index) => file !== paths[index]) ||
-    paths.some((file) => !inScope(file, policy.allowedPaths, policy.protectedPaths))
+    paths.some((file) => !planPathAllowed(file, policy.scope))
   )
     throw new DomainError('INVALID_ASSIGNMENT', 'The worker envelope requires its saved scope.');
   const savedRole = run.roleSnapshots?.find((candidate) => candidate.id === role.id);
@@ -167,7 +180,11 @@ export function buildWorkerEnvelope(options: {
             'Complete your assigned plan steps and return the formal execution result.',
           criteria: [],
         },
-    scope: { allowedPaths: [...paths], protectedPaths: [...(policy.protectedPaths || [])] },
+    scope: {
+      mode: policy.scope.mode,
+      plannedPaths: [...paths],
+      protectedPaths: [...policy.scope.protectedPaths],
+    },
     steps: run.plan.filter((step) => step.owner === role.id).map((step) => step.step),
     checks: {
       collection,

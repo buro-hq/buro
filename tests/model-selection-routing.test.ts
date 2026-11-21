@@ -137,6 +137,14 @@ function fixture(t: any) {
     workspace: '/workspace',
     delegation: 'buro',
     resources: selection.forProject('p'),
+    executionPolicySnapshot: {
+      scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
+      checks: [],
+      defaultCheckIds: [],
+      maxWorkers: 1,
+      maxRepairs: 0,
+      turnTimeoutMs: 1000,
+    },
     roleSnapshots: [structuredClone(role)],
     assignmentResources: { builder: structuredClone(decision) },
     roleAssignments: { builder: ['src/module.ts'] },
@@ -201,8 +209,7 @@ function fixture(t: any) {
     assignment: {
       sessionId: 'S-worker',
       roleId: 'builder',
-      allowedPaths: ['src/module.ts'],
-      protectedPaths: [],
+      scope: { mode: 'advisory', plannedPaths: ['src/module.ts'], protectedPaths: [] },
     },
   };
   t.after(async () => {
@@ -264,6 +271,18 @@ test('missing or tampered saved assignments fail before any worker client starts
     },
     (f) => {
       f.run.assignmentResources = {};
+    },
+    (f) => {
+      delete f.run.executionPolicySnapshot;
+    },
+    (f) => {
+      f.run.executionPolicySnapshot!.scope.mode = 'strict';
+    },
+    (f) => {
+      f.run.executionPolicySnapshot!.scope.protectedPaths = ['AGENTS.md'];
+    },
+    (f) => {
+      f.run.roleAssignments!.builder = ['src/unassigned.ts'];
     },
     (f) => {
       f.run.agents = [];

@@ -53,8 +53,7 @@ function checkpoint(): ManagedSession {
     sessionId: 'S-builder',
     workspace: '/workspace',
     readOnly: false,
-    allowedPaths: ['src/owned.ts'],
-    protectedPaths: ['checks/'],
+    writeScope: { mode: 'advisory', plannedPaths: ['src/owned.ts'], protectedPaths: ['checks/'] },
     materials: [],
     commands: [],
     baseCommit: 'a'.repeat(40),
@@ -84,8 +83,7 @@ function checkpoint(): ManagedSession {
     scope,
     assignment: {
       roleId: 'builder',
-      allowedPaths: scope.allowedPaths,
-      protectedPaths: scope.protectedPaths,
+      scope: structuredClone(scope.writeScope),
     },
     scopeRevisions: [
       { revision: 1, scope: structuredClone(scope), instructions: anchor.instructions },

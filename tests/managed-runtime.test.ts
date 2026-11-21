@@ -67,8 +67,7 @@ async function fixture(t: any) {
     version: 1,
     revision: 1,
     context: 'Fixture project',
-    allowedPaths: ['src/'],
-    protectedPaths: ['checks/'],
+    scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
     checks: [
       {
         id: 'test',
@@ -120,8 +119,7 @@ async function fixture(t: any) {
       assignment: {
         sessionId: 'S-fixture',
         roleId: 'builder',
-        allowedPaths: ['src/'],
-        protectedPaths: ['checks/'],
+        scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
       },
     });
   t.after(async () => {
@@ -237,9 +235,14 @@ test('managed execution reads, edits and checks a real worktree, then independen
   const events: RuntimeEvent[] = [];
   runtime.subscribe((event) => events.push(event));
   const policy = {
-    ...f.profile,
+    scope: f.profile.scope,
+    context: f.profile.context,
     profile: f.profile,
     checks: f.profile.checks.map(({ id, title }) => ({ id, title })),
+    defaultCheckIds: f.profile.defaultCheckIds,
+    maxWorkers: f.profile.maxWorkers,
+    maxRepairs: f.profile.maxRepairs,
+    turnTimeoutMs: f.profile.turnTimeoutMs,
   };
   const checks = new ProjectChecks(
     f.projects,
@@ -1035,8 +1038,7 @@ test('repository tools reject secret paths, symlinks, arbitrary commands and wri
     sessionId: 's',
     workspace: f.root,
     readOnly: false,
-    allowedPaths: ['src/'],
-    protectedPaths: ['checks/'],
+    writeScope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
     materials: [],
     commands: f.profile.checks,
   };

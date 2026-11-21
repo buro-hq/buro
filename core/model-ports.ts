@@ -1,3 +1,4 @@
+import type { WorkScope } from '../protocol/work-scope.ts';
 import type { RuntimePurpose } from '../protocol/resources.ts';
 import type { ManagedWorkSegments } from './work-segments.ts';
 import type { ManagedWorkerStepChecks } from './worker-step-checks.ts';
@@ -17,8 +18,7 @@ export type ToolScope = {
   verificationViewId?: string;
   verificationTree?: string;
   readOnly: boolean;
-  allowedPaths: string[];
-  protectedPaths: string[];
+  writeScope: WorkScope;
   materials: string[];
   commands: { id: string; command: string; timeoutMs: number }[];
   baseCommit?: string;
@@ -50,7 +50,7 @@ export type ManagedSession = {
   /** Service-owned immutable routing purpose; absent legacy values use the work allowance. */
   purpose?: RuntimePurpose;
   scope: ToolScope;
-  assignment?: { roleId: string; allowedPaths: string[]; protectedPaths: string[] };
+  assignment?: { roleId: string; scope: WorkScope };
   scopeRevisions?: { revision: number; scope: ToolScope; instructions: string }[];
   /** Service-owned per-turn authority; persisted before generation and never model-controlled. */
   turnAuthorities?: {

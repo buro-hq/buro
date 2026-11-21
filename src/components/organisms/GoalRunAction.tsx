@@ -79,8 +79,19 @@ export function GoalRunAction({
         </small>
       )}
       <small>
-        {t('Change scope:')} {policy!.allowedPaths.join(', ')}
+        {t('Change scope:')}{' '}
+        {policy.scope.mode === 'strict' ? t('Restricted to planned paths') : t('Flexible')}
       </small>
+      <small>
+        {t('Planned paths:')} {policy.scope.plannedPaths.join(', ') || t('Automatic discovery')}
+      </small>
+      {policy.scope.mode === 'strict' && (
+        <small>
+          {t(
+            'Agent commands and intermediate checks are deferred; final isolated checks and an independent review still run.',
+          )}
+        </small>
+      )}
       <Button
         leftSection={<Play size={13} />}
         loading={busy}

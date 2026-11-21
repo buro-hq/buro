@@ -40,7 +40,7 @@ function workerRun(): Run {
     role: { id: 'implementer', version: 1 },
     goal: { id: run.goalId, title: run.title },
     task: { source: 'coordinator', ...structuredClone(task) },
-    scope: { allowedPaths: ['src/cli.ts'], protectedPaths: ['checks/'] },
+    scope: { mode: 'advisory', plannedPaths: ['src/cli.ts'], protectedPaths: ['checks/'] },
     steps: ['Improve CLI feedback without changing JSON fields.'],
     checks: {
       collection: 'baseline',
@@ -130,6 +130,8 @@ test('saved worker contract and consumed replan intent survive restart and both 
   assert.deepEqual(restored.workerReplan, first.workerReplan);
   assert.equal(restored.workerReplan?.status, 'requested');
   assert.deepEqual(restored.agents[0].assignment, first.agents[0].assignment);
+  assert.equal(restored.agents[0].assignment!.envelope!.scope.mode, 'advisory');
+  assert.deepEqual(restored.agents[0].assignment!.envelope!.scope.plannedPaths, ['src/cli.ts']);
 
   const refined = { ...structuredClone(task), objective: 'Update only the text feedback branch.' };
   await f.store.transact('refined', 'refined', (draft) => {
@@ -192,6 +194,11 @@ test('worker transport rejects fabricated recovery eligibility and malformed con
     (run: any) => (run.agents[0].assignment.knownFailure.code = 'MODEL_BUDGET_EXHAUSTED'),
     (run: any) => (run.agents[0].assignment.envelope.version = 2),
     (run: any) => (run.agents[0].assignment.envelope.task.criteria = []),
+    (run: any) => (run.agents[0].assignment.envelope.scope.mode = 'implicit'),
+    (run: any) => {
+      run.agents[0].assignment.envelope.scope.mode = 'strict';
+      run.agents[0].assignment.envelope.scope.plannedPaths = [];
+    },
     (run: any) => (run.workerTasks.implementer.objective = 'x'.repeat(2001)),
     (run: any) => (run.workerReplan.status = 'completed'),
   ]) {

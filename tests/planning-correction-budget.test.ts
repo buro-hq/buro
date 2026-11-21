@@ -26,8 +26,11 @@ const source = () => ({
     'Preserve the public exports, module format and supported runtime. Keep the change focused on the session module and its existing shared types; do not rewrite unrelated storage, UI or application code.',
     'Acceptance requires successful replacement, failed-rename preservation, temporary-file cleanup and synchronous compatibility. The service owns the checks and independent review. Do not edit check scripts to make a result pass.',
   ].join('\n'),
-  allowedPaths: ['src/session.ts', 'src/session-types.ts'],
-  protectedPaths: ['checks/', 'AGENTS.md', 'package.json', 'package-lock.json'],
+  scope: {
+    mode: 'strict',
+    plannedPaths: ['src/session.ts', 'src/session-types.ts'],
+    protectedPaths: ['checks/', 'AGENTS.md', 'package.json', 'package-lock.json'],
+  },
   projectContext:
     'The project is an offline desktop utility. Session files may already exist and contain user data; compatibility and preserving the last complete write take priority over introducing abstractions. Use only the existing runtime filesystem API.',
   maxWorkers: 2,
@@ -102,8 +105,7 @@ function correction() {
       TeamPlanSchema.parse(JSON.parse(invalidPlan)),
       input.roles,
       {
-        allowedPaths: input.allowedPaths,
-        protectedPaths: input.protectedPaths,
+        scope: structuredClone(input.scope),
         maxWorkers: 2,
       } as Parameters<typeof resolveTeam>[2],
       'now',

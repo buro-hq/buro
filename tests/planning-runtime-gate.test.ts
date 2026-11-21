@@ -207,7 +207,7 @@ test('nonsegmented coordinator checkpoints reject authority rollback and counter
       next.requestedModel = 'other';
     },
     (next: typeof saved) => {
-      next.scope.allowedPaths.push('secret/');
+      next.scope.writeScope.plannedPaths.push('secret/');
     },
     (next: typeof saved) => {
       next.turnAuthorities!.push({

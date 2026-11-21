@@ -170,8 +170,7 @@ test('view access rejects writable reviewers, workers, arbitrary paths and live-
       assignment: {
         sessionId: 'S-fake',
         roleId: 'writer',
-        allowedPaths: ['./'],
-        protectedPaths: [],
+        scope: { mode: 'advisory' as const, plannedPaths: ['./'], protectedPaths: [] },
       },
     },
   ])
