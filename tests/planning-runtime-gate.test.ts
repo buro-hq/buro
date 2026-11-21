@@ -254,7 +254,7 @@ test('native Codex explicitly rejects tools-free authority before lookup or proc
   await runtime.dispose();
 });
 
-test('native Codex pins the same model and reasoning before discovery and app-server and confines network', async (t) => {
+test('native inspection requests a real read-only session and pins the same model before discovery and app-server', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-codex-pin-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const executable = path.join(directory, 'codex-fixture.mjs');
@@ -308,9 +308,13 @@ else {
     networkAccess: false,
   });
   t.after(() => runtime.dispose());
-  const { threadId } = await runtime.start({ projectId: 'p', instructions: 'Fixture' });
-  await runtime.turn(threadId, 'Work', turnOptions());
-  await runtime.submit(threadId, 'Submit work');
+  const { threadId } = await runtime.start({
+    projectId: 'p',
+    instructions: 'Fixture',
+    readOnly: true,
+  });
+  await runtime.turn(threadId, 'Inspect and plan', turnOptions());
+  await runtime.submit(threadId, 'Correct plan');
   await runtime.dispose();
   const argv = (await fs.readFile(log, 'utf8'))
     .trim()
@@ -331,6 +335,10 @@ else {
     .split('\n')
     .map((line) => JSON.parse(line));
   const turns = rpc.filter((entry) => entry.method === 'turn/start');
+  const thread = rpc.find((entry) => entry.method === 'thread/start');
+  assert.equal(thread.params.sandbox, 'read-only');
+  assert.equal(thread.params.approvalPolicy, 'never');
   assert.equal(turns.length, 2);
-  for (const entry of turns) assert.equal(entry.params.sandboxPolicy.networkAccess, false);
+  for (const entry of turns)
+    assert.deepEqual(entry.params.sandboxPolicy, { type: 'readOnly', networkAccess: false });
 });

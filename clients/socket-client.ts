@@ -20,6 +20,10 @@ type Pending = {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 };
+const hasActiveRun = (snapshot: Snapshot) =>
+  snapshot.runs.some(
+    (run) => !!run.status && ['queued', 'running', 'canceling'].includes(run.status),
+  );
 export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
   if (event.projectId !== snapshot.project.id || event.seq <= snapshot.sequence) return snapshot;
   if (event.seq !== snapshot.sequence + 1) throw Error('Event gap: a new snapshot is required.');
@@ -39,6 +43,7 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
   if (c.type === 'goal.deleted') next.goals = snapshot.goals.filter((g) => g.id !== c.id);
   if (c.type === 'role.saved')
     next.roles = [...snapshot.roles.filter((r) => r.id !== c.role.id), c.role];
+  if (c.type === 'role.saved' || c.type === 'project.configured') next.effectivePolicy = undefined; // Only the service can resolve changed policy inheritance.
   if (c.type === 'project.verified') next.verification = c.verification;
   if (c.type === 'project.research.changed') next.research = c.research;
   if (c.type === 'project.configured') {
@@ -69,6 +74,9 @@ export class SocketProjectClient implements ProjectClient {
   pending = new Map<string, Pending>();
   reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   initial: { resolve: (s: Snapshot) => void; reject: (e: Error) => void } | undefined;
+  private projectionRevision = 0;
+  private observedProjectionRevision = 0;
+  private projectionRefresh?: { socket: WebSocket; events: DomainEvent[]; promise: Promise<void> };
   constructor(url = 'ws://127.0.0.1:4341', projectId = 'codex-panel') {
     this.url = url;
     this.projectId = projectId;
@@ -109,8 +117,18 @@ export class SocketProjectClient implements ProjectClient {
             );
         } else if (message.type === 'event' && this.state) {
           try {
-            this.state = applyEvent(this.state, parseDomainEvent(message.event));
+            const event = parseDomainEvent(message.event);
+            const busyBefore = hasActiveRun(this.state);
+            if (this.projectionRefresh?.socket === ws) this.projectionRefresh.events.push(event);
+            this.state = applyEvent(this.state, event);
             this.notify();
+            if (
+              event.change.type === 'role.saved' ||
+              event.change.type === 'project.configured' ||
+              event.change.type === 'goal.deleted' ||
+              (event.change.type === 'run.changed' && busyBefore !== hasActiveRun(this.state))
+            )
+              this.invalidateProjection();
           } catch {
             ws.close();
           }
@@ -155,6 +173,7 @@ export class SocketProjectClient implements ProjectClient {
     );
     this.ready = true;
     this.status('connected');
+    void this.refreshProjection().catch(() => {});
     for (const p of this.pending.values()) this.ws?.send(JSON.stringify(p.request));
     this.initial?.resolve(this.snapshot());
     this.initial = undefined;
@@ -187,7 +206,63 @@ export class SocketProjectClient implements ProjectClient {
     });
   }
   command<T>(command: ClientCommand) {
-    return this.request<T>(command);
+    return this.request<T>(command).then((result) => {
+      // This configuration command has no project-domain event. Its receipt remains authoritative.
+      if (command.method === 'resources.use') this.invalidateProjection();
+      return result;
+    });
+  }
+  private invalidateProjection() {
+    this.projectionRevision++;
+    if (this.state?.effectivePolicy) {
+      this.state = { ...this.state, effectivePolicy: undefined };
+      this.notify();
+    }
+    void this.refreshProjection().catch(() => {});
+  }
+  private refreshProjection(): Promise<void> {
+    const socket = this.ws;
+    if (
+      this.closed ||
+      !this.ready ||
+      !socket ||
+      socket.readyState !== WebSocket.OPEN ||
+      this.projectionRevision === this.observedProjectionRevision
+    )
+      return Promise.resolve();
+    if (this.projectionRefresh?.socket === socket) return this.projectionRefresh.promise;
+    const revision = this.projectionRevision;
+    const after = this.state?.sequence || 0;
+    const refresh = { socket, events: [] as DomainEvent[], promise: Promise.resolve() };
+    this.projectionRefresh = refresh;
+    refresh.promise = (async () => {
+      try {
+        let next = parseSnapshot(
+          await this.request({ method: 'project.snapshot', params: { projectId: this.projectId } }),
+        );
+        if (this.closed || this.ws !== socket || !this.ready) return;
+        if (next.project.id !== this.projectId || next.sequence < after)
+          throw Error('The refreshed snapshot does not cover the current project history.');
+        for (const event of refresh.events)
+          if (event.seq > next.sequence) next = applyEvent(next, event);
+        if (this.state && next.sequence < this.state.sequence)
+          throw Error('A refreshed snapshot cannot discard observed project events.');
+        if (this.projectionRevision > revision) next.effectivePolicy = undefined;
+        this.state = next;
+        this.observedProjectionRevision = revision;
+        this.notify();
+      } catch (error) {
+        if (!this.closed && this.ws === socket) socket.close();
+        throw error;
+      } finally {
+        if (this.projectionRefresh === refresh) {
+          this.projectionRefresh = undefined;
+          if (this.projectionRevision > this.observedProjectionRevision)
+            void this.refreshProjection().catch(() => {});
+        }
+      }
+    })();
+    return refresh.promise;
   }
   createGoal(input: CreateGoal) {
     return this.command<Goal>({ method: 'goal.create', params: input });

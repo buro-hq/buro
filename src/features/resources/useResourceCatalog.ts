@@ -8,6 +8,11 @@ export function useResourceCatalog(projectId?: string) {
     !!client && connection === 'connected' && !!snapshot?.capabilities.includes('resources.list');
   const canConfigure = supported && !!snapshot?.capabilities.includes('resources.connection.save');
   const canSetup = supported && !!snapshot?.capabilities.includes('resources.setup.save');
+  const roleRevision = snapshot?.roles
+    .map((role) => `${role.id}:${role.version}`)
+    .sort()
+    .join(',');
+  const profileRevision = snapshot?.profile?.revision;
   const [catalog, setCatalog] = useState<ResourceCatalog | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,7 +37,7 @@ export function useResourceCatalog(projectId?: string) {
     } finally {
       if (version === generation.current) setLoading(false);
     }
-  }, [client, supported, projectId]);
+  }, [client, supported, projectId, roleRevision, profileRevision]);
   useEffect(() => {
     setCatalog(null);
     setError('');

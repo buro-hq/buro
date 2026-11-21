@@ -4,9 +4,18 @@ import {
   type ProjectComponent,
   type Run,
   type RunPreview,
+  type Role,
 } from '../protocol/domain.ts';
+import { effectiveRunPolicy } from './autonomy-policy.ts';
+import { resolveRoleResource, validateRoleResource } from './role-routing.ts';
+import { sessionResource, type AssignmentResource } from '../protocol/resources.ts';
 import type { DeliveryConfig } from '../protocol/operations.ts';
-import { DomainError, type AgentRuntime, type ProjectRegistry } from './ports.ts';
+import {
+  DomainError,
+  type AgentRuntime,
+  type ProjectRegistry,
+  type ProjectDocument,
+} from './ports.ts';
 
 export interface ResultOperations {
   preview(input: {
@@ -78,7 +87,7 @@ export class ResultService {
   update(
     projectId: string,
     runId: string,
-    fn: (run: Run) => void,
+    fn: (run: Run, doc: ProjectDocument) => void,
     meta?: { id: string; fingerprint: string },
     result: unknown = null,
   ) {
@@ -91,7 +100,9 @@ export class ResultService {
           const run = doc.runs.find((r) => r.id === runId)!,
             goal = doc.goals.find((g) => g.id === run?.goalId);
           if (!run || !goal) throw new DomainError('NOT_FOUND', 'Goal not found.');
-          fn(run);
+          fn(run, doc);
+          run.effectivePolicy = effectiveRunPolicy(run);
+          if (run.status === 'completed') run.stop = undefined;
           return { result, change: { type: 'run.changed', run, goal } };
         },
       );
@@ -103,48 +114,89 @@ export class ResultService {
     context: unknown,
     signal: AbortSignal,
   ) {
-    const role = this.projects
-      .get(projectId)
-      .snapshot()
-      .roles.find((r) => r.id === roleId);
-    if (!role)
-      throw new DomainError('ROLE_MISSING', `Create or select role ${roleId} in the project team.`);
+    let role: Role | undefined;
+    let decision: AssignmentResource | undefined;
+    await this.update(projectId, run.id, (saved, doc) => {
+      if (
+        saved.commit !== run.commit ||
+        saved.workspace !== run.workspace ||
+        saved.status !== 'completed'
+      )
+        throw new DomainError('COMMIT_CHANGED', 'The accepted result changed before preparation.');
+      if (!saved.resources)
+        throw new DomainError(
+          'RESOURCE_PROFILE_UNAVAILABLE',
+          'The accepted run has no frozen execution resource profile.',
+        );
+      const existing = saved.roleResources?.[roleId];
+      role = existing
+        ? saved.roleSnapshots?.find(
+            (item) => item.id === roleId && item.version === existing.roleVersion,
+          )
+        : doc.roleVersions.filter((item) => item.id === roleId).at(-1);
+      if (!role)
+        throw new DomainError(
+          'ROLE_MISSING',
+          `Create or select role ${roleId} in the project team.`,
+        );
+      const context = {
+        purpose: 'delivery' as const,
+        requirements: { structuredTurns: true as const, readOnlySessions: true as const },
+      };
+      decision = existing
+        ? validateRoleResource(saved.resources, role, existing, context)
+        : resolveRoleResource(saved.resources, role, context);
+      saved.roleResources = { ...saved.roleResources, [roleId]: structuredClone(decision) };
+      if (
+        !saved.roleSnapshots?.some((item) => item.id === role!.id && item.version === role!.version)
+      )
+        saved.roleSnapshots = [...(saved.roleSnapshots || []), structuredClone(role)];
+    });
+    if (!role || !decision)
+      throw new DomainError('INVALID_ASSIGNMENT', 'The result role decision was not saved.');
+    const preparedRole = role;
+    const preparedDecision = decision;
     const { threadId } = await this.runtime.start({
       projectId,
       workspace: run.workspace,
       readOnly: true,
       purpose: 'delivery',
+      roleId,
       runId: 'result-' + run.id,
       ownerRunId: run.id,
       instructions:
-        role.instructions +
+        preparedRole.instructions +
         '\nThis prepares a result after acceptance. Read only. Do not run delivery/launch commands, mutate Git, use the network, install packages or run migrations. The service performs these operations. Do not read secrets or local/. Verify the saved commit and configuration; do not invent settings.' +
         (roleId === 'local_preview'
           ? ' The service passes env from source project/component .env/.env.local files and then .buro/local/. A missing workspace .env does not mean variables are unavailable: they are passed to the process without copying files. Do not read their values.'
           : ''),
     });
-    await this.update(projectId, run.id, (r) => {
-      const at = new Date().toISOString();
-      (r.resultAgents ??= []).push({
-        threadId,
-        name: roleId,
-        agentPath: '/results/' + roleId,
-        startedAt: at,
-        completedAt: '',
-        messages: [],
-        commands: 0,
-        status: 'running',
-      });
-      if (!r.roleSnapshots?.some((saved) => saved.id === role.id && saved.version === role.version))
-        r.roleSnapshots = [...(r.roleSnapshots || []), role];
-      r.events.push({
-        at,
-        type: 'result.role.started',
-        threadId,
-        text: `${role.title} · v${role.version}`,
-      });
-    });
     try {
+      await this.update(projectId, run.id, (r) => {
+        const at = new Date().toISOString();
+        (r.resultAgents ??= []).push({
+          threadId,
+          name: roleId,
+          agentPath: '/results/' + roleId,
+          startedAt: at,
+          completedAt: '',
+          messages: [],
+          commands: 0,
+          session: {
+            id: 'S-' + crypto.randomUUID(),
+            roleId,
+            roleVersion: preparedRole.version,
+            ...sessionResource(r.resources, 'delivery', this.runtime.id, preparedDecision),
+          },
+          status: 'running',
+        });
+        r.events.push({
+          at,
+          type: 'result.role.started',
+          threadId,
+          text: `${preparedRole.title} · v${preparedRole.version}`,
+        });
+      });
       if (!this.runtime.turn) throw Error('The runtime does not support result preparation.');
       const answer = await this.runtime.turn(
         threadId,
@@ -170,7 +222,7 @@ export class ResultService {
           text: result.summary,
         });
       });
-      return { summary: result.summary, role };
+      return { summary: result.summary, role: preparedRole };
     } catch (error) {
       await this.update(projectId, run.id, (r) => {
         const agent = r.resultAgents?.find((a) => a.threadId === threadId);

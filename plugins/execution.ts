@@ -1,6 +1,8 @@
 import { Service, type Context, type Plugin } from 'cordis';
 import { randomUUID } from 'node:crypto';
 import type { ExecutionEnvironmentPort } from '../core/environment-ports.ts';
+import { effectiveProjectPolicy, projectRunAutonomy } from '../core/autonomy-policy.ts';
+import { terminal } from '../core/execution-ports.ts';
 import { ExecutionService } from '../core/execution.ts';
 import type { ExecutionPolicy, WorkspacePort, CheckPort } from '../core/execution-ports.ts';
 declare module 'cordis' {
@@ -20,7 +22,6 @@ export const executionPlugin: Plugin.Object<{
   policies: Record<string, ExecutionPolicy>;
   workspaces: WorkspacePort;
   checks: CheckPort;
-  planningMode?: 'bounded' | 'legacy';
 }> = {
   name: 'goal-execution',
   inject: ['projects', 'commands', 'agentRuntime'],
@@ -51,6 +52,34 @@ export const executionPlugin: Plugin.Object<{
       const { turnTimeoutMs, profile: _profile, context: _context, ...view } = policy;
       snapshot.executionPolicy = view;
       snapshot.capabilities.push('run.start', 'run.cancel', 'run.resume');
+      let resources;
+      try {
+        resources = ctx.agentRuntime.selection?.forProject(snapshot.project.id);
+      } catch {
+        /* History remains readable while configuration is unavailable. */
+      }
+      snapshot.effectivePolicy = effectiveProjectPolicy({
+        policy: view,
+        profile: policy.profile,
+        resources,
+        roles: snapshot.roles,
+      });
+      snapshot.runs = snapshot.runs.map((run) => ({
+        ...run,
+        ...projectRunAutonomy(run, {
+          goalExists: snapshot.goals.some((goal) => goal.id === run.goalId),
+          goalUnsettled: snapshot.runs.some(
+            (other) =>
+              other.id !== run.id &&
+              other.goalId === run.goalId &&
+              !!(other.reconciliation || other.pendingTurn),
+          ),
+          projectBusy: snapshot.runs.some((other) => other.id !== run.id && !terminal(other)),
+          resumeSupported: true,
+          startSupported: true,
+          settingsSupported: !!policy.profile,
+        }),
+      }));
       if (policy.profile && (options.environments || options.workspaces.synchronizeDependencies))
         snapshot.capabilities.push('goal.environment-repair');
     });

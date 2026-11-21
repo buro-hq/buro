@@ -1,3 +1,7 @@
+import {
+  fixtureExecutionSelection,
+  fixtureExecutionCapabilities,
+} from './fixtures/execution-resources.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -179,7 +183,17 @@ async function fixture(t: any, enabled = true, tamper = false) {
   };
   const env = { projects, now: () => new Date().toISOString(), id: () => crypto.randomUUID() },
     goals = new GoalService(env),
-    engine = new ExecutionService({ ...env, runtime, workspaces, checks, policies: { p: policy } });
+    engine = new ExecutionService({
+      ...env,
+      runtime,
+      selection: fixtureExecutionSelection(
+        runtime.id,
+        fixtureExecutionCapabilities({ strictPlannedWrites: true }),
+      ),
+      workspaces,
+      checks,
+      policies: { p: policy },
+    });
   t.after(async () => {
     await engine.dispose();
     await store.close();
@@ -219,7 +233,9 @@ test('per-goal opt-in repairs baseline dependencies, installs in isolation, and 
   assert.equal(f.run.acceptance.passed, 1);
   assert.equal(f.reviews, 1);
   assert.equal(f.installations.length, 1);
-  assert.ok(f.prompts[0].includes('Baseline checks'));
+  const brief = JSON.parse(f.prompts[0].split('Brief: ')[1]);
+  assert.equal(brief.baseline.passed, 0);
+  assert.equal(brief.baseline.total, 1);
   assert.ok(f.prompts[0].includes('The user authorized'));
   assert.ok(f.run.events.some((e) => e.type === 'phase.repair'));
   assert.ok(f.run.events.some((e) => e.type === 'environment.install-completed'));

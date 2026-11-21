@@ -150,7 +150,7 @@ export function ExecutionResources() {
               const resource = catalog!.runtimes.find((item) => item.id === id);
               return (
                 <Text key={label} size="xs" c="dimmed">
-                  {t(label)}: {resource?.model || (resource?.client === 'codex' ? 'Codex' : id)}
+                  {t(label)}: {resource?.model || id}
                 </Text>
               );
             })}
@@ -321,7 +321,7 @@ export function ExecutionResources() {
                   </Paper>
                 ))}
                 {catalog?.runtimes
-                  .filter((runtime) => runtime.client === 'managed')
+                  .filter((runtime) => catalog.probeRuntimeIds?.includes(runtime.id))
                   .map((runtime) => {
                     const probe = catalog.probes.find(
                       (item) =>

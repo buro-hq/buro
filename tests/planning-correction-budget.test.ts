@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
-import { boundedPlanningTurn } from '../core/planning-policy.ts';
+import { planningTurn, selectPlanningPolicy } from '../core/planning-policy.ts';
 import { conservativeRequestPolicy } from '../core/request-policy.ts';
 import { resolveTeam } from '../core/execution-ports.ts';
 import { TeamPlanSchema, teamOutputSchema } from '../protocol/execution.ts';
@@ -15,7 +15,15 @@ import type { ProjectRegistry } from '../core/ports.ts';
 
 const instructions =
   'You coordinate a scoped repository change. Preserve the complete user goal, acceptance criteria, fixed model preferences and path restrictions. Planning produces a formal proposal; implementation begins only after service validation. A passing public check alone never substitutes for independent review. Keep uncertainty explicit and do not invent file contents, repository findings or completed checks.';
+const planningPolicy = selectPlanningPolicy({
+  id: 'fixture-planner',
+  client: 'managed',
+  local: true,
+  configurationRevision: 'fixture-v1',
+  capabilities: fixtureCapabilities({ structuredTurns: true, toolsFreeTurns: true }),
+});
 const source = () => ({
+  policy: planningPolicy,
   title: 'Preserve synchronous session writes during a failed replacement',
   goalText: [
     'GOAL_SESSION_ATOMICITY: Make the existing synchronous session writer preserve the previous session when a replacement fails.',
@@ -226,14 +234,13 @@ async function fixture(t: any) {
   };
 }
 
-test('v2 corrects a verbose plan on the same actual 16K managed session with useful output headroom', async (t) => {
+test('compact correction handles a verbose plan on the same actual 16K managed session with useful output headroom', async (t) => {
   const f = await fixture(t),
     input = source();
   assert.ok(invalidPlan.length >= 5250 && invalidPlan.length <= 5500);
-  const first = boundedPlanningTurn({ ...input, revision: 'bounded-planning-v2' });
-  const corrected = boundedPlanningTurn({
+  const first = planningTurn({ ...input });
+  const corrected = planningTurn({
     ...input,
-    revision: 'bounded-planning-v2',
     reuseBrief: true,
     correction: correction(),
   });
@@ -273,14 +280,13 @@ test('v2 corrects a verbose plan on the same actual 16K managed session with use
   }
 });
 
-test('saved v1 repeats the original brief and stops before a second HTTP request at the same 16K limit', async (t) => {
+test('repeating the complete brief cannot discard history and stops before a second HTTP request at the same 16K limit', async (t) => {
   const f = await fixture(t),
     input = source();
-  const first = boundedPlanningTurn({ ...input, revision: 'bounded-planning-v1' });
-  const corrected = boundedPlanningTurn({
+  const first = planningTurn({ ...input });
+  const corrected = planningTurn({
     ...input,
-    revision: 'bounded-planning-v1',
-    reuseBrief: true,
+    reuseBrief: false,
     correction: correction(),
   });
   await f.turn(first.text);

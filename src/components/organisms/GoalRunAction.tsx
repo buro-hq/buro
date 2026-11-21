@@ -4,6 +4,7 @@ import { Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Goal, RepositoryInfo } from '../../../protocol/domain.ts';
 import { useProject } from '../../data/provider';
+import { PolicySummary } from './PolicySummary';
 export function GoalRunAction({
   goal,
   onStarted,
@@ -27,6 +28,9 @@ export function GoalRunAction({
         .catch(() => {});
   }, [client, snapshot?.project.id]);
   const policy = snapshot?.executionPolicy;
+  const unresolved = snapshot?.runs.find(
+    (run) => run.goalId === goal.id && run.stop?.category === 'unknown',
+  );
   useEffect(() => {
     setIds(policy?.defaultCheckIds || []);
   }, [snapshot?.profile?.revision]);
@@ -78,25 +82,14 @@ export function GoalRunAction({
           {t('Environment repair is allowed for this goal. Dependencies are installed separately.')}
         </small>
       )}
-      <small>
-        {t('Change scope:')}{' '}
-        {policy.scope.mode === 'strict' ? t('Restricted to planned paths') : t('Flexible')}
-      </small>
-      <small>
-        {t('Planned paths:')} {policy.scope.plannedPaths.join(', ') || t('Automatic discovery')}
-      </small>
-      {policy.scope.mode === 'strict' && (
-        <small>
-          {t(
-            'Agent commands and intermediate checks are deferred; final isolated checks and an independent review still run.',
-          )}
-        </small>
-      )}
+      <PolicySummary policy={snapshot?.effectivePolicy} />
+      {unresolved?.stop && <p className="source-notice">{t(unresolved.stop.message)}</p>}
       <Button
         leftSection={<Play size={13} />}
         loading={busy}
         disabled={
           connection !== 'connected' ||
+          !!unresolved ||
           !ids.length ||
           snapshot!.runs.some(
             (r) => r.status && ['queued', 'running', 'canceling'].includes(r.status),

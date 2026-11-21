@@ -17,7 +17,7 @@ The [implementation sequence](docs/IMPLEMENTATION.md) tracks the transition from
 
 The [selected execution design](docs/EXECUTION-DESIGN-DECISION-2026-11-21.md) turns the [workflow research](docs/ARCHITECTURE-RESEARCH-2026-11-21.md) into a concrete plan: audited hidden constraints, optional quotas, a clean pre-release cutover and [reusable agent packages](docs/REUSABLE-AGENT-PACKAGES-2026-11-21.md).
 
-The [full project architecture review](docs/PROJECT-ARCHITECTURE-REVIEW-2026-11-21.md) records fresh verification, reproduced gaps, SDK reuse choices and the revised implementation order. [Autonomy policy](docs/AUTONOMY-POLICY-2026-11-21.md) defines the target defaults: advisory file scope and optional strict scope are implemented; opt-in aggregate quotas and broader stop/continuation behavior remain planned.
+The [full project architecture review](docs/PROJECT-ARCHITECTURE-REVIEW-2026-11-21.md) records fresh verification, reproduced gaps, SDK reuse choices and the revised implementation order. [Autonomy policy](docs/AUTONOMY-POLICY-2026-11-21.md) defines the target defaults: advisory file scope, optional strict scope, common role model preferences and service-derived policy/stop summaries are implemented. Default-none aggregate quotas and the remaining lifecycle/storage changes are still planned.
 
 [Implementation progress](docs/IMPLEMENTATION-PROGRESS-2026-11-21.md) distinguishes completed refactor steps and their checks from the remaining target design.
 

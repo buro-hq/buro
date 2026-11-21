@@ -1,0 +1,69 @@
+{
+  "stage": "2C",
+  "date": "2026-11-22",
+  "baseline": "f7ad286",
+  "validation": {
+    "fullSuite": {
+      "command": "npm test",
+      "tests": 770,
+      "passed": 770,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 66346.40575,
+      "log": "/private/tmp/buro-stage2c-final-tests.log"
+    },
+    "build": {
+      "command": "npm run build",
+      "passed": true,
+      "log": "/private/tmp/buro-stage2c-final-build.log"
+    },
+    "format": {
+      "command": "npm run format:check; focused changed core/adapter/test prettier checks; git diff --check",
+      "passed": true
+    },
+    "productionBrowser": {
+      "command": "npm run check:production",
+      "desktopAndMobile": true,
+      "emptyHistory": true,
+      "errors": [],
+      "log": "/private/tmp/buro-stage2c-production.log"
+    },
+    "autonomyBrowser": {
+      "command": "node scripts/check-autonomy.cjs",
+      "policyProjection": true,
+      "optionalClarification": true,
+      "coordinatorFixedPreference": true,
+      "unavailableReasonVisible": true,
+      "unknownActionsBlocked": true,
+      "openModalBusyGuard": true,
+      "translatedServiceReason": true,
+      "modelRequests": 0,
+      "errors": [],
+      "log": "/private/tmp/buro-stage2c-autonomy-ui.log"
+    }
+  },
+  "reviews": [
+    "stage2c-architecture-review-2026-11-22.md",
+    "stage2c-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": [
+    "planning and integration contracts",
+    "role routing and operational dispatch",
+    "service projection and UI",
+    "independent architecture/code/boundary review",
+    "independent tests and UI review"
+  ],
+  "boundaries": [
+    "Default finite aggregate/session/turn policies remain active until complete stage5 cutover.",
+    "Operational read-only preparation lacks a separate owning preparation-outcome receipt; failed preparation never dispatches delivery.",
+    "Machine profile selection refreshes the initiating client; cross-client invalidation remains later work.",
+    "Custom delivery role IDs can need operation-specific catalog eligibility; actual dispatch validates delivery requirements.",
+    "Neutral AgentBackend/production SDK, contribution composition, SQLite and independent package consumption remain subsequent stages.",
+    "No live provider evaluation or offline RTX request; synthetic fixtures only."
+  ],
+  "preservedUntracked": [
+    "output/ux/",
+    "output/research/sdk-spike-pi-fake-2026-11-21.mjs",
+    "output/research/sdk-spike-preparation-2026-11-21.md"
+  ]
+}

@@ -1,3 +1,7 @@
+import {
+  fixtureExecutionSelection,
+  fixtureExecutionCapabilities,
+} from './fixtures/execution-resources.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -134,6 +138,10 @@ async function fixture(t: any) {
     engine = new ExecutionService({
       ...env,
       runtime,
+      selection: fixtureExecutionSelection(
+        runtime.id,
+        fixtureExecutionCapabilities({ resumeSessions: true }),
+      ),
       workspaces,
       checks,
       policies: {

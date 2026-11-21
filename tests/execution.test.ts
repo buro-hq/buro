@@ -1,4 +1,8 @@
 import {
+  fixtureExecutionSelection,
+  fixtureExecutionCapabilities,
+} from './fixtures/execution-resources.ts';
+import {
   virtualWorkspaceRevision,
   virtualVerificationViews,
   VIRTUAL_BASE_COMMIT,
@@ -231,6 +235,10 @@ async function fixture(
     engine = new ExecutionService({
       ...env,
       runtime,
+      selection: fixtureExecutionSelection(
+        runtime.id,
+        fixtureExecutionCapabilities({ strictPlannedWrites: !!options.outOfScope }),
+      ),
       policies: {
         p: options.outOfScope ? { ...policy, scope: { ...policy.scope, mode: 'strict' } } : policy,
       },
@@ -460,10 +468,15 @@ test('each run freezes its execution policy and passes project context to coordi
   assert.deepEqual(run.executionPolicySnapshot?.scope.plannedPaths, ['src/']);
   assert.equal(run.executionPolicySnapshot?.context, 'Original project context');
   assert.equal(instructions.length, 3);
+  const planning = f.turns.find((turn) => turn.text.startsWith('First,'))!;
+  assert.match(planning.text, /Original project context/);
+  assert.doesNotMatch(planning.text, /Changed context/);
   assert.ok(
-    instructions.every(
-      (text) => text.includes('Original project context') && !text.includes('Changed context'),
-    ),
+    instructions
+      .slice(1)
+      .every(
+        (text) => text.includes('Original project context') && !text.includes('Changed context'),
+      ),
   );
 });
 test('Buro persists assignments before client dispatch and completes workers without native children', async (t) => {

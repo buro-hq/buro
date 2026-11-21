@@ -2,7 +2,7 @@
 
 Date: 2026-11-21. Status: selected policy, partly implemented as recorded below. The user wants maximum useful automation with an easy way to intervene, no default aggregate budget, equal backend adapters and optional strict task scope. This document supersedes default-strict planned-path assumptions in earlier design notes.
 
-Implementation update, 2026-11-22: the WorkScope slice is implemented: advisory planned paths by default, optional strict managed writes, revision-bound observations and preserved scope across context changes. Aggregate quotas and the broader resolved-policy/stop-action contract remain target work. [Actual implementation progress and validation](IMPLEMENTATION-PROGRESS-2026-11-21.md).
+Implementation update, 2026-11-22: the WorkScope slice is implemented: advisory planned paths by default, optional strict managed writes, revision-bound observations and preserved scope across context changes. Common role resource choices, capability-selected planning and service-derived policy/stop actions are implemented in 2C. Aggregate quota removal, complete operational preparation receipts and cross-client machine-configuration invalidation remain target work. [Actual implementation progress and validation](IMPLEMENTATION-PROGRESS-2026-11-21.md).
 
 ## Selected default
 

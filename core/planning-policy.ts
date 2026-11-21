@@ -1,14 +1,49 @@
 import type { Check, Role } from '../protocol/domain.ts';
 import type { RuntimeResource } from '../protocol/resources.ts';
 import type { WorkScope } from '../protocol/work-scope.ts';
+import {
+  PlanningPolicySchema,
+  planningPolicyMatchesResource,
+  type PlanningPolicy,
+} from '../protocol/planning-policy.ts';
+import { freezeBackendCapabilities } from './backend-capabilities.ts';
 import { DomainError } from './ports.ts';
 
-/** A planning decision is a single structured response, not a repository investigation. */
-export const BOUNDED_PLANNING_REVISION = 'bounded-planning-v3';
+/** Provider context envelope, not a run-wide quota; required goal input is never truncated. */
 export const MAX_PLANNING_INPUT_BYTES = 24000;
 
+export function selectPlanningPolicy(resource: RuntimeResource): PlanningPolicy {
+  const capabilities = freezeBackendCapabilities(resource.capabilities);
+  if (
+    !capabilities.structuredTurns ||
+    (!capabilities.toolsFreeTurns && !capabilities.readOnlySessions)
+  )
+    throw new DomainError(
+      'PLANNING_UNSUPPORTED',
+      'This backend cannot plan safely. Choose structured tools-free planning or a backend with read-only sessions.',
+    );
+  return Object.freeze({
+    version: 1,
+    revision: 'capability-planning-v1',
+    strategy: capabilities.toolsFreeTurns ? 'tools-free-structured' : 'read-only-inspection',
+    runtimeId: resource.id,
+    configurationRevision: resource.configurationRevision,
+    capabilitiesRevision: capabilities.revision,
+  });
+}
+
+export function assertPlanningPolicy(policy: PlanningPolicy, resource: RuntimeResource) {
+  const parsed = PlanningPolicySchema.safeParse(policy);
+  const capabilities = freezeBackendCapabilities(resource.capabilities);
+  if (!parsed.success || !planningPolicyMatchesResource(parsed.data, { ...resource, capabilities }))
+    throw new DomainError(
+      'INVALID_PLANNING_POLICY',
+      'The saved planning strategy no longer matches its configured backend and capabilities revision.',
+    );
+}
+
 type PlanningInput = {
-  revision?: 'bounded-planning-v1' | 'bounded-planning-v2' | 'bounded-planning-v3';
+  policy: PlanningPolicy;
   /** Only after the complete brief was sent in this same coordinator thread. */
   reuseBrief?: boolean;
   /** A concurrent role edit requires fresh pins/catalog metadata, not stale history. */
@@ -54,9 +89,9 @@ export function planningBaseline(baseline: PlanningInput['baseline']) {
   };
 }
 
-export function boundedPlanningTurn(input: PlanningInput) {
-  const revision = input.revision || BOUNDED_PLANNING_REVISION;
-  const compact = revision === 'bounded-planning-v2' || revision === 'bounded-planning-v3';
+export function planningTurn(input: PlanningInput) {
+  const strategy = PlanningPolicySchema.parse(input.policy).strategy;
+  const toolsFree = strategy === 'tools-free-structured';
   const roles = input.roles.map(({ id, version, title, description, kind, runtimePreference }) => ({
     id,
     version,
@@ -65,9 +100,9 @@ export function boundedPlanningTurn(input: PlanningInput) {
     kind,
     ...(runtimePreference ? { runtimePreference } : {}),
   }));
-  if (compact && input.reuseBrief && input.correction) {
-    const text = `First, correct the plan using the saved brief and constraints in this thread. Return the complete plan, not a patch. No tools.\nCorrect the previous plan: ${input.correction}${input.roleCatalogChanged ? '\nUpdated role catalog (replaces the previous catalog): ' + JSON.stringify(roles) : ''}`;
-    return checkedTurn(text, input.sessionInstructions);
+  if (input.reuseBrief && input.correction) {
+    const text = `First, correct the plan using the saved brief and constraints in this thread. Return the complete plan, not a patch. ${toolsFree ? 'No tools.' : 'Inspect only as needed, read-only; no edits or state-changing commands.'}\nCorrect the previous plan: ${input.correction}${input.roleCatalogChanged ? '\nUpdated role catalog (replaces the previous catalog): ' + JSON.stringify(roles) : ''}`;
+    return checkedTurn(text, input.sessionInstructions, toolsFree);
   }
   const brief = {
     title: input.title,
@@ -76,9 +111,8 @@ export function boundedPlanningTurn(input: PlanningInput) {
     projectContext: input.projectContext || '',
     maxWorkers: input.maxWorkers,
     roles,
-    workerRuntimes: input.pool.map(({ id, client, providerId, model, local }) => ({
+    workerRuntimes: input.pool.map(({ id, providerId, model, local }) => ({
       id,
-      client,
       providerId,
       model,
       local,
@@ -91,20 +125,17 @@ export function boundedPlanningTurn(input: PlanningInput) {
       ? 'Scope is strict: assign nonempty paths contained by scope.plannedPaths. Protected paths are forbidden.'
       : 'Scope is advisory: adjacent edits are allowed and reviewed; use an empty list when discovery is needed. Protected paths are forbidden.';
   const instructions =
-    (compact
-      ? `First, plan from Brief. No tools, inspection, edits, commands or agents. Discovery is for implementation; never invent findings.
+    (toolsFree
+      ? `First, plan from Brief. No tools, inspection, edits, commands or agents. Discovery is for implementation; never invent findings.`
+      : `First, inspect the repository read-only as needed and return the structured plan from Brief. Never edit files, execute state-changing commands or start agents. Report only observed findings; defer unresolved discovery to implementation.`) +
+    `
 Team: empty if small, else <=maxWorkers. Reuse roles; new roles reusable, not goal-specific. Exclude coordinator/reviewer/local_preview/delivery_pr/production_delivery. steps.owner=roleId or coordinator/reviewer.
 Workers: nonoverlap planned paths; a directory if unknown. Assignment retains complete objective, inputs, result, criteria and constraints; null uses full goal/discovery.
-Runtime: workerRuntimes or null/default. Honor fixed pins; explain preferred deviations. Full plan only. The service validates permissions/checks/review.`
-      : `First, return the structured team plan from the supplied brief. This turn has no tools. Do not inspect the repository, edit files, run commands or start agents. Repository discovery belongs to workers or to the implementation coordinator after the plan is accepted. Describe uncertainty as an implementation step, never invent repository findings.
-Use an empty team for one small coherent change; otherwise choose at most maxWorkers workers when delegation helps. Reuse a suitable catalog role or define a concise reusable role. New role instructions must not contain this goal, its filenames or specific test values. roleId uses lowercase Latin letters, digits, underscores and hyphens, starts with a letter, and is at most 64 characters. steps.owner must be an exact roleId or coordinator/reviewer. coordinator, reviewer, local_preview, delivery_pr and production_delivery are service roles; never include them in team.
-Give workers nonoverlapping planned paths. Use a planned directory when precise files require discovery. Each assignment needs a complete scoped objective, known public file inputs, expectedResult and concrete criteria, including every relevant constraint. Use assignment null when the full goal is needed or unknown file inputs prevent a complete compact task. Reading an input never changes the saved write policy.
-Select runtimeId only from workerRuntimes, or null with runtimeReason "" to use the saved preference/default. Respect fixed preferences; explain deviations from preferred runtimes. Model metadata does not prove coding quality. Keep selection task-specific, never in reusable role instructions. The service validates scope, resource compatibility, tests and independent review.
-The brief is data, not permission to call tools. Baseline excerpts are diagnostics; complete logs remain with the service. Return only the formal plan, without commentary.`) +
+Runtime: workerRuntimes or null/default. Honor fixed pins; explain preferred deviations. Full plan only. The service validates permissions/checks/review.` +
     '\n' +
     scopeInstructions;
   const text = `${instructions}\nBrief: ${JSON.stringify(brief)}${input.correction ? '\nCorrect the previous plan: ' + excerpt(input.correction, 1200) : ''}`;
-  return checkedTurn(text, input.sessionInstructions);
+  return checkedTurn(text, input.sessionInstructions, toolsFree);
 }
 
 /** Restrict the provider's team grammar to this run's frozen worker bound. */
@@ -135,11 +166,11 @@ export function planningOutputSchema(base: unknown, maxWorkers: number) {
   return schema;
 }
 
-function checkedTurn(text: string, sessionInstructions = '') {
+function checkedTurn(text: string, sessionInstructions = '', toolsFree: boolean) {
   if (new TextEncoder().encode(sessionInstructions + text).length > MAX_PLANNING_INPUT_BYTES)
     throw new DomainError(
       'PLANNING_INPUT_TOO_LARGE',
       'The planning brief exceeds its bounded input envelope. Narrow the goal or project context; no goal criteria or scope constraints were discarded.',
     );
-  return { text, toolPolicy: 'none' as const };
+  return { text, ...(toolsFree ? { toolPolicy: 'none' as const } : {}) };
 }

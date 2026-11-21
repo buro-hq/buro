@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { endpointIsPrivate, modelEndpointURL } from './endpoint-trust.ts';
 import { BackendCapabilitiesSchema } from './backend-capabilities.ts';
+import type { BackendRequirements } from '../agent/contracts/capabilities.ts';
 export const ResourceIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 const modelEndpoint = z
   .string()
@@ -178,7 +179,7 @@ export const RuntimePreferenceSchema = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('fixed'), runtimeId: ResourceIdSchema }),
 ]);
 export const AssignmentSelectionSchema = z.strictObject({
-  source: z.enum(['profile', 'coordinator', 'preferred', 'fixed']),
+  source: z.enum(['profile', 'coordinator', 'preferred', 'fixed', 'automatic']),
   reason: z.string().trim().min(1).max(1000),
 });
 export const AssignmentResourceSchema = AssignmentSelectionSchema.extend({
@@ -199,7 +200,18 @@ export type RuntimePurpose =
   | 'research'
   | 'environment'
   | 'delivery';
+export type RoleResourceChoices = {
+  /** '*' is the server-authored template for newly created worker roles. */
+  roleId: string;
+  roleVersion?: number;
+  purpose: RuntimePurpose;
+  requirements: BackendRequirements;
+  choices: { resource: RuntimeResource; eligible: boolean; reason: string }[];
+};
 export type ResourceCatalog = {
+  roleChoices?: RoleResourceChoices[];
+  /** Active provider-bound runtimes supporting the separate raw model diagnostic. */
+  probeRuntimeIds?: string[];
   configurationRevision?: string;
   configured?: {
     runtimes: { definition: RuntimeDefinition; restartRequired: boolean }[];
@@ -229,12 +241,15 @@ export function sessionResource(
   snapshot: ResourceSnapshot | undefined,
   purpose: RuntimePurpose,
   fallbackId: string,
+  decision?: AssignmentResource,
 ) {
-  const resource = snapshot ? resourceForPurpose(snapshot, purpose) : undefined;
+  const resource =
+    decision?.resource || (snapshot ? resourceForPurpose(snapshot, purpose) : undefined);
   return {
     runtimeId: resource?.id || fallbackId,
     providerId: resource?.providerId,
     model: resource?.model,
     configurationRevision: resource?.configurationRevision,
+    ...(decision ? { selection: { source: decision.source, reason: decision.reason } } : {}),
   };
 }

@@ -188,14 +188,18 @@ export type Run = {
   verificationEvidence?: import('./verification.ts').VerificationEvidence;
   reconciliation?: import('./reconciliation.ts').RunReconciliation;
   pendingTurn?: import('./reconciliation.ts').PendingRunTurn;
-  planningPolicy?: { version: 1; mode: 'bounded' | 'legacy'; revision: string };
+  planningPolicy?: import('./planning-policy.ts').PlanningPolicy;
+  effectivePolicy?: import('./autonomy.ts').EffectivePolicy;
+  stop?: import('./autonomy.ts').RunStop;
   managedBudget?: import('./run-budget.ts').ManagedRunBudgetSummary;
   workerTasks?: Record<string, import('./worker-tasks.ts').WorkerTask>;
   workerReplan?: import('./worker-tasks.ts').WorkerReplan;
   resources?: import('./resources.ts').ResourceSnapshot;
   assignmentResources?: Record<string, AssignmentResource>;
+  roleResources?: Record<string, AssignmentResource>;
   delegation?: 'buro';
   coordinatorSession?: AgentSession;
+  planningSession?: AgentSession;
   contextMaterials?: ContextMaterial[];
   id: string;
   key: string;
@@ -322,6 +326,7 @@ export type Snapshot = {
   runs: Run[];
   capabilities: string[];
   executionPolicy?: ExecutionPolicyView;
+  effectivePolicy?: import('./autonomy.ts').EffectivePolicy;
   profile?: ProjectProfile;
   verification?: ProjectVerification;
   research?: ProjectResearch;

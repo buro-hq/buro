@@ -1,7 +1,6 @@
 import type { CreateGoal, SaveRole, Goal, Role } from '../protocol/domain.ts';
 import { DomainError, type ProjectRegistry } from './ports.ts';
 import { validateMaterialIds } from './context.ts';
-import { operationalRoles } from './operational-roles.ts';
 export type Services = { projects: ProjectRegistry; now: () => string; id: () => string };
 export class GoalService {
   env: Services;
@@ -97,15 +96,6 @@ export class RoleService {
         throw new DomainError('CONFLICT', 'The role changed. Refresh it before saving.');
       const { expectedVersion, projectId, ...fields } = input;
       const runtimePreference = input.runtimePreference ?? current?.runtimePreference;
-      if (
-        runtimePreference &&
-        runtimePreference.mode !== 'auto' &&
-        ['coordinator', 'reviewer', ...operationalRoles.map((role) => role.id)].includes(input.id)
-      )
-        throw new DomainError(
-          'ROLE_RUNTIME_PROFILE_MANAGED',
-          'Choose this role’s model in the resource profile. Model preferences apply to assigned workers only.',
-        );
       const role: Role = {
         ...fields,
         ...(runtimePreference ? { runtimePreference: structuredClone(runtimePreference) } : {}),

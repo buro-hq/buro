@@ -20,14 +20,6 @@ import { roleColor } from '../../model';
 import { RoleIcon } from '../atoms/RoleIcon';
 import { useResourceCatalog } from '../../features/resources/useResourceCatalog';
 
-const profileRoles = new Set([
-  'coordinator',
-  'reviewer',
-  'local_preview',
-  'delivery_pr',
-  'production_delivery',
-]);
-
 export function TeamPanel({
   roles,
   run,
@@ -45,9 +37,6 @@ export function TeamPanel({
 }) {
   const [editor, setEditor] = useState<Role | 'new' | null>(null);
   const resources = useResourceCatalog(projectId);
-  const pool =
-    resources.catalog?.selected?.workerPool ||
-    (resources.catalog?.selected ? [resources.catalog.selected.worker] : []);
   return (
     <div className="content-panel">
       <div className="section-heading">
@@ -102,15 +91,13 @@ export function TeamPanel({
               <span className="mono muted">{role.id}</span>
               <p>{roleLabels(role).description}</p>
               <Text size="xs" c="dimmed">
-                {profileRoles.has(role.id)
-                  ? t('Configured in execution profile')
-                  : preference && preference.mode !== 'auto'
-                    ? t(preference.mode === 'fixed' ? 'Only: {p0}' : 'Prefer: {p0}', {
-                        p0:
-                          pool.find((item) => item.id === preference.runtimeId)?.model ||
-                          preference.runtimeId,
-                      })
-                    : t('Auto model')}
+                {preference && preference.mode !== 'auto'
+                  ? t(preference.mode === 'fixed' ? 'Only: {p0}' : 'Prefer: {p0}', {
+                      p0:
+                        resources.catalog?.runtimes.find((item) => item.id === preference.runtimeId)
+                          ?.model || preference.runtimeId,
+                    })
+                  : t('Auto model')}
               </Text>
               <div className="role-actions">
                 <button
@@ -181,16 +168,21 @@ function RoleForm({
       ? initial.runtimePreference.runtimeId
       : '',
   );
-  const profileRole = profileRoles.has(id);
-  const pool =
-    resources.catalog?.selected?.workerPool ||
-    (resources.catalog?.selected ? [resources.catalog.selected.worker] : []);
-  const modelOptions = pool.map((runtime) => ({
+  const roleChoices =
+    resources.catalog?.roleChoices?.find((item) => item.roleId === id) ||
+    resources.catalog?.roleChoices?.find((item) => item.roleId === '*');
+  const modelOptions = (roleChoices?.choices || []).map(({ resource: runtime, eligible }) => ({
     value: runtime.id,
-    label: `${runtime.model || 'Codex'} · ${runtime.providerId || runtime.client}`,
+    label: `${runtime.model || runtime.id} · ${runtime.id}${eligible ? '' : ' · ' + t('Unavailable')}`,
+    disabled: !eligible,
   }));
+  const selectedChoice = roleChoices?.choices.find((item) => item.resource.id === runtimeId);
   if (runtimeId && !modelOptions.some((item) => item.value === runtimeId))
-    modelOptions.push({ value: runtimeId, label: runtimeId + ' · ' + t('Unavailable') });
+    modelOptions.push({
+      value: runtimeId,
+      label: runtimeId + ' · ' + t('Unavailable'),
+      disabled: true,
+    });
   const [error, setError] = useState(''),
     [saving, setSaving] = useState(false);
   async function save() {
@@ -207,9 +199,7 @@ function RoleForm({
         expectedVersion: initial?.version || 0,
         ...(initial?.model ? { model: initial.model } : {}),
         runtimePreference:
-          profileRole || preferenceMode === 'auto'
-            ? { mode: 'auto' }
-            : { mode: preferenceMode, runtimeId },
+          preferenceMode === 'auto' ? { mode: 'auto' } : { mode: preferenceMode, runtimeId },
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -270,60 +260,74 @@ function RoleForm({
         <Text size="sm" fw={500}>
           {t('Specialist model')}
         </Text>
-        {profileRole ? (
-          <Text size="xs" c="dimmed">
-            {t('Configured in execution profile')}
-          </Text>
-        ) : (
-          <>
-            <SegmentedControl
-              aria-label={t('Model selection')}
-              size="xs"
-              value={preferenceMode}
-              onChange={(value) => setPreferenceMode(value as typeof preferenceMode)}
-              data={[
-                { value: 'auto', label: t('Auto') },
-                { value: 'prefer', label: t('Prefer') },
-                { value: 'fixed', label: t('Only this model') },
-              ]}
+        <>
+          <SegmentedControl
+            aria-label={t('Model selection')}
+            size="xs"
+            value={preferenceMode}
+            onChange={(value) => setPreferenceMode(value as typeof preferenceMode)}
+            data={[
+              { value: 'auto', label: t('Auto') },
+              { value: 'prefer', label: t('Prefer') },
+              { value: 'fixed', label: t('Only this model') },
+            ]}
+          />
+          {preferenceMode !== 'auto' && (
+            <Select
+              label={t('Model from project pool')}
+              value={runtimeId || null}
+              onChange={(value) => setRuntimeId(value || '')}
+              data={modelOptions}
+              renderOption={({ option }) => {
+                const choice = roleChoices?.choices.find(
+                  (item) => item.resource.id === option.value,
+                );
+                return (
+                  <Stack gap={2}>
+                    <Text size="sm">{option.label}</Text>
+                    {choice && !choice.eligible && (
+                      <Text size="xs" c="dimmed">
+                        {t(choice.reason)}
+                      </Text>
+                    )}
+                  </Stack>
+                );
+              }}
+              searchable
+              allowDeselect={false}
+              disabled={!resources.catalog || resources.loading}
+              nothingFoundMessage={t('No models in this project pool')}
+              required
             />
-            {preferenceMode !== 'auto' && (
-              <Select
-                label={t('Model from project pool')}
-                value={runtimeId || null}
-                onChange={(value) => setRuntimeId(value || '')}
-                data={modelOptions}
-                searchable
-                allowDeselect={false}
-                disabled={!resources.catalog || resources.loading}
-                nothingFoundMessage={t('No models in this project pool')}
-                required
-              />
-            )}
-            {resources.supported && (!resources.catalog || resources.error) && (
-              <Group gap="xs">
-                <Text
-                  size="xs"
-                  c={resources.error ? 'red' : 'dimmed'}
-                  role={resources.error ? 'alert' : 'status'}
-                >
-                  {resources.error || t('Loading project models…')}
-                </Text>
-                <Button
-                  size="xs"
-                  variant="light"
-                  loading={resources.loading}
-                  onClick={() => void resources.refresh()}
-                >
-                  {t('Refresh')}
-                </Button>
-              </Group>
-            )}
-            <Text size="xs" c="dimmed">
-              {t('New plans use this preference. Existing assignments keep their resources.')}
+          )}
+          {preferenceMode !== 'auto' && selectedChoice && !selectedChoice.eligible && (
+            <Text size="xs" c="orange">
+              {t(selectedChoice.reason)}
             </Text>
-          </>
-        )}
+          )}
+          {resources.supported && (!resources.catalog || resources.error) && (
+            <Group gap="xs">
+              <Text
+                size="xs"
+                c={resources.error ? 'red' : 'dimmed'}
+                role={resources.error ? 'alert' : 'status'}
+              >
+                {resources.error || t('Loading project models…')}
+              </Text>
+              <Button
+                size="xs"
+                variant="light"
+                loading={resources.loading}
+                onClick={() => void resources.refresh()}
+              >
+                {t('Refresh')}
+              </Button>
+            </Group>
+          )}
+          <Text size="xs" c="dimmed">
+            {t('New plans use this preference. Existing assignments keep their resources.')}
+          </Text>
+        </>
       </Stack>
       {error && (
         <p className="form-error" role="alert">
@@ -339,9 +343,8 @@ function RoleForm({
             !title.trim() ||
             !description.trim() ||
             !instructions.trim() ||
-            (!profileRole &&
-              preferenceMode !== 'auto' &&
-              (!runtimeId || !resources.catalog || resources.loading))
+            (preferenceMode !== 'auto' &&
+              (!runtimeId || !resources.catalog || resources.loading || !selectedChoice?.eligible))
           }
         >
           {t('Save')} {initial ? t('version {p0}', { p0: initial.version + 1 }) : t('role')}

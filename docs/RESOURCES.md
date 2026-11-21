@@ -40,6 +40,8 @@ Runtime IDs identify configured instances. Several native definitions can use `c
 
 The service publishes each registered backend's explicit, versioned capabilities with its resource metadata. Saved sessions must match that trusted descriptor and configuration before another operation. Metadata supplied by a model cannot enable tools-free turns, immutable review or cancellation. Native tools-free turns, host-owned tool hooks and strict planned-write prevention remain unavailable. The managed broker supports strict writes through its bounded source tools; strict sessions cannot execute agent commands or intermediate checks against mutable source. Final isolated acceptance checks and fresh review still run.
 
+Planning uses tools-free structured turns when supported, otherwise a read-only inspection session. After an inspection plan is accepted, a separate writable session receives the full goal and accepted plan. A backend without thread resumption can continue through a fresh session in the saved workspace with the frozen role instructions; this does not replay an unknown operation. An unresolved operation from another run of the same goal also blocks new/continued execution.
+
 Stop and cleanup retain the original owned session even after its execution permission is revoked. A released session needs explicit resume before another turn. Missing historical routes never manufacture a Codex session. This record format requires capabilities and admission requirements; the controlled archive/cutover for older prototype execution state is tracked in [implementation progress](IMPLEMENTATION-PROGRESS-2026-11-21.md).
 
 Project profiles store file policy in `scope`, with `mode`, `plannedPaths` and `protectedPaths`. New projects start with advisory mode and no required advance file list. The strict checkbox requires a nonempty selection and an eligible backend, including the coordinator when it implements work. A file selection cannot expand from an exact file to a whole directory through a slash alias. Service metadata, protected paths and check-configuration integrity remain separate from this planning preference. Explicit continuation can adopt a revised user profile after prior operations settle; it cannot erase an unknown action.
@@ -170,7 +172,7 @@ Add a managed runtime referencing `connectionId: "deepseek"` and a model ID retu
 
 `local-only` rejects remote resources before starting a client. This Ollama adapter also rejects cloud-backed models; a failure never authorizes a remote fallback. `hybrid` explicitly permits the configured providers for that profile. DeepSeek uses its model API, not a separate harness. [DeepSeek API](https://api-docs.deepseek.com/), [tool/thinking continuation](https://api-docs.deepseek.com/guides/thinking_mode/).
 
-## Automatic worker selection
+## Role and assignment selection
 
 A profile can authorize several configured runtimes for worker assignments through `workerPool`. For the hybrid example above, add:
 
@@ -180,19 +182,19 @@ A profile can authorize several configured runtimes for worker assignments throu
 }
 ```
 
-This is an additional field on the profile, not a separate configuration object. It must include the profile's default `worker`, contain unique configured runtime IDs, and have at most 16 entries. Local-only profiles reject remote entries before dispatch. Without `workerPool`, only the original default worker is authorized; upgrading does not silently give existing profiles a larger pool.
+This is an additional field on the profile, not a separate configuration object. It must include the profile's default `worker`, contain unique configured runtime IDs, and have at most 16 entries. The authorized role pool is the unique union of the saved coordinator, worker, reviewer and these alternatives. Local-only rejects remote entries before dispatch. A role choice never adds another endpoint or an arbitrary globally configured runtime.
 
 The coordinator sees this saved pool and can propose a runtime and short reason for each planned specialist. The service validates the proposal and the user's role preference before saving the plan. A global configured runtime is not automatically part of a project's pool. Adding or changing a runtime after a run starts does not expand that run's saved pool.
 
 In **Team → Edit role → Specialist model**, choose:
 
-- **Auto:** the coordinator can select from the pool; an omitted choice uses the profile worker.
-- **Prefer:** use the selected runtime by default. Another permitted choice requires a reason. An unavailable preference uses the profile worker with an explicit saved explanation.
+- **Auto:** use the eligible profile default for the operation, or an eligible alternative with a saved explanation. The coordinator can propose a worker assignment from the same authorized pool.
+- **Prefer:** use the selected eligible runtime by default. A coordinator deviation requires a reason. An unavailable preference permits an eligible profile/default alternative with an explicit saved explanation.
 - **Only this model:** use exactly this runtime. A conflicting proposal or a pin outside the pool blocks the assignment; it does not cause fallback.
 
 The preference is separate from persistent specialist instructions and creates a new role version. It applies to new plans. A choice made by the coordinator does not become a reusable role preference. The old free-form `Role.model` field remains historical metadata and is not interpreted as a runtime ID. Older clients omitting `runtimePreference` preserve an existing preference; explicit `auto` clears the pin.
 
-Coordinator, reviewer and delivery roles continue to use the execution profile; worker preferences are not accepted for those service-owned roles. This increment chooses models for planned workers. Adaptive specialist creation during execution, automatic selection of the initial coordinator, measured quality/cost routing and goal-specific overrides remain future work.
+The same preferences apply to coordinator, reviewer and operational roles. New runs save coordinator/reviewer role versions and decisions before the first session; operational preparation freezes its actual role/decision before dispatch. Eligibility follows operation capabilities rather than role kind or client name. Adaptive specialist creation during execution and measured quality/cost routing remain future work.
 
 Each accepted plan saves the canonical resource, configuration revision, role version, preference, selection source and reason. Worker dispatch saves its AgentSession before opening a client. Routing checks that recorded session against the saved decision and pool. The inspector shows the actual requested/reported model and the selection reason. Existing sessions continue on their recorded route; switching models requires another assignment rather than replacing provider state inside a conversation.
 
@@ -200,9 +202,9 @@ Each accepted plan saves the canonical resource, configuration revision, role ve
 
 User settings show the default profile, its coordinator/worker/reviewer models, editable API connections, restart state, model discovery and explicit diagnostics. Project settings can pin a profile or inherit the machine default. The agent inspector displays the saved runtime/model identity rather than labelling every session Codex.
 
-Each run freezes its profile, data policy and runtime configuration revisions. Buro handles identify sessions independently of native thread IDs. Restart or repair follows the saved route; changing the default does not move an existing session to another provider. If that runtime configuration has changed or disappeared, continuation stops with a configuration error. Restore it or start a new run. Historical Codex runs without resource snapshots require an explicitly remote-permitted profile for legacy continuation.
+Each run freezes its profile, data policy and runtime configuration revisions. Buro handles identify sessions independently of native thread IDs. Restart or repair follows the saved route; changing the default does not move an existing session to another provider. If that runtime configuration has changed or disappeared, continuation stops with a configuration error. Restore it or start a new run. Historical prototype runs without the required resource/planning/route bindings are not silently resumed; preserve/archive their records and start a fresh run after the controlled cutover.
 
-Environment discovery and result preparation reference their owning run explicitly, so they inherit its resources and material manifest. A manual managed repair saves a new scope revision for updated criteria/materials while retaining earlier evidence. Worker assignments cannot expand into the whole project during continuation.
+Environment discovery and result preparation reference their owning run explicitly, so they inherit its resources and material manifest. A manual managed repair saves a new scope revision for updated criteria/materials while retaining earlier evidence. Strict assignments retain their planned-path containment during continuation; advisory work can make additional permitted edits, which are checked and reported.
 
 ## Supported execution boundary
 
@@ -211,3 +213,5 @@ Managed tools provide bounded text reads/search, exact edits in assigned paths, 
 Managed Docker execution currently fails closed because the existing native-client container does not provide the required private-data isolation. Native Codex Docker behavior remains available. Unsupported environments never fall back to an unconfined host command.
 
 Checkpoints and routing references are private atomic records. Unknown tool/client-start outcomes remain stopped for reconciliation. Recovery does not promise automatic replay, exactly-once execution or transferable provider conversation state.
+
+The service supplies an effective policy summary and stopped-run actions to the interface. Current finite managed limits remain visible, and unknown native usage is not zero. Machine-default changes refresh the initiating client; other connected clients currently need a refresh/reconnect. Read-only operational preparation still needs its separate durable unknown-outcome receipt; failed preparation never dispatches external delivery. Custom environment role IDs can require more specific operation eligibility than the current built-in catalog row; actual dispatch still validates the delivery operation. These remaining contribution/lifecycle boundaries are tracked in implementation progress.

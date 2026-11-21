@@ -140,8 +140,7 @@ async function runProjectModelComparison(options = {}) {
     const started = Date.now();
     const result = {
       arm,
-      planning:
-        arm === 'codex-direct' ? 'not-applicable' : arm === 'codex-buro' ? 'legacy' : 'bounded',
+      planning: arm === 'codex-direct' ? 'not-applicable' : 'capability-selected',
       status: 'failed',
       accepted: false,
       canonical: {
@@ -196,14 +195,17 @@ async function runProjectModelComparison(options = {}) {
           budgets: config.limits,
           contextTokensByProvider: { ollama: 16384 },
           forceWorker: true,
-          planningMode: arm === 'codex-buro' ? 'legacy' : 'bounded',
           segmentPolicy: options.segmentPolicy,
           reportPath: trial?.file,
           sourceCase: { id: CASE_ID, prepare },
           async onRunFinished({ run }) {
             workspace = run?.workspace;
-            if (['legacy', 'bounded'].includes(run?.planningPolicy?.mode))
-              actualPlanning = run.planningPolicy.mode;
+            if (
+              ['tools-free-structured', 'read-only-inspection'].includes(
+                run?.planningPolicy?.strategy,
+              )
+            )
+              actualPlanning = run.planningPolicy.strategy;
             if (/^[A-Za-z0-9._:-]{1,100}$/.test(run?.planningPolicy?.revision || ''))
               result.planningRevision = run.planningPolicy.revision;
           },

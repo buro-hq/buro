@@ -475,13 +475,20 @@ test('a failed atomic run creation dispatches nothing and leaves no orphan ledge
   assert.equal((await f.raw()).managedRunBudgets, undefined);
 });
 
-test('native-only selection does not fabricate managed model accounting', async (t) => {
+test('a backend without host tool lifecycle does not fabricate managed model accounting', async (t) => {
   const f = await fixture(t);
   const native = {
     ...f.selection.coordinator,
     id: 'codex',
     client: 'codex' as const,
     local: false,
+    capabilities: {
+      ...f.selection.coordinator.capabilities,
+      revision: 'native-fixture-v1',
+      hostToolLifecycle: false,
+      toolsFreeTurns: false,
+      usage: 'unknown' as const,
+    },
   };
   f.engine.env.selection = {
     forProject: () => ({

@@ -1043,7 +1043,6 @@ async function runLiveProviderEvaluation(options = {}) {
     const policy = executionPolicy(profile);
     await host.ctx.plugin(executionPlugin, {
       policies: { p: policy },
-      planningMode: options.planningMode,
       workspaces,
       checks,
       environments,

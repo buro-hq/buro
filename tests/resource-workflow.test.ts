@@ -735,6 +735,22 @@ test('a conflicting coordinator proposal is corrected before dispatch and a user
   );
 });
 
+test('an eligible runtime used by another role is available to a worker without an explicit worker pool', async (t) => {
+  const f = await fixture(t, 'ollama', false, {
+    scenario: selectedScenario({ runtimeId: 'local-reviewer' }),
+  });
+  const run = await executeGoal(f);
+  assert.equal(run.resources?.workerPool, undefined);
+  assert.equal(run.assignmentResources?.builder.resource.id, 'local-reviewer');
+  assert.equal(run.assignmentResources?.builder.source, 'coordinator');
+  assert.ok(
+    f.generations
+      .filter((request) => request.phase === 'worker')
+      .every((request) => request.model === 'local-review'),
+  );
+  assert.equal(run.events.filter((event) => event.type === 'plan.rejected').length, 0);
+});
+
 test('an unavailable user fixed runtime requires attention after one plan without dispatch or fallback', async (t) => {
   const f = await fixture(t, 'mixed', false, {
     scenario: selectedScenario({ reuse: true }),
@@ -748,14 +764,13 @@ test('an unavailable user fixed runtime requires attention after one plan withou
       description: 'Implements modules',
       instructions: 'Change only the assigned module.',
       kind: 'implementation',
-      runtimePreference: { mode: 'fixed', runtimeId: 'local-reviewer' },
+      runtimePreference: { mode: 'fixed', runtimeId: 'not-configured' },
       expectedVersion: 0,
     },
   });
   const run = await startGoal(f);
   assert.equal(run.status, 'needs-attention', [run.result, ...f.failures].join('\n'));
-  assert.match(run.result, /fixed runtime.*outside the saved worker pool/i);
-  assert.match(run.result, /choose another profile or update the role preference/i);
+  assert.match(run.result, /fixed runtime.*not-configured.*outside the saved profile pool/i);
   assert.equal(run.commit, undefined);
   assert.equal(run.assignmentResources, undefined);
   assert.equal(run.agents.length, 0);
@@ -775,7 +790,6 @@ test('an unavailable user fixed runtime requires attention after one plan withou
 
 for (const [label, runtimeId, pool] of [
   ['unknown', 'not-configured', ['local-worker', 'local-reviewer']],
-  ['outside the legacy pool', 'local-reviewer', undefined],
   ['remote in a local-only run', 'cloud-coordinator', ['local-worker', 'local-reviewer']],
 ] as const)
   test(`model proposal (${label}) is corrected without widening the frozen worker pool or dispatching it`, async (t) => {

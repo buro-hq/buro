@@ -5,6 +5,8 @@ import { DomainError } from '../../core/ports.ts';
 import { ManagedAgentRuntime } from '../../core/managed-runtime.ts';
 import { conservativeRequestPolicy, type ManagedRequestPolicy } from '../../core/request-policy.ts';
 import { ResourceSelection } from '../../core/resource-selection.ts';
+import { roleResourceContext, roleResourceEligibility } from '../../core/role-routing.ts';
+import type { RoleResourceChoices } from '../../protocol/resources.ts';
 import { CapabilityProbeService, type ProbeReceipt } from '../../core/capability-probe.ts';
 import type {
   ResourceConnection,
@@ -284,8 +286,41 @@ export async function createRuntimeResources(options: {
       return selected;
     },
   };
+  const projectRoleChoices = (projectId: string): RoleResourceChoices[] => {
+    const snapshot = options.projects.get(projectId).snapshot();
+    const selected = activeSelection.forProject(projectId);
+    const strict = snapshot.profile?.scope?.mode === 'strict';
+    return [
+      ...(snapshot.roles || []).map((role) => ({ id: role.id, version: role.version })),
+      ...['coordinator', 'reviewer', 'local_preview', 'delivery_pr', 'production_delivery']
+        .filter((id) => !(snapshot.roles || []).some((role) => role.id === id))
+        .map((id) => ({ id, version: undefined })),
+      { id: '*', version: undefined },
+    ].map((role) => {
+      const context = roleResourceContext(role.id, strict);
+      return {
+        roleId: role.id,
+        ...(role.version !== undefined ? { roleVersion: role.version } : {}),
+        purpose: context.purpose,
+        requirements: context.requirements || {},
+        choices: roleResourceEligibility(selected, context.requirements, context.purpose).map(
+          (choice) =>
+            pendingRuntime(choice.resource.id)
+              ? {
+                  ...choice,
+                  eligible: false,
+                  reason: 'Restart the service to activate this runtime configuration.',
+                }
+              : choice,
+        ),
+      };
+    });
+  };
   const list = async (projectId?: string) => ({
     defaultProfile: configuration.snapshot().defaultProfile,
+    probeRuntimeIds: config.runtimes
+      .filter((runtime) => runtime.client === 'managed' && providers.has(runtime.connectionId))
+      .map((runtime) => runtime.id),
     profiles: structuredClone(config.profiles),
     runtimes: structuredClone(resources),
     configurationRevision: resourceConfigurationRevision(configuration.snapshot()),
@@ -306,7 +341,12 @@ export async function createRuntimeResources(options: {
       activeEndpoint: config.connections.find((item) => item.id === connection.id)?.endpoint,
       restartRequired: pending(connection.id),
     })),
-    ...(projectId ? { selected: activeSelection.forProject(projectId) } : {}),
+    ...(projectId
+      ? {
+          selected: activeSelection.forProject(projectId),
+          roleChoices: projectRoleChoices(projectId),
+        }
+      : {}),
     probes: (
       await Promise.all(
         resources.map(async (resource) => {

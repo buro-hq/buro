@@ -1,3 +1,4 @@
+import { fixtureExecutionSelection } from './fixtures/execution-resources.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -257,6 +258,7 @@ test('managed execution reads, edits and checks a real worktree, then independen
   const engine = new ExecutionService({
     ...env,
     runtime,
+    selection: fixtureExecutionSelection(runtime.id, runtime.capabilities),
     workspaces,
     checks,
     policies: { p: policy },

@@ -406,3 +406,66 @@ test('resource plugin publishes and executes API connection saves through the sh
   const after = await bus.execute({ method: 'resources.list', params: {} }, meta('after'));
   assert.equal(after.connections.find((item: any) => item.id === 'ollama').restartRequired, true);
 });
+
+test('role choices expose server eligibility for the selected profile and actual provider diagnostics without model calls', async (t) => {
+  const f = await fixture(t),
+    resources = await f.create();
+  Object.assign(f.state.profile, {
+    resourceProfile: 'pool',
+    scope: { mode: 'strict', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
+  });
+  Object.assign(f.state, {
+    roles: [
+      { id: 'coordinator', version: 3 },
+      { id: 'reviewer', version: 2 },
+      { id: 'builder', version: 4 },
+      { id: 'local_preview', version: 1 },
+      { id: 'delivery_pr', version: 1 },
+      { id: 'production_delivery', version: 1 },
+    ],
+  });
+  const catalog = await resources.list('p');
+  assert.deepEqual(catalog.probeRuntimeIds, ['local']);
+  const choices = catalog.roleChoices!;
+  const coordinator = choices.find((entry) => entry.roleId === 'coordinator')!;
+  assert.equal(coordinator.roleVersion, 3);
+  assert.equal(coordinator.purpose, 'coordination');
+  assert.equal(coordinator.requirements.strictPlannedWrites, true);
+  assert.equal(
+    coordinator.choices.find((choice) => choice.resource.id === 'codex')!.eligible,
+    false,
+  );
+  assert.match(
+    coordinator.choices.find((choice) => choice.resource.id === 'codex')!.reason,
+    /outside planned paths/,
+  );
+  assert.equal(
+    coordinator.choices.find((choice) => choice.resource.id === 'local')!.eligible,
+    true,
+  );
+  const worker = choices.find((entry) => entry.roleId === '*')!;
+  assert.equal(worker.roleVersion, undefined);
+  assert.equal(worker.purpose, 'implementation');
+  assert.equal(worker.choices.find((choice) => choice.resource.id === 'local')!.eligible, true);
+  const reviewer = choices.find((entry) => entry.roleId === 'reviewer')!;
+  assert.equal(reviewer.requirements.immutableReview, true);
+  assert.equal(reviewer.requirements.readOnlySessions, true);
+  for (const id of ['local_preview', 'delivery_pr', 'production_delivery']) {
+    const operational = choices.find((entry) => entry.roleId === id)!;
+    assert.equal(operational.purpose, 'delivery');
+    assert.equal(operational.requirements.readOnlySessions, true);
+  }
+  assert.deepEqual(
+    [
+      ...new Set(choices.flatMap((entry) => entry.choices.map((choice) => choice.resource.id))),
+    ].sort(),
+    ['codex', 'local'],
+  );
+  await update(resources, direct());
+  const pending = (await resources.list('p'))
+    .roleChoices!.find((entry) => entry.roleId === '*')!
+    .choices.find((choice) => choice.resource.id === 'local')!;
+  assert.equal(pending.eligible, false);
+  assert.match(pending.reason, /Restart the service/);
+  assert.deepEqual(f.calls, []);
+});

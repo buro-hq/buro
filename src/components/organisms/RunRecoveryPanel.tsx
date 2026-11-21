@@ -6,6 +6,7 @@ import type { Goal, Run } from '../../../protocol/domain.ts';
 import { useProject } from '../../data/provider';
 import { Notice } from '../atoms/Notice';
 import { GoalModal } from './GoalModal';
+import { PolicySummary } from './PolicySummary';
 export function RunRecoveryPanel({
   run,
   compact = false,
@@ -30,18 +31,15 @@ export function RunRecoveryPanel({
   )
     return null;
   const goal = snapshot?.goals.find((g) => g.id === run.goalId),
-    supported = snapshot?.capabilities.includes('run.resume'),
-    canRecheck =
-      !!run.planSavedAt ||
-      !!run.roleSnapshots?.some((role) => !['coordinator', 'reviewer'].includes(role.id)),
+    actions = new Set(run.stop?.actions || []),
     policy = currentProfile
       ? snapshot?.executionPolicy
       : run.executionPolicySnapshot || snapshot?.executionPolicy;
   const blocked = snapshot?.runs.some(
     (r) => r.status && ['queued', 'running', 'canceling'].includes(r.status),
   );
-  const poisonedBudget = run.managedBudget?.status === 'exceeded';
   async function resume() {
+    if (!mode || !actions.has(mode) || blocked || connection !== 'connected') return;
     setBusy(true);
     setError('');
     try {
@@ -64,58 +62,81 @@ export function RunRecoveryPanel({
       setBusy(false);
     }
   }
+  async function startNew() {
+    if (!actions.has('new-run') || blocked || connection !== 'connected') return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await client!.command<{ runId: string }>({
+        method: 'run.start',
+        params: {
+          projectId: snapshot!.project.id,
+          goalId: run.goalId!,
+          checkIds: snapshot!.executionPolicy!.defaultCheckIds,
+        },
+      });
+      onResumed?.(result.runId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className={compact ? 'recovery-actions' : 'recovery-panel'}>
       {!compact && (
         <>
           <h3>{t('Continue work')}</h3>
           <Notice tone={run.issue ? 'warning' : 'info'}>
-            {run.issue?.message ||
-              t(
-                'The workspace and history are preserved. Revise the goal, continue repairs or rerun checks only.',
-              )}
+            {run.stop
+              ? t(run.stop.message)
+              : t('Recovery actions are unavailable. Refresh the service connection.')}
           </Notice>
         </>
       )}
-      {compact && run.issue && <Notice tone="warning">{run.issue.message}</Notice>}
-      {run.issue?.code === 'MANAGED_BUDGET_BLOCKED' && (
-        <p className="caption">
-          {poisonedBudget
-            ? t('This budget is blocked. Start a new run; previous work and history are preserved.')
-            : t(
-                'Continuing keeps this run’s budget. Start a new run for a new budget; rechecking can use any remaining review allowance.',
-              )}
-        </p>
-      )}
+      {compact && run.stop && <Notice tone="warning">{t(run.stop.message)}</Notice>}
+      {run.stop?.detail && <p className="caption">{t(run.stop.detail)}</p>}
+      {!compact && <PolicySummary policy={run.effectivePolicy} />}
       <div className="recovery-buttons">
-        <Button
-          variant="light"
-          size="xs"
-          leftSection={<Play size={13} />}
-          disabled={
-            poisonedBudget || !supported || blocked || connection !== 'connected' || !run.workspace
-          }
-          onClick={() => setMode('repair')}
-        >
-          {t('Continue')}
-        </Button>
-        <Button
-          variant="default"
-          size="xs"
-          leftSection={<RefreshCw size={13} />}
-          disabled={
-            poisonedBudget ||
-            !supported ||
-            !canRecheck ||
-            blocked ||
-            connection !== 'connected' ||
-            !run.workspace
-          }
-          onClick={() => setMode('recheck')}
-        >
-          {t('Rerun checks')}
-        </Button>
-        {goal && (
+        {actions.has('repair') && (
+          <Button
+            variant="light"
+            size="xs"
+            leftSection={<Play size={13} />}
+            disabled={blocked || connection !== 'connected'}
+            onClick={() => setMode('repair')}
+          >
+            {t('Continue')}
+          </Button>
+        )}
+        {actions.has('recheck') && (
+          <Button
+            variant="default"
+            size="xs"
+            leftSection={<RefreshCw size={13} />}
+            disabled={blocked || connection !== 'connected'}
+            onClick={() => setMode('recheck')}
+          >
+            {t('Rerun checks')}
+          </Button>
+        )}
+        {actions.has('new-run') && (
+          <Button
+            variant="default"
+            size="xs"
+            leftSection={<Play size={13} />}
+            loading={busy}
+            disabled={
+              blocked ||
+              connection !== 'connected' ||
+              !snapshot?.executionPolicy?.defaultCheckIds.length
+            }
+            onClick={() => void startNew()}
+          >
+            {t('Start new run')}
+          </Button>
+        )}
+        {goal && actions.has('edit-goal') && (
           <Button
             variant="subtle"
             size="xs"
@@ -128,13 +149,8 @@ export function RunRecoveryPanel({
           </Button>
         )}
       </div>
-      {supported && !canRecheck && (
-        <p className="caption">
-          {t('No plan has been saved yet. Click Continue to finish planning.')}
-        </p>
-      )}
-      {!supported && (
-        <p className="caption">{t('Update the local service to continue saved runs.')}</p>
+      {actions.has('project-settings') && (
+        <p className="caption">{t('Project settings can be updated for a new run.')}</p>
       )}
       <Modal
         opened={mode !== null}
@@ -163,7 +179,7 @@ export function RunRecoveryPanel({
           )}
           {mode === 'repair' && (
             <Textarea
-              label={t('What needs to be fixed or clarified?')}
+              label={t('Clarification (optional)')}
               value={instructions}
               onChange={(e) => setInstructions(e.currentTarget.value)}
               minRows={4}
@@ -212,11 +228,11 @@ export function RunRecoveryPanel({
             <Button
               loading={busy}
               disabled={
-                poisonedBudget || !ids.length || (mode === 'repair' && !instructions.trim())
+                blocked || connection !== 'connected' || !ids.length || !mode || !actions.has(mode)
               }
               onClick={() => void resume()}
             >
-              {mode === 'recheck' ? t('Check saved result') : t('Continue with clarification')}
+              {mode === 'recheck' ? t('Check saved result') : t('Continue')}
             </Button>
           </div>
         </div>

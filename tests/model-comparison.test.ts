@@ -228,7 +228,7 @@ test('inner trial reports live beside the outer report with relative public refe
   assert.equal(comparisonTrialReport(undefined, 'codex-direct', 'not-applicable'), undefined);
 });
 
-test('the complete matrix keeps task/oracle/wall constant and changes only planning control', async (t) => {
+test('the complete matrix keeps task/oracle/wall constant without overriding capability-selected planning', async (t) => {
   const roots: string[] = [];
   t.after(() => Promise.all(roots.map((root) => rm(root, { recursive: true, force: true }))));
   const providerInputs: any[] = [];
@@ -261,11 +261,11 @@ test('the complete matrix keeps task/oracle/wall constant and changes only plann
       return canonicalOracle(fixture, workspace, phase, { execute: syntheticExecution });
     },
   });
-  assert.equal(report.results.length, 8);
+  assert.equal(report.results.length, 5);
   assert.ok(report.results.every((result: any) => result.accepted));
-  assert.equal(providerInputs.length, 7);
-  assert.equal(oracleCalls.length, 16);
-  assert.equal(new Set(roots).size, 8);
+  assert.equal(providerInputs.length, 4);
+  assert.equal(oracleCalls.length, 10);
+  assert.equal(new Set(roots).size, 5);
   assert.deepEqual(directModel, { model: 'gpt-6.1-sol', reasoningEffort: 'high' });
   for (const input of providerInputs) {
     assert.equal(input.forceWorker, true);
@@ -280,14 +280,14 @@ test('the complete matrix keeps task/oracle/wall constant and changes only plann
   for (const mode of ['deepseek', 'ollama', 'mixed']) {
     assert.deepEqual(
       providerInputs.filter((input) => input.mode === mode).map((input) => input.planningMode),
-      ['legacy', 'bounded'],
+      [undefined],
     );
   }
   assert.deepEqual(
     report.results
       .filter((result: any) => result.arm === 'codex-buro')
       .map((result: any) => result.planning),
-    ['legacy'],
+    ['capability-selected'],
   );
   assert.doesNotMatch(JSON.stringify(report), /never retain|privateText|fixtureDirectory/);
 });
@@ -298,7 +298,6 @@ test('failed Buro workflows still get the same final oracle and cannot be accept
   const report = await runModelComparison({
     env,
     arms: ['deepseek-buro'],
-    planningControls: [{ id: 'bounded', mode: 'bounded' }],
     runProvider: async (input: any) => {
       const directory = await mkdtemp(path.join(os.tmpdir(), 'buro-comparison-failed-'));
       const fixture = await input.sourceCase.prepare({ temporaryDirectory: directory });
@@ -326,7 +325,6 @@ test('synthetic preparing failures receive the final baseline oracle without a w
   const report = await runModelComparison({
     env,
     arms: ['ollama-buro'],
-    planningControls: [{ id: 'bounded', mode: 'bounded' }],
     runProvider: async (input: any) => {
       const directory = await mkdtemp(path.join(os.tmpdir(), 'buro-comparison-early-'));
       const fixture = await input.sourceCase.prepare({ temporaryDirectory: directory });

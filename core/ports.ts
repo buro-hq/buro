@@ -71,6 +71,7 @@ export interface AgentRuntime {
     runId?: string;
     ownerRunId?: string;
     purpose?: RuntimePurpose;
+    roleId?: string;
     assignment?: {
       sessionId: string;
       roleId: string;
@@ -86,6 +87,7 @@ export interface AgentRuntime {
     ownerRunId?: string;
     readOnly?: boolean;
     purpose?: RuntimePurpose;
+    roleId?: string;
   }): Promise<{ threadId: string }>;
   submit(threadId: string, text: string): Promise<{ turnId: string }>;
   interrupt(threadId: string, turnId: string): Promise<void>;

@@ -1,4 +1,8 @@
 import test from 'node:test';
+import {
+  fixtureExecutionSelection,
+  fixtureExecutionCapabilities,
+} from './fixtures/execution-resources.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -71,6 +75,7 @@ function record(): Run {
     phase: 'done',
     commit,
     workspace: '/worktree',
+    resources: fixtureExecutionSelection('fixture', fixtureExecutionCapabilities()).forProject('p'),
     agents: [],
     events: [],
     commands: [],

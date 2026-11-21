@@ -91,7 +91,9 @@ export async function runWorkerAssignments(options: {
     if (savedDecision && !run.resources)
       throw new DomainError('INVALID_ASSIGNMENT', 'A resource decision requires its saved pool.');
     const decision = savedDecision
-      ? validateAssignmentResource(run.resources!, role, savedDecision)
+      ? validateAssignmentResource(run.resources!, role, savedDecision, {
+          ...(policy.scope.mode === 'strict' ? { strictPlannedWrites: true } : {}),
+        })
       : undefined;
     const envelope = buildWorkerEnvelope({ run, role, paths, policy, workspace: workspace.path });
     const session: AgentSession = {

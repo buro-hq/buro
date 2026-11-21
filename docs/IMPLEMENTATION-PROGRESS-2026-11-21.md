@@ -60,9 +60,21 @@ Run.scopeObservation binds the mode and observed additional files to the accepte
 
 Default aggregate quotas, finite lower-level counters and the remaining client-specific planning/role rules are unchanged. Full automatic role/model selection, the neutral AgentBackend loop, SDK adoption, plugin contributions, SQLite authority and controlled state archive are still pending; these scope changes are not evidence of live-model coding quality.
 
+### Substep 2C — capability planning, common role choices and visible policy
+
+Status: complete. Final full suite **770/770 passed**, with no skips; build/typecheck, formatting and desktop/mobile production smoke passed. The synthetic autonomy browser check passed real role preference persistence, policy refresh, optional continuation clarification, unknown-outcome blocking, busy modal guards and Russian stop text with zero model requests/page errors. Five agent roles contributed implementation and independent reviews in waves. [Validation receipt](../output/research/stage2c-validation-2026-11-22.json), [architecture/code/boundary review](../output/research/stage2c-architecture-review-2026-11-22.md), [independent tests/UI review](../output/research/stage2c-tests-review-2026-11-22.md).
+
+New runs freeze coordinator/reviewer role versions and their actual Auto/Prefer/Fixed resource decisions before dispatch. Operational preparation similarly saves its role and selected backend before starting; worker proposals use the same authorized profile pool and operation requirements. Fixed never silently falls back, and a role's descriptive kind does not grant execution authority.
+
+Planning selects structured tools-free turns or a read-only inspection session from capabilities rather than a client name. An accepted read-only plan clears its planner thread from the writer slot durably before a separate writable session starts. Backends without session resumption can continue in a fresh session with the frozen role, saved workspace and full goal/plan; uncertain operations still block execution. Another unresolved run of the same goal blocks both a new run and continuation of a settled sibling.
+
+The service projects effective file, model, check and actual current usage policy, together with stop reasons and available recovery actions. The UI consumes that projection; configuration changes refresh it without rolling later events back. Default aggregate budgets remain finite in this slice. The package/SDK and contribution cutovers below are not implemented by these UI and routing changes.
+
+Bounded follow-ups retained: readonly operational preparation still lacks a separate durable preparation-outcome receipt; a failed preparation never dispatches delivery. Machine-default selection refreshes the initiating client, while cross-client invalidation requires the later service contribution/API work. Neither is evidence of complete operational effect recovery or multi-client policy broadcasts. Custom environment role IDs also need contribution-aware catalog eligibility; actual delivery dispatch still validates its operation requirements.
+
 ## Remaining authorized stages
 
-2. Common AgentBackend/ModelProvider/capability contracts and effective visible autonomy policy; advisory planned paths with explicit strict mode; remove client-name privileges.
+Stage 2A–2C is complete within the recorded scope. Portable ModelProvider contracts, capabilities, common role choices, scope and policy projection are implemented; the neutral AgentBackend loop belongs to stage 3 below.
 3. A pinned TS SDK contract spike: pi-ai/pi-agent-core first, AI SDK transport fallback/control, optional mini backend. Confirm actual package availability and behavior before adoption; use one loop and one host effect authority.
 4. Contribution-based Cordis composition, project services/store factory and empty production startup; demo fixtures remain explicit.
 5. One transactional SQLite authority, incremental accounting, complete private artifacts and paged context/history; clean pre-release cutover and default-none quotas only after every hidden lifetime stop is removed.

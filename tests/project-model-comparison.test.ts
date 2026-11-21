@@ -155,7 +155,10 @@ test('five real-project routes use the same contract, budget, final oracle and p
       const fixture = await input.sourceCase.prepare({ temporaryDirectory });
       await fix(fixture.root);
       await input.onRunFinished({
-        run: { workspace: fixture.root, planningPolicy: { mode: input.planningMode } },
+        run: {
+          workspace: fixture.root,
+          planningPolicy: { strategy: 'tools-free-structured', revision: 'capability-planning-v1' },
+        },
       });
       return {
         status: 'passed',
@@ -174,7 +177,7 @@ test('five real-project routes use the same contract, budget, final oracle and p
   );
   assert.equal(report.fixture.sourceFiles, 9);
   assert.equal(report.results[0].budgetCoverage.generationRequests, null);
-  assert.equal(report.results[1].planning, 'legacy');
+  assert.equal(report.results[1].planning, 'capability-selected');
   assert.equal(report.results[1].budgetCoverage.observedInputTokens, 10);
   for (const input of inputs) {
     assert.equal(input.forceWorker, true);

@@ -8,6 +8,9 @@ import { ContextMaterialSchema } from './context.ts';
 import { PendingRunTurnSchema, RunReconciliationSchema } from './reconciliation.ts';
 import { ExecutionPolicySchema } from './execution-policy.ts';
 import { ScopeObservationSchema } from './work-scope.ts';
+import { PlanningPolicySchema, planningPolicyMatchesResource } from './planning-policy.ts';
+import { EffectivePolicySchema, RunStopSchema } from './autonomy.ts';
+export { PlanningPolicySchema } from './planning-policy.ts';
 import {
   WorkerTaskSchema,
   WorkerEnvelopeSchema,
@@ -312,18 +315,6 @@ const agentSession = z.object({
     })
     .optional(),
 });
-export const PlanningPolicySchema = z.discriminatedUnion('mode', [
-  z.strictObject({
-    version: z.literal(1),
-    mode: z.literal('bounded'),
-    revision: z.enum(['bounded-planning-v1', 'bounded-planning-v2', 'bounded-planning-v3']),
-  }),
-  z.strictObject({
-    version: z.literal(1),
-    mode: z.literal('legacy'),
-    revision: z.literal('legacy-planning-v1'),
-  }),
-]);
 const run = z
   .object({
     reconciliation: RunReconciliationSchema.optional(),
@@ -331,13 +322,17 @@ const run = z
     verificationEvidence: VerificationEvidenceSchema.optional(),
     pendingTurn: PendingRunTurnSchema.optional(),
     planningPolicy: PlanningPolicySchema.optional(),
+    effectivePolicy: EffectivePolicySchema.optional(),
+    stop: RunStopSchema.optional(),
     managedBudget: ManagedRunBudgetSummarySchema.optional(),
     workerTasks: z.record(z.string(), WorkerTaskSchema).optional(),
     workerReplan: WorkerReplanSchema.optional(),
     resources: ResourceSnapshotSchema.optional(),
     assignmentResources: z.record(z.string(), AssignmentResourceSchema).optional(),
+    roleResources: z.record(z.string(), AssignmentResourceSchema).optional(),
     delegation: z.literal('buro').optional(),
     coordinatorSession: agentSession.optional(),
+    planningSession: agentSession.optional(),
     contextMaterials: z.array(ContextMaterialSchema).optional(),
     id: z.string(),
     key: z.string(),
@@ -539,8 +534,14 @@ const run = z
         code: 'custom',
         message: 'A reconciliation issue requires its durable reference.',
       });
-    if (run.planningPolicy?.mode === 'bounded' && run.resources?.coordinator.client !== 'managed')
-      ctx.addIssue({ code: 'custom', message: 'Bounded planning requires a managed coordinator.' });
+    if (run.planningPolicy) {
+      const coordinator = run.roleResources?.coordinator?.resource || run.resources?.coordinator;
+      if (!coordinator || !planningPolicyMatchesResource(run.planningPolicy, coordinator))
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Planning requires its saved configured backend and capabilities.',
+        });
+    }
   });
 export const DomainEventSchema = z
   .object({
@@ -599,6 +600,7 @@ export const SnapshotSchema = z
     runs: z.array(run),
     capabilities: z.array(z.string()),
     executionPolicy: ExecutionPolicySchema.optional(),
+    effectivePolicy: EffectivePolicySchema.optional(),
     profile: ProjectProfileSchema.optional(),
     verification: verification.optional(),
     research: ResearchSchema.optional(),

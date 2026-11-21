@@ -1,7 +1,8 @@
 import { runWorkerAssignments } from './worker-assignments.ts';
 import {
-  boundedPlanningTurn,
-  BOUNDED_PLANNING_REVISION,
+  planningTurn,
+  selectPlanningPolicy,
+  assertPlanningPolicy,
   planningOutputSchema,
 } from './planning-policy.ts';
 import { createManagedRunBudget, managedBudgetSummary } from './run-budget.ts';
@@ -12,6 +13,9 @@ import { workerRefinementOutputSchema } from '../protocol/worker-tasks.ts';
 import { resolveWorkerResource, workerResourcePool } from './assignment-resources.ts';
 import type { AssignmentResource } from '../protocol/resources.ts';
 import { sessionResource } from '../protocol/resources.ts';
+import { resolveRoleResource, roleResourceContext } from './role-routing.ts';
+import { defaultRoles } from './defaults.ts';
+import { projectRunAutonomy } from './autonomy-policy.ts';
 import { recordableRuntimeEvent } from './runtime-events.ts';
 import { applyRuntimeEvent } from './runtime-projection.ts';
 import { checkContext, changeContext, roleContext } from './agent-context.ts';
@@ -69,8 +73,6 @@ type Environment = {
   projects: ProjectRegistry;
   runtime: AgentRuntime;
   selection?: RuntimeSelection;
-  /** Saved on new runs; existing runs keep their original planning behavior. */
-  planningMode?: 'bounded' | 'legacy';
   workspaces: WorkspacePort;
   checks: CheckPort;
   policies: Record<string, ExecutionPolicy>;
@@ -480,6 +482,11 @@ ${installation.output || installation.error || ''}`,
         const goal = doc.goals.find((g) => g.id === input.goalId);
         if (!goal) throw new DomainError('NOT_FOUND', 'Goal not found.');
         this.assertEnvironmentRepair(goal, policy);
+        if (doc.runs.some((r) => r.goalId === goal.id && (r.reconciliation || r.pendingTurn)))
+          throw new DomainError(
+            'RUN_RECONCILIATION_REQUIRED',
+            'An earlier run of this goal has an unknown operation. Reconcile it before starting another run.',
+          );
         if (doc.runs.some((r) => !terminal(r)))
           throw new DomainError('PROJECT_BUSY', 'A goal is already running in this project.');
         const now = this.env.now(),
@@ -520,13 +527,32 @@ ${installation.output || installation.error || ''}`,
             result: '',
             sourceHash: '',
           };
-        const bounded =
-          run.resources?.coordinator.client === 'managed' && this.env.planningMode !== 'legacy';
-        run.planningPolicy = {
-          version: 1,
-          mode: bounded ? 'bounded' : 'legacy',
-          revision: bounded ? BOUNDED_PLANNING_REVISION : 'legacy-planning-v1',
-        };
+        if (!run.resources)
+          throw new DomainError(
+            'RESOURCE_PROFILE_REQUIRED',
+            'Execution requires a saved resource profile.',
+          );
+        const createdRoles: Role[] = [];
+        run.roleSnapshots = ['coordinator', 'reviewer'].map((id) => {
+          const existing = doc.roleVersions.filter((role) => role.id === id).at(-1);
+          if (existing) return structuredClone(existing);
+          const template = defaultRoles.find((role) => role.id === id)!;
+          const role = { ...structuredClone(template), createdAt: now, updatedAt: now };
+          doc.roleVersions.push(role);
+          createdRoles.push(role);
+          return structuredClone(role);
+        });
+        run.roleResources = Object.fromEntries(
+          run.roleSnapshots.map((role) => [
+            role.id,
+            resolveRoleResource(
+              run.resources!,
+              role,
+              roleResourceContext(role.id, policy.scope.mode === 'strict'),
+            ),
+          ]),
+        );
+        run.planningPolicy = selectPlanningPolicy(run.roleResources.coordinator.resource);
         if (
           run.resources &&
           [
@@ -534,7 +560,7 @@ ${installation.output || installation.error || ''}`,
             run.resources.worker,
             run.resources.reviewer,
             ...(run.resources.workerPool || []),
-          ].some((resource) => resource.client === 'managed')
+          ].some((resource) => resource.capabilities.hostToolLifecycle)
         ) {
           const ledger = createManagedRunBudget({
             projectId: input.projectId,
@@ -545,10 +571,14 @@ ${installation.output || installation.error || ''}`,
           doc.managedRunBudgets = { ...doc.managedRunBudgets, [run.id]: ledger };
           run.managedBudget = managedBudgetSummary(ledger);
         }
+        Object.assign(run, projectRunAutonomy(run, this.autonomyContext(doc, run)));
         doc.runs.unshift(run);
         goal.status = 'running';
         goal.runId = run.id;
-        return { result: { runId: run.id }, change: { type: 'run.changed', run, goal } };
+        return {
+          result: { runId: run.id },
+          change: { type: 'run.changed', run, goal, roles: createdRoles },
+        };
       });
     this.schedule(input.projectId, result.runId);
     return result;
@@ -573,6 +603,18 @@ ${installation.output || installation.error || ''}`,
           goal = doc.goals.find((g) => g.id === run?.goalId);
         if (!run || !goal) throw new DomainError('NOT_FOUND', 'Run or goal not found.');
         assertRunReconciled(run);
+        if (
+          doc.runs.some(
+            (other) =>
+              other.id !== run.id &&
+              other.goalId === run.goalId &&
+              (other.reconciliation || other.pendingTurn),
+          )
+        )
+          throw new DomainError(
+            'RUN_RECONCILIATION_REQUIRED',
+            'Another run of this goal has an unknown operation. Reconcile it before continuing.',
+          );
         this.assertManagedBudgetOpen(run);
         if (
           input.mode === 'recheck' &&
@@ -639,6 +681,7 @@ ${installation.output || installation.error || ''}`,
         run.review = undefined;
         run.independentReviewer = false;
         run.issue = undefined;
+        run.stop = undefined;
         run.title = goal.title;
         const goalText = goal.body + '\n\nAcceptance criteria:\n' + goal.criteria;
         if (run.goalText !== goalText) {
@@ -657,6 +700,7 @@ ${installation.output || installation.error || ''}`,
           type: 'run.resume-requested',
           text: `${input.mode === 'recheck' ? 'Rechecking' : 'Continuing with repair'} in the saved workspace. ${input.useCurrentProfile ? 'Using the current profile.' : 'Keeping the original profile.'} ${input.instructions}`,
         });
+        Object.assign(run, projectRunAutonomy(run, this.autonomyContext(doc, run)));
         goal.status = 'running';
         goal.runId = run.id;
         return { result: { runId: run.id }, change: { type: 'run.changed', run, goal } };
@@ -729,15 +773,23 @@ ${installation.output || installation.error || ''}`,
       };
     if (run.continuation?.mode === 'repair') {
       const instructions =
+        (run.roleSnapshots?.find((role) => role.id === 'coordinator')?.instructions || '') +
+        '\n' +
         'Continue the existing goal in its saved workspace. Do not start agents: Buro dispatches workers. Do not commit or modify protected files. Project context: ' +
         (policy.context || '') +
         materialInstructions(run.contextMaterials || [], workspace.path, true) +
         (run.repairEnvironment ? '\n' + environmentRepairInstructions : '');
-      if (run.threadId && this.env.runtime.resume) {
+      if (
+        run.threadId &&
+        this.env.runtime.resume &&
+        run.roleResources?.coordinator?.resource.capabilities.resumeSessions
+      ) {
         root = await this.env.runtime.resume({
           projectId,
           runId,
           threadId: run.threadId,
+          roleId: 'coordinator',
+          purpose: 'coordination',
           workspace: workspace.path,
           instructions,
         });
@@ -750,10 +802,25 @@ ${installation.output || installation.error || ''}`,
           }),
         );
       } else {
+        await this.update(projectId, runId, (r) => {
+          r.coordinatorSession = {
+            id: 'S-' + this.env.id(),
+            roleId: 'coordinator',
+            roleVersion: r.roleSnapshots?.find((role) => role.id === 'coordinator')?.version || 1,
+            ...sessionResource(
+              r.resources,
+              'coordination',
+              this.env.runtime.id,
+              r.roleResources?.coordinator,
+            ),
+            parentId: r.planningSession?.id,
+          };
+        });
         root = await this.startRuntime({
           projectId,
           runId,
           purpose: 'coordination',
+          roleId: 'coordinator',
           workspace: workspace.path,
           instructions,
         });
@@ -837,6 +904,21 @@ ${installation.output || installation.error || ''}`,
     if (!run) throw new DomainError('NOT_FOUND', 'Run not found.');
     return run;
   }
+  private autonomyContext(doc: ProjectDocument, run: Run) {
+    return {
+      goalExists: doc.goals.some((goal) => goal.id === run.goalId),
+      goalUnsettled: doc.runs.some(
+        (other) =>
+          other.id !== run.id &&
+          other.goalId === run.goalId &&
+          !!(other.reconciliation || other.pendingTurn),
+      ),
+      projectBusy: doc.runs.some((other) => other.id !== run.id && !terminal(other)),
+      resumeSupported: true,
+      startSupported: true,
+      settingsSupported: !!this.env.policies[doc.project.id]?.profile,
+    };
+  }
   async update(
     projectId: string,
     runId: string,
@@ -850,6 +932,7 @@ ${installation.output || installation.error || ''}`,
           goal = doc.goals.find((g) => g.id === run?.goalId);
         if (!run || !goal) throw new DomainError('NOT_FOUND', 'Run or goal was deleted.');
         apply(run, goal, doc);
+        Object.assign(run, projectRunAutonomy(run, this.autonomyContext(doc, run)));
         run.updatedAt = this.env.now();
         return {
           result: null,
@@ -929,15 +1012,20 @@ ${installation.output || installation.error || ''}`,
     status: Run['status'],
     text: string,
     issue?: Run['issue'],
+    errorCode?: string,
   ) {
     await this.eventQueue;
-    await this.update(projectId, runId, (r, g) => {
+    await this.update(projectId, runId, (r, g, doc) => {
       r.status = status;
       r.phase = 'done';
       r.completedAt = this.env.now();
       r.result = text;
       r.summary = text;
       if (issue) r.issue = issue;
+      Object.assign(
+        r,
+        projectRunAutonomy(r, { ...this.autonomyContext(doc, r), lastErrorCode: errorCode }),
+      );
       g.status = status === 'completed' ? 'completed' : 'failed';
       for (const a of r.agents)
         if (!a.completedAt) {
@@ -1069,6 +1157,7 @@ ${installation.output || installation.error || ''}`,
                 ].includes(error.code)
               ? { code: 'EXECUTION_FAILED', message: error.message, checks: [] }
               : undefined,
+        error instanceof DomainError ? error.code : undefined,
       );
     } finally {
       await Promise.allSettled(threads.map((id) => this.env.runtime.release?.(id)));
@@ -1114,36 +1203,55 @@ ${installation.output || installation.error || ''}`,
     });
     const initial = this.env.projects.get(projectId).snapshot(),
       run = this.get(projectId, runId);
-    // Missing snapshots are historical runs. Never silently change their comparison arm on resume.
-    const boundedPlanning =
-      run.planningPolicy?.mode === 'bounded' && run.resources?.coordinator.client === 'managed';
+    const coordinatorResource = run.roleResources?.coordinator?.resource;
+    if (!run.planningPolicy || !coordinatorResource)
+      throw new DomainError(
+        'INVALID_PLANNING_POLICY',
+        'This run has no saved planning strategy and coordinator decision. Start a new run.',
+      );
+    assertPlanningPolicy(run.planningPolicy, coordinatorResource);
+    const inspectionPlanning = run.planningPolicy.strategy === 'read-only-inspection';
     await this.phase(projectId, runId, 'planning', 'Coordinator is planning and selecting roles');
-    const coordinator = initial.roles.find((r) => r.id === 'coordinator');
+    const coordinator = run.roleSnapshots?.find((r) => r.id === 'coordinator');
+    if (!coordinator)
+      throw new DomainError('INVALID_ASSIGNMENT', 'The coordinator role snapshot is missing.');
     const input = {
       projectId,
       runId,
       purpose: 'coordination' as const,
+      roleId: 'coordinator',
+      ...(inspectionPlanning ? { readOnly: true } : {}),
       workspace: workspace.path,
       instructions:
         (coordinator?.instructions || 'Coordinate work on the goal.') +
-        '\nDo not start agents: Buro dispatches workers. Do not run Git commit/reset/checkout. An external service accepts changes. Modify only allowed files. Do not touch .git. Network use is limited to preparing project tools and dependencies when a managed environment is provided.' +
-        (boundedPlanning ? '' : '\nProject context: ' + (policy.context || '')) +
+        '\nDo not start agents: Buro dispatches workers. Do not run Git commit/reset/checkout. An external service accepts changes. Follow the saved file policy; planned paths are guidance unless strict mode is enabled. Do not touch .git. Network use is limited to preparing project tools and dependencies when a managed environment is provided.' +
+        (inspectionPlanning ? '\nProject context: ' + (policy.context || '') : '') +
         materialInstructions(run.contextMaterials || [], workspace.path, true, {
-          deferPlanningReads: boundedPlanning,
+          deferPlanningReads: !inspectionPlanning,
         }) +
         (run.repairEnvironment ? '\n' + environmentRepairInstructions : ''),
     };
     await this.update(projectId, runId, (r) => {
       r.delegation = 'buro';
+      if (restoreThread && !coordinatorResource.capabilities.resumeSessions)
+        r.coordinatorSession = undefined;
       r.coordinatorSession ||= {
         id: 'S-' + this.env.id(),
         roleId: 'coordinator',
-        roleVersion: coordinator?.version || 0,
-        ...sessionResource(r.resources, 'coordination', this.env.runtime.id),
+        roleVersion: coordinator.version,
+        ...sessionResource(
+          r.resources,
+          'coordination',
+          this.env.runtime.id,
+          r.roleResources?.coordinator,
+        ),
       };
     });
-    const root =
-      restoreThread && run.threadId && this.env.runtime.resume
+    let root =
+      restoreThread &&
+      run.threadId &&
+      this.env.runtime.resume &&
+      coordinatorResource.capabilities.resumeSessions
         ? await this.env.runtime.resume({ ...input, threadId: run.threadId })
         : await this.env.runtime.start(input);
     if (restoreThread)
@@ -1158,6 +1266,14 @@ ${installation.output || installation.error || ''}`,
     threads.push(root.threadId);
     await this.update(projectId, runId, (r) => {
       r.threadId = root.threadId;
+      r.events.push({
+        at: this.env.now(),
+        type: 'planning.started',
+        threadId: root.threadId,
+        text: inspectionPlanning
+          ? 'Planning in a read-only session'
+          : 'Planning with tools disabled for this turn',
+      });
     });
     const ask = (threadId: string, text: string, schema: unknown) =>
       this.completedTurn(
@@ -1174,66 +1290,41 @@ ${installation.output || installation.error || ''}`,
       correction = '',
       roleCatalogChanged = false,
       planningRoles = initial.roles;
-    const planningSchema =
-      boundedPlanning && run.planningPolicy?.revision === 'bounded-planning-v3'
-        ? planningOutputSchema(teamOutputSchema, policy.maxWorkers)
-        : teamOutputSchema;
+    const planningSchema = planningOutputSchema(teamOutputSchema, policy.maxWorkers);
     for (let attempt = 0; attempt < 2; attempt++) {
       const workerCatalog = planningRoles.filter(
         (role) => !['local_preview', 'delivery_pr', 'production_delivery'].includes(role.id),
       );
       const pool = run.resources ? workerResourcePool(run.resources) : [];
-      const boundedTurn = boundedPlanning
-        ? boundedPlanningTurn({
-            revision:
-              run.planningPolicy?.revision === 'bounded-planning-v3' ||
-              run.planningPolicy?.revision === 'bounded-planning-v2'
-                ? run.planningPolicy.revision
-                : 'bounded-planning-v1',
-            reuseBrief: attempt > 0,
-            roleCatalogChanged,
-            title: run.title,
-            goalText: run.goalText,
-            scope: policy.scope,
-            projectContext: policy.context,
-            maxWorkers: policy.maxWorkers,
-            roles: workerCatalog,
-            pool,
-            baseline,
-            repairInstructions: run.repairEnvironment ? environmentRepairInstructions : undefined,
-            correction: correction.replace(/^Correct the previous plan: /, ''),
-            sessionInstructions: input.instructions,
-          })
-        : undefined;
-      const legacyPrompt = boundedTurn
-        ? ''
-        : `First, only inspect the project and create a plan; do not edit files or start agents.
-Goal: ${run.title}
-${run.goalText}
-File policy: ${JSON.stringify(policy.scope)}. ${policy.scope.mode === 'advisory' ? 'Planned paths are guidance; edit additional public project files when needed and report them.' : 'Only the selected planned paths may change.'} Protected paths are always forbidden. Project context: ${policy.context || ''}.
-For a small coherent change, return an empty team and implement directly as coordinator. Otherwise choose between 1 and ${policy.maxWorkers} workers only when delegation is useful. Reuse suitable catalog roles where possible. If none fits, create a concise reusable role without this goal, filenames or specific test values. New roles also require roleId, for example react_developer or dependency-maintainer: lowercase Latin letters, digits, underscores and hyphens, starting with a letter, up to 64 characters. steps.owner must use the exact roleId, not the title. The coordinator and independent reviewer are supplied by the service; exclude them from team. local_preview/delivery_pr/production_delivery run separately after acceptance; exclude them from team. Assign nonoverlapping paths to workers. Steps may use coordinator/reviewer as owners.
-For each worker, supply a compact assignment with a complete objective, exact public file inputs, expectedResult and concrete criteria. It describes only that worker's coherent subtask, not the whole project. Keep role instructions reusable. Workers receive this assignment instead of the full goal; include every constraint needed for their part. Use assignment null only when the full original goal is needed. File inputs allow reading, not writing outside the assigned paths. Prefer short native tool calls and factual results over long commentary.
-Baseline checks: ${JSON.stringify(checkContext(baseline))}
-${run.repairEnvironment ? environmentRepairInstructions : ''}
-Catalog: ${JSON.stringify(roleContext(workerCatalog))}
-Permitted worker runtimes: ${JSON.stringify(pool.map(({ id, client, providerId, model, local }) => ({ id, client, providerId, model, local })))}.
-Choose a runtime for each worker only from this pool when that improves its assignment. Use runtimeId null and runtimeReason "" to follow its user preference or the profile default. Respect fixed user preferences. Explain a different choice when a user prefers another runtime. A runtime selection applies only to this assignment; never put it in reusable role instructions or create a new connection. Runtime metadata is not evidence of coding quality; the service still checks capabilities, scope, tests and independent review.
-${correction}`;
+      const plannedTurn = planningTurn({
+        policy: run.planningPolicy,
+        reuseBrief: attempt > 0,
+        roleCatalogChanged,
+        title: run.title,
+        goalText: run.goalText,
+        scope: policy.scope,
+        projectContext: policy.context,
+        maxWorkers: policy.maxWorkers,
+        roles: workerCatalog,
+        pool,
+        baseline,
+        repairInstructions: run.repairEnvironment ? environmentRepairInstructions : undefined,
+        correction: correction.replace(/^Correct the previous plan: /, ''),
+        sessionInstructions: input.instructions,
+      });
       let answer: unknown;
       let formatError: DomainError | undefined;
       try {
-        answer = boundedTurn
-          ? await this.completedTurn(
-              projectId,
-              runId,
-              root.threadId,
-              boundedTurn.text,
-              planningSchema,
-              signal,
-              run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-              boundedTurn.toolPolicy,
-            )
-          : await ask(root.threadId, legacyPrompt, teamOutputSchema);
+        answer = await this.completedTurn(
+          projectId,
+          runId,
+          root.threadId,
+          plannedTurn.text,
+          planningSchema,
+          signal,
+          run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
+          plannedTurn.toolPolicy,
+        );
       } catch (error) {
         // Only an observed response with invalid JSON is eligible for format correction.
         if (!(error instanceof DomainError) || error.code !== 'INVALID_AGENT_OUTPUT') throw error;
@@ -1257,6 +1348,7 @@ ${correction}`;
                 run.resources!,
                 role,
                 candidatePlan.team.find((worker) => worker.roleId === role.id),
+                policy.scope.mode === 'strict' ? { strictPlannedWrites: true } : {},
               ),
             ]),
           );
@@ -1285,9 +1377,17 @@ ${correction}`;
           }
           r.plan = candidatePlan.steps;
           r.planSavedAt = this.env.now();
+          if (inspectionPlanning) {
+            r.planningSession = r.coordinatorSession;
+            r.coordinatorSession = undefined;
+            // A saved read-only planner must never be resumed as a writer after a crash.
+            r.threadId = '';
+          }
           r.summary = candidatePlan.summary;
           r.roleSnapshots = [
-            ...initial.roles.filter((role) => ['coordinator', 'reviewer'].includes(role.id)),
+            ...(r.roleSnapshots || []).filter((role) =>
+              ['coordinator', 'reviewer'].includes(role.id),
+            ),
             ...candidateTeam.roles,
           ];
           r.roleOrigins = candidateTeam.origins;
@@ -1328,6 +1428,35 @@ ${correction}`;
       }
     }
     if (!plan || !team) throw Error('The revised plan did not pass validation. ' + correction);
+    if (inspectionPlanning) {
+      await this.env.runtime.release?.(root.threadId);
+      await this.update(projectId, runId, (r) => {
+        r.coordinatorSession = {
+          id: 'S-' + this.env.id(),
+          roleId: 'coordinator',
+          roleVersion: coordinator.version,
+          ...sessionResource(
+            r.resources,
+            'coordination',
+            this.env.runtime.id,
+            r.roleResources?.coordinator,
+          ),
+          parentId: r.planningSession?.id,
+        };
+      });
+      const writer = await this.startRuntime({ ...input, readOnly: false });
+      threads.push(writer.threadId);
+      root = writer;
+      await this.update(projectId, runId, (r) => {
+        r.threadId = writer.threadId;
+        r.events.push({
+          at: this.env.now(),
+          type: 'planning.writer-started',
+          threadId: writer.threadId,
+          text: 'Read-only planning completed; a separate implementation session received the accepted plan.',
+        });
+      });
+    }
     const proposed = team.roles.filter((r) => team!.origins[r.id] === 'created');
     await this.phase(projectId, runId, 'implementation', 'Workers are implementing the plan');
     const workerResults = await this.dispatchWorkers(
@@ -1344,7 +1473,7 @@ ${correction}`;
       await ask(
         root.threadId,
         `Plan accepted. Buro has executed the assigned workers. If team is empty, implement directly. Integrate the current changes and repair inconsistencies. Do not start agents: worker dispatch and independent review belong to Buro. Do not commit. Prefer targeted local verification; the service runs the registered acceptance commands, so do not repeat a full successful suite without a reason.
-Plan: ${JSON.stringify(plan)}
+${inspectionPlanning ? `Goal: ${run.title}\n${run.goalText}\nProject context: ${policy.context || ''}\n` : ''}Plan: ${JSON.stringify(plan)}
 Worker results: ${JSON.stringify(workerResults)}
 Baseline checks: ${JSON.stringify(checkContext(baseline))}
 Use relevant user materials at their staged paths. Return the formal execution result.`,
@@ -1575,12 +1704,19 @@ Return a shorter complete objective and only needed inputs from the saved input 
           'No verified source revision was captured.',
         );
       await this.phase(projectId, runId, 'review', 'Independent reviewer is checking the result');
-      const reviewerRole = initial.roles.find((r) => r.id === 'reviewer');
+      const reviewerRole = this.get(projectId, runId).roleSnapshots?.find(
+        (r) => r.id === 'reviewer',
+      );
       const reviewerSession = {
         id: 'S-' + this.env.id(),
         roleId: 'reviewer',
         roleVersion: reviewerRole?.version || 0,
-        ...sessionResource(this.get(projectId, runId).resources, 'review', this.env.runtime.id),
+        ...sessionResource(
+          this.get(projectId, runId).resources,
+          'review',
+          this.env.runtime.id,
+          this.get(projectId, runId).roleResources?.reviewer,
+        ),
         parentId: this.get(projectId, runId).coordinatorSession?.id,
       };
       await this.update(projectId, runId, (r) => {
@@ -1608,6 +1744,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
         workspace: view.readRoot,
         readOnly: true,
         purpose: 'review',
+        roleId: 'reviewer',
         instructions:
           (reviewerRole?.instructions ||
             'Independently verify the goal and correctness of the changes.') +

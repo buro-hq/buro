@@ -27,7 +27,7 @@ import type { Role } from '../protocol/domain.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 
 const local: RuntimeResource = {
-  capabilities: fixtureCapabilities(),
+  capabilities: fixtureCapabilities({ structuredTurns: true }),
   id: 'small',
   client: 'managed',
   providerId: 'ollama',
@@ -36,7 +36,7 @@ const local: RuntimeResource = {
   local: true,
 };
 const cloud: RuntimeResource = {
-  capabilities: fixtureCapabilities(),
+  capabilities: fixtureCapabilities({ structuredTurns: true }),
   id: 'reasoner',
   client: 'managed',
   providerId: 'deepseek',
@@ -64,12 +64,13 @@ const role = (extra: Partial<Role> = {}): Role => ({
   ...extra,
 });
 
-test('legacy snapshots authorize only the original worker and legacy model strings do not select a runtime', () => {
+test('the full frozen profile union authorizes role choices without client-name or legacy model-string selection', () => {
   const saved = snapshot();
   delete saved.workerPool;
-  assert.deepEqual(workerResourcePool(saved), [local]);
+  assert.deepEqual(workerResourcePool(saved), [cloud, local]);
   assert.equal(resolveWorkerResource(saved, role({ model: cloud.model })).resource.id, local.id);
-  assert.throws(() => resolveWorkerResource(saved, role(), { runtimeId: cloud.id }), {
+  assert.equal(resolveWorkerResource(saved, role(), { runtimeId: cloud.id }).resource.id, cloud.id);
+  assert.throws(() => resolveWorkerResource(saved, role(), { runtimeId: 'unlisted' }), {
     code: 'RUNTIME_NOT_ALLOWED',
   });
 });
@@ -99,7 +100,7 @@ test('a saved assignment cannot replace the capabilities of its frozen resource'
   const saved = snapshot();
   const decision = resolveWorkerResource(saved, role());
   assert.equal(validateAssignmentResource(saved, role(), decision).resource.id, local.id);
-  decision.resource.capabilities = { ...decision.resource.capabilities, structuredTurns: true };
+  decision.resource.capabilities = { ...decision.resource.capabilities, readOnlySessions: true };
   assert.throws(() => validateAssignmentResource(saved, role(), decision), {
     code: 'INVALID_ASSIGNMENT',
   });
@@ -117,6 +118,8 @@ test('fixed worker preferences reject conflicting or unavailable proposals witho
   });
   const saved = snapshot();
   delete saved.workerPool;
+  saved.coordinator = local;
+  saved.reviewer = local;
   assert.throws(() => resolveWorkerResource(saved, pinned), { code: 'FIXED_RUNTIME_UNAVAILABLE' });
 });
 
@@ -136,10 +139,12 @@ test('preferred workers are the default; overrides require a reason and missing 
   assert.equal(overridden.resource.id, local.id);
   const saved = snapshot();
   delete saved.workerPool;
+  saved.coordinator = local;
+  saved.reviewer = local;
   const fallback = resolveWorkerResource(saved, preferred);
   assert.equal(fallback.resource.id, local.id);
   assert.equal(fallback.source, 'profile');
-  assert.match(fallback.reason, /outside the saved worker pool/);
+  assert.match(fallback.reason, /outside the saved profile pool/);
 });
 
 test('frozen pools reject duplicate, divergent and remote local-only entries', () => {
@@ -231,7 +236,7 @@ test('legacy plans remain valid while native model output requires explicit auto
   assert.ok(JSON.stringify(item.properties.runtimeId).includes('null'));
 });
 
-test('old role clients preserve saved pins, explicit auto clears them, and profile-managed roles reject worker pins', async (t) => {
+test('role edits preserve saved preferences, explicit auto clears them, and service roles accept the same choices', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'assignment-role-'));
   const store = await FileProjectStore.open({
     directory,
@@ -274,9 +279,10 @@ test('old role clients preserve saved pins, explicit auto clears them, and profi
     'delivery_pr',
     'production_delivery',
   ])
-    await assert.rejects(service.save('pin-' + id, 'pin-' + id, { ...input, id }), {
-      code: 'ROLE_RUNTIME_PROFILE_MANAGED',
-    });
+    assert.deepEqual(
+      (await service.save('pin-' + id, 'pin-' + id, { ...input, id })).runtimePreference,
+      input.runtimePreference,
+    );
   await store.close();
   const restored = await FileProjectStore.open({
     directory,

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { RuntimeResourceSchema } from '../../protocol/resources.ts';
+import { RuntimeResourceSchema, AssignmentResourceSchema } from '../../protocol/resources.ts';
 import { BackendRequirementsSchema } from '../../protocol/backend-capabilities.ts';
 import { DomainError } from '../../core/ports.ts';
 import type { RuntimeRoute, RuntimeRouteStore } from '../../core/runtime-router.ts';
@@ -14,6 +14,8 @@ const schema = z.object({
   resource: RuntimeResourceSchema,
   requirements: BackendRequirementsSchema,
   readOnly: z.boolean().optional(),
+  roleId: z.string().optional(),
+  roleDecision: AssignmentResourceSchema.optional(),
   purpose: z
     .enum(['coordination', 'implementation', 'review', 'research', 'environment', 'delivery'])
     .optional(),

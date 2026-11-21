@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { DomainError, type ProjectDocument } from '../../core/ports.ts';
-import { PlanningPolicySchema } from '../../protocol/schema.ts';
+import { assertPlanningPolicy } from '../../core/planning-policy.ts';
 
 /** A run's planning mode cannot change when defaults change or a run is resumed. */
 export function validateProjectPlanningPolicies(
@@ -8,12 +8,15 @@ export function validateProjectPlanningPolicies(
   previous?: ProjectDocument,
 ) {
   for (const run of document.runs) {
-    if (
-      run.planningPolicy !== undefined &&
-      (!PlanningPolicySchema.safeParse(run.planningPolicy).success ||
-        (run.planningPolicy.mode === 'bounded' && run.resources?.coordinator.client !== 'managed'))
-    )
-      throw new DomainError('INVALID_PLANNING_POLICY', 'The saved planning policy is invalid.');
+    if (run.planningPolicy !== undefined) {
+      const coordinator = run.roleResources?.coordinator?.resource || run.resources?.coordinator;
+      if (!coordinator)
+        throw new DomainError(
+          'INVALID_PLANNING_POLICY',
+          'The saved planning policy needs its configured coordinator.',
+        );
+      assertPlanningPolicy(run.planningPolicy, coordinator);
+    }
     const before = previous?.runs.find((candidate) => candidate.id === run.id);
     if (before && !isDeepStrictEqual(before.planningPolicy, run.planningPolicy))
       throw new DomainError('INVALID_PLANNING_POLICY', 'The run planning policy is immutable.');
@@ -23,11 +26,6 @@ export function validateProjectPlanningPolicies(
         'The attempt planning history cannot be removed.',
       );
     for (const [index, attempt] of (run.attempts || []).entries()) {
-      if (
-        attempt.planningPolicy !== undefined &&
-        !PlanningPolicySchema.safeParse(attempt.planningPolicy).success
-      )
-        throw new DomainError('INVALID_PLANNING_POLICY', 'The attempt planning policy is invalid.');
       if (!isDeepStrictEqual(attempt.planningPolicy, run.planningPolicy))
         throw new DomainError(
           'INVALID_PLANNING_POLICY',

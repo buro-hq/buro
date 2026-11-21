@@ -620,22 +620,10 @@ async function writeDirectTrialReport(trial, fixture, config, provider) {
   });
 }
 
-/** Runs arms sequentially to avoid contention. Optional controls change only planning policy. */
+/** Runs arms sequentially; each service run selects planning from its saved backend capabilities. */
 async function runModelComparison(options = {}) {
   const config = validateComparison(options);
-  const controls = options.planningControls || [
-    { id: 'legacy', mode: 'legacy' },
-    { id: 'bounded', mode: 'bounded' },
-  ];
-  if (
-    !controls.length ||
-    controls.some(
-      (control) =>
-        !/^[a-z][a-z0-9-]{0,39}$/.test(control.id) || !['legacy', 'bounded'].includes(control.mode),
-    ) ||
-    new Set(controls.map((control) => control.id)).size !== controls.length
-  )
-    throw codeError('COMPARISON_INVALID_CONTROLS');
+  if (options.planningControls !== undefined) throw codeError('COMPARISON_INVALID_CONTROLS');
   const report = {
     version: 1,
     syntheticOnly: true,
@@ -663,11 +651,8 @@ async function runModelComparison(options = {}) {
   const directRunner = options.runDirect || runDirectCodex;
   const oracle = options.oracle || canonicalOracle;
   for (const arm of config.arms) {
-    for (const control of arm === 'codex-direct'
-      ? [{ id: 'not-applicable' }]
-      : arm === 'codex-buro'
-        ? [{ id: 'legacy', mode: 'legacy' }]
-        : controls) {
+    const control = { id: arm === 'codex-direct' ? 'not-applicable' : 'capability-selected' };
+    {
       let fixture, workspace, actualPlanning;
       const trial = comparisonTrialReport(options.reportPath, arm, control.id);
       const started = Date.now();
@@ -698,7 +683,6 @@ async function runModelComparison(options = {}) {
             budgets: config.limits,
             contextTokensByProvider: { ollama: 16384 },
             forceWorker: true,
-            planningMode: control.mode,
             segmentPolicy: options.segmentPolicy,
             reportPath: trial?.file,
             sourceCase: {
@@ -712,9 +696,9 @@ async function runModelComparison(options = {}) {
             async onRunFinished(input) {
               workspace = input.run?.workspace;
               const policy = input.run?.planningPolicy;
-              if (['bounded', 'legacy'].includes(policy?.mode))
+              if (['tools-free-structured', 'read-only-inspection'].includes(policy?.strategy))
                 actualPlanning = {
-                  mode: policy.mode,
+                  strategy: policy.strategy,
                   revision: /^[a-zA-Z0-9._:-]{1,100}$/.test(policy.revision || '')
                     ? policy.revision
                     : 'unknown',
@@ -742,11 +726,7 @@ async function runModelComparison(options = {}) {
           planning: control.id,
           ...(trial ? { trialReport: trial.reference } : {}),
           planningCoverage:
-            arm === 'codex-direct'
-              ? 'not-applicable'
-              : arm === 'codex-buro'
-                ? 'native-legacy'
-                : `managed-${control.mode}`,
+            arm === 'codex-direct' ? 'not-applicable' : 'service-capability-selected',
           actualPlanning: actualPlanning || null,
           model: arm.startsWith('codex-')
             ? config.models.codex
