@@ -1,0 +1,64 @@
+{
+  "stage": "3B1",
+  "date": "2026-11-22",
+  "baseline": "9339110",
+  "validation": {
+    "fullSuite": {
+      "command": "npm test",
+      "tests": 832,
+      "passed": 832,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 66213.893125,
+      "log": "/private/tmp/buro-stage3b1-final-tests.log"
+    },
+    "build": {
+      "command": "npm run build",
+      "passed": true,
+      "log": "/private/tmp/buro-stage3b1-final-build.log"
+    },
+    "format": {
+      "command": "npm run format:check; changed-source prettier checks; git diff --check",
+      "passed": true
+    },
+    "hostEffects": {
+      "realFileManagedSessions": true,
+      "entireBatchAdmissionBeforeEffect": true,
+      "receiptBarrierAndOrder": true,
+      "canonicalDataDetached": true,
+      "foreignPendingPreserved": true,
+      "unknownReopenNoReplay": true
+    },
+    "context": {
+      "canonicalGenerationOnly": true,
+      "pendingReceiptBlocksAdvance": true,
+      "cancelLatchSurvivesCloneAdoption": true
+    },
+    "ui": {
+      "changed": false,
+      "productionBundleHash": "index-DA_Ij_oX.js"
+    }
+  },
+  "reviews": [
+    "stage3b1-architecture-review-2026-11-22.md",
+    "stage3b1-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": [
+    "generation and action effect authority",
+    "session and scope authority",
+    "coding context and verification feedback",
+    "independent architecture/boundary review",
+    "independent context/cancellation test review"
+  ],
+  "boundaries": [
+    "Private Buro host seams, not a finished generic AgentBackend or upstream SDK scheduler.",
+    "Exactly one original request/tool scheduling loop remains in ManagedAgentRuntime.",
+    "SDK bridge must enforce one context decision per batch, phase sequencing and drain in-flight broker work on fatal shutdown.",
+    "No aggregate quota/session/response policy removal or SQLite transition.",
+    "Operational preparation receipts, contribution-aware role eligibility and cross-client configuration invalidation remain later work.",
+    "No live model/RTX/original-project/external-delivery evaluation."
+  ],
+  "preservedUntracked": [
+    "output/ux/"
+  ]
+}

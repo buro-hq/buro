@@ -10,7 +10,8 @@ import {
   type ManagedRequestInput,
   type ManagedRequestPolicy,
 } from '../core/request-policy.ts';
-import { ManagedAgentRuntime, type ManagedRuntimeOptions } from '../core/managed-runtime.ts';
+import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
+import type { ManagedRuntimeOptions } from '../core/managed-runtime-options.ts';
 import type { ManagedSession } from '../core/model-ports.ts';
 import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { ProjectRegistry } from '../core/ports.ts';

@@ -7,7 +7,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ManagedAgentRuntime, type ManagedRuntimeOptions } from '../core/managed-runtime.ts';
+import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
+import type { ManagedRuntimeOptions } from '../core/managed-runtime-options.ts';
 import type { ManagedSessionStore, ToolBroker, ToolScope } from '../core/model-ports.ts';
 import type {
   ModelContext,
@@ -569,7 +570,8 @@ test('context projection uses a cloned request view for both the guard and infer
   const p: ModelProvider = {
     ...provider(async (input) => {
       requests++;
-      assert.equal(input.messages, views.at(-1), 'Send the exact view whose size passed the guard');
+      assert.deepEqual(input.messages, views.at(-1), 'Send the same packet whose size passed the guard');
+      assert.notEqual(input.messages, views.at(-1), 'The provider cannot mutate the prepared view');
       if (requests === 1)
         return {
           ...response([call]),

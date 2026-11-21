@@ -84,6 +84,16 @@ Explicit provider outcomes distinguish confirmed preflight/non-dispatch, observe
 
 [Private-project evaluation details removed.]
 
+### Substep 3B1 — application host authority, effects and context seams
+
+Status: complete. Final full suite **832/832 passed**, with no skips; build/typecheck and formatting passed. Five agent roles contributed implementation and independent reviews in waves. [Validation receipt](../output/research/stage3b1-validation-2026-11-22.json), [architecture/boundary review](../output/research/stage3b1-architecture-review-2026-11-22.md), [independent context/cancellation review](../output/research/stage3b1-tests-review-2026-11-22.md).
+
+ManagedAgentRuntime now owns lifecycle, cache, cancellation and exactly one request/tool loop. Its active production calls delegate start/resume/scope/review binding to managed-session-authority, generation/batch/tool/failure receipts to managed-host-effects, and coding checks/feedback/context rotation to managed-coding-context. These are Buro application modules, not generic SDK contracts disguised with repository types.
+
+The full tool batch must be admitted and durable before any effect. Dispatch uses only the saved action ID, detached canonical arguments and scope, enforces original order and waits for the prior receipt. A scheduler/provider/broker object cannot mutate the recorded response or action. Failed cleanup preserves foreign pending markers; same-request generation replay rejects before another reservation or HTTP call. Context decisions read the canonical saved generation and require the current batch's receipts. A cloned context cannot clear a concurrent cancellation latch.
+
+The original scheduler remains the sole loop; Pi is not adopted by this extraction. The following bridge must provide single-use phase sequencing (including exactly one context decision per batch), cooperative yield for SDK transcript memory, original fatal-error preservation and cleanup that drains in-flight host work. No new lifetime limit, provider fallback, SDK ledger, default-none quota or generic package distribution is claimed. Existing operational preparation, custom delivery-role catalog and cross-client machine-profile follow-ups remain unchanged.
+
 ## Remaining authorized stages
 
 Stage 2A–2C is complete within the recorded scope. Portable ModelProvider contracts, capabilities, common role choices, scope and policy projection are implemented; the neutral AgentBackend loop belongs to stage 3 below.
