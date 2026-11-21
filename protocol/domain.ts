@@ -25,7 +25,13 @@ export type Project = {
   managed?: boolean;
   dataDirectory?: string;
 };
-export type ProjectCommand = { id: string; title: string; command: string; timeoutMs: number };
+export type ProjectCommand = {
+  id: string;
+  title: string;
+  command: string;
+  timeoutMs: number;
+  outputPaths?: string[];
+};
 export type ProjectProfile = {
   managedBudget?: import('./run-budget.ts').ManagedRunBudgetPolicy;
   resourceProfile?: string;
@@ -178,6 +184,8 @@ export type RunIssue = {
   checks: string[];
 };
 export type Run = {
+  verificationView?: import('./verification.ts').VerificationView;
+  verificationEvidence?: import('./verification.ts').VerificationEvidence;
   reconciliation?: import('./reconciliation.ts').RunReconciliation;
   pendingTurn?: import('./reconciliation.ts').PendingRunTurn;
   planningPolicy?: { version: 1; mode: 'bounded' | 'legacy'; revision: string };

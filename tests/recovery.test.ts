@@ -14,6 +14,9 @@ import { CodexRuntime } from '../adapters/codex/runtime.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
 import { DomainError } from '../core/ports.ts';
 import { unchangedDependencyFailures } from '../core/check-failures.ts';
+import { ProjectChecks } from '../adapters/checks/project-commands.ts';
+import { EnvironmentExecutors } from '../adapters/environments/executors.ts';
+import type { ProjectProfile } from '../protocol/domain.ts';
 const exec = promisify(execFile);
 async function fixture(t: any) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'recover-run-'))),
@@ -338,6 +341,106 @@ test('restart retains a pending host turn as an owning-run reconciliation requir
     { code: 'RUN_RECONCILIATION_REQUIRED' },
   );
   assert.equal(f.turns.length, calls);
+});
+
+function verificationProfile(command: string, outputPaths: string[] = []): ProjectProfile {
+  return {
+    version: 1,
+    revision: 1,
+    context: '',
+    allowedPaths: ['src/'],
+    protectedPaths: [],
+    checks: [{ id: 'suite', title: 'Frozen check', command, timeoutMs: 5000, outputPaths }],
+    defaultCheckIds: ['suite'],
+    setup: [],
+    dependencies: 'none',
+    maxWorkers: 1,
+    maxRepairs: 0,
+    turnTimeoutMs: 10000,
+    environment: { provider: 'native' },
+  };
+}
+const shellQuote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+
+test('a real acceptance command cannot temporarily replace frozen input and restore it to hide an ABA edit', async (t) => {
+  const f = await fixture(t);
+  const profile = verificationProfile(
+    shellQuote(process.execPath) +
+      ' -e ' +
+      shellQuote(
+        "const fs=require('node:fs');const file='src/code.mjs';const before=fs.readFileSync(file,'utf8');fs.writeFileSync(file,'export const value=3;');try{require('node:assert/strict').match(fs.readFileSync(file,'utf8'),/value=3/)}finally{fs.writeFileSync(file,before)}",
+      ),
+  );
+  f.engine.env.policies.p.profile = profile;
+  f.engine.env.policies.p.maxRepairs = 0;
+  f.engine.env.checks = new ProjectChecks(
+    f.projects,
+    {
+      async run() {
+        throw Error('Verification must not fall back to an unconstrained check');
+      },
+    },
+    new EnvironmentExecutors(),
+  );
+  const run = await f.start();
+  assert.notEqual(run.status, 'completed');
+  assert.equal(run.commit, undefined);
+  assert.equal(run.acceptance.passed, 0);
+  assert.match(run.acceptance.results[0].output || '', /EACCES|EPERM|permission|read-only/i);
+  assert.equal(
+    await fs.readFile(path.join(run.workspace!, 'src/code.mjs'), 'utf8'),
+    'export const value=2;',
+  );
+  assert.equal(run.verificationView, undefined);
+});
+
+test('real frozen checks and reviewer share one source tree while declared outputs stay writable', async (t) => {
+  const f = await fixture(t);
+  const profile = verificationProfile(
+    shellQuote(process.execPath) +
+      ' -e ' +
+      shellQuote(
+        "const fs=require('node:fs');require('node:assert/strict').equal(fs.readFileSync('src/code.mjs','utf8'),'export const value=2;');fs.writeFileSync('reports/check.txt','passed')",
+      ),
+    ['reports'],
+  );
+  f.engine.env.policies.p.profile = profile;
+  f.engine.env.checks = new ProjectChecks(
+    f.projects,
+    {
+      async run() {
+        throw Error('Unexpected host fallback');
+      },
+    },
+    new EnvironmentExecutors(),
+  );
+  const start = f.runtime.start.bind(f.runtime);
+  let reviewRoot = '';
+  f.runtime.start = async (input) => {
+    if (input.purpose === 'review') {
+      reviewRoot = input.workspace!;
+      const run = f.store.snapshot().runs[0];
+      assert.equal(run.verificationView?.readRoot, reviewRoot);
+      assert.notEqual(reviewRoot, run.workspace);
+      assert.equal(
+        await fs.readFile(path.join(reviewRoot, 'src/code.mjs'), 'utf8'),
+        'export const value=2;',
+      );
+      assert.equal(await fs.readFile(path.join(reviewRoot, 'reports/check.txt'), 'utf8'), 'passed');
+    }
+    return start(input);
+  };
+  const run = await f.start();
+  assert.equal(run.status, 'completed', run.result);
+  assert.equal(
+    run.verificationEvidence?.tree,
+    (await f.git(['rev-parse', run.commit + '^{tree}'])).stdout.trim(),
+  );
+  assert.ok(run.verificationEvidence?.reviewedAt);
+  assert.ok(run.verificationEvidence?.reviewerSessionId);
+  assert.equal(run.verificationView, undefined);
+  await assert.rejects(fs.stat(reviewRoot), { code: 'ENOENT' });
+  await assert.rejects(fs.stat(path.join(f.root, 'reports')), { code: 'ENOENT' });
 });
 test('editing a stopped goal is versioned; repair resumes the original coordinator with revised requirements', async (t) => {
   const f = await fixture(t);

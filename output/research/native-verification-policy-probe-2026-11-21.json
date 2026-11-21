@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-21",
+  "installedCli": "codex-cli 0.171.0",
+  "scope": "Offline schema inspection, synthetic local Codex sandbox execution and fake app-server wire contracts. No model request or API endpoint was invoked; no secrets were inspected/printed, and no credentials or global configuration were modified.",
+  "schemaEvidence": {
+    "ThreadStartParams.json": "80a40a7fac15b4bf70efb7f893fb353acc0a0d30c68f54aee4f01923deca85de",
+    "TurnStartParams.json": "b64078d4310cb1fa591c7f63344bed6b8c08d216f9f81d86c00045136187a2b6",
+    "ThreadStartResponse.json": "1e3c5bf155d2861994e76b63ab5c1f23b9e265aac79bbe7515a28028b179b4b8"
+  },
+  "protocol": {
+    "threadStart": "permissions selects a named profile; cannot coexist with sandbox",
+    "turnStart": "permissions selects a named profile; cannot coexist with sandboxPolicy",
+    "requiredAcknowledgement": "activePermissionProfile.id must equal issued profile"
+  },
+  "sandboxProbe": {
+    "inputReadAllowed": true,
+    "siblingTemporaryReadDenied": true,
+    "originalProjectReadDenied": true,
+    "reviewOutputWriteDenied": true,
+    "profileRecipe": [
+      "filesystem root deny",
+      ":minimal read for OS execution support",
+      "explicit canonical temporary-directory denies",
+      "explicit original/private root denies",
+      "issued snapshot/output/dependency/toolchain roots read only",
+      "network.enabled=false"
+    ],
+    "importantCounterexample": "Listing read roots without root deny still allowed unrelated reads. :minimal alone also left temporary reads accessible.",
+    "explicitOsRootsWithoutMinimal": "Exited134 before running shell; not selected",
+    "command": {
+      "executable": "codex",
+      "args": [
+        "sandbox",
+        "-P",
+        "buro_probe",
+        "-c",
+        "permissions.buro_probe={\"filesystem\"={\"/\"=\"deny\",\":minimal\"=\"read\",\"/private/tmp\"=\"deny\",\"/tmp\"=\"deny\",\"/private/tmp/buro-codex-read-probe-paj58t0v/allowed\"=\"read\",\"/private/tmp/buro-codex-read-probe-paj58t0v/outputs\"=\"read\",\"/workspace/buro\"=\"deny\"},\"network\"={\"enabled\"=false}}",
+        "-C",
+        "/private/tmp/buro-codex-read-probe-paj58t0v/allowed",
+        "/bin/sh",
+        "-c",
+        "cat /private/tmp/buro-codex-read-probe-paj58t0v/allowed/input.txt; cat /private/tmp/buro-codex-read-probe-paj58t0v/outside.txt; printf outside_status=$?\\n; cat ./package.json >/dev/null; printf original_status=$?\\n; printf forbidden > /private/tmp/buro-codex-read-probe-paj58t0v/outputs/review-write.txt; printf output_write_status=$?\\n"
+      ]
+    }
+  },
+  "tests": {
+    "focused": 16,
+    "passed": 16,
+    "newNativeContracts": 4,
+    "liveModel": false
+  },
+  "limits": [
+    "Native subprocess read confinement proven on installed macOS CLI only.",
+    "Fake protocol tests prove adapter field binding and refusal, not enforcement by an arbitrary executable.",
+    "No real app-server/model built-in file-tool coverage or live coding-quality claim.",
+    "Unsupported or ignored named profile is rejected before a native model turn."
+  ]
+}

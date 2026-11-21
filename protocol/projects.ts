@@ -3,6 +3,7 @@ import { ManagedRunBudgetPolicySchema } from './run-budget.ts';
 import { EnvironmentConfigSchema } from './environment.ts';
 import { RelativePathSchema } from './projects-paths.ts';
 import { ComponentSchema, DeliveryConfigSchema } from './operations.ts';
+import { CheckOutputPathsSchema } from './verification.ts';
 export { RelativePathSchema } from './projects-paths.ts';
 const name = z.string().trim().min(1).max(120);
 export const ProjectCommandSchema = z.strictObject({
@@ -10,6 +11,7 @@ export const ProjectCommandSchema = z.strictObject({
   title: name,
   command: z.string().trim().min(1).max(4000),
   timeoutMs: z.number().int().min(1000).max(900000),
+  outputPaths: CheckOutputPathsSchema.optional(),
 });
 export const ProjectProfileSchema = z
   .strictObject({

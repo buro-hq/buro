@@ -53,6 +53,9 @@ export type ToolScope = {
   ownerRunId?: string;
   sessionId: string;
   workspace: string;
+  /** Host-issued frozen source view, valid only for its active read-only review session. */
+  verificationViewId?: string;
+  verificationTree?: string;
   readOnly: boolean;
   allowedPaths: string[];
   protectedPaths: string[];

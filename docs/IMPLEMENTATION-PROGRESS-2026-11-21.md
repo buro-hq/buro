@@ -6,7 +6,7 @@ Baseline: `601f26e`. Existing untracked `output/ux/` is preserved. Original user
 
 ## Stage 1 — revision integrity and recovery
 
-Status: substep **1A complete**, independent architecture/code/boundary review clear within its stated scope. Substep **1B follows**: immutable verification inputs, including transient A→B→A source changes.
+Status: substeps **1A and 1B complete**, independent architecture/code/boundary review clear within their stated scope. Stage 2 follows.
 
 Implemented working-tree changes:
 
@@ -21,6 +21,18 @@ Five agents worked in waves: apply recovery, runtime reconciliation, immutable w
 Validation: final full suite **638/638 passed**, build/typecheck and formatting passed. Five agent roles contributed implementation and independent review in waves. Focused counts overlap the full suite and are not summed. [Bounded review and remaining VerificationView contract](../output/research/stage1-verification-view-review-2026-11-21.md).
 
 Known deliberate substep-1A boundaries: before/after equality cannot exclude transient source mutation during a check; immutable verification input is still required for1B. Also, a crash after creating an owned Git checkpoint but before durable Run finalization is conservative/reconciliation-required. No automatic checkpoint recovery is claimed. Existing quota/scope defaults are unchanged until their complete later contract cutover.
+
+### Substep 1B — immutable verification input
+
+Status: complete. Final full suite **682/682 passed**, with no skips; build/typecheck, formatting and desktop/mobile production smoke passed. Five agent roles contributed implementation, independent review and the next contract/scope preparation in waves. [Validation receipt](../output/research/stage1b-validation-2026-11-21.json).
+
+The workspace adapter materializes the captured Git tree and its baseline into an independent read-only input, with its own shallow Git metadata and no live repository pointer. Checks write only into explicitly declared output directories; the fresh reviewer receives that same source view and read-only check outputs. Core retains the view/tree/check/reviewer identity before checkpointing the exact captured tree. Managed sessions reject replaced or revoked view grants before further generation/tool work.
+
+Real Darwin sandbox regressions exercise source writes, restore-after-write, rename/chmod/link attempts, live-source reads, writable outputs and prepared toolchains. Trusted Node checks no longer receive their original script directory as a filesystem grant. Their registered entrypoint bytes are pinned before model dispatch, so copying a candidate checker into the view cannot silently adopt an always-pass replacement; arbitrary imported test dependencies are a separate trust boundary. Native review uses an acknowledged named permission profile on start and every turn, never legacy `readOnly` as an equivalent fallback. [Independent review](../output/research/stage1b-review-2026-11-21.md), [installed-client offline permission proof and limits](../output/research/native-verification-policy-probe-2026-11-21.json).
+
+Current boundaries: Linux execution and Docker verification support require separate evidence/implementation. Prepared dependencies are read-only environment inputs, not a claimed immutable dependency snapshot. Live monorepo dependency aliases and submodules reject explicitly. Normal lifecycle cleanup is implemented; complete descendant-process leases and crash-orphan cleanup are not claimed. Existing quota and strict planned-path behavior remain unchanged until stage 2/5 cutover.
+
+Stage 2 preparation is recorded in the [scope map](../output/research/stage2-scope-cutover-2026-11-21.md) and [backend contract map](../output/research/stage2-backend-cutover-2026-11-21.md). These are implementation plans, not implemented behavior or published reusable packages.
 
 ## Remaining authorized stages
 

@@ -1,4 +1,8 @@
-import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
+import {
+  virtualWorkspaceRevision,
+  virtualVerificationViews,
+  VIRTUAL_BASE_COMMIT,
+} from './fixtures/virtual-workspace.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -41,7 +45,7 @@ function savedRun(policy: Run['planningPolicy'], client: 'managed' | 'codex' = '
   run.planningPolicy = policy;
   run.status = 'failed';
   run.workspace = '/fixture/workspace';
-  run.baseCommit = 'a'.repeat(40);
+  run.baseCommit = VIRTUAL_BASE_COMMIT;
   run.checkIds = ['suite'];
   return run;
 }
@@ -195,6 +199,7 @@ test('resume archives the frozen planning policy despite changed current plannin
         },
       },
       workspaces: {
+        ...virtualVerificationViews,
         async prepare() {
           throw Error('No workspace creation expected during admission.');
         },

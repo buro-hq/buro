@@ -1,4 +1,8 @@
-import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
+import {
+  virtualWorkspaceRevision,
+  virtualVerificationViews,
+  VIRTUAL_BASE_COMMIT,
+} from './fixtures/virtual-workspace.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -257,11 +261,12 @@ async function fixture(
     now: () => new Date().toISOString(),
     id: randomUUID,
     workspaces: {
+      ...virtualVerificationViews,
       async prepare() {
-        return { path: root, base: 'fixture-base' };
+        return { path: root, base: VIRTUAL_BASE_COMMIT };
       },
       async restore() {
-        return { path: root, base: 'fixture-base' };
+        return { path: root, base: VIRTUAL_BASE_COMMIT };
       },
       async changes() {
         const actual = await fs.readFile(path.join(root, 'src/value.mjs'), 'utf8');

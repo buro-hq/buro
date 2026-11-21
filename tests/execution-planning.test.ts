@@ -1,4 +1,8 @@
-import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
+import {
+  virtualWorkspaceRevision,
+  virtualVerificationViews,
+  VIRTUAL_BASE_COMMIT,
+} from './fixtures/virtual-workspace.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs/promises';
@@ -228,8 +232,9 @@ async function fixture(
       },
     },
     workspaces: {
+      ...virtualVerificationViews,
       async prepare() {
-        return { path: directory, base: 'initial' };
+        return { path: directory, base: VIRTUAL_BASE_COMMIT };
       },
       async changes() {
         return [{ path: 'src/value.ts', before: 'one', after: 'two' }];
@@ -406,7 +411,7 @@ test('historical missing planning policy remains legacy even when current enviro
   await f.engine.planAndImplement(
     'p',
     'R-historical',
-    { path: f.directory, base: 'initial' },
+    { path: f.directory, base: VIRTUAL_BASE_COMMIT },
     f.environment.policies.p,
     new AbortController().signal,
     [],
@@ -443,7 +448,7 @@ for (const revision of ['bounded-planning-v1', 'bounded-planning-v2'] as const)
     await f.engine.planAndImplement(
       'p',
       'R-historical-v1',
-      { path: f.directory, base: 'initial' },
+      { path: f.directory, base: VIRTUAL_BASE_COMMIT },
       f.environment.policies.p,
       new AbortController().signal,
       [],

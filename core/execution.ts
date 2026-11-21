@@ -45,6 +45,7 @@ import {
 import { unchangedDependencyFailures } from './check-failures.ts';
 import { canAccept } from './services.ts';
 import { sameWorkspaceRevision, type WorkspaceRevision } from './workspace-revision.ts';
+import { canonicalOutputPaths, type VerificationView } from './verification-view.ts';
 import {
   assertRunReconciled,
   isKnownTurnRejection,
@@ -84,6 +85,7 @@ export class ExecutionService {
   unsubscribe: () => void;
   eventQueue: Promise<unknown> = Promise.resolve();
   seen = new Set<string>();
+  private verificationViews = new Map<string, VerificationView>();
   constructor(env: Environment) {
     this.env = env;
     this.unsubscribe =
@@ -140,12 +142,78 @@ export class ExecutionService {
     });
     throw new DomainError('VERIFICATION_REVISION_CHANGED', message);
   }
+  private async openVerificationView(
+    projectId: string,
+    runId: string,
+    workspace: string,
+    revision: WorkspaceRevision,
+    policy: ExecutionPolicy,
+    signal: AbortSignal,
+  ) {
+    if (!this.env.workspaces.openVerificationView || !this.env.workspaces.releaseVerificationView)
+      throw new DomainError(
+        'VERIFICATION_UNAVAILABLE',
+        'The workspace adapter cannot provide immutable verification input.',
+      );
+    await this.closeVerificationView(projectId, runId);
+    const selected = new Set(this.get(projectId, runId).checkIds || []);
+    const outputPaths = canonicalOutputPaths(
+      (policy.profile?.checks || [])
+        .filter((check) => selected.has(check.id))
+        .flatMap((check) => check.outputPaths || []),
+    );
+    const view = await this.env.workspaces.openVerificationView(workspace, revision, {
+      projectId,
+      runId,
+      outputPaths,
+      signal,
+    });
+    try {
+      if (
+        view.projectId !== projectId ||
+        view.runId !== runId ||
+        view.sourceWorkspace !== workspace ||
+        view.base !== revision.base ||
+        view.tree !== revision.tree
+      )
+        throw new DomainError(
+          'VERIFICATION_UNAVAILABLE',
+          'The issued verification source does not match this run and revision.',
+        );
+      this.verificationViews.set(runId, view);
+      await this.update(projectId, runId, (run) => {
+        run.verificationView = view;
+        run.events.push({
+          at: this.env.now(),
+          type: 'verification.opened',
+          text: `${view.id}: ${view.tree}`,
+        });
+      });
+      return view;
+    } catch (error) {
+      this.verificationViews.delete(runId);
+      await this.env.workspaces.releaseVerificationView(view).catch(() => {});
+      throw error;
+    }
+  }
+  private async closeVerificationView(projectId: string, runId: string) {
+    const view = this.verificationViews.get(runId);
+    if (!view) return;
+    await this.env.checks.releaseVerificationView?.(view);
+    await this.env.workspaces.releaseVerificationView?.(view);
+    this.verificationViews.delete(runId);
+    await this.update(projectId, runId, (run) => {
+      if (run.verificationView?.id === view.id) run.verificationView = undefined;
+      run.events.push({ at: this.env.now(), type: 'verification.closed', text: view.id });
+    });
+  }
   async verify(
     projectId: string,
     runId: string,
     workspace: { path: string; base: string },
     policy: ExecutionPolicy,
     signal: AbortSignal,
+    options: { keepView?: boolean } = {},
   ) {
     let changes = await this.env.workspaces.changes(workspace.path, workspace.base);
     const safe = () =>
@@ -158,6 +226,7 @@ export class ExecutionService {
       changes,
       scope: false,
       revision: undefined,
+      view: undefined,
       checks: {
         passed: 0,
         total: 1,
@@ -197,6 +266,7 @@ ${installation.output || installation.error || ''}`,
             scope: true,
             checks: { passed: 0, total: 1, results: [installation] },
             revision: undefined,
+            view: undefined,
           };
         changes = await this.env.workspaces.changes(workspace.path, workspace.base);
         if (!safe()) return blocked();
@@ -205,28 +275,43 @@ ${installation.output || installation.error || ''}`,
     const revision = await this.env.workspaces.captureRevision(workspace.path, workspace.base);
     changes = revision.changes;
     if (!safe()) return blocked();
-    const resources = this.get(projectId, runId).resources;
-    const requirePreparedIsolation =
-      !!policy.profile &&
-      !!resources &&
-      [
-        resources.coordinator,
-        resources.worker,
-        resources.reviewer,
-        ...(resources.workerPool || []),
-      ].some((resource) => resource.client === 'managed');
-    const checks = await this.measure(projectId, runId, 'checks', () =>
-      this.env.checks.run(
-        projectId,
-        workspace.path,
-        this.get(projectId, runId).checkIds!,
-        signal,
-        policy.profile,
-        { requirePreparedIsolation },
-      ),
+    const view = await this.openVerificationView(
+      projectId,
+      runId,
+      workspace.path,
+      revision,
+      policy,
+      signal,
     );
-    await this.requireRevision(projectId, runId, workspace, revision, 'verification');
-    return { changes, scope: true, checks, revision };
+    let retained = false;
+    try {
+      const checks = await this.measure(projectId, runId, 'checks', () =>
+        this.env.checks.run(
+          projectId,
+          workspace.path,
+          this.get(projectId, runId).checkIds!,
+          signal,
+          policy.profile,
+          { requirePreparedIsolation: !!policy.profile, verificationView: view },
+        ),
+      );
+      await this.requireRevision(projectId, runId, workspace, revision, 'verification');
+      await this.update(projectId, runId, (run) => {
+        run.verificationEvidence = {
+          version: 1,
+          viewId: view.id,
+          base: view.base,
+          tree: view.tree,
+          checkIds: [...(run.checkIds || [])],
+          profileRevision: policy.profile?.revision,
+          checkedAt: this.env.now(),
+        };
+      });
+      retained = !!options.keepView;
+      return { changes, scope: true, checks, revision, view: retained ? view : undefined };
+    } finally {
+      if (!retained) await this.closeVerificationView(projectId, runId);
+    }
   }
   async prepareEnvironment(
     projectId: string,
@@ -930,7 +1015,11 @@ ${installation.output || installation.error || ''}`,
                     'ENVIRONMENT_FAILED',
                     'ENVIRONMENT_UNAVAILABLE',
                     'FIXED_RUNTIME_UNAVAILABLE',
+                    'CHECK_DEFINITION_CHANGED',
                     'VERIFICATION_REVISION_CHANGED',
+                    'VERIFICATION_UNAVAILABLE',
+                    'VERIFICATION_VIEW_UNAVAILABLE',
+                    'VERIFICATION_VIEW_CHANGED',
                   ].includes(error.code))
               ? 'needs-attention'
               : 'failed',
@@ -944,12 +1033,30 @@ ${installation.output || installation.error || ''}`,
                 message: error instanceof Error ? error.message : String(error),
                 checks: [],
               }
-            : error instanceof DomainError && error.code === 'VERIFICATION_REVISION_CHANGED'
+            : error instanceof DomainError &&
+                [
+                  'CHECK_DEFINITION_CHANGED',
+                  'VERIFICATION_REVISION_CHANGED',
+                  'VERIFICATION_UNAVAILABLE',
+                  'VERIFICATION_VIEW_UNAVAILABLE',
+                  'VERIFICATION_VIEW_CHANGED',
+                ].includes(error.code)
               ? { code: 'EXECUTION_FAILED', message: error.message, checks: [] }
               : undefined,
       );
     } finally {
-      await Promise.all(threads.map((id) => this.env.runtime.release?.(id)));
+      await Promise.allSettled(threads.map((id) => this.env.runtime.release?.(id)));
+      try {
+        await this.closeVerificationView(projectId, runId);
+      } catch (error) {
+        await this.update(projectId, runId, (run) =>
+          run.events.push({
+            at: this.env.now(),
+            type: 'verification.cleanup-failed',
+            text: String(error),
+          }),
+        ).catch(() => {});
+      }
       const workspace = this.get(projectId, runId).workspace;
       if (workspace) {
         try {
@@ -1376,18 +1483,20 @@ Return a shorter complete objective and only needed inputs from the saved input 
     let acceptedRevision: WorkspaceRevision | undefined;
     for (let iteration = 0; iteration <= policy.maxRepairs; iteration++) {
       abort();
+      await this.closeVerificationView(projectId, runId);
       await this.phase(
         projectId,
         runId,
         'checking',
         'The service is verifying changes and running independent checks',
       );
-      const { changes, scope, checks, revision } = await this.verify(
+      const { changes, scope, checks, revision, view } = await this.verify(
         projectId,
         runId,
         workspace,
         policy,
         signal,
+        { keepView: true },
       );
       await this.update(projectId, runId, (r) => {
         r.changedFiles = changes;
@@ -1420,6 +1529,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
         checks.passed !== checks.total ||
         envelope.status !== 'success'
       ) {
+        await this.closeVerificationView(projectId, runId);
         if (iteration === policy.maxRepairs)
           throw Error(
             `Acceptance failed: ${checks.passed}/${checks.total} checks; boundaries ${scope ? 'respected' : 'violated'}. ${envelope.summary}`,
@@ -1439,7 +1549,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
         );
         continue;
       }
-      if (!revision)
+      if (!revision || !view)
         throw new DomainError(
           'VERIFICATION_REVISION_REQUIRED',
           'No verified source revision was captured.',
@@ -1475,7 +1585,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
       const reviewer = await this.startRuntime({
         projectId,
         runId,
-        workspace: workspace.path,
+        workspace: view.readRoot,
         readOnly: true,
         purpose: 'review',
         instructions:
@@ -1483,7 +1593,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
             'Independently verify the goal and correctness of the changes.') +
           '\nRead only. Do not modify files, start agents or use the network. You did not participate in implementation. Request changes for blocking issues.\nProject context: ' +
           (policy.context || '') +
-          materialInstructions(run.contextMaterials || [], workspace.path, true),
+          materialInstructions(run.contextMaterials || [], view.readRoot, true),
       });
       threads.push(reviewer.threadId);
       await this.update(projectId, runId, (r) => {
@@ -1514,6 +1624,17 @@ Read relevant sources and verify actual correctness, including preservation of e
       await this.update(projectId, runId, (r) => {
         r.review = review;
         r.independentReviewer = true;
+        if (
+          !r.verificationEvidence ||
+          r.verificationEvidence.viewId !== view.id ||
+          r.verificationEvidence.tree !== revision.tree
+        )
+          throw new DomainError(
+            'VERIFICATION_REVISION_CHANGED',
+            'The reviewed verification input changed.',
+          );
+        r.verificationEvidence.reviewedAt = this.env.now();
+        r.verificationEvidence.reviewerSessionId = reviewerSession.id;
         const a = r.agents.find((a) => a.threadId === reviewer.threadId)!;
         a.completedAt = this.env.now();
         a.status = 'completed';
@@ -1532,6 +1653,7 @@ Read relevant sources and verify actual correctness, including preservation of e
       await this.env.runtime.release?.(reviewer.threadId);
       await this.eventQueue;
       await this.requireRevision(projectId, runId, workspace, revision, 'independent review');
+      await this.closeVerificationView(projectId, runId);
       const observed = this.get(projectId, runId);
       this.assertManagedBudgetOpen(observed);
       const workersReady = team.roles.every((role) => {
@@ -1610,6 +1732,18 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
       (r, g, doc) => {
         this.assertManagedBudgetOpen(r);
         assertRunReconciled(r);
+        if (
+          !r.verificationEvidence ||
+          r.verificationEvidence.tree !== acceptedRevision!.tree ||
+          r.verificationEvidence.base !== acceptedRevision!.base ||
+          !r.verificationEvidence.reviewedAt ||
+          !r.verificationEvidence.reviewerSessionId ||
+          JSON.stringify(r.verificationEvidence.checkIds) !== JSON.stringify(r.checkIds || [])
+        )
+          throw new DomainError(
+            'VERIFICATION_REVISION_CHANGED',
+            'The accepted revision no longer has matching check and review evidence.',
+          );
         for (const role of acceptedRoles) {
           if (doc.roleVersions.some((x) => x.id === role.id))
             throw Error('Role catalog conflict: ' + role.id);
@@ -1672,6 +1806,8 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
     for (const job of this.jobs.values()) job.controller.abort();
     await Promise.allSettled([...this.jobs.values()].map((j) => j.promise));
     await this.eventQueue;
+    for (const view of [...this.verificationViews.values()])
+      await this.closeVerificationView(view.projectId, view.runId).catch(() => {});
     this.unsubscribe();
   }
 }

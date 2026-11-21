@@ -1075,5 +1075,8 @@
   "The coordinator may choose only these models. The primary worker is always included.": "Координатор выбирает только из этих моделей. Основная модель исполнителя всегда включена.",
   "Save now, restart the Buro service, then explicitly select this profile. Saving does not run a model or diagnostic.": "Сохраните, перезапустите сервис Buro, затем явно выберите профиль. Сохранение не запускает модель или диагностику.",
   "Team profile ready. Select it explicitly to use it for new runs.": "Профиль команды готов. Явно выберите его для новых запусков.",
-  "Team profile saved. Refresh resource settings to check availability.": "Профиль команды сохранён. Обновите настройки ресурсов, чтобы проверить доступность."
+  "Team profile saved. Refresh resource settings to check availability.": "Профиль команды сохранён. Обновите настройки ресурсов, чтобы проверить доступность.",
+  "Writable check outputs": "Записываемые результаты проверки",
+  "Output directories": "Каталоги результатов",
+  "Build and cache outputs only. Checked source files remain read-only. One directory per line.": "Только результаты сборки и кэш. Проверяемые исходники доступны только для чтения. По одному каталогу в строке."
 }

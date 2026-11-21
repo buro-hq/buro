@@ -11,7 +11,11 @@ import type { ResourceSnapshot, RuntimeResource } from '../protocol/resources.ts
 import { ProjectChecks } from '../adapters/checks/project-commands.ts';
 import { EnvironmentExecutors, type Launch } from '../adapters/environments/executors.ts';
 import { ProjectEnvironments } from '../adapters/environments/project-environments.ts';
-import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
+import {
+  virtualWorkspaceRevision,
+  virtualVerificationViews,
+  VIRTUAL_BASE_COMMIT,
+} from './fixtures/virtual-workspace.ts';
 
 const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
 const native: RuntimeResource = {
@@ -84,6 +88,7 @@ async function fixture(t: any, frozen: ResourceSnapshot | undefined) {
         id: 'r',
         goalId: 'g',
         workspace,
+        baseCommit: VIRTUAL_BASE_COMMIT,
         resources: frozen,
         checkIds: ['test'],
         events: [],
@@ -106,14 +111,28 @@ async function fixture(t: any, frozen: ResourceSnapshot | undefined) {
   return { root, workspace, marker, profile, policy, projects, state };
 }
 
-test('baseline and final verification never run managed-pool checks on the host after the prepared world disappears', async (t) => {
+test('baseline and final verification never run checks on the host after their required prepared world disappears', async (t) => {
   const f = await fixture(t, resources([native, managed]));
+  f.profile.environment = {
+    provider: 'native',
+    recipe: {
+      summary: 'Required prepared environment',
+      variables: {},
+      inputs: [],
+      setup: [],
+      ready: [{ id: 'ready', title: 'Ready', command: 'true', timeoutMs: 1000 }],
+    },
+  };
   let world: any;
   let observations = 0;
   let launches = 0;
   let fallback = 0;
   const executors = {
     get: () => world,
+    releaseVerification() {},
+    registerVerification: () => {
+      throw new Error('The required world must be rejected before verification registration');
+    },
     launch: () => {
       launches++;
       throw new Error('The lost world must be rejected before process launch');
@@ -134,6 +153,7 @@ test('baseline and final verification never run managed-pool checks on the host 
     projects: f.projects,
     runtime,
     workspaces: {
+      ...virtualVerificationViews,
       changes: async () => {
         if (++observations % 2 === 0) world = undefined;
         return [];
@@ -163,11 +183,11 @@ test('baseline and final verification never run managed-pool checks on the host 
       service.verify(
         'p',
         'r',
-        { path: f.workspace, base: 'base' },
+        { path: f.workspace, base: VIRTUAL_BASE_COMMIT },
         f.policy,
         new AbortController().signal,
       ),
-      { code: 'STEP_CHECK_UNAVAILABLE' },
+      { code: 'ENVIRONMENT_UNAVAILABLE' },
     );
   assert.equal(launches, 0);
   assert.equal(fallback, 0);
@@ -175,7 +195,7 @@ test('baseline and final verification never run managed-pool checks on the host 
   await service.dispose();
 });
 
-test('native-only and legacy verification preserve the existing trusted host-check path', async (t) => {
+test('native-only and legacy verification require immutable check isolation too', async (t) => {
   for (const frozen of [resources(), undefined]) {
     const f = await fixture(t, frozen);
     const checks = new ProjectChecks(f.projects, {
@@ -188,6 +208,7 @@ test('native-only and legacy verification preserve the existing trusted host-che
       projects: f.projects,
       runtime,
       workspaces: {
+        ...virtualVerificationViews,
         changes: async () => [],
         captureRevision: async (_workspace: string, base: string) =>
           virtualWorkspaceRevision([], base),
@@ -197,15 +218,17 @@ test('native-only and legacy verification preserve the existing trusted host-che
       now: () => '2026-11-20T00:00:00Z',
       id: () => String(++sequence),
     });
-    const result = await service.verify(
-      'p',
-      'r',
-      { path: f.workspace, base: 'base' },
-      f.policy,
-      new AbortController().signal,
+    await assert.rejects(
+      service.verify(
+        'p',
+        'r',
+        { path: f.workspace, base: VIRTUAL_BASE_COMMIT },
+        f.policy,
+        new AbortController().signal,
+      ),
+      { code: 'ENVIRONMENT_UNAVAILABLE' },
     );
-    assert.equal(result.checks.passed, 1);
-    assert.equal(await fs.readFile(f.marker, 'utf8'), 'ran');
+    await assert.rejects(fs.stat(f.marker), { code: 'ENOENT' });
     await service.dispose();
   }
 });
@@ -250,7 +273,7 @@ test('an optional managed worker gets private-data isolation even with native de
     projectId: 'p',
     runId: 'r',
     workspace: f.workspace,
-    base: 'base',
+    base: VIRTUAL_BASE_COMMIT,
     profile: f.profile,
     signal: new AbortController().signal,
     report: async () => {},

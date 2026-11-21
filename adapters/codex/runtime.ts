@@ -7,6 +7,7 @@ import type { AgentRuntime, ProjectRegistry, RuntimeEvent } from '../../core/por
 import { DomainError } from '../../core/ports.ts';
 import { normalizeCodexEvent } from './events.ts';
 import { observedTurnFailure, UnresolvedEffectError } from '../../core/run-reconciliation.ts';
+import { nativeVerificationPolicy } from './verification-policy.ts';
 
 export type RuntimeOptions = {
   projects: ProjectRegistry;
@@ -42,22 +43,87 @@ export class CodexRuntime implements AgentRuntime {
     if (this.disposed) throw new DomainError('RUNTIME_CLOSED', 'The runtime stopped.');
     const root =
       input.workspace || this.options.projects.get(input.projectId).snapshot().project.root;
+    const snapshot = this.options.projects.get(input.projectId).snapshot();
+    const owner = input.runId ? snapshot.runs?.find((run) => run.id === input.runId) : undefined;
+    const view = owner?.verificationView;
+    if (!view && this.options.executors?.isVerificationWorkspace(root))
+      throw new DomainError(
+        'VERIFICATION_VIEW_CHANGED',
+        'The issued native review input has no active owning run.',
+      );
+    let verification: { id: string; assertCurrent: () => void } | undefined;
+    let verificationArguments: string[] = [];
+    let verificationVariables: Record<string, string> | undefined;
+    if (view && (input.readOnly || root === view.readRoot)) {
+      if (
+        !input.readOnly ||
+        root !== view.readRoot ||
+        view.projectId !== input.projectId ||
+        view.runId !== input.runId ||
+        owner?.workspace !== view.sourceWorkspace ||
+        owner?.baseCommit !== view.base ||
+        !this.options.executors
+      )
+        throw new DomainError(
+          'VERIFICATION_VIEW_CHANGED',
+          'Native review requires its issued immutable input.',
+        );
+      const access = this.options.executors.verificationPolicy(view);
+      const profile = nativeVerificationPolicy(view, access, snapshot.project.root);
+      const signature = JSON.stringify(view);
+      verification = {
+        id: profile.id,
+        assertCurrent: () => {
+          const currentOwner = this.options.projects
+            .get(input.projectId)
+            .snapshot()
+            .runs.find((run) => run.id === input.runId);
+          if (
+            JSON.stringify(currentOwner?.verificationView) !== signature ||
+            currentOwner?.workspace !== view.sourceWorkspace ||
+            currentOwner?.baseCommit !== view.base
+          )
+            throw new DomainError(
+              'VERIFICATION_VIEW_CHANGED',
+              'The native review input is no longer active.',
+            );
+          this.options.executors!.verificationPolicy(view);
+        },
+      };
+      verificationArguments = ['-c', profile.argument];
+      verificationVariables = access.variables;
+    }
     const world = this.options.executors?.get(root);
     const launch = (argv: string[]): Launch =>
       world
         ? this.options.executors!.launch(root, argv, { agent: true })
         : { executable: argv[0], args: argv.slice(1), cwd: root, env: process.env };
-    const args = this.options.args
+    const baseArgs = this.options.args
       ? [...codexModelArguments(this.options), ...this.options.args]
       : await hardenedCodexArguments(
           this.options.executable || 'codex',
           root,
           launch,
-          world?.variables,
+          verificationVariables || world?.variables,
           !!world?.container,
           this.options,
         );
+    const args = [
+      ...baseArgs,
+      ...verificationArguments,
+      ...(verification
+        ? [
+            '-c',
+            'shell_environment_policy.inherit="none"',
+            ...Object.entries(verificationVariables || {}).flatMap(([key, value]) => [
+              '-c',
+              `shell_environment_policy.set.${key}=${JSON.stringify(value)}`,
+            ]),
+          ]
+        : []),
+    ];
     if (this.disposed) throw new DomainError('RUNTIME_CLOSED', 'The runtime stopped.');
+    verification?.assertCurrent();
     const specification = launch([this.options.executable || 'codex', ...args]);
     const connection = new Connection(
       specification,
@@ -78,6 +144,7 @@ export class CodexRuntime implements AgentRuntime {
       !!input.readOnly,
       world ? [world.cacheRoot] : [],
       this.options.networkAccess,
+      verification,
     );
     this.active.add(connection);
     try {
@@ -88,13 +155,20 @@ export class CodexRuntime implements AgentRuntime {
       connection.send({ method: 'initialized', params: {} });
       const result = (await connection.call(input.threadId ? 'thread/resume' : 'thread/start', {
         cwd: root,
-        sandbox: input.readOnly ? 'read-only' : 'workspace-write',
+        ...(verification
+          ? { permissions: verification.id }
+          : { sandbox: input.readOnly ? 'read-only' : 'workspace-write' }),
         approvalPolicy: 'never',
         ...(!input.threadId
           ? { ephemeral: false }
           : { threadId: input.threadId, excludeTurns: true }),
         developerInstructions: input.instructions,
-      })) as { thread: { id: string } };
+      })) as { thread: { id: string }; activePermissionProfile?: { id: string } };
+      if (verification && result.activePermissionProfile?.id !== verification.id)
+        throw new DomainError(
+          'ENVIRONMENT_UNAVAILABLE',
+          'This native client did not confirm the required immutable-review permission profile.',
+        );
       if (this.disposed) {
         await connection.close();
         throw new DomainError('RUNTIME_CLOSED', 'The runtime stopped.');
@@ -105,6 +179,11 @@ export class CodexRuntime implements AgentRuntime {
     } catch (error) {
       this.active.delete(connection);
       await connection.close();
+      if (verification && !(error instanceof DomainError))
+        throw new DomainError(
+          'ENVIRONMENT_UNAVAILABLE',
+          'The native client could not establish the required immutable-review permission profile.',
+        );
       throw error;
     }
   }
@@ -127,7 +206,7 @@ export class CodexRuntime implements AgentRuntime {
     const result = (await connection.call('turn/start', {
       threadId,
       input: [{ type: 'text', text, text_elements: [] }],
-      sandboxPolicy: connection.sandboxPolicy(),
+      ...connection.permissionFields(),
     })) as { turn: { id: string } };
     return { turnId: result.turn.id };
   }
@@ -186,7 +265,19 @@ class Connection {
   cwd: string;
   environmentRoots: string[];
   networkAccess?: boolean;
+  verification?: { id: string; assertCurrent: () => void };
+  permissionFields() {
+    this.verification?.assertCurrent();
+    return this.verification
+      ? { permissions: this.verification.id }
+      : { sandboxPolicy: this.sandboxPolicy() };
+  }
   sandboxPolicy() {
+    if (this.verification)
+      throw new DomainError(
+        'ENVIRONMENT_UNAVAILABLE',
+        'Immutable native review requires its named permission profile, not legacy sandbox policy.',
+      );
     return this.readOnly
       ? { type: 'readOnly', networkAccess: false }
       : {
@@ -204,11 +295,13 @@ class Connection {
     readOnly = false,
     environmentRoots: string[] = [],
     networkAccess?: boolean,
+    verification?: { id: string; assertCurrent: () => void },
   ) {
     this.readOnly = readOnly;
     this.cwd = cwd;
     this.environmentRoots = environmentRoots;
     this.networkAccess = networkAccess;
+    this.verification = verification;
     this.process = spawn(launch.executable, launch.args, {
       cwd: launch.cwd,
       env: launch.env,
@@ -325,6 +418,12 @@ class Connection {
       throw observedTurnFailure(new DOMException('Interrupted', 'AbortError'));
     if (this.closed || this.closePromise)
       throw observedTurnFailure(Error('Codex app-server is closed.'));
+    let permissionFields: ReturnType<Connection['permissionFields']>;
+    try {
+      permissionFields = this.permissionFields();
+    } catch (error) {
+      throw observedTurnFailure(error);
+    }
     let turnId = '',
       answer = '';
     let terminalObserved = false;
@@ -397,7 +496,7 @@ class Connection {
           threadId,
           input: [{ type: 'text', text, text_elements: [] }],
           outputSchema: options.schema,
-          sandboxPolicy: this.sandboxPolicy(),
+          ...permissionFields,
         },
         options.signal,
       )) as { turn: { id: string } };

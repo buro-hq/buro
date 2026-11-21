@@ -32,11 +32,17 @@ const host = await createHost({
   ],
 });
 const checks = [
-  { id: 'session_list', title: 'Session list', script: path.join(root, 'checks/session-list.mjs') },
+  {
+    id: 'session_list',
+    title: 'Session list',
+    script: path.join(root, 'checks/session-list.mjs'),
+    sourceRoot: root,
+  },
   {
     id: 'session_select',
     title: 'Session selection',
     script: path.join(root, 'checks/session-select.mjs'),
+    sourceRoot: root,
   },
 ];
 const policy = {

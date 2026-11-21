@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { EnvironmentConfig } from '../../protocol/environment.ts';
 import { DomainError } from '../../core/ports.ts';
+import type { VerificationView } from '../../protocol/verification.ts';
 const exec = promisify(execFile);
 export type Launch = {
   executable: string;
@@ -28,6 +29,10 @@ export type ExecutionWorld = {
 /** Shared coordinates for service checks and the agent; providers never silently fall back to the host. */
 export class EnvironmentExecutors {
   worlds = new Map<string, ExecutionWorld>();
+  private verification = new Map<
+    string,
+    { view: VerificationView; signature: string; world: ExecutionWorld; readRoots: string[] }
+  >();
   readonly execute: typeof exec;
   readonly agentConfigHome: string;
   private privatePaths = new Set<string>();
@@ -203,6 +208,244 @@ export class EnvironmentExecutors {
   get(workspace: string) {
     return this.worlds.get(workspace);
   }
+  /** Bind a host-issued immutable input view to its isolated writable output area. */
+  async registerVerification(view: VerificationView, signal: AbortSignal) {
+    signal.throwIfAborted();
+    const signature = JSON.stringify(view);
+    const saved = this.verification.get(view.id);
+    if (saved) {
+      if (saved.signature !== signature)
+        throw new DomainError(
+          'VERIFICATION_VIEW_CHANGED',
+          'The verification view identity changed.',
+        );
+      return;
+    }
+    const overlap = (a: string, b: string) =>
+      a === b || a.startsWith(b + path.sep) || b.startsWith(a + path.sep);
+    if (
+      overlap(view.readRoot, view.outputRoot) ||
+      overlap(view.sourceWorkspace, view.readRoot) ||
+      overlap(view.sourceWorkspace, view.outputRoot)
+    )
+      throw new DomainError('VERIFICATION_VIEW_CHANGED', 'Verification areas must be independent.');
+    for (const root of [view.sourceWorkspace, view.readRoot, view.outputRoot])
+      if (path.resolve(root) !== root || (await fs.realpath(root).catch(() => undefined)) !== root)
+        throw new DomainError('VERIFICATION_VIEW_CHANGED', 'Verification roots cannot be aliases.');
+    const original = this.worlds.get(view.sourceWorkspace);
+    if (original?.container || original?.config.provider === 'docker')
+      throw new DomainError(
+        'ENVIRONMENT_UNAVAILABLE',
+        'This Docker executor cannot provide an immutable verification view.',
+      );
+    if (process.platform !== 'darwin' && process.platform !== 'linux')
+      throw new DomainError(
+        'ENVIRONMENT_UNAVAILABLE',
+        'This host cannot enforce immutable verification inputs.',
+      );
+    const readRoots = [view.readRoot];
+    if (original?.variables.HOME && existsSync(original.variables.HOME)) {
+      if ((await fs.realpath(original.variables.HOME)) !== original.variables.HOME)
+        throw new DomainError(
+          'VERIFICATION_VIEW_CHANGED',
+          'The prepared toolchain home was replaced.',
+        );
+      readRoots.push(original.variables.HOME);
+    }
+    const dependencies =
+      (
+        view as VerificationView & {
+          readonlyDependencies?: { path: string; target: string }[];
+        }
+      ).readonlyDependencies || [];
+    for (const dependency of dependencies) {
+      const relative = path.relative(view.readRoot, dependency.path);
+      const prepared = path.join(view.sourceWorkspace, relative);
+      const home = os.homedir();
+      const forbidden = [
+        this.agentConfigHome,
+        ...['.aws', '.ssh', '.codex', '.claude', '.config', 'Library/Keychains'].map((part) =>
+          path.join(home, part),
+        ),
+      ];
+      const isWithin = (value: string, parent: string) =>
+        value === parent || value.startsWith(parent + path.sep);
+      const privateTarget =
+        forbidden.some((root) => overlap(root, dependency.target)) ||
+        [...this.privatePaths].some(
+          (root) =>
+            isWithin(dependency.target, root) && !isWithin(dependency.target, view.sourceWorkspace),
+        );
+      if (
+        !dependency.path.startsWith(view.readRoot + path.sep) ||
+        path.resolve(dependency.path) !== dependency.path ||
+        path.resolve(dependency.target) !== dependency.target ||
+        (await fs.realpath(dependency.path).catch(() => undefined)) !== dependency.target ||
+        (await fs.realpath(dependency.target).catch(() => undefined)) !== dependency.target ||
+        (await fs.realpath(prepared).catch(() => undefined)) !== dependency.target ||
+        !(await fs.stat(dependency.target)).isDirectory() ||
+        privateTarget ||
+        overlap(dependency.target, view.outputRoot) ||
+        dependency.target === view.sourceWorkspace ||
+        view.sourceWorkspace.startsWith(dependency.target + path.sep)
+      )
+        throw new DomainError('VERIFICATION_VIEW_CHANGED', 'A verification dependency changed.');
+      readRoots.push(dependency.target);
+    }
+    const home = path.join(view.outputRoot, 'home');
+    const cacheRoot = path.join(view.outputRoot, 'cache');
+    const temp = path.join(view.outputRoot, 'tmp');
+    await Promise.all([home, cacheRoot, temp].map((root) => fs.mkdir(root, { recursive: true })));
+    const remap = (value: string) => {
+      for (const [from, to] of [
+        [original?.variables.HOME, home],
+        [original?.cacheRoot, cacheRoot],
+        [view.sourceWorkspace, view.readRoot],
+        [original?.root, view.readRoot],
+      ]) {
+        if (from && (value === from || value.startsWith(from + path.sep)))
+          return to + value.slice(from.length);
+      }
+      return value;
+    };
+    const inherited = Object.fromEntries(
+      Object.entries(original?.variables || {}).map(([key, value]) => [key, remap(value)]),
+    );
+    const variables = {
+      ...inherited,
+      PATH: original?.variables.PATH || process.env.PATH || '/usr/bin:/bin',
+      CI: '1',
+      PROJECT_ROOT: view.readRoot,
+      GOAL_WORKSPACE: view.readRoot,
+      HOME: home,
+      TMPDIR: temp,
+      TMP: temp,
+      TEMP: temp,
+      XDG_CACHE_HOME: cacheRoot,
+      npm_config_cache: path.join(cacheRoot, 'npm'),
+      COREPACK_HOME: path.join(cacheRoot, 'corepack'),
+      YARN_CACHE_FOLDER: path.join(cacheRoot, 'yarn'),
+      PIP_CACHE_DIR: path.join(cacheRoot, 'pip'),
+      UV_CACHE_DIR: path.join(cacheRoot, 'uv'),
+      CARGO_HOME: path.join(home, '.cargo'),
+      GOPATH: path.join(home, 'go'),
+      GOCACHE: path.join(cacheRoot, 'go-build'),
+      GIT_OPTIONAL_LOCKS: '0',
+    };
+    signal.throwIfAborted();
+    this.verification.set(view.id, {
+      view: structuredClone(view),
+      signature,
+      readRoots,
+      world: {
+        workspace: view.readRoot,
+        root: view.readRoot,
+        config: { provider: 'native' },
+        cacheRoot: view.outputRoot,
+        variables,
+        baseVariables: { ...variables },
+        privateDataIsolation: true,
+      },
+    });
+  }
+  launchVerification(view: VerificationView, argv: string[], readOnly = false): Launch {
+    const saved = this.verification.get(view.id);
+    if (!saved || saved.signature !== JSON.stringify(view))
+      throw new DomainError(
+        'VERIFICATION_VIEW_CHANGED',
+        'The verification view is not registered.',
+      );
+    for (const root of [view.readRoot, view.outputRoot])
+      if (!existsSync(root) || realpathSync(root) !== root)
+        throw new DomainError('VERIFICATION_VIEW_CHANGED', 'The verification view was replaced.');
+    for (const dependency of view.readonlyDependencies || [])
+      if (
+        !existsSync(dependency.path) ||
+        realpathSync(dependency.path) !== dependency.target ||
+        realpathSync(dependency.target) !== dependency.target
+      )
+        throw new DomainError(
+          'VERIFICATION_VIEW_CHANGED',
+          'A verification dependency was replaced.',
+        );
+    return this.isolatedLaunch(saved.world, argv, saved.world.variables, readOnly, false, {
+      readRoots: saved.readRoots,
+      writableRoots: readOnly ? [] : [view.outputRoot],
+      immutableRoots: [view.readRoot, ...saved.readRoots.slice(1)],
+      denyLinks: true,
+    });
+  }
+  releaseVerification(view: VerificationView) {
+    const saved = this.verification.get(view.id);
+    if (saved && saved.signature === JSON.stringify(view)) this.verification.delete(view.id);
+  }
+  /** Native clients consume these roots in their own tool sandbox; their controller stays outside it. */
+  verificationPolicy(view: VerificationView) {
+    // Validate the registered identity and current mounts without launching this plan.
+    this.launchVerification(view, [process.execPath], true);
+    const saved = this.verification.get(view.id)!;
+    const original = this.worlds.get(view.sourceWorkspace);
+    const home = os.homedir();
+    const readRoots = new Set([
+      ...saved.readRoots,
+      view.outputRoot,
+      path.dirname(process.execPath),
+    ]);
+    const sourceRoots = [view.sourceWorkspace, ...(original?.root ? [original.root] : [])];
+    for (const value of (saved.world.variables.PATH || '').split(path.delimiter)) {
+      if (!value || !path.isAbsolute(value) || !existsSync(value)) continue;
+      const directory = realpathSync(value);
+      if (directory === home || home.startsWith(directory + path.sep)) continue;
+      const prepared = saved.readRoots.some(
+        (root) => directory === root || directory.startsWith(root + path.sep),
+      );
+      if (
+        !prepared &&
+        sourceRoots.some((root) => directory === root || directory.startsWith(root + path.sep))
+      )
+        continue;
+      readRoots.add(directory);
+      if (
+        /\/(?:\.nvm\/versions\/node|\.asdf\/installs|\.pyenv\/versions|\.volta\/tools\/image|\.local\/share\/mise\/installs)\//.test(
+          directory,
+        )
+      )
+        readRoots.add(path.dirname(directory));
+    }
+    const deniedRoots = new Set(
+      [
+        ...sourceRoots,
+        ...this.privatePaths,
+        this.agentConfigHome,
+        home,
+        '/tmp',
+        '/private/tmp',
+        os.tmpdir(),
+        ...[
+          '.codex',
+          '.aws',
+          '.ssh',
+          '.config',
+          'Library/Keychains',
+          '.netrc',
+          '.npmrc',
+          '.git-credentials',
+        ].map((part) => path.join(home, part)),
+        '/etc/npmrc',
+        '/usr/local/etc/npmrc',
+        '/opt/homebrew/etc/npmrc',
+        path.join(path.dirname(path.dirname(process.execPath)), 'etc/npmrc'),
+      ].map((root) => (existsSync(root) ? realpathSync(root) : path.resolve(root))),
+    );
+    return {
+      readRoots: [...readRoots],
+      deniedRoots: [...deniedRoots],
+      variables: { ...saved.world.variables },
+    };
+  }
+  isVerificationWorkspace(workspace: string) {
+    return [...this.verification.values()].some((entry) => entry.view.readRoot === workspace);
+  }
   launch(
     workspace: string,
     argv: string[],
@@ -314,6 +557,10 @@ export class EnvironmentExecutors {
   }
   /** Inspection works before setup and cannot write even inside the repository. */
   launchReadOnly(workspace: string, argv: string[]): Launch {
+    const verification = [...this.verification.values()].find(
+      (entry) => entry.view.readRoot === workspace,
+    );
+    if (verification) return this.launchVerification(verification.view, argv, true);
     const world = this.worlds.get(workspace) || {
       workspace,
       root: workspace,
@@ -330,6 +577,12 @@ export class EnvironmentExecutors {
     variables: Record<string, string>,
     readOnly: boolean,
     allowNetwork: boolean,
+    verification?: {
+      readRoots: string[];
+      writableRoots: string[];
+      immutableRoots: string[];
+      denyLinks: boolean;
+    },
   ): Launch {
     const home = os.homedir();
     const protectedPaths = new Set([
@@ -371,6 +624,7 @@ export class EnvironmentExecutors {
       world.workspace,
       world.cacheRoot,
       path.dirname(process.execPath),
+      ...(verification?.readRoots || []),
     ]);
     for (const value of (process.env.PATH || '').split(path.delimiter)) {
       if (!value || !path.isAbsolute(value) || !existsSync(value)) continue;
@@ -384,7 +638,8 @@ export class EnvironmentExecutors {
       )
         reads.add(path.dirname(directory));
     }
-    const writable = readOnly ? [] : [world.workspace, world.cacheRoot];
+    const writable =
+      verification?.writableRoots || (readOnly ? [] : [world.workspace, world.cacheRoot]);
     const env = {
       PATH: process.env.PATH,
       CI: '1',
@@ -416,7 +671,14 @@ export class EnvironmentExecutors {
         '(deny file-read-data (regex #"^(.*/)?[.](npmrc|netrc|git-credentials)$"))' +
         // Artifact caches are the one explicit exception under private project metadata.
         `(allow file-read-data (subpath ${literal(world.cacheRoot)}))` +
+        (verification?.readRoots || [])
+          .map((value) => `(allow file-read-data (subpath ${literal(value)}))`)
+          .join('') +
         writable.map((value) => `(allow file-write* (subpath ${literal(value)}))`).join('') +
+        (verification?.immutableRoots || [])
+          .map((value) => `(deny file-write* (subpath ${literal(value)}))`)
+          .join('') +
+        (verification?.denyLinks ? '(deny file-link)(deny file-mount)(deny file-unmount)' : '') +
         '(allow file-write* (literal "/dev/null"))' +
         (!allowNetwork ? '(deny network*)' : '');
       return {
@@ -480,6 +742,8 @@ export class EnvironmentExecutors {
             ? ['--tmpfs', value]
             : ['--ro-bind', '/dev/null', value]),
         );
+    for (const value of verification?.readRoots || [])
+      if (existsSync(value)) args.push('--ro-bind', value, value);
     // Re-expose only this run's artifact cache beneath the masked metadata root.
     if (existsSync(world.cacheRoot))
       args.push(readOnly ? '--ro-bind' : '--bind', world.cacheRoot, world.cacheRoot);

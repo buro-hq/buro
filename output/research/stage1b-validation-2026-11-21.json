@@ -1,0 +1,71 @@
+{
+  "stage": "1B",
+  "date": "2026-11-21",
+  "baseline": "fd50e27",
+  "productionChanged": true,
+  "agents": 5,
+  "checks": {
+    "fullSuite": {
+      "tests": 682,
+      "passed": 682,
+      "failed": 0,
+      "skipped": 0
+    },
+    "buildAndTypecheck": "passed",
+    "format": "passed",
+    "productionSmoke": {
+      "desktopAndMobile": true,
+      "pageOrConsoleErrors": 0,
+      "mode": "offline drafts"
+    },
+    "architectureCodeBoundaries": "clear within documented stage1B scope"
+  },
+  "noModelOrRtxCalls": true,
+  "originalUserRepositoriesUnchanged": true,
+  "nativeProof": "native-verification-policy-probe-2026-11-21.json",
+  "knownRemaining": [
+    "Native real model built-in filesystem tools and Linux verification were not exercised; unsupported named profiles reject before a native turn.",
+    "Docker verification views, submodules and live monorepo dependency aliases are explicitly unsupported.",
+    "Read-only prepared dependencies/toolchains are environment inputs, not a claim of immutable dependency snapshots.",
+    "Trusted Node entrypoints are pinned; arbitrary imported test dependency closure is not pinned.",
+    "Complete descendant process leases, crash-orphan cleanup and checkpoint receipt reconciliation remain later work.",
+    "Default quotas and mandatory planned-path scope have not been cut over."
+  ],
+  "sourceHashes": {
+    "adapters/checks/node-checks.ts": "1cb9e327420e200586e96050aea121a565817de9b50cd76115b20a44343b1525",
+    "adapters/checks/project-commands.ts": "d5e3e86586799ea1bc3a27d621eea77735329e6772276fbad1e8a6d8455314fc",
+    "adapters/codex/runtime.ts": "8ebfd47341a0f9a79ff854ae12469b01f6cd8d70108252b8757bb7a7adf3f65a",
+    "adapters/codex/verification-policy.ts": "ba27fbc255cb23ddb113f405c0785eb31bfa3ca4e496f497467cbd09ef02d7da",
+    "adapters/environments/executors.ts": "d93ec2dd9e158020c345f026c4e677be7ca47e3ef39c7f6b625d0a468f824942",
+    "adapters/files/git-workspaces.ts": "349a05102aa4f548cacc29b7f8dca5db44830853fc462e246b9f906839593706",
+    "adapters/files/managed-sessions.ts": "5258fdeb8a5136b3fd01c5d57e292f9b00e7d777a7455217002267a8751bd63d",
+    "adapters/files/verification-view.ts": "3cc758c40f9d00384dea3f84615b5af1d127e2e1e4817da0a4209e398950785a",
+    "adapters/processes/safe-git.ts": "c3b7f5ee92f61577434277a214370aa11b1e0951cadc61d40e4d784b8218b194",
+    "core/execution-ports.ts": "b546e4466d28ad617c8773d72da107a16d858f19ecd7e345f24ecc7bb7628c8e",
+    "core/execution.ts": "3f407188cb328c9b2ab954f193ee79088ccc7dd06aef88abd6f734702279dd9e",
+    "core/managed-runtime.ts": "bf9721d6ba95bb3aca9c521613b4765a11af722db8e21b72b5f25d79d180a571",
+    "core/model-ports.ts": "75b34e809a0d8725abf3c3468c91a64c8c3cca0d97ac5543c178e7f16e227f6d",
+    "core/verification-view.ts": "11061ec24b048c19ee2c3492bd747c5413e1c2673976bf32b8ab170fec29e00e",
+    "daemon/main.ts": "e8fa09e410c4a113cab65b2a3afa8b5864d3a0d56810d8dde9b7938468e4e1a7",
+    "protocol/domain.ts": "8a353fd3e8e3fa211fde97cf05bfc5b156549c150846f8cc4a043ac214d2d9e5",
+    "protocol/projects.ts": "c4f6800dcf8215eaafe63468d094e52ab1988817a7affdc0a057b8d664aa0b03",
+    "protocol/schema.ts": "61c9717586ddacda00f53fffb2371cf064cd2d168305d39a12c15e86d96101a8",
+    "protocol/verification.ts": "d15208c48ad6f8cf5b5cbeeefce173b98b33d7745065682eac76a99201fc363f",
+    "src/components/organisms/ProjectProfileForm.tsx": "67d51705e8cbc1cba431ea2b1ed25445e5070aa78e22d6be9a633d8ce6e0164f",
+    "src/i18n/locales/en.json": "44f187d7a33e54d6c4cc19c249005db2c592e9c76b6ea813d7ef1609da78f4b3",
+    "src/i18n/locales/ru.json": "31791f1822f74bf35341bcea0578631517d93ef577a8524ec77759ed152f4940",
+    "tests/codex-verification.test.ts": "8b2c4f131467c877ad0c90bb7bb32cf42ccb6fe069de3b03e3773e19113858f9",
+    "tests/execution-planning.test.ts": "ccde68739b24e251931ab9700d18cf9416de60231bd4e4a11d4a976f70da76b3",
+    "tests/execution.test.ts": "f8a1fd63b350d10da9e2c59febfc6be16f70537163dc87f3be8167c2bcffaee9",
+    "tests/fixtures/virtual-workspace.ts": "6ea0bdb8ca27ce20a140ec5012107cdce6b754046378bf332ed5861139e00556",
+    "tests/managed-check-dispatch.test.ts": "1a9e01c1fbcbd92c031dfe270f7880e46416d0d74cb4c177bf77abe384cd18f3",
+    "tests/managed-verification-views.test.ts": "7e83b3655f0c9bd8dbc96e8cda5a14e6ec3c0fc19f70070e50f67fd990041386",
+    "tests/node-verification-inputs.test.ts": "d93afcf72151db17f4343c5f5df5e905b734d4ccb7f5d8ccba2a59e2f8f382a9",
+    "tests/planning-runtime-gate.test.ts": "5c8ae598e23f6a792cea8071150b49ff20366661594adba4543a9446da8230e4",
+    "tests/project-planning-policy.test.ts": "9fe69bbdd1596e3dc3836a1a418282a252c8dbd58d554c651f1645bd97605191",
+    "tests/recovery.test.ts": "1a6bf19b6f9082e5a179937d5c8c8ea8ee6b8d3d816cd2228893712139c21ebf",
+    "tests/run-budget-workflow.test.ts": "ee240943ceb091b629980807a825bcf3785119fe140cc0d68ab117df78a30ddf",
+    "tests/verification-isolation.test.ts": "e9e02c162ca0f6e29ef685c81c64724b4726c8ca106462efac7d205d9ba7c6c6",
+    "tests/verification-view.test.ts": "c692f788198d66e8ed2ad3b9a5558254bd8b415b37ce7b60e18b0a30ed1584ca"
+  }
+}

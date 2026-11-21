@@ -288,6 +288,7 @@ else {
     get: () => ({ snapshot: () => ({ project: { root: directory } }) }),
   } as unknown as ProjectRegistry;
   const executors = {
+    isVerificationWorkspace: () => false,
     get: () => ({ cacheRoot: path.join(directory, 'cache') }),
     launch: (_root: string, argv: string[]) => ({
       executable: argv[0],

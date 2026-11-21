@@ -1075,5 +1075,8 @@
   "The coordinator may choose only these models. The primary worker is always included.": "The coordinator may choose only these models. The primary worker is always included.",
   "Save now, restart the Buro service, then explicitly select this profile. Saving does not run a model or diagnostic.": "Save now, restart the Buro service, then explicitly select this profile. Saving does not run a model or diagnostic.",
   "Team profile ready. Select it explicitly to use it for new runs.": "Team profile ready. Select it explicitly to use it for new runs.",
-  "Team profile saved. Refresh resource settings to check availability.": "Team profile saved. Refresh resource settings to check availability."
+  "Team profile saved. Refresh resource settings to check availability.": "Team profile saved. Refresh resource settings to check availability.",
+  "Writable check outputs": "Writable check outputs",
+  "Output directories": "Output directories",
+  "Build and cache outputs only. Checked source files remain read-only. One directory per line.": "Build and cache outputs only. Checked source files remain read-only. One directory per line."
 }

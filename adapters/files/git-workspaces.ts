@@ -13,6 +13,11 @@ import type { ProjectProfile, ContextMaterial } from '../../protocol/domain.ts';
 import { stageContextMaterials } from './context-materials.ts';
 import { NodeEnvironment } from '../dependencies/node-environment.ts';
 import { sameWorkspaceRevision, type WorkspaceRevision } from '../../core/workspace-revision.ts';
+import type {
+  VerificationView,
+  OpenVerificationViewOptions,
+} from '../../core/verification-view.ts';
+import { materializeVerificationView, type VerificationViewHandle } from './verification-view.ts';
 
 function revisionChanged() {
   return new DomainError(
@@ -110,9 +115,12 @@ async function readWorkspaceFile(
 
 export class GitWorkspaces implements WorkspacePort {
   projects: ProjectRegistry;
+  private verificationViews = new Map<string, VerificationViewHandle>();
   records = new Map<
     string,
     {
+      projectId: string;
+      runId: string;
       base: string;
       gitPointer: string;
       gitDirectory: string;
@@ -193,6 +201,8 @@ export class GitWorkspaces implements WorkspacePort {
       );
     const realWorkspace = await fs.realpath(workspace);
     this.records.set(workspace, {
+      projectId,
+      runId,
       base: sha,
       gitPointer: await readWorkspaceFile(workspace, realWorkspace, '.git', 64 * 1024),
       realWorkspace,
@@ -315,6 +325,8 @@ export class GitWorkspaces implements WorkspacePort {
       }
     }
     this.records.set(workspace, {
+      projectId,
+      runId,
       base,
       gitPointer,
       realWorkspace: actual,
@@ -600,5 +612,66 @@ export class GitWorkspaces implements WorkspacePort {
       if (open) await handle.close();
       if (ownsLock) await fs.rm(lock, { force: true });
     }
+  }
+
+  async openVerificationView(
+    workspace: string,
+    revision: WorkspaceRevision,
+    options: OpenVerificationViewOptions,
+  ): Promise<VerificationView> {
+    options.signal?.throwIfAborted();
+    const entry = await this.validate(workspace);
+    const project = this.projects.get(options.projectId).snapshot().project;
+    if (
+      (await fs.realpath(project.root)) !== (await fs.realpath(entry.contextRoot)) ||
+      entry.projectId !== options.projectId ||
+      entry.runId !== options.runId ||
+      !sameWorkspaceRevision(revision, await this.captureRevision(workspace, entry.base))
+    )
+      throw new DomainError(
+        'VERIFICATION_REVISION_CHANGED',
+        'The verification view does not match its owning run and captured revision.',
+      );
+    let dependencyTarget: string | undefined;
+    const modules = path.join(workspace, 'node_modules');
+    try {
+      const stat = await fs.lstat(modules);
+      dependencyTarget = await fs.realpath(modules);
+      if (
+        (!stat.isDirectory() && !stat.isSymbolicLink()) ||
+        (stat.isSymbolicLink()
+          ? dependencyTarget !== entry.dependencyLink
+          : dependencyTarget !== path.join(entry.realWorkspace, 'node_modules'))
+      )
+        throw new DomainError(
+          'VERIFICATION_VIEW_UNAVAILABLE',
+          'The dependency root is not an owned or prepared dependency directory.',
+        );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    const resource = await materializeVerificationView({
+      workspace,
+      gitDirectory: entry.gitDirectory,
+      contextRoot: entry.contextRoot,
+      materials: entry.materials,
+      dependencyTarget,
+      revision,
+      options,
+    });
+    this.verificationViews.set(resource.view.id, resource);
+    return resource.view;
+  }
+
+  async releaseVerificationView(view: VerificationView) {
+    const resource = this.verificationViews.get(view.id);
+    if (!resource) return;
+    if (resource.view !== view)
+      throw new DomainError(
+        'VERIFICATION_VIEW_UNAVAILABLE',
+        'Only the owning verification handle can release this input.',
+      );
+    await resource.dispose();
+    this.verificationViews.delete(view.id);
   }
 }

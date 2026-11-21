@@ -12,6 +12,8 @@ import type {
   ToolScope,
 } from './model-ports.ts';
 import { inScope } from './execution-ports.ts';
+import type { Run } from '../protocol/domain.ts';
+import { VerificationViewSchema } from '../protocol/verification.ts';
 import { withEnvironmentRepair } from './environment-repair.ts';
 import {
   estimateManagedRequest,
@@ -120,8 +122,8 @@ export class ManagedAgentRuntime implements AgentRuntime {
     )
       throw new DomainError('SESSION_MISMATCH', 'The owning run was not found.');
     const workspace = input.workspace || snapshot.project.root;
-    if (run?.workspace && run.workspace !== workspace)
-      throw new DomainError('SESSION_MISMATCH', 'The owning run uses another workspace.');
+    const verificationView =
+      run?.verificationView?.readRoot === workspace ? run.verificationView : undefined;
     const materials = run
       ? run.contextMaterials || []
       : (snapshot.contextMaterials || []).filter((m) => m.active && m.scope === 'project');
@@ -143,6 +145,12 @@ export class ManagedAgentRuntime implements AgentRuntime {
         ownerRunId: run?.id || input.ownerRunId,
         sessionId: input.assignment?.sessionId || id,
         workspace,
+        ...(verificationView
+          ? {
+              verificationViewId: verificationView.id,
+              verificationTree: verificationView.tree,
+            }
+          : {}),
         readOnly: !!input.readOnly,
         allowedPaths: [...(input.assignment?.allowedPaths || policy?.allowedPaths || [])],
         protectedPaths: [...(input.assignment?.protectedPaths || policy?.protectedPaths || [])],
@@ -173,6 +181,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
           }
         : {}),
     };
+    if (run) this.assertRunWorkspace(run, session);
     session.scopeRevisions = [
       { revision: 1, scope: structuredClone(session.scope), instructions: input.instructions },
     ];
@@ -215,8 +224,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
     const run = snapshot.runs.find((r) => r.id === ownerRunId);
     if ((session.scope.ownerRunId || input.ownerRunId) && !run)
       throw new DomainError('SESSION_MISMATCH', 'The owning run was not found.');
-    if (run?.workspace && run.workspace !== session.scope.workspace)
-      throw new DomainError('SESSION_MISMATCH', 'The owning run uses another workspace.');
+    if (run) this.assertRunWorkspace(run, session);
     if (run?.baseCommit && session.scope.baseCommit && run.baseCommit !== session.scope.baseCommit)
       throw new DomainError('SESSION_MISMATCH', 'The owning run uses another Git base.');
     const scope: ToolScope = structuredClone(session.scope);
@@ -326,6 +334,12 @@ export class ManagedAgentRuntime implements AgentRuntime {
     let session = await this.session(threadId);
     this.assertReconciled(session);
     const { provider, sessions, tools, budgets } = this.options;
+    if (
+      session.purpose === 'review' ||
+      session.scope.verificationViewId ||
+      session.scope.verificationTree
+    )
+      this.assertCurrentWorkspace(session);
     const budgetOwner = budgets ? this.budgetOwner(session) : undefined;
     const budgetPhase = session.purpose === 'review' ? ('review' as const) : ('work' as const);
     if (session.purpose === 'review' && (!session.scope.readOnly || session.assignment))
@@ -351,6 +365,12 @@ export class ManagedAgentRuntime implements AgentRuntime {
     const check = () => {
       if (signal.aborted || session.cancelRequested)
         throw new DOMException('Interrupted', 'AbortError');
+      if (
+        session.purpose === 'review' ||
+        session.scope.verificationViewId ||
+        session.scope.verificationTree
+      )
+        this.assertCurrentWorkspace(session);
     };
     const emit = (body: EventBody) => {
       const event = {
@@ -945,6 +965,54 @@ export class ManagedAgentRuntime implements AgentRuntime {
   private assertOpen() {
     if (this.closed) throw new DomainError('RUNTIME_CLOSED', 'The runtime stopped.');
   }
+  private assertRunWorkspace(
+    run: Run,
+    session: Pick<ManagedSession, 'purpose' | 'scope' | 'assignment'>,
+  ) {
+    const scope = session.scope;
+    if (scope.verificationViewId || scope.verificationTree) {
+      const parsed = VerificationViewSchema.safeParse(run.verificationView);
+      if (!parsed.success || session.purpose !== 'review' || !scope.readOnly || session.assignment)
+        throw new DomainError(
+          'SESSION_MISMATCH',
+          'Only a read-only service reviewer can use an issued verification view.',
+        );
+      const view = parsed.data;
+      if (
+        view.id !== scope.verificationViewId ||
+        view.tree !== scope.verificationTree ||
+        view.projectId !== scope.projectId ||
+        view.runId !== run.id ||
+        view.readRoot !== scope.workspace ||
+        view.sourceWorkspace !== run.workspace ||
+        view.base !== run.baseCommit ||
+        view.base !== scope.baseCommit
+      )
+        throw new DomainError(
+          'SESSION_MISMATCH',
+          'The saved verification view is unavailable or changed.',
+        );
+      return;
+    }
+    if (
+      (run.workspace && run.workspace !== scope.workspace) ||
+      (session.purpose === 'review' && run.verificationView)
+    )
+      throw new DomainError(
+        'SESSION_MISMATCH',
+        'The owning run uses another workspace or active verification view.',
+      );
+  }
+  private assertCurrentWorkspace(session: ManagedSession) {
+    const owner = session.scope.ownerRunId || session.scope.runId;
+    const run = this.options.projects
+      .get(session.scope.projectId)
+      .snapshot()
+      .runs.find((run) => run.id === owner);
+    if (run) this.assertRunWorkspace(run, session);
+    else if (session.scope.verificationViewId || session.scope.verificationTree)
+      throw new DomainError('SESSION_MISMATCH', 'The owning verification run was not found.');
+  }
   private budgetOwner(session: ManagedSession) {
     const scope = session.scope;
     const ownerRunId = scope.ownerRunId || scope.runId;
@@ -958,8 +1026,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
         return undefined;
       throw new DomainError('SESSION_MISMATCH', 'The owning run was not found.');
     }
-    if (run.workspace && run.workspace !== scope.workspace)
-      throw new DomainError('SESSION_MISMATCH', 'The owning run uses another workspace.');
+    this.assertRunWorkspace(run, session);
     return { projectId: scope.projectId, ownerRunId };
   }
   private assertReconciled(session: ManagedSession) {

@@ -24,6 +24,11 @@ export function ProjectProfileForm({
     [paths, setPaths] = useState(initial.allowedPaths.join('\n')),
     [protectedPaths, setProtectedPaths] = useState(initial.protectedPaths.join('\n')),
     [setup, setSetup] = useState(initial.setup.map((c) => c.command).join('\n')),
+    [checkOutputs, setCheckOutputs] = useState<Record<string, string>>(
+      Object.fromEntries(
+        initial.checks.map((check) => [check.id, (check.outputPaths || []).join('\n')]),
+      ),
+    ),
     [error, setError] = useState(''),
     [saving, setSaving] = useState(false);
   const update = (patch: Partial<ProjectProfile>) => setProfile((p) => ({ ...p, ...patch }));
@@ -40,6 +45,10 @@ export function ProjectProfileForm({
         ...profile,
         allowedPaths: list(paths),
         protectedPaths: list(protectedPaths),
+        checks: profile.checks.map((check) => ({
+          ...check,
+          outputPaths: list(checkOutputs[check.id] ?? (check.outputPaths || []).join('\n')),
+        })),
         setup: setup
           .split('\n')
           .map((p) => p.trim())
@@ -168,6 +177,24 @@ export function ProjectProfileForm({
               <X size={14} />
             </ActionIcon>
           </div>
+          <details>
+            <summary>{t('Writable check outputs')}</summary>
+            <Textarea
+              label={t('Output directories')}
+              description={t(
+                'Build and cache outputs only. Checked source files remain read-only. One directory per line.',
+              )}
+              placeholder="dist/"
+              autosize
+              minRows={1}
+              maxRows={4}
+              value={checkOutputs[check.id] ?? (check.outputPaths || []).join('\n')}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setCheckOutputs((current) => ({ ...current, [check.id]: value }));
+              }}
+            />
+          </details>
         </div>
       ))}
       <Select

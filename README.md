@@ -67,6 +67,8 @@ Keep a goal small enough to review as one change. The project settings control w
 
 The run view shows the plan, timeline, changed files, check output and reviewer findings. You can replay the saved history or open an individual agent's commands and messages.
 
+Acceptance checks and fresh review use a separate read-only snapshot of the exact source tree to be saved. Checks that generate reports or build artifacts need output directories declared under **Writable check outputs** in project settings. Those outputs remain separate from source. Unsupported verification isolation stops explicitly rather than running an unconstrained host check.
+
 | Read the diff | Inspect checks and review |
 | --- | --- |
 | [![The Changes tab showing the activity-search diff](docs/images/changes.png)](docs/images/changes.png) | [![The Checks tab showing test results and independent acceptance criteria](docs/images/checks.png)](docs/images/checks.png) |

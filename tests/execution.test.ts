@@ -1,4 +1,8 @@
-import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
+import {
+  virtualWorkspaceRevision,
+  virtualVerificationViews,
+  VIRTUAL_BASE_COMMIT,
+} from './fixtures/virtual-workspace.ts';
 import { observedTurnFailure } from '../core/run-reconciliation.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -229,9 +233,10 @@ async function fixture(
       runtime,
       policies: { p: policy },
       workspaces: {
+        ...virtualVerificationViews,
         async prepare(_p, _r, base) {
           prepared.push(base);
-          return { path: directory, base: base || 'initial' };
+          return { path: directory, base: base || VIRTUAL_BASE_COMMIT };
         },
         async changes() {
           return [

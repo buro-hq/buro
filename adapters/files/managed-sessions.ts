@@ -29,6 +29,11 @@ const scope = z.object({
   ownerRunId: z.string().optional(),
   sessionId: z.string(),
   workspace: z.string(),
+  verificationViewId: z.string().min(1).optional(),
+  verificationTree: z
+    .string()
+    .regex(/^[a-f0-9]{40}$/)
+    .optional(),
   readOnly: z.boolean(),
   allowedPaths: z.array(z.string()),
   protectedPaths: z.array(z.string()),
@@ -307,6 +312,21 @@ function validateWorkerCheckCheckpoint(session: ManagedSession) {
   }
 }
 function validateSegmentCheckpoint(session: ManagedSession) {
+  if (
+    session.scope.verificationViewId !== undefined ||
+    session.scope.verificationTree !== undefined
+  ) {
+    if (
+      !session.scope.verificationViewId ||
+      !session.scope.verificationTree ||
+      session.purpose !== 'review' ||
+      !session.scope.readOnly ||
+      session.assignment
+    )
+      invalidSegment(
+        'A verification scope requires a read-only service reviewer and frozen source identity.',
+      );
+  }
   validateTurnAuthorities(session);
   validateWorkerCheckCheckpoint(session);
   const state = session.workSegments;
@@ -578,7 +598,9 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
     !previous.workSegments &&
     !next.workSegments &&
     !previous.turnAuthorities &&
-    !next.turnAuthorities
+    !next.turnAuthorities &&
+    !previous.scope.verificationViewId &&
+    !next.scope.verificationViewId
   )
     return;
   if (previous.workSegments && !next.workSegments)
@@ -619,6 +641,8 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
       previous.scope.ownerRunId !== next.scope.ownerRunId ||
       previous.scope.sessionId !== next.scope.sessionId ||
       previous.scope.workspace !== next.scope.workspace ||
+      previous.scope.verificationViewId !== next.scope.verificationViewId ||
+      previous.scope.verificationTree !== next.scope.verificationTree ||
       previous.scope.baseCommit !== next.scope.baseCommit ||
       previous.scope.readOnly !== next.scope.readOnly
     )

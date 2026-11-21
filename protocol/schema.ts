@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VerificationViewSchema, VerificationEvidenceSchema } from './verification.ts';
 import { ManagedRunBudgetSummarySchema, ManagedBudgetErrorCodeSchema } from './run-budget.ts';
 import { roleIdPattern, type DomainEvent, type Snapshot } from './domain.ts';
 import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
@@ -324,6 +325,8 @@ export const PlanningPolicySchema = z.discriminatedUnion('mode', [
 const run = z
   .object({
     reconciliation: RunReconciliationSchema.optional(),
+    verificationView: VerificationViewSchema.optional(),
+    verificationEvidence: VerificationEvidenceSchema.optional(),
     pendingTurn: PendingRunTurnSchema.optional(),
     planningPolicy: PlanningPolicySchema.optional(),
     managedBudget: ManagedRunBudgetSummarySchema.optional(),
@@ -521,6 +524,16 @@ const run = z
     sourceHash: z.string(),
   })
   .superRefine((run, ctx) => {
+    if (
+      run.verificationView &&
+      (run.verificationView.runId !== run.id ||
+        run.verificationView.sourceWorkspace !== run.workspace ||
+        run.verificationView.base !== run.baseCommit)
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A verification view must belong to this run, workspace and Git base.',
+      });
     if (run.status === 'completed' && (run.reconciliation || run.pendingTurn))
       ctx.addIssue({
         code: 'custom',
@@ -534,70 +547,94 @@ const run = z
     if (run.planningPolicy?.mode === 'bounded' && run.resources?.coordinator.client !== 'managed')
       ctx.addIssue({ code: 'custom', message: 'Bounded planning requires a managed coordinator.' });
   });
-export const DomainEventSchema = z.object({
-  version: z.literal(1),
-  id: z.string(),
-  projectId: z.string(),
-  seq: z.number().int().positive(),
-  at: z.string(),
-  change: z.discriminatedUnion('type', [
-    z.object({ type: z.literal('goal.created'), goal }),
-    z.object({ type: z.literal('goal.updated'), goal }),
-    z.object({ type: z.literal('goal.deleted'), id: z.string() }),
-    z.object({ type: z.literal('role.saved'), role }),
-    z.object({
-      type: z.literal('context.materials.added'),
-      materials: z.array(ContextMaterialSchema),
+export const DomainEventSchema = z
+  .object({
+    version: z.literal(1),
+    id: z.string(),
+    projectId: z.string(),
+    seq: z.number().int().positive(),
+    at: z.string(),
+    change: z.discriminatedUnion('type', [
+      z.object({ type: z.literal('goal.created'), goal }),
+      z.object({ type: z.literal('goal.updated'), goal }),
+      z.object({ type: z.literal('goal.deleted'), id: z.string() }),
+      z.object({ type: z.literal('role.saved'), role }),
+      z.object({
+        type: z.literal('context.materials.added'),
+        materials: z.array(ContextMaterialSchema),
+      }),
+      z.object({ type: z.literal('context.material.removed'), id: z.string() }),
+      z.object({ type: z.literal('project.research.changed'), research: ResearchSchema }),
+      z.object({ type: z.literal('project.verified'), verification }),
+      z.object({
+        type: z.literal('project.configured'),
+        research: ResearchSchema.optional(),
+        profile: ProjectProfileSchema,
+        executionPolicy: z.object({
+          allowedPaths: z.array(z.string()),
+          protectedPaths: z.array(z.string()).optional(),
+          checks: z.array(z.object({ id: z.string(), title: z.string() })),
+          defaultCheckIds: z.array(z.string()),
+          maxWorkers: z.number(),
+          maxRepairs: z.number(),
+        }),
+      }),
+      z.object({ type: z.literal('run.changed'), run, goal, roles: z.array(role).optional() }),
+    ]),
+  })
+  .superRefine((event, ctx) => {
+    if (
+      event.change.type === 'run.changed' &&
+      event.change.run.verificationView &&
+      event.change.run.verificationView.projectId !== event.projectId
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A verification view cannot cross the event project.',
+      });
+  });
+export const SnapshotSchema = z
+  .object({
+    contextMaterials: z.array(ContextMaterialSchema).optional(),
+    version: z.literal(1),
+    project: z.object({
+      id: z.string(),
+      name: z.string(),
+      root: z.string(),
+      managed: z.boolean().optional(),
+      dataDirectory: z.string().optional(),
     }),
-    z.object({ type: z.literal('context.material.removed'), id: z.string() }),
-    z.object({ type: z.literal('project.research.changed'), research: ResearchSchema }),
-    z.object({ type: z.literal('project.verified'), verification }),
-    z.object({
-      type: z.literal('project.configured'),
-      research: ResearchSchema.optional(),
-      profile: ProjectProfileSchema,
-      executionPolicy: z.object({
+    revision: z.number().int().nonnegative(),
+    sequence: z.number().int().nonnegative(),
+    roles: z.array(role),
+    goals: z.array(goal),
+    runs: z.array(run),
+    capabilities: z.array(z.string()),
+    executionPolicy: z
+      .object({
         allowedPaths: z.array(z.string()),
         protectedPaths: z.array(z.string()).optional(),
         checks: z.array(z.object({ id: z.string(), title: z.string() })),
         defaultCheckIds: z.array(z.string()),
         maxWorkers: z.number(),
         maxRepairs: z.number(),
-      }),
-    }),
-    z.object({ type: z.literal('run.changed'), run, goal, roles: z.array(role).optional() }),
-  ]),
-});
-export const SnapshotSchema = z.object({
-  contextMaterials: z.array(ContextMaterialSchema).optional(),
-  version: z.literal(1),
-  project: z.object({
-    id: z.string(),
-    name: z.string(),
-    root: z.string(),
-    managed: z.boolean().optional(),
-    dataDirectory: z.string().optional(),
-  }),
-  revision: z.number().int().nonnegative(),
-  sequence: z.number().int().nonnegative(),
-  roles: z.array(role),
-  goals: z.array(goal),
-  runs: z.array(run),
-  capabilities: z.array(z.string()),
-  executionPolicy: z
-    .object({
-      allowedPaths: z.array(z.string()),
-      protectedPaths: z.array(z.string()).optional(),
-      checks: z.array(z.object({ id: z.string(), title: z.string() })),
-      defaultCheckIds: z.array(z.string()),
-      maxWorkers: z.number(),
-      maxRepairs: z.number(),
-    })
-    .optional(),
-  profile: ProjectProfileSchema.optional(),
-  verification: verification.optional(),
-  research: ResearchSchema.optional(),
-});
+      })
+      .optional(),
+    profile: ProjectProfileSchema.optional(),
+    verification: verification.optional(),
+    research: ResearchSchema.optional(),
+  })
+  .superRefine((snapshot, ctx) => {
+    if (
+      snapshot.runs.some(
+        (run) => run.verificationView && run.verificationView.projectId !== snapshot.project.id,
+      )
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A verification view cannot cross the snapshot project.',
+      });
+  });
 export function parseSnapshot(input: unknown): Snapshot {
   return SnapshotSchema.parse(input) as unknown as Snapshot;
 }

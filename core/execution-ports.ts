@@ -2,6 +2,7 @@ import { PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY } from '../protocol/project
 import { roleIdPattern } from '../protocol/domain.ts';
 import type { TeamPlan } from '../protocol/execution.ts';
 import type { WorkspaceRevision } from './workspace-revision.ts';
+import type { VerificationView, OpenVerificationViewOptions } from './verification-view.ts';
 export type { TeamPlan } from '../protocol/execution.ts';
 import type {
   Run,
@@ -40,16 +41,23 @@ export interface WorkspacePort {
   synchronizeDependencies?(workspace: string, signal: AbortSignal): Promise<Check | undefined>;
   changes(workspace: string, base: string): Promise<FileChange[]>;
   captureRevision(workspace: string, base: string): Promise<WorkspaceRevision>;
+  openVerificationView?(
+    workspace: string,
+    revision: WorkspaceRevision,
+    options: OpenVerificationViewOptions,
+  ): Promise<VerificationView>;
+  releaseVerificationView?(view: VerificationView): Promise<void>;
   checkpoint(workspace: string, runId: string, expected?: WorkspaceRevision): Promise<string>;
 }
 export interface CheckPort {
+  releaseVerificationView?(view: VerificationView): Promise<void>;
   run(
     projectId: string,
     workspace: string,
     checkIds: string[],
     signal: AbortSignal,
     profile?: ProjectProfile,
-    options?: { requirePreparedIsolation?: boolean },
+    options?: { requirePreparedIsolation?: boolean; verificationView?: VerificationView },
   ): Promise<{ passed: number; total: number; results: Check[] }>;
 }
 export type ExecutionPolicy = ExecutionPolicyView & {
