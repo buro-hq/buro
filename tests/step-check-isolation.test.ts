@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -38,6 +39,7 @@ async function fixture(t: any) {
     checkConcurrency: 1,
   } as ProjectProfile;
   const resource = {
+    capabilities: fixtureCapabilities({ hostToolLifecycle: true }),
     id: 'local',
     client: 'managed',
     providerId: 'ollama',

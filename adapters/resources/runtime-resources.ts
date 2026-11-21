@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentRuntime, ProjectRegistry, RuntimeSelection } from '../../core/ports.ts';
+import type { RegisteredRuntime, ProjectRegistry, RuntimeSelection } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
 import { ManagedAgentRuntime } from '../../core/managed-runtime.ts';
 import { conservativeRequestPolicy, type ManagedRequestPolicy } from '../../core/request-policy.ts';
@@ -127,53 +127,69 @@ export async function createRuntimeResources(options: {
           }),
     );
   }
-  const runtimes: AgentRuntime[] = [],
+  const runtimes: RegisteredRuntime[] = [],
     resources: RuntimeResource[] = [];
   for (const runtime of config.runtimes) {
     if (runtime.client === 'codex') {
-      runtimes.push(
-        new CodexRuntime({
-          projects: options.projects,
-          executors: options.executors,
-          ...options.codex,
-        }),
-      );
+      const nativeOptions = {
+        ...options.codex,
+        model: runtime.model ?? options.codex?.model,
+        reasoningEffort: runtime.reasoningEffort ?? options.codex?.reasoningEffort,
+      };
+      const adapter = new CodexRuntime({
+        ...nativeOptions,
+        id: runtime.id,
+        projects: options.projects,
+        executors: options.executors,
+      });
+      runtimes.push(adapter);
       resources.push({
         id: runtime.id,
         client: 'codex',
+        ...(nativeOptions.model ? { model: nativeOptions.model } : {}),
         local: false,
+        capabilities: structuredClone(adapter.capabilities),
         configurationRevision: createHash('sha256')
-          .update(JSON.stringify(['codex-buro-dispatch-v1', options.codex || {}]))
+          .update(
+            JSON.stringify([
+              'native-backend-instance-v2',
+              runtime.id,
+              nativeOptions,
+              adapter.capabilities,
+            ]),
+          )
           .digest('hex'),
       });
     } else {
       const provider = providers.get(runtime.connectionId)!;
-      runtimes.push(
-        new ManagedAgentRuntime({
-          id: runtime.id,
-          model: runtime.model,
-          provider,
-          sessions,
-          tools,
-          projects: options.projects,
-          idGenerator: randomUUID,
-          limits: runtime.limits,
-          requestPolicy,
-          budgets,
-          segmentPolicy,
-          segmentEvidence,
-          workerStepChecks,
-        }),
-      );
+      const adapter = new ManagedAgentRuntime({
+        id: runtime.id,
+        model: runtime.model,
+        provider,
+        sessions,
+        tools,
+        projects: options.projects,
+        idGenerator: randomUUID,
+        limits: runtime.limits,
+        requestPolicy,
+        budgets,
+        segmentPolicy,
+        segmentEvidence,
+        workerStepChecks,
+      });
+      runtimes.push(adapter);
       resources.push({
         id: runtime.id,
         client: 'managed',
         providerId: provider.id,
         model: runtime.model,
         local: provider.local && !/(?:[:_-]cloud)(?:$|:)/i.test(runtime.model),
+        capabilities: structuredClone(adapter.capabilities),
         configurationRevision: createHash('sha256')
           .update(
             JSON.stringify([
+              runtime.id,
+              adapter.capabilities,
               provider.revision,
               runtime.model,
               runtime.limits,

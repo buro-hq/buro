@@ -552,6 +552,7 @@ test('environment classification never hides new or application-source type erro
 test('native adapter restores the saved thread id through thread/resume', async (t) => {
   const f = await fixture(t),
     runtime = new CodexRuntime({
+      id: 'codex',
       projects: f.projects,
       executable: process.execPath,
       args: [path.resolve('tests/fixtures/fake-codex.mjs')],

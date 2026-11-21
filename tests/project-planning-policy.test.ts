@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import {
   virtualWorkspaceRevision,
   virtualVerificationViews,
@@ -30,6 +31,7 @@ const legacy: NonNullable<Run['planningPolicy']> = {
 function savedRun(policy: Run['planningPolicy'], client: 'managed' | 'codex' = 'managed') {
   const run = sampleRun();
   const resource = {
+    capabilities: fixtureCapabilities(),
     id: client === 'managed' ? 'local-qwen' : 'codex',
     client,
     local: client === 'managed',

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DomainError } from '../../core/ports.ts';
-import type { ModelProvider, ModelToolCall } from '../../core/model-ports.ts';
+import type { ModelProvider, ModelToolCall } from '../../agent/contracts/model.ts';
 import {
   RequestGate,
   endpointURL,

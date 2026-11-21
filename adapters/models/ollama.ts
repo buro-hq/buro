@@ -10,7 +10,7 @@ import type {
   ModelMessage,
   ModelProvider,
   ModelToolCall,
-} from '../../core/model-ports.ts';
+} from '../../agent/contracts/model.ts';
 import {
   RequestGate,
   json,

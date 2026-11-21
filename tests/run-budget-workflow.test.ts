@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import {
   virtualWorkspaceRevision,
   virtualVerificationViews,
@@ -17,7 +18,8 @@ import { ProjectRunBudgets } from '../adapters/files/project-run-budgets.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { ProjectProfileSchema } from '../protocol/projects.ts';
 import { parseDomainEvent, parseSnapshot } from '../protocol/schema.ts';
-import type { ModelProvider, ToolBroker } from '../core/model-ports.ts';
+import type { ToolBroker } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { ResourceSnapshot } from '../protocol/resources.ts';
 import type { ManagedRunBudgetPolicy } from '../protocol/run-budget.ts';
 
@@ -211,6 +213,7 @@ async function fixture(
     },
   });
   const resource = {
+    capabilities: fixtureCapabilities(),
     id: 'managed',
     client: 'managed' as const,
     providerId: provider.id,

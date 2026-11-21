@@ -1,17 +1,39 @@
-import { DomainError, type AgentRuntime, type RuntimeRegistry } from './ports.ts';
+import { DomainError, type RegisteredRuntime, type RuntimeRegistry } from './ports.ts';
+import { freezeBackendCapabilities } from './backend-capabilities.ts';
 
 /** Process-local adapter catalog. Durable session routing is a separate responsibility. */
 export class RuntimeCatalog implements RuntimeRegistry {
-  private adapters = new Map<string, AgentRuntime>();
+  private adapters = new Map<string, RegisteredRuntime>();
   private closing = false;
   private disposal?: Promise<void>;
 
-  register(adapter: AgentRuntime) {
+  register(adapter: RegisteredRuntime) {
     this.assertOpen();
     if (!adapter.id.trim()) throw new DomainError('INVALID_RUNTIME', 'A runtime needs an ID.');
     if (this.adapters.has(adapter.id))
       throw new DomainError('RUNTIME_EXISTS', `Runtime already registered: ${adapter.id}`);
-    this.adapters.set(adapter.id, adapter);
+    const capabilities = freezeBackendCapabilities(adapter.capabilities);
+    if (
+      (capabilities.structuredTurns && typeof adapter.turn !== 'function') ||
+      (capabilities.resumeSessions && typeof adapter.resume !== 'function')
+    )
+      throw new DomainError(
+        'INVALID_BACKEND_CAPABILITIES',
+        'The declared backend mechanics require their corresponding execution methods.',
+      );
+    const registered: RegisteredRuntime = {
+      id: adapter.id,
+      capabilities,
+      start: adapter.start.bind(adapter),
+      submit: adapter.submit.bind(adapter),
+      interrupt: adapter.interrupt.bind(adapter),
+      dispose: adapter.dispose.bind(adapter),
+      ...(adapter.resume ? { resume: adapter.resume.bind(adapter) } : {}),
+      ...(adapter.turn ? { turn: adapter.turn.bind(adapter) } : {}),
+      ...(adapter.subscribe ? { subscribe: adapter.subscribe.bind(adapter) } : {}),
+      ...(adapter.release ? { release: adapter.release.bind(adapter) } : {}),
+    };
+    this.adapters.set(adapter.id, Object.freeze(registered));
   }
 
   list() {

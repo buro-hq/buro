@@ -8,13 +8,8 @@ import { z } from 'zod';
 import { DomainError } from '../../core/ports.ts';
 import { inScope } from '../../core/execution-ports.ts';
 import { dependencyManifestPreserved } from '../../core/environment-repair.ts';
-import type {
-  ModelToolCall,
-  ToolBroker,
-  ToolDefinition,
-  ToolResult,
-  ToolScope,
-} from '../../core/model-ports.ts';
+import type { ToolBroker, ToolResult, ToolScope } from '../../core/model-ports.ts';
+import type { ModelToolCall, ToolDefinition } from '../../agent/contracts/model.ts';
 import type { EnvironmentExecutors } from '../environments/executors.ts';
 import { runProjectCommand } from '../checks/project-commands.ts';
 const exec = promisify(execFile);

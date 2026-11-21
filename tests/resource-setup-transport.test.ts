@@ -299,7 +299,7 @@ test('retrying the same setup command ID on another connection reuses its receip
   assert.deepEqual(s.http, []);
 });
 
-test('invalid references and plaintext secret fields are rejected at the socket boundary without any partial file mutation', async (t) => {
+test('invalid references, duplicate IDs and plaintext secret fields are rejected without any partial file mutation', async (t) => {
   const s = await server(t),
     client = await s.client();
   const input = setup((await catalog(client)).configurationRevision!);
@@ -318,7 +318,10 @@ test('invalid references and plaintext secret fields are rejected at the socket 
       params: { ...input, profile: { ...input.profile, coordinator: 'missing' } },
       code: 'RESOURCE_SETUP_REFERENCE',
     },
-    { params: { ...input, runtimes: [{ id: 'codex', client: 'codex' }] }, code: 'BAD_REQUEST' },
+    {
+      params: { ...input, runtimes: [{ id: 'codex', client: 'codex' }] },
+      code: 'RESOURCE_SETUP_ID_EXISTS',
+    },
   ];
   for (const candidate of invalid) {
     await assert.rejects(

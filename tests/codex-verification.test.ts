@@ -53,6 +53,7 @@ for await(const line of readline.createInterface({input:process.stdin})){
   const executors = new EnvironmentExecutors();
   await executors.registerVerification(view, new AbortController().signal);
   const runtime = new CodexRuntime({
+    id: 'native-review',
     projects,
     executors,
     executable: process.execPath,

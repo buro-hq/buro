@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { endpointIsPrivate, modelEndpointURL } from './endpoint-trust.ts';
+import { BackendCapabilitiesSchema } from './backend-capabilities.ts';
 export const ResourceIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 const modelEndpoint = z
   .string()
@@ -82,17 +83,30 @@ export const ManagedLimitsSchema = z
   })
   .refine((limits) => limits.maxOutputTokens < limits.contextTokens, 'Reserve input context.');
 export const ManagedRuntimeDefinitionSchema = z.strictObject({
-  id: ResourceIdSchema.refine((value) => value !== 'codex', 'The Codex runtime ID is reserved.'),
+  id: ResourceIdSchema,
   client: z.literal('managed'),
   connectionId: ResourceIdSchema,
   model: z.string().min(1).max(200),
   limits: ManagedLimitsSchema.default(() => ManagedLimitsSchema.parse({})),
 });
+export const NativeRuntimeDefinitionSchema = z.strictObject({
+  id: ResourceIdSchema,
+  client: z.literal('codex'),
+  model: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine((value) => !/[\0\r\n]/.test(value), 'Use a single model identifier.')
+    .optional(),
+  reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
+});
 export const RuntimeDefinitionSchema = z.discriminatedUnion('client', [
-  z.strictObject({ id: z.literal('codex'), client: z.literal('codex') }),
+  NativeRuntimeDefinitionSchema,
   ManagedRuntimeDefinitionSchema,
 ]);
 export type ManagedRuntimeDefinition = z.infer<typeof ManagedRuntimeDefinitionSchema>;
+export type NativeRuntimeDefinition = z.infer<typeof NativeRuntimeDefinitionSchema>;
 export type RuntimeDefinition = z.infer<typeof RuntimeDefinitionSchema>;
 export const RuntimeResourceSchema = z.object({
   id: ResourceIdSchema,
@@ -101,6 +115,7 @@ export const RuntimeResourceSchema = z.object({
   model: z.string().optional(),
   configurationRevision: z.string(),
   local: z.boolean(),
+  capabilities: BackendCapabilitiesSchema,
 });
 export const ResourceProfileSchema = z
   .strictObject({
@@ -126,7 +141,7 @@ export const ResourceProfileSchema = z
   });
 export const ResourceSetupInputSchema = z.strictObject({
   expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
-  runtimes: z.array(ManagedRuntimeDefinitionSchema).max(8),
+  runtimes: z.array(RuntimeDefinitionSchema).max(8),
   profile: ResourceProfileSchema,
 });
 export type ResourceSetupInput = z.infer<typeof ResourceSetupInputSchema>;
@@ -148,7 +163,8 @@ export const ResourceSnapshotSchema = z
       !worker ||
       (['client', 'providerId', 'model', 'configurationRevision', 'local'] as const).some(
         (key) => worker[key] !== snapshot.worker[key],
-      )
+      ) ||
+      JSON.stringify(worker?.capabilities) !== JSON.stringify(snapshot.worker.capabilities)
     )
       ctx.addIssue({
         code: 'custom',

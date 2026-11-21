@@ -58,7 +58,7 @@ async function fixture(t: any, initial = defaultResources()) {
 const rejects = (action: () => unknown, code?: string) =>
   assert.rejects(async () => action(), code ? { code } : undefined);
 
-test('shared runtime and setup contracts retain defaults and reject malformed limits, native replacement and secret fields', () => {
+test('shared runtime and setup contracts retain defaults and reject malformed limits, invalid references and secret fields', () => {
   assert.equal(LegacyManagedLimitsSchema, ManagedLimitsSchema);
   assert.deepEqual(runtime().limits, ManagedLimitsSchema.parse({}));
   assert.deepEqual(RuntimeDefinitionSchema.parse({ id: 'codex', client: 'codex' }), {
@@ -73,8 +73,6 @@ test('shared runtime and setup contracts retain defaults and reject malformed li
   for (const candidate of [
     { ...value, expectedRevision: 'stale' },
     { ...value, expectedRevision: undefined },
-    { ...value, runtimes: [{ id: 'codex', client: 'codex' }] },
-    { ...value, runtimes: [{ ...runtime(), id: 'codex' }] },
     {
       ...value,
       runtimes: [
@@ -214,7 +212,8 @@ test('local-only setup respects explicit endpoint trust across all roles and wor
       before = f.configuration.snapshot(),
       input = setup(before);
     if (slot === 'workerPool') input.profile.workerPool!.push('codex');
-    else if (slot === 'deepseek') input.runtimes[0].connectionId = 'deepseek';
+    else if (slot === 'deepseek' && input.runtimes[0].client === 'managed')
+      input.runtimes[0].connectionId = 'deepseek';
     else input.profile[slot] = 'codex';
     await rejects(
       () => f.configuration.saveSetup('blocked', 'blocked', input),
@@ -239,7 +238,7 @@ test('new setup rejects known cloud-backed Ollama IDs without retroactively inva
   for (const policy of ['hybrid', 'local-only'] as const) {
     const input = setup(original);
     input.profile.policy = policy;
-    input.runtimes[0].model = 'fixture:cloud';
+    if (input.runtimes[0].client === 'managed') input.runtimes[0].model = 'fixture:cloud';
     await rejects(
       () => f.configuration.saveSetup('cloud-' + policy, 'cloud-' + policy, input),
       'MODEL_REMOTE_ROUTE',
@@ -265,7 +264,7 @@ test('setup never overwrites IDs or leaves a partial runtime behind for invalid 
       input.runtimes.push(structuredClone(input.runtimes[0]));
     },
     (input: ResourceSetupInput) => {
-      input.runtimes[0].connectionId = 'missing';
+      if (input.runtimes[0].client === 'managed') input.runtimes[0].connectionId = 'missing';
     },
     (input: ResourceSetupInput) => {
       input.profile.reviewer = 'missing';

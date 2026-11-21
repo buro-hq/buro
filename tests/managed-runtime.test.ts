@@ -7,15 +7,13 @@ import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ManagedAgentRuntime, type ManagedRuntimeOptions } from '../core/managed-runtime.ts';
+import type { ManagedSessionStore, ToolBroker, ToolScope } from '../core/model-ports.ts';
 import type {
-  ManagedSessionStore,
   ModelContext,
   ModelMessage,
   ModelProvider,
   ModelToolCall,
-  ToolBroker,
-  ToolScope,
-} from '../core/model-ports.ts';
+} from '../agent/contracts/model.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';

@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { normalizeCodexEvent } from '../adapters/codex/events.ts';
 import { RuntimeCatalog } from '../core/runtimes.ts';
-import type { AgentRuntime } from '../core/ports.ts';
+import type { RegisteredRuntime } from '../core/ports.ts';
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import { createHost } from '../plugins/host.ts';
 import { runtimePlugin } from '../plugins/runtime.ts';
 
@@ -130,9 +131,10 @@ test('unknown completion status never becomes success; malformed wire data does 
   assert.notEqual(first[0].id, second[0].id);
 });
 
-function runtime(id: string, cleanup: () => Promise<void> = async () => {}): AgentRuntime {
+function runtime(id: string, cleanup: () => Promise<void> = async () => {}): RegisteredRuntime {
   return {
     id,
+    capabilities: fixtureCapabilities(),
     async start() {
       return { threadId: 'same-native-id' };
     },
@@ -151,13 +153,15 @@ test('registry selects exact adapters, rejects duplicates and never falls back',
   registry.register(local);
   registry.register(cloud);
   assert.deepEqual(registry.list(), ['local', 'cloud']);
-  assert.equal(registry.get('local'), local);
-  assert.equal(registry.get('cloud'), cloud);
+  const selectedLocal = registry.get('local');
+  assert.notEqual(selectedLocal, local);
+  assert.equal(selectedLocal.id, local.id);
+  assert.equal(registry.get('cloud').id, cloud.id);
   assert.equal((await registry.get('local').submit('same-native-id', 'task')).turnId, 'local');
   assert.equal((await registry.get('cloud').submit('same-native-id', 'task')).turnId, 'cloud');
   assert.throws(() => registry.get('unavailable'), { code: 'RUNTIME_UNAVAILABLE' });
   assert.throws(() => registry.register(runtime('local')), { code: 'RUNTIME_EXISTS' });
-  assert.equal(registry.get('local'), local);
+  assert.equal(registry.get('local'), selectedLocal);
   await registry.dispose();
 });
 
@@ -200,8 +204,9 @@ test('generic Cordis runtime composition works without loading Codex and owns cl
       cleaned++;
     });
   await host.ctx.plugin(runtimePlugin, { runtimes: [a, b], defaultRuntimeId: 'local' });
-  assert.equal(host.ctx.agentRuntime.adapter, a);
-  assert.equal(host.ctx.agentRuntime.registry.get('cloud'), b);
+  assert.equal(host.ctx.agentRuntime.adapter, host.ctx.agentRuntime.registry.get('local'));
+  assert.equal(host.ctx.agentRuntime.registry.get('cloud').id, b.id);
+  assert.notEqual(host.ctx.agentRuntime.registry.get('cloud'), b);
   assert.deepEqual(host.ctx.agentRuntime.registry.list(), ['local', 'cloud']);
   await host.dispose();
   assert.equal(cleaned, 2);

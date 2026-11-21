@@ -6,7 +6,7 @@ import {
   type ProbeResult,
   type ProbeStore,
 } from '../core/capability-probe.ts';
-import type { ModelProvider } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 
 class MemoryProbes implements ProbeStore {
   requests = new Map<string, ProbeReceipt>();

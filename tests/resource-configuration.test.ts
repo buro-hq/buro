@@ -115,13 +115,6 @@ test('configuration validation rejects duplicate IDs, dangling runtime reference
   assert.equal(
     ResourceConfigurationSchema.safeParse({
       ...original,
-      runtimes: [{ id: 'codex', client: 'managed', connectionId: 'ollama', model: 'small' }],
-    }).success,
-    false,
-  );
-  assert.equal(
-    ResourceConfigurationSchema.safeParse({
-      ...original,
       runtimes: [
         ...original.runtimes,
         {
@@ -149,4 +142,21 @@ test('private configuration refuses symlink storage before creating files outsid
     code: 'UNSAFE_CHECKPOINT',
   });
   assert.deepEqual(await fs.readdir(outside), []);
+});
+
+test('managed-only configurations may use any ID including codex, without a native singleton', () => {
+  const original = defaultResources();
+  const parsed = ResourceConfigurationSchema.parse({
+    ...original,
+    runtimes: [{ id: 'codex', client: 'managed', connectionId: 'ollama', model: 'small' }],
+  });
+  assert.equal(parsed.runtimes.length, 1);
+  assert.equal(parsed.runtimes[0].client, 'managed');
+  assert.equal(
+    ResourceConfigurationSchema.safeParse({
+      ...parsed,
+      runtimes: [parsed.runtimes[0], { id: 'codex', client: 'codex' }],
+    }).success,
+    false,
+  );
 });

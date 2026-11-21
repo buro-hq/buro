@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { OllamaProvider } from '../adapters/models/ollama.ts';
 import { DeepSeekProvider } from '../adapters/models/deepseek.ts';
-import type { ModelMessage, ModelProvider } from '../core/model-ports.ts';
+import type { ModelMessage, ModelProvider } from '../agent/contracts/model.ts';
 
 const request = (): Parameters<ModelProvider['complete']>[0] => ({
   requestId: 'native-turn',

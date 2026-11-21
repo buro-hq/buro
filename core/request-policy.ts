@@ -1,4 +1,4 @@
-import type { ModelMessage, ToolDefinition } from './model-ports.ts';
+import type { ModelMessage, ToolDefinition } from '../agent/contracts/model.ts';
 import { DomainError } from './ports.ts';
 
 export type ManagedRequestInput = {

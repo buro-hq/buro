@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { OllamaProvider } from '../adapters/models/ollama.ts';
 import { DeepSeekProvider } from '../adapters/models/deepseek.ts';
 import { RequestGate } from '../adapters/models/http.ts';
-import type { ModelProvider, ModelMessage } from '../core/model-ports.ts';
+import type { ModelProvider, ModelMessage } from '../agent/contracts/model.ts';
 
 function streamed(text: string) {
   const bytes = new TextEncoder().encode(text);

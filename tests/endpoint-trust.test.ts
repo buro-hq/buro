@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -10,7 +11,7 @@ import { OllamaProvider } from '../adapters/models/ollama.ts';
 import { ResourceSelection } from '../core/resource-selection.ts';
 import { RuntimeRouter, type RuntimeRoute } from '../core/runtime-router.ts';
 import type { AgentRuntime, ProjectRegistry } from '../core/ports.ts';
-import type { ModelProvider } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { RuntimeResource } from '../protocol/resources.ts';
 
 test('private-network trust is an explicit assertion limited to private IP literals', () => {
@@ -181,6 +182,7 @@ test('local-only selection permits explicit LAN trust and frozen sessions reject
   const resource = (trust: EndpointTrust): RuntimeResource => {
     const provider = new OllamaProvider({ id: 'rtx', endpoint, trust });
     return {
+      capabilities: fixtureCapabilities(),
       id: 'rtx-model',
       client: 'managed',
       providerId: 'rtx',
@@ -214,6 +216,7 @@ test('local-only selection permits explicit LAN trust and frozen sessions reject
   let nativeTurns = 0;
   const runtime = {
     id: 'rtx-model',
+    capabilities: fixtureCapabilities(),
     async start() {
       return { threadId: 'native' };
     },

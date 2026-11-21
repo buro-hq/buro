@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import {
   virtualWorkspaceRevision,
   virtualVerificationViews,
@@ -17,7 +18,7 @@ import type { AgentRuntime } from '../core/ports.ts';
 import type { ResourceSnapshot } from '../protocol/resources.ts';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
-import type { ModelProvider } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 
 async function fixture(
   t: any,
@@ -43,6 +44,7 @@ async function fixture(
   const providerCalls: Parameters<ModelProvider['complete']>[0][] = [];
   const sessions = new FileManagedSessions(path.join(directory, 'private-sessions'));
   const resource = {
+    capabilities: fixtureCapabilities(),
     id: options.client === 'codex' ? 'codex' : 'local-qwen',
     client: options.client || 'managed',
     configurationRevision: 'frozen-resource',

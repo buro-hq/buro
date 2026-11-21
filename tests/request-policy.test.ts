@@ -11,7 +11,8 @@ import {
   type ManagedRequestPolicy,
 } from '../core/request-policy.ts';
 import { ManagedAgentRuntime, type ManagedRuntimeOptions } from '../core/managed-runtime.ts';
-import type { ManagedSession, ModelProvider } from '../core/model-ports.ts';
+import type { ManagedSession } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 import { createRuntimeResources } from '../adapters/resources/runtime-resources.ts';
 import { EnvironmentExecutors } from '../adapters/environments/executors.ts';

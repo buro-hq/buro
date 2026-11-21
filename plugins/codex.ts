@@ -2,9 +2,12 @@ import type { Plugin } from 'cordis';
 import { CodexRuntime } from '../adapters/codex/runtime.ts';
 import type { EnvironmentExecutors } from '../adapters/environments/executors.ts';
 import { runtimePlugin } from './runtime.ts';
-export const codexPlugin: Plugin.Object<
-  { executable?: string; args?: string[]; executors?: EnvironmentExecutors } | undefined
-> = {
+export const codexPlugin: Plugin.Object<{
+  id: string;
+  executable?: string;
+  args?: string[];
+  executors?: EnvironmentExecutors;
+}> = {
   name: 'codex-runtime',
   inject: ['projects'],
   async apply(ctx, options) {

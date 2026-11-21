@@ -10,8 +10,15 @@ import {
 } from '../core/runtime-router.ts';
 import { ResourceSelection } from '../core/resource-selection.ts';
 import { RuntimeCatalog } from '../core/runtimes.ts';
-import type { AgentRuntime, ProjectRegistry, RuntimeEvent } from '../core/ports.ts';
+import type {
+  AgentRuntime,
+  RegisteredRuntime,
+  ProjectRegistry,
+  RuntimeEvent,
+} from '../core/ports.ts';
 import type { ResourceProfile, ResourceSnapshot, RuntimeResource } from '../protocol/resources.ts';
+import type { VerificationView } from '../protocol/verification.ts';
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import { FileRuntimeRoutes } from '../adapters/files/runtime-routes.ts';
 
 class MemoryRoutes implements RuntimeRouteStore {
@@ -24,17 +31,26 @@ class MemoryRoutes implements RuntimeRouteStore {
   }
 }
 
-function adapter(id: string) {
+function adapter(id: string, review = false) {
   const listeners = new Set<(event: RuntimeEvent) => void>();
   const calls = {
     starts: [] as Parameters<AgentRuntime['start']>[0][],
     resumes: [] as Parameters<NonNullable<AgentRuntime['resume']>>[0][],
     turns: [] as string[],
+    interrupts: [] as { threadId: string; turnId: string }[],
     releases: [] as string[],
   };
-  const runtime: AgentRuntime = {
+  let startHook: AgentRuntime['start'] | undefined;
+  const runtime: RegisteredRuntime = {
+    capabilities: fixtureCapabilities({
+      structuredTurns: true,
+      ...(review ? { readOnlySessions: true, immutableReview: true } : {}),
+      resumeSessions: true,
+      cancellation: 'settled-or-unknown',
+    }),
     id,
     async start(input) {
+      if (startHook) return startHook(input);
       calls.starts.push(input);
       return { threadId: 'same-native-thread' };
     },
@@ -50,7 +66,9 @@ function adapter(id: string) {
       calls.turns.push(threadId);
       return { turnId: id + '-turn', text: JSON.stringify({ runtime: id }) };
     },
-    async interrupt() {},
+    async interrupt(threadId, turnId) {
+      calls.interrupts.push({ threadId, turnId });
+    },
     async release(threadId) {
       calls.releases.push(threadId);
     },
@@ -64,6 +82,9 @@ function adapter(id: string) {
   };
   return {
     runtime,
+    setStart: (hook: AgentRuntime['start']) => {
+      startHook = hook;
+    },
     calls,
     emit: (event: RuntimeEvent) => {
       for (const listener of listeners) listener(event);
@@ -71,13 +92,19 @@ function adapter(id: string) {
   };
 }
 
-function fixture(t: any) {
+function fixture(t: any, review = false) {
   const resources: RuntimeResource[] = [
     {
       id: 'local',
       client: 'managed',
       providerId: 'ollama',
       model: 'local-model',
+      capabilities: fixtureCapabilities({
+        structuredTurns: true,
+        ...(review ? { readOnlySessions: true, immutableReview: true } : {}),
+        resumeSessions: true,
+        cancellation: 'settled-or-unknown',
+      }),
       configurationRevision: 'local-v1',
       local: true,
     },
@@ -86,10 +113,27 @@ function fixture(t: any) {
       client: 'managed',
       providerId: 'deepseek',
       model: 'cloud-model',
+      capabilities: fixtureCapabilities({
+        structuredTurns: true,
+        ...(review ? { readOnlySessions: true, immutableReview: true } : {}),
+        resumeSessions: true,
+        cancellation: 'settled-or-unknown',
+      }),
       configurationRevision: 'cloud-v1',
       local: false,
     },
-    { id: 'codex', client: 'codex', configurationRevision: 'codex-v1', local: false },
+    {
+      id: 'codex',
+      client: 'codex',
+      configurationRevision: 'codex-v1',
+      local: false,
+      capabilities: fixtureCapabilities({
+        structuredTurns: true,
+        ...(review ? { readOnlySessions: true, immutableReview: true } : {}),
+        resumeSessions: true,
+        cancellation: 'settled-or-unknown',
+      }),
+    },
   ];
   const profiles: ResourceProfile[] = [
     {
@@ -135,6 +179,8 @@ function fixture(t: any) {
       threadId: string;
       resources?: ResourceSnapshot;
       workspace?: string;
+      baseCommit?: string;
+      verificationView?: VerificationView;
     }[],
   };
   const projects = {
@@ -146,9 +192,9 @@ function fixture(t: any) {
     runtimes: resources,
     defaultProfile: () => defaultProfile,
   });
-  const local = adapter('local'),
-    cloud = adapter('cloud'),
-    codex = adapter('codex');
+  const local = adapter('local', review),
+    cloud = adapter('cloud', review),
+    codex = adapter('codex', review);
   const registry = new RuntimeCatalog();
   for (const item of [local, cloud, codex]) registry.register(item.runtime);
   const routes = new MemoryRoutes(),
@@ -381,27 +427,25 @@ test('failed route intent prevents dispatch; failed binding releases the started
   assert.equal(f.local.calls.resumes.length, 0);
 });
 
-test('legacy Codex continuation requires a matching historical run and an explicitly remote-permitted policy', async (t) => {
+test('historical native handles without a saved route never dispatch or migrate', async (t) => {
   const f = fixture(t),
     router = f.create();
-  const input = {
-    projectId: 'p',
-    runId: 'R-legacy',
-    workspace: '/workspace',
-    threadId: 'legacy-native-thread',
-    instructions: 'Continue',
-  };
-  await assert.rejects(router.resume(input), { code: 'THREAD_NOT_FOUND' });
-  f.state.runs.push({ id: 'R-legacy', threadId: 'different-thread', workspace: '/workspace' });
-  await assert.rejects(router.resume(input), { code: 'THREAD_NOT_FOUND' });
-  f.state.runs[0].threadId = input.threadId;
-  f.setDefault('local');
-  await assert.rejects(router.resume(input), { code: 'DATA_POLICY_BLOCKED' });
-  f.setDefault('mixed');
-  assert.deepEqual(await router.resume(input), { threadId: input.threadId });
-  assert.equal(f.codex.calls.resumes.length, 1);
-  assert.equal(f.codex.calls.starts.length, 0);
-  assert.equal(f.codex.calls.resumes[0].threadId, input.threadId);
+  f.state.runs.push({ id: 'R-legacy', threadId: 'legacy-native-thread', workspace: '/workspace' });
+  for (const profile of ['local', 'mixed']) {
+    f.setDefault(profile);
+    await assert.rejects(
+      router.resume({
+        projectId: 'p',
+        runId: 'R-legacy',
+        workspace: '/workspace',
+        threadId: 'legacy-native-thread',
+        instructions: 'Continue',
+      }),
+      { code: 'THREAD_NOT_FOUND' },
+    );
+  }
+  assert.equal(f.codex.calls.resumes.length, 0);
+  assert.equal(f.routes.saved.size, 0);
 });
 
 test('durable route files preserve external references privately and refuse identity tampering', async (t) => {
@@ -414,8 +458,15 @@ test('durable route files preserve external references privately and refuse iden
     runId: 'R-one',
     workspace: '/workspace',
     status: 'ready',
+    requirements: {},
     externalThreadId: 'private-native-reference',
-    resource: { id: 'local', client: 'managed', local: true, configurationRevision: 'v1' },
+    resource: {
+      id: 'local',
+      client: 'managed',
+      local: true,
+      configurationRevision: 'v1',
+      capabilities: fixtureCapabilities(),
+    },
   };
   await routes.save(route);
   assert.deepEqual(await new FileRuntimeRoutes(directory).load(route.id), route);
@@ -438,13 +489,13 @@ test('shutdown cannot publish a late-started client and releases its native sess
   const wait = new Promise<void>((resolve) => {
     finishStart = resolve;
   });
-  const originalStart = f.local.runtime.start;
-  f.local.runtime.start = async (input) => {
-    const started = await originalStart(input);
+  f.local.setStart(async (input) => {
+    f.local.calls.starts.push(input);
+    const started = { threadId: 'same-native-thread' };
     entered();
     await wait;
     return started;
-  };
+  });
   const start = router.start({ projectId: 'p', runId: 'R-one', instructions: 'Work' });
   await ready;
   const stopping = router.dispose();
@@ -454,7 +505,7 @@ test('shutdown cannot publish a late-started client and releases its native sess
   assert.deepEqual(f.local.calls.releases, ['same-native-thread']);
 });
 
-test('legacy continuation validates the historical workspace before creating a route', async (t) => {
+test('missing route rejects even when a historical run has a different workspace', async (t) => {
   const f = fixture(t),
     router = f.create();
   f.state.runs.push({ id: 'R-legacy', threadId: 'legacy-native-thread', workspace: '/workspace' });
@@ -466,7 +517,7 @@ test('legacy continuation validates the historical workspace before creating a r
       workspace: '/different-workspace',
       instructions: 'Continue',
     }),
-    { code: 'SESSION_MISMATCH' },
+    { code: 'THREAD_NOT_FOUND' },
   );
   assert.equal(f.codex.calls.resumes.length, 0);
   assert.equal(f.routes.saved.size, 0);
@@ -506,4 +557,132 @@ test('undeclared native children cannot move activity to another run through the
     text: 'Own progress',
   });
   assert.equal(events.length, 2);
+});
+
+test('closing a review view does not block idempotent cleanup or replay released child events', async (t) => {
+  const f = fixture(t, true),
+    router = f.create();
+  const view: VerificationView = {
+    version: 1,
+    id: 'issued',
+    projectId: 'p',
+    runId: 'R-review',
+    sourceWorkspace: '/writer',
+    readRoot: '/frozen',
+    outputRoot: '/outputs',
+    base: 'a'.repeat(40),
+    tree: 'b'.repeat(40),
+    outputPaths: [],
+  };
+  const run = {
+    id: 'R-review',
+    threadId: '',
+    workspace: view.sourceWorkspace,
+    baseCommit: view.base,
+    verificationView: view,
+  };
+  f.state.runs.push(run);
+  const session = await router.start({
+    projectId: 'p',
+    runId: run.id,
+    workspace: view.readRoot,
+    purpose: 'review',
+    readOnly: true,
+    instructions: 'Review',
+  });
+  const events: RuntimeEvent[] = [];
+  router.subscribe((event) => events.push(event));
+  f.cloud.emit({
+    id: 'child',
+    runId: run.id,
+    threadId: 'child-wire',
+    parentThreadId: 'same-native-thread',
+    type: 'agent.activity',
+    completed: false,
+  });
+  assert.equal(events.length, 1);
+  delete (run as { verificationView?: VerificationView }).verificationView;
+  await router.interrupt(session.threadId, 'active-turn');
+  assert.deepEqual(f.cloud.calls.interrupts, [
+    { threadId: 'same-native-thread', turnId: 'active-turn' },
+  ]);
+  assert.equal(f.cloud.calls.turns.length, 0);
+  await Promise.all([router.release(session.threadId), router.release(session.threadId)]);
+  await router.release(session.threadId);
+  f.cloud.emit({
+    id: 'late',
+    runId: run.id,
+    threadId: 'child-wire',
+    type: 'message.completed',
+    text: 'Late',
+  });
+  f.cloud.emit({
+    id: 'late-parent',
+    runId: run.id,
+    threadId: 'same-native-thread',
+    type: 'message.completed',
+    text: 'Late',
+  });
+  assert.equal(events.length, 1);
+  await router.dispose();
+  assert.deepEqual(f.cloud.calls.releases, ['same-native-thread']);
+  assert.equal(f.routes.saved.get(session.threadId)?.status, 'ready');
+});
+
+test('changed configuration cannot retarget owned stop and cleanup, and historical routes need resume before stop', async (t) => {
+  const f = fixture(t),
+    router = f.create();
+  const session = await router.start({
+    projectId: 'p',
+    runId: 'R-one',
+    purpose: 'implementation',
+    instructions: 'Work',
+  });
+  f.resources[1].configurationRevision = 'changed';
+  f.resources[1].capabilities = fixtureCapabilities();
+  await router.interrupt(session.threadId, 'active-turn');
+  await router.release(session.threadId);
+  assert.deepEqual(f.cloud.calls.interrupts, [
+    { threadId: 'same-native-thread', turnId: 'active-turn' },
+  ]);
+  assert.deepEqual(f.cloud.calls.releases, ['same-native-thread']);
+  assert.equal(f.local.calls.interrupts.length + f.local.calls.releases.length, 0);
+  const restored = f.create();
+  await assert.rejects(restored.interrupt(session.threadId, 'foreign-turn'), {
+    code: 'THREAD_NOT_FOUND',
+  });
+  await restored.release(session.threadId);
+  await router.dispose();
+  assert.equal(f.cloud.calls.interrupts.length, 1);
+  assert.equal(f.cloud.calls.releases.length, 1);
+});
+
+test('a released saved session requires explicit resume before a new turn or submit', async (t) => {
+  const f = fixture(t),
+    router = f.create();
+  const session = await router.start({
+    projectId: 'p',
+    runId: 'R-one',
+    workspace: '/workspace',
+    purpose: 'implementation',
+    instructions: 'Work',
+  });
+  await router.release(session.threadId);
+  await assert.rejects(router.turn(session.threadId, 'Work again', turnOptions()), {
+    code: 'THREAD_NOT_FOUND',
+  });
+  await assert.rejects(router.submit(session.threadId, 'Work again'), { code: 'THREAD_NOT_FOUND' });
+  assert.equal(f.cloud.calls.turns.length, 0);
+  await router.resume({
+    projectId: 'p',
+    runId: 'R-one',
+    workspace: '/workspace',
+    threadId: session.threadId,
+    instructions: 'Continue',
+  });
+  await router.turn(session.threadId, 'Work again', turnOptions());
+  assert.equal(f.cloud.calls.resumes.length, 1);
+  assert.equal(f.cloud.calls.turns.length, 1);
+  await router.release(session.threadId);
+  assert.equal(f.cloud.calls.releases.length, 2);
 });

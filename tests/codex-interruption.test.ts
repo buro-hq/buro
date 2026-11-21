@@ -113,6 +113,7 @@ async function fixture(t: any) {
     visibleAnswer = deferred();
   const events: RuntimeEvent[] = [];
   const runtime = new CodexRuntime({
+    id: 'codex',
     projects: {
       get: () => ({ snapshot: () => ({ project: { root: directory } }) }),
     } as unknown as ProjectRegistry,

@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WorkerStepChecks } from '../adapters/checks/worker-step-checks.ts';
@@ -6,6 +7,7 @@ import type { WorkerStepCheckPlan } from '../core/worker-step-checks.ts';
 
 function fixture() {
   const resource = {
+    capabilities: fixtureCapabilities({ hostToolLifecycle: true }),
     id: 'local',
     client: 'managed',
     providerId: 'ollama',
@@ -178,10 +180,23 @@ test('checkpoint normalization of command display fields does not change the fro
     command,
     timeoutMs,
   }));
+  f.run.resources.worker.capabilities = Object.fromEntries(
+    Object.entries(f.run.resources.worker.capabilities).reverse(),
+  );
   assert.deepEqual(f.adapter.plan(f.scope), initial);
   const result = await f.adapter.run(f.scope, initial, f.fingerprint, signal());
   assert.equal(result.outcome, 'completed');
   assert.equal(f.calls.length, 1);
+});
+
+test('worker feedback requires host tool lifecycle, independently of the client label', () => {
+  const capable = fixture();
+  capable.run.resources.worker.client = 'codex';
+  assert.ok(capable.adapter.plan(capable.scope));
+  const incapable = fixture();
+  incapable.run.resources.worker.capabilities.hostToolLifecycle = false;
+  assert.throws(() => incapable.adapter.plan(incapable.scope), { code: 'STEP_CHECK_UNAVAILABLE' });
+  assert.equal(incapable.calls.length, 0);
 });
 
 test('forged owner, assignment, protected paths, check commands and resource revisions are rejected before effects', () => {

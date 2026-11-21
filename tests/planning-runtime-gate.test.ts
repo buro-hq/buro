@@ -6,7 +6,7 @@ import path from 'node:path';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { CodexRuntime } from '../adapters/codex/runtime.ts';
-import type { ModelProvider } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 import type { EnvironmentExecutors } from '../adapters/environments/executors.ts';
 
@@ -242,6 +242,7 @@ test('a none authority with a tool action is rejected on checkpoint load as well
 
 test('native Codex explicitly rejects tools-free authority before lookup or process launch', async () => {
   const runtime = new CodexRuntime({
+    id: 'codex',
     projects: {} as ProjectRegistry,
     executable: '/does-not-exist',
   });
@@ -298,6 +299,7 @@ else {
     }),
   } as unknown as EnvironmentExecutors;
   const runtime = new CodexRuntime({
+    id: 'codex',
     projects,
     executors,
     executable,

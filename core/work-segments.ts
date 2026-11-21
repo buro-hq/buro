@@ -1,4 +1,5 @@
-import type { ManagedSession, ModelMessage, ToolScope } from './model-ports.ts';
+import type { ManagedSession, ToolScope } from './model-ports.ts';
+import type { ModelMessage } from '../agent/contracts/model.ts';
 import { DomainError } from './ports.ts';
 import { inScope } from './execution-ports.ts';
 import type { WorkerStepCheckResult } from './worker-step-checks.ts';

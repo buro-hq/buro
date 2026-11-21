@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -19,12 +20,14 @@ import {
 
 const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
 const native: RuntimeResource = {
+  capabilities: fixtureCapabilities(),
   id: 'codex',
   client: 'codex',
   local: false,
   configurationRevision: 'native-frozen',
 };
 const managed: RuntimeResource = {
+  capabilities: fixtureCapabilities(),
   id: 'small',
   client: 'managed',
   providerId: 'ollama',

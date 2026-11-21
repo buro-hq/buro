@@ -1,5 +1,5 @@
 import { Service, type Context, type Plugin } from 'cordis';
-import type { AgentRuntime, RuntimeSelection } from '../core/ports.ts';
+import type { AgentRuntime, RegisteredRuntime, RuntimeSelection } from '../core/ports.ts';
 import { RuntimeCatalog } from '../core/runtimes.ts';
 
 declare module 'cordis' {
@@ -28,14 +28,14 @@ class RuntimeService extends Service {
     this.routed = routed;
   }
 
-  /** Compatibility route until project/session resource profiles are introduced. */
+  /** Application session routing, or the explicitly configured backend when routing is absent. */
   get adapter() {
     return this.routed || this.registry.get(this.defaultRuntimeId);
   }
 }
 
 export const runtimePlugin: Plugin.Object<{
-  runtimes: AgentRuntime[];
+  runtimes: RegisteredRuntime[];
   defaultRuntimeId: string;
   selection?: RuntimeSelection;
   route?: (registry: RuntimeCatalog) => AgentRuntime;

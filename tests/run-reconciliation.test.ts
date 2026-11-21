@@ -15,7 +15,8 @@ import {
 } from '../core/run-reconciliation.ts';
 import { DomainError, type ProjectRegistry } from '../core/ports.ts';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
-import type { ManagedSession, ManagedSessionStore, ModelProvider } from '../core/model-ports.ts';
+import type { ManagedSession, ManagedSessionStore } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { parseDomainEvent, parseSnapshot } from '../protocol/schema.ts';
 import { sampleRun } from './fixtures/sample-run.ts';

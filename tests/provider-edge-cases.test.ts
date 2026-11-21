@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { OllamaProvider } from '../adapters/models/ollama.ts';
 import { DeepSeekProvider } from '../adapters/models/deepseek.ts';
 import { endpointURL, lines } from '../adapters/models/http.ts';
-import type { ModelProvider } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 
 const input = (): Parameters<ModelProvider['complete']>[0] => ({
   requestId: 'r',

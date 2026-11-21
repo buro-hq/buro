@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { RuntimeResourceSchema } from '../../protocol/resources.ts';
+import { BackendRequirementsSchema } from '../../protocol/backend-capabilities.ts';
 import { DomainError } from '../../core/ports.ts';
 import type { RuntimeRoute, RuntimeRouteStore } from '../../core/runtime-router.ts';
 import { PrivateJSONFiles } from './private-json.ts';
@@ -11,8 +12,14 @@ const schema = z.object({
   ownerRunId: z.string().optional(),
   workspace: z.string().optional(),
   resource: RuntimeResourceSchema,
+  requirements: BackendRequirementsSchema,
+  readOnly: z.boolean().optional(),
+  purpose: z
+    .enum(['coordination', 'implementation', 'review', 'research', 'environment', 'delivery'])
+    .optional(),
+  verificationViewId: z.string().optional(),
   externalThreadId: z.string().optional(),
-  status: z.enum(['starting', 'ready', 'unknown']),
+  status: z.enum(['starting', 'ready', 'unknown', 'rejected']),
 });
 const key = (id: string) => createHash('sha256').update(id).digest('hex');
 export class FileRuntimeRoutes implements RuntimeRouteStore {

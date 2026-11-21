@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs/promises';
@@ -9,7 +10,7 @@ import { boundedPlanningTurn } from '../core/planning-policy.ts';
 import { conservativeRequestPolicy } from '../core/request-policy.ts';
 import { resolveTeam } from '../core/execution-ports.ts';
 import { TeamPlanSchema, teamOutputSchema } from '../protocol/execution.ts';
-import type { ModelProvider } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 
 const instructions =
@@ -45,6 +46,7 @@ const source = () => ({
   ],
   pool: [
     {
+      capabilities: fixtureCapabilities(),
       id: 'local-qwen',
       client: 'managed' as const,
       providerId: 'ollama',

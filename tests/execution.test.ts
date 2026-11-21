@@ -675,6 +675,7 @@ test('team validation rejects overlapping ownership, missing reuse and escaping 
 test('native JSONL completed-turn contract captures final structured answer and sandbox', async (t) => {
   const f = await fixture(t),
     runtime = new CodexRuntime({
+      id: 'codex',
       projects: f.projects,
       executable: process.execPath,
       args: [path.resolve('tests/fixtures/fake-codex.mjs')],
@@ -772,7 +773,11 @@ test('CLI discovers servers under the same disabled-plugin config and verifies e
     if (previous === undefined) delete process.env.PROJECT_CLI_PROBE_OUTPUT;
     else process.env.PROJECT_CLI_PROBE_OUTPUT = previous;
   });
-  const runtime = new CodexRuntime({ projects: f.projects, executable });
+  const runtime = new CodexRuntime({
+    id: 'codex',
+    projects: f.projects,
+    executable,
+  });
   t.after(() => runtime.dispose());
   const started = await runtime.start({ projectId: 'p', workspace, instructions: 'fixture' });
   assert.equal(started.threadId, 'fixture-thread');
@@ -816,6 +821,7 @@ test('hyphenated worker ids validate, while missing ids receive actionable diagn
 test('runtime allows ongoing child progress beyond a wall deadline but interrupts a stalled turn', async (t) => {
   const f = await fixture(t),
     runtime = new CodexRuntime({
+      id: 'codex',
       projects: f.projects,
       executable: process.execPath,
       args: [path.resolve('tests/fixtures/fake-codex.mjs')],

@@ -38,6 +38,8 @@ export function validateAssignmentResource(
   );
   if (
     expected.source !== decision.source ||
+    JSON.stringify(expected.resource.capabilities) !==
+      JSON.stringify(decision.resource.capabilities) ||
     (['id', 'client', 'providerId', 'model', 'configurationRevision', 'local'] as const).some(
       (key) => expected.resource[key] !== decision.resource[key],
     )

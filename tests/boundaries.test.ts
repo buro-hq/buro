@@ -19,6 +19,15 @@ async function sources(dir: string): Promise<string[]> {
 function imports(source: string) {
   return [...source.matchAll(/(?:from|import)\s*(?:\(\s*)?['"]([^'"]+)['"]/g)].map((m) => m[1]);
 }
+test('neutral agent contracts depend only on other neutral contracts', async () => {
+  const root = path.resolve('agent/contracts');
+  for (const file of await sources(root))
+    for (const name of imports(await fs.readFile(file, 'utf8'))) {
+      assert.ok(name.startsWith('.'), `${file}: external dependency ${name}`);
+      const target = path.resolve(path.dirname(file), name);
+      assert.ok(target.startsWith(root + path.sep), `${file}: application dependency ${name}`);
+    }
+});
 test('domain and protocol have no framework/platform imports; clients never import backend', async () => {
   for (const dir of ['core', 'protocol'])
     for (const file of await sources(dir))

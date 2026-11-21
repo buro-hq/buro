@@ -221,6 +221,7 @@ test('Codex runtime is a replaceable plugin; same session supports follow-up tur
     await fs.rm(directory, { recursive: true, force: true });
   });
   await host.ctx.plugin(codexPlugin, {
+    id: 'codex',
     executable: process.execPath,
     args: [path.resolve('tests/fixtures/fake-codex.mjs')],
   });

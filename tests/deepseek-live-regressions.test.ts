@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { DeepSeekProvider } from '../adapters/models/deepseek.ts';
 import { CapabilityProbeService, type ProbeReceipt } from '../core/capability-probe.ts';
-import type { ModelProvider } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 
 function completed(content: string) {
   return new Response(

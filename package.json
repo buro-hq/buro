@@ -14,7 +14,7 @@
     "daemon": "node daemon/main.ts",
     "cli": "node cli/main.ts",
     "test:core": "node --test tests/*.test.ts",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json",
+    "typecheck": "tsc -p agent/contracts/tsconfig.json && tsc -p tsconfig.json && tsc -p tsconfig.server.json",
     "check:service": "node scripts/check-service.cjs",
     "test": "npm run test:core",
     "check:projects": "node scripts/check-projects.cjs",

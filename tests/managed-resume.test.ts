@@ -6,10 +6,10 @@ import path from 'node:path';
 import type {
   ManagedSession,
   ManagedSessionStore,
-  ModelProvider,
   ToolBroker,
   ToolScope,
 } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 import type { ContextMaterial, Run, Snapshot } from '../protocol/domain.ts';

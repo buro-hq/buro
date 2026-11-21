@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { ManagedAgentRuntime, type ManagedRuntimeOptions } from '../core/managed-runtime.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
-import type { ManagedSession, ModelProvider } from '../core/model-ports.ts';
+import type { ManagedSession } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { RuntimeEvent, ProjectRegistry } from '../core/ports.ts';
 import type { ManagedRunBudgetPort } from '../core/run-budget.ts';
 import {

@@ -16,6 +16,7 @@ import {
   validateWorkerStepCheckResult,
 } from '../../core/worker-step-checks.ts';
 import { workerResourcePool } from '../../core/assignment-resources.ts';
+import { RuntimeResourceSchema } from '../../protocol/resources.ts';
 import type { EnvironmentExecutors } from '../environments/executors.ts';
 
 type Options = {
@@ -88,9 +89,11 @@ export class WorkerStepChecks implements WorkerStepCheckPort {
     const decision = run.assignmentResources?.[session.roleId];
     if (run.resources.workerPool && !decision) blocked();
     const resource = decision?.resource || run.resources.worker;
+    const canonicalResource = RuntimeResourceSchema.safeParse(resource);
     if (
-      resource.client !== 'managed' ||
-      !workerResourcePool(run.resources).some((item) => same(item, resource)) ||
+      !canonicalResource.success ||
+      !canonicalResource.data.capabilities.hostToolLifecycle ||
+      !workerResourcePool(run.resources).some((item) => same(item, canonicalResource.data)) ||
       session.runtimeId !== resource.id ||
       session.providerId !== resource.providerId ||
       session.model !== resource.model ||
@@ -128,7 +131,7 @@ export class WorkerStepChecks implements WorkerStepCheckPort {
           },
           policy,
           ids,
-          resource,
+          resource: canonicalResource.data,
           roleVersion: session.roleVersion,
           assignment: agent.assignment,
           roleAssignments: run.roleAssignments,

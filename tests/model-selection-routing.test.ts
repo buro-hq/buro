@@ -7,7 +7,8 @@ import {
 } from '../core/runtime-router.ts';
 import { RuntimeCatalog } from '../core/runtimes.ts';
 import { ResourceSelection } from '../core/resource-selection.ts';
-import type { AgentRuntime, ProjectRegistry } from '../core/ports.ts';
+import type { AgentRuntime, RegisteredRuntime, ProjectRegistry } from '../core/ports.ts';
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import type { Role, Run } from '../protocol/domain.ts';
 import type {
   AssignmentResource,
@@ -15,11 +16,14 @@ import type {
   RuntimeResource,
 } from '../protocol/resources.ts';
 
+const declaredCapabilities = fixtureCapabilities({ structuredTurns: true, resumeSessions: true });
+
 function client(id: string) {
   const starts: Parameters<AgentRuntime['start']>[0][] = [],
     resumes: string[] = [];
-  const runtime: AgentRuntime = {
+  const runtime: RegisteredRuntime = {
     id,
+    capabilities: declaredCapabilities,
     async start(input) {
       starts.push(structuredClone(input));
       return { threadId: 'native-' + id };
@@ -48,6 +52,7 @@ function fixture(t: any) {
       providerId: 'ollama',
       model: 'small-a',
       configurationRevision: 'a1',
+      capabilities: declaredCapabilities,
       local: true,
     },
     {
@@ -56,6 +61,7 @@ function fixture(t: any) {
       providerId: 'ollama',
       model: 'small-b',
       configurationRevision: 'b1',
+      capabilities: declaredCapabilities,
       local: true,
     },
     {
@@ -64,6 +70,7 @@ function fixture(t: any) {
       providerId: 'deepseek',
       model: 'remote',
       configurationRevision: 'c1',
+      capabilities: declaredCapabilities,
       local: false,
     },
   ];

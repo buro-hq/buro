@@ -8,8 +8,11 @@ import { DomainError } from '../../core/ports.ts';
 import { normalizeCodexEvent } from './events.ts';
 import { observedTurnFailure, UnresolvedEffectError } from '../../core/run-reconciliation.ts';
 import { nativeVerificationPolicy } from './verification-policy.ts';
+import { freezeBackendCapabilities } from '../../core/backend-capabilities.ts';
+import type { BackendCapabilities } from '../../agent/contracts/capabilities.ts';
 
 export type RuntimeOptions = {
+  id: string;
   projects: ProjectRegistry;
   executors?: EnvironmentExecutors;
   executable?: string;
@@ -22,7 +25,8 @@ export type RuntimeOptions = {
 };
 /** Native Codex JSONL is contained here. Constructing the adapter launches no processes. */
 export class CodexRuntime implements AgentRuntime {
-  readonly id = 'codex';
+  readonly id: string;
+  readonly capabilities: BackendCapabilities;
   options: RuntimeOptions;
   connections = new Map<string, Connection>();
   active = new Set<Connection>();
@@ -30,6 +34,25 @@ export class CodexRuntime implements AgentRuntime {
   listeners = new Set<(event: RuntimeEvent) => void>();
   eventSequence = 0;
   constructor(options: RuntimeOptions) {
+    if (!/^[a-z][a-z0-9_-]{0,63}$/.test(options.id))
+      throw new DomainError(
+        'INVALID_RUNTIME',
+        'A native runtime requires its explicit configured ID.',
+      );
+    this.id = options.id;
+    this.capabilities = freezeBackendCapabilities({
+      version: 1,
+      revision: 'codex-app-server-permissions-v1',
+      structuredTurns: true,
+      toolsFreeTurns: false,
+      readOnlySessions: true,
+      immutableReview: !!options.executors && ['darwin', 'linux'].includes(process.platform),
+      strictPlannedWrites: false,
+      hostToolLifecycle: false,
+      resumeSessions: true,
+      usage: 'unknown',
+      cancellation: 'settled-or-unknown',
+    });
     this.options = options;
   }
   async start(input: {
@@ -193,6 +216,7 @@ export class CodexRuntime implements AgentRuntime {
     instructions: string;
     workspace: string;
     runId: string;
+    readOnly?: boolean;
   }) {
     return this.start(input);
   }

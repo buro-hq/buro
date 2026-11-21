@@ -7,7 +7,8 @@ import { randomUUID } from 'node:crypto';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
 import { RuntimeCatalog } from '../core/runtimes.ts';
 import { RuntimeRouter } from '../core/runtime-router.ts';
-import type { ModelProvider, ToolBroker } from '../core/model-ports.ts';
+import type { ToolBroker } from '../core/model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
 import type { Run } from '../protocol/domain.ts';
 import type { RuntimeResource } from '../protocol/resources.ts';
@@ -284,6 +285,7 @@ async function fixture(t: any, kind: Provider) {
     const registry = new RuntimeCatalog();
     registry.register(managed);
     const resource: RuntimeResource = {
+      capabilities: structuredClone(managed.capabilities),
       id: 'managed',
       client: 'managed',
       providerId: kind,
@@ -531,8 +533,9 @@ for (const kind of ['ollama', 'deepseek'] as const) {
       { code: 'GENERATION_RECONCILIATION_REQUIRED' },
     );
     await assert.rejects(reopened.router.turn(started.threadId, 'Do not replay', turnOptions()), {
-      code: 'GENERATION_RECONCILIATION_REQUIRED',
+      code: 'THREAD_NOT_FOUND',
     });
+    assert.equal((await reopened.sessions.load(started.nativeId))?.generation?.outcome, 'unknown');
     assert.equal(reopened.requests.length, 0);
     assert.equal(f.edits(), 1);
     assert.equal(f.selections(), 1);

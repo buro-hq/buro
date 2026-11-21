@@ -13,6 +13,7 @@ import type {
 } from '../protocol/domain.ts';
 import type { RuntimeEvent } from './runtime-events.ts';
 import type { ResourceSnapshot, RuntimePurpose } from '../protocol/resources.ts';
+import type { BackendCapabilities } from '../agent/contracts/capabilities.ts';
 export type { RuntimeEvent } from './runtime-events.ts';
 export type Receipt = { fingerprint: string; result: unknown };
 export type ProjectDocument = {
@@ -83,6 +84,8 @@ export interface AgentRuntime {
     workspace: string;
     runId: string;
     ownerRunId?: string;
+    readOnly?: boolean;
+    purpose?: RuntimePurpose;
   }): Promise<{ threadId: string }>;
   submit(threadId: string, text: string): Promise<{ turnId: string }>;
   interrupt(threadId: string, turnId: string): Promise<void>;
@@ -95,10 +98,11 @@ export interface AgentRuntime {
   release?(threadId: string): Promise<void>;
   dispose(): Promise<void>;
 }
+export type RegisteredRuntime = AgentRuntime & { readonly capabilities: BackendCapabilities };
 /** Explicit selection only: an unavailable runtime never falls back to another route. */
 export interface RuntimeRegistry {
   list(): string[];
-  get(id: string): AgentRuntime;
+  get(id: string): RegisteredRuntime;
 }
 export interface RuntimeSelection {
   forProject(projectId: string): ResourceSnapshot;

@@ -49,13 +49,10 @@ export const ResourceConfigurationSchema = z
     if (!profiles.has(value.defaultProfile))
       ctx.addIssue({ code: 'custom', message: 'Default resource profile is missing.' });
     for (const runtime of value.runtimes)
-      if (
-        runtime.client === 'managed' &&
-        (runtime.id === 'codex' || !connections.has(runtime.connectionId))
-      )
+      if (runtime.client === 'managed' && !connections.has(runtime.connectionId))
         ctx.addIssue({
           code: 'custom',
-          message: 'Managed runtime needs an existing connection and a nonreserved ID.',
+          message: 'Managed runtime needs an existing connection.',
         });
     for (const profile of value.profiles)
       if (
@@ -280,7 +277,9 @@ export class FileResourceConfiguration {
         ...(setup.profile.workerPool || []),
       ]);
       if (
-        setup.runtimes.some((runtime) => !connections.has(runtime.connectionId)) ||
+        setup.runtimes.some(
+          (runtime) => runtime.client === 'managed' && !connections.has(runtime.connectionId),
+        ) ||
         [...referenced].some((runtimeId) => !runtimes.has(runtimeId))
       )
         throw new DomainError(

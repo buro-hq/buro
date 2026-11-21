@@ -34,6 +34,20 @@ Current boundaries: Linux execution and Docker verification support require sepa
 
 Stage 2 preparation is recorded in the [scope map](../output/research/stage2-scope-cutover-2026-11-21.md) and [backend contract map](../output/research/stage2-backend-cutover-2026-11-21.md). These are implementation plans, not implemented behavior or published reusable packages.
 
+## Stage 2 — common capabilities and autonomy
+
+### Substep 2A — capability admission and configured backend instances
+
+Status: complete. Final full suite **707/707 passed**, with no skips; build/typecheck, formatting and desktop/mobile production smoke passed. Five agent roles contributed implementation, independent admission tests and architecture/code/boundary review in waves. [Validation receipt](../output/research/stage2a-validation-2026-11-22.json).
+
+Portable ModelProvider/message/tool/usage contracts now live in `agent/contracts`, are used by production consumers, and compile separately without ambient Node types. Repository ToolScope, Buro sessions and provider transport errors remain application-owned. This is a real type boundary, not a finished neutral AgentBackend loop or distributable SDK.
+
+Registered backends provide explicit immutable capability descriptors. Resources and routes freeze their revision and operation requirements; the router validates those against the actual registered implementation before dispatch. Known preflight failure remains distinct from an unknown error after backend dispatch. Worker feedback requires host-tool lifecycle capability rather than a client label. Native instances have arbitrary IDs and individual model/reasoning settings; managed instances may use the ID `codex`. The historical direct-Codex resume fallback is removed.
+
+Original runtime/thread leases preserve stop and idempotent cleanup after view/configuration revocation. Released sessions need explicit resume. [Independent review](../output/research/stage2a-review-2026-11-22.md).
+
+The new execution record format requires capability and route-admission metadata. Prototype records are intentionally not silently upgraded or resumed; archive old execution state before the operational cutover. Validation uses fresh synthetic state. Advisory scope, read-only planning strategy, common role routing, default-none quotas, plugin contributions, durable SQLite authority and packaged AgentBackend remain subsequent work.
+
 ## Remaining authorized stages
 
 2. Common AgentBackend/ModelProvider/capability contracts and effective visible autonomy policy; advisory planned paths with explicit strict mode; remove client-name privileges.

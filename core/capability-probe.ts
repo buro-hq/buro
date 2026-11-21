@@ -1,5 +1,5 @@
 import { DomainError } from './ports.ts';
-import type { ModelMessage, ModelProvider } from './model-ports.ts';
+import type { ModelMessage, ModelProvider } from '../agent/contracts/model.ts';
 export type ProbeResult = {
   runtimeId: string;
   configurationRevision: string;

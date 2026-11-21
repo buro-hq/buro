@@ -1,16 +1,13 @@
 import {
   DomainError,
   type AgentRuntime,
+  type RegisteredRuntime,
   type ProjectRegistry,
   type RuntimeEvent,
 } from './ports.ts';
-import type {
-  ManagedSession,
-  ManagedSessionStore,
-  ModelProvider,
-  ToolBroker,
-  ToolScope,
-} from './model-ports.ts';
+import type { BackendCapabilities } from '../agent/contracts/capabilities.ts';
+import type { ManagedSession, ManagedSessionStore, ToolBroker, ToolScope } from './model-ports.ts';
+import type { ModelProvider } from '../agent/contracts/model.ts';
 import { inScope } from './execution-ports.ts';
 import type { Run } from '../protocol/domain.ts';
 import { VerificationViewSchema } from '../protocol/verification.ts';
@@ -68,8 +65,23 @@ export type ManagedRuntimeOptions = {
 };
 
 /** Buro owns this loop. Providers never execute tools or accept a coding result. */
-export class ManagedAgentRuntime implements AgentRuntime {
+export class ManagedAgentRuntime implements RegisteredRuntime {
   readonly id: string;
+  readonly capabilities: BackendCapabilities = Object.freeze({
+    version: 1,
+    revision: 'managed-host-tools-v1',
+    structuredTurns: true,
+    toolsFreeTurns: true,
+    readOnlySessions: true,
+    immutableReview: true,
+    // Registered commands still have worktree-wide write access; edit_file alone
+    // does not establish prevention for every indirect tool effect.
+    strictPlannedWrites: false,
+    hostToolLifecycle: true,
+    usage: 'reported',
+    resumeSessions: true,
+    cancellation: 'settled-or-unknown',
+  });
   private options: ManagedRuntimeOptions;
   private loaded = new Map<string, ManagedSession>();
   private listeners = new Set<(event: RuntimeEvent) => void>();

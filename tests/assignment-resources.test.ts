@@ -1,9 +1,11 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { resolveWorkerResource, workerResourcePool } from '../core/assignment-resources.ts';
+import { validateAssignmentResource } from '../core/assignment-routing.ts';
 import { ResourceSelection } from '../core/resource-selection.ts';
 import { RoleService } from '../core/services.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
@@ -25,6 +27,7 @@ import type { Role } from '../protocol/domain.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 
 const local: RuntimeResource = {
+  capabilities: fixtureCapabilities(),
   id: 'small',
   client: 'managed',
   providerId: 'ollama',
@@ -33,6 +36,7 @@ const local: RuntimeResource = {
   local: true,
 };
 const cloud: RuntimeResource = {
+  capabilities: fixtureCapabilities(),
   id: 'reasoner',
   client: 'managed',
   providerId: 'deepseek',
@@ -88,6 +92,16 @@ test('auto proposals resolve to canonical frozen resources and cannot mutate the
   assert.equal(resolveWorkerResource(saved, role(), { runtimeId: null }).source, 'profile');
   assert.throws(() => resolveWorkerResource(saved, role(), { runtimeId: 'unlisted' }), {
     code: 'RUNTIME_NOT_ALLOWED',
+  });
+});
+
+test('a saved assignment cannot replace the capabilities of its frozen resource', () => {
+  const saved = snapshot();
+  const decision = resolveWorkerResource(saved, role());
+  assert.equal(validateAssignmentResource(saved, role(), decision).resource.id, local.id);
+  decision.resource.capabilities = { ...decision.resource.capabilities, structuredTurns: true };
+  assert.throws(() => validateAssignmentResource(saved, role(), decision), {
+    code: 'INVALID_ASSIGNMENT',
   });
 });
 

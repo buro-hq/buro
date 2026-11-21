@@ -1,3 +1,4 @@
+import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DomainError } from '../core/ports.ts';
@@ -33,6 +34,7 @@ const input = () => ({
   ],
   pool: [
     {
+      capabilities: fixtureCapabilities(),
       id: 'local-qwen',
       client: 'managed' as const,
       providerId: 'ollama',
