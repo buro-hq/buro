@@ -63,7 +63,7 @@ The coordinator can add a specialist after discovering a risk. It does not have 
 
 Buro starts worker sessions itself. Native subagents may become an optional optimization after their lifecycle and permissions can be mapped reliably. They are not required for cross-provider orchestration. An undeclared native child cannot silently become a trusted assignment just because its prompt resembles a role name.
 
-Start with a small versioned decision schema and bounded graph edits. Reject cycles, invalid dependency references, unsupported tools, ownership violations and policy expansion. A rejected decision returns a concrete correction; invalid output consumes a bounded retry budget.
+Start with a small versioned decision schema and bounded graph edits. Reject cycles, invalid dependency references, unsupported tools, ownership violations and policy expansion. A rejected decision returns a concrete correction. Repeated failure causes validated replanning, another context/strategy or a genuine blocker; a lifetime retry quota exists only when explicitly configured.
 
 ## Runtime and provider contracts
 
@@ -94,7 +94,7 @@ Acceptance checks run under service ownership. Their definitions and evidence ca
 
 ## Context and routing
 
-Select models by task requirements, measured capability, data policy, availability and budget. Start with explicit user-selected profiles; add adaptive routing based on evaluation results. Do not equate a role title with a permanent model choice.
+Select models by task requirements, measured capability, data policy, availability and any explicit user quota. Start with explicit user-selected profiles; add adaptive routing based on evaluation results. Do not equate a role title with a permanent model choice.
 
 The first model-selection increment gives each run a frozen worker pool. The coordinator proposes a runtime for a bounded assignment; a pure service resolver enforces the user's versioned Auto/Prefer/Fixed preference and the saved pool. Persist the canonical decision and reason with the plan, then persist its AgentSession before client dispatch. The router verifies that session against the saved decision rather than trusting an arbitrary runtime ID in an input. A role edited during planning requires a fresh decision; later edits do not change an accepted assignment. Initial coordinator and independent-review resources remain profile choices in this increment.
 
@@ -102,7 +102,7 @@ Support local-only and configured hybrid operation. Endpoint credentials and pri
 
 A remote GPU supplies a model HTTP API; repositories, tools, orchestration and acceptance stay on the Buro host. SSH tunnels are not part of the runtime contract. An Ollama connection at a literal private IP can be explicitly trusted as self-hosted for local-only work; cloud-backed models remain excluded. API connection edits use the shared application commands and become active after a service restart. A pending edit blocks new work using that connection while existing owned runs retain the active configuration. After restart, a historical route with a different configuration fails closed instead of silently moving to the new endpoint.
 
-Project materials, goal inputs, session briefs and run outputs keep separate provenance. Use token budgets appropriate to the selected model, leaving space for tool results and completion. Provider-native continuation needed for correctness must be preserved privately even when it is not part of the human-readable brief.
+Project materials, goal inputs, session briefs and run outputs keep separate provenance. Build context views appropriate to actual model capacity, leaving space for tool results and completion; this is separate from an optional aggregate user quota. Provider-native continuation needed for correctness must be preserved privately even when it is not part of the human-readable brief.
 
 ## Parallelism and workspaces
 
@@ -135,3 +135,15 @@ The milestone is complete when a goal works through either direct provider witho
 ## Later decisions
 
 Claude and ACP adapters, DeepSeek Harness as an optional runtime, SQLite migration, parallel task writers, richer retrieval and distributed execution can follow the first verified slice. LangGraph remains an alternative if a focused comparison shows that it simplifies recovery; Temporal becomes relevant for multiple execution hosts. There must be one owner of workflow state rather than two competing schedulers.
+
+## Selected execution and resource-policy decision
+
+See [EXECUTION-DESIGN-DECISION-2026-11-21.md](docs/EXECUTION-DESIGN-DECISION-2026-11-21.md) for the chosen target and source inventory. Production v1 behavior is unchanged by this design document.
+
+Separate UsageAccounting, optional user quota, provider request capacity, scheduling quantum and operation health. New-format runs default to no aggregate hard quota. A cooperative yield is a resumable scheduling event, not a failed goal; counters and operation IDs cannot reset at that boundary.
+
+For clean-cutover activation, use one authoritative transactional project store for admission receipts, incremental counters, public Run projections, events and idempotency receipts. SQLite is the selected implementation behind StateStore; core decisions operate on a summary and the requested operation receipt rather than an ever-growing operation map. Large private histories and complete logs use paged immutable artifact references. No separate accounting database plus authoritative JSON summary or live dual writing.
+
+This unreleased product needs no backward compatibility: use one clean execution contract, no old runtime/checkpoint resume or legacy strategy resolver. Archive prototype state before explicit cutover without deleting it; optionally reimport domain inputs, never old generated quota defaults or executable ledgers. New configuration distinguishes none/inherit/bounded. New-format runs retain configuration identity, durable receipts and recovery. Activate observation-only defaults only after runtime, workflow, storage and UI consumers pass the former64/24/256/4/15/17408 boundaries without an unintended stop. Permissions, trusted checks, fresh review and unknown-effect reconciliation remain mandatory.
+
+[Private-project evaluation details removed.]

@@ -119,3 +119,11 @@ Saved the same-model experiment implementation as `77a016e`: 605 default tests, 
 Primary-source research and a local code audit are summarized in `docs/ARCHITECTURE-RESEARCH-2026-11-21.md`, with three supporting reports under `output/research/`. Keep core/workspace/provider/evidence boundaries; change workflow and context contracts rather than replace the framework. Priorities: optional user-configured aggregate ceilings with default observation-only accounting; explicit audit of hidden repair/session/window ceilings; full verified review input and same-executor repair; accurate context admission; compute-matched extra-candidates/self-debug control and broader real-task evaluation.
 
 The user explicitly requests no default hard request/token/time/session budget in ordinary product work. Do not merely raise constants or delete accounting/idempotency. Propose a versioned optional-quota policy, retain historical receipts/counters and explicit prior-run settings, and preserve permission/evidence/unknown-effect guards. Physical context/memory and transport-failure handling are separate concerns. Production defaults have not yet been migrated; the next implementation must apply this agreed direction deliberately.
+
+## Selected design and full constraint audit
+
+Completed five-role research/audit on2026-11-21: runtime32groups, workflow37groups and primary-source reuse/migration/review; primary agent added10tool-interface groups. The normalized inventory has79layeredgroups and185validatedsource references across49files. Sources distinguish actual defaults, schema ranges, quotas, operation health, payload projections, concurrency and authority. Pure schema/decision probes confirm finite fallback/null rejection and byte-admission behavior; no model, RTX or user-source calls were made.
+
+[Private-project evaluation details removed.]
+
+The chosen sequence and acceptance gates are in `docs/EXECUTION-DESIGN-DECISION-2026-11-21.md`; reusable boundaries in `docs/REUSABLE-AGENT-PACKAGES-2026-11-21.md`; inventory `output/research/buro-constraints-inventory-2026-11-21.json`; supporting reuse/quota/independentreview reports are retained. Target VISION/ARCHITECTURE documentation is aligned. Production behavior and all existing records remain unchanged by this research; implementation of the clean cutover is the next work.

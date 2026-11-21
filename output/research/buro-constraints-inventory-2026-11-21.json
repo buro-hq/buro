@@ -1,0 +1,2252 @@
+{
+  "version": 1,
+  "date": "2026-11-21",
+  "sourceCommit": "1ee8a55",
+  "scope": "Layered runtime/workflow/protocol/UI/transport/storage/tool-broker audit; some entries describe overlapping guards at distinct layers. Not a claim that every field length is a defect.",
+  "policyDecision": "Clean pre-release contract cutover, no legacy runtime/checkpoint support. No aggregate hard quota by default for new runs; explicit user caps optional. Archive old data without deleting it. No production change applied by this audit.",
+  "groups": 79,
+  "validatedSourceReferences": 185,
+  "sourceHashes": {
+    "protocol/run-budget.ts": "999afacb8e24d99c56078ff94c44ffdb0dc10276e3fc646fe00763d096241e82",
+    "core/run-budget.ts": "c5ae24a0e6d18324f33526b2fdc76f569b7c5282e7024de107087eaf6f6bcffe",
+    "protocol/resources.ts": "b856415b5f5d283319ac809097b59ce0065ac5c12bfd65bb45e1cf7abc0a42b7",
+    "core/managed-runtime.ts": "1430d52217ca9ded0f0badf08c86f0b39884656e1ab7636957015799bec1214a",
+    "adapters/files/managed-sessions.ts": "1835e9064989d81a92947b36becb5463e57baba7a81e7a43e8883f921af1b9b7",
+    "core/managed-worker-checks.ts": "4cc93d183a07bb68101d993bc2ba49bcc6b7c18698dba78356bb47d307a2d435",
+    "adapters/models/ollama.ts": "cf987e57156a7217099efc9bce7c1e285a332db98da61a1da64bffb483675878",
+    "adapters/models/deepseek.ts": "b2ee59479958032cde57bd31391c65047cf73ab7382637b249129ccea4eae5c2",
+    "core/request-policy.ts": "36c83bf14053485b86e14f758d74e894af7936bc5d987b0d3e9a324a8831dff0",
+    "core/work-segments.ts": "d1d6ba69fcbe0661e7f2ef042683bb378e43210787bb4ed82c3e55874a502d8e",
+    "core/worker-step-checks.ts": "58e1d00fc27486c7e64b0c7f1de605cd9d18ed48311d47d60bba2f51bd56ccb5",
+    "adapters/tools/segment-evidence.ts": "208063f59e35c80f330c47a3ce5b0af4ea4e64ea396230a9f11d71435822488b",
+    "protocol/domain.ts": "09211a8d59290d248a8219a69531cda7773e5a2a4a510dad37a56257e31c9d0e",
+    "adapters/codex/runtime.ts": "26dccb5c8e4cf23d3709f6ff232f2e413979edf411a2b88287b9555758309b09",
+    "adapters/models/http.ts": "e59224a737609770013eb0ae800f3a2e0897d3e1ddf6bd2ab952ca150d776d69",
+    "adapters/resources/runtime-resources.ts": "f2c6b60c1e98140d212cafc52b7df5b1aea619daa7e04332bae9c0254c38581c",
+    "adapters/files/private-json.ts": "f44e8e37fa037d0c2d15bb9a290e6827d72199fdf4da242d6ee6d24e81d0a2b1",
+    "protocol/projects.ts": "e56e3bdf71083116cf631aa11d1aebfe6307f871d9ebaf6f9d30d1d4bde1613a",
+    "protocol/execution.ts": "268862e7f904ff91572bf51c9b1b976c9d3d464727b6e322ed3e9a37b10b00d1",
+    "src/components/organisms/ProjectProfileForm.tsx": "92489c21f2b6ec397fe3398c378f10f71476246b7154a31deb6a77bcff94f76c",
+    "core/worker-assignments.ts": "45afedb4d50401cccdfa22d48973677ce51da598ecf7c0432b920199c7fec7b4",
+    "core/execution.ts": "621aa7e6c98ae1254247a52aba58641660c9c509a92e0c2d4e4c98e90bed5bce",
+    "adapters/files/project-manager.ts": "e8ab6007ea7cc76046f3589f4036600ada3e1db3748a526a59a9b61e888a6eb6",
+    "core/worker-recovery.ts": "d2f97d35ec74d9f77c4f10362ac52544dc4dfb36c0ed06486498c4a4ea083486",
+    "core/project-research.ts": "a684866f62e6dc62d998d08fa84ce5ebf509711b86da52d6c6fde43e8ea3979b",
+    "core/services.ts": "36e41c62fc0b6db1fe3e5123939b88ff0f19374433165337ddc15ba0aafaeb9b",
+    "src/components/organisms/GoalModal.tsx": "dce874deb39fcec69411e8f8070f2abf5dbde47bb7178e596bc726d26d6f6c6d",
+    "adapters/checks/project-commands.ts": "f1fc98d2a92f05d1642a132b85b1bd030df4d03470c5dd8cce7eeb02d18c9122",
+    "adapters/checks/node-checks.ts": "683f5f7164e4bba1c55a5f006998c0b83a61e3833c4960235379605a6fba2915",
+    "core/planning-policy.ts": "e6de9722e4cdc91815fe0452919837028818a64467c4aab62a6e57022e9a7b93",
+    "core/worker-envelope.ts": "c3e4d85421a07cb39c3c9465385fe0eb35dc9d224e0fd93c85219934812d2a56",
+    "core/agent-context.ts": "34b244729bd0e63c5402aceadb9b59ab597f29008e078ef43da3dd4755478e42",
+    "protocol/schema.ts": "dbe4e405b6ca597f84686ddf8975ba62c430c3a5215fb633536bb8750aa63ecd",
+    "core/execution-ports.ts": "0f6086c403c59d1eae6328cb42d4f6ab9ef41c252173ca852b89a4a8c2baeee7",
+    "protocol/worker-tasks.ts": "e9ef87e2243cac75c094d5063bd0e31d7476c1ad922a784c52f8337a8f3a012d",
+    "adapters/files/context-materials.ts": "e9d680fd27e6e7aea1477a279279be47bd217586cdee15aa5aed8038123cb1c2",
+    "core/context.ts": "06f6ab28b8a88ec1dc775648c9fe476967ad37dfc148881f02f9a6c515f5babe",
+    "daemon/websocket.ts": "f4a18f343adf54f8cf673d594faf99c710fb59d42f7166182fe878dba80b4675",
+    "clients/socket-client.ts": "8b4cd32272c198ad076fb34f3d62b2a75d75a5b00a4d0dbcd2dd7174c4f8aa13",
+    "src/data/provider.tsx": "0d63226c7092b2619db9d0664ba11f7b40ab7ae0d70b028db266731ceb4a82a9",
+    "adapters/files/git-workspaces.ts": "d045921e857759f92195c5e9e24f950b60921d7b71cd10445f8f963921ff4dbb",
+    "adapters/processes/safe-git.ts": "b5f2a84e538b63e9e30f75ab4844d4677c35ba33cf2d0a098a5addedac4346f6",
+    "adapters/environments/project-environments.ts": "de17d3924706cca36ab7a28f25edd69d5ec7da21939115c24bd1bce7e06d2e9a",
+    "protocol/environment.ts": "a2642d2076ecb97f0417a45be96016a4d54e224c1b90126c236b700454aec0aa",
+    "adapters/environments/executors.ts": "a09874972ae57d39c52121a4654aa17266ec36714f8110fd279d3f023f055eed",
+    "adapters/processes/project-operations.ts": "7c71ab59587f232bdbd4f4e84d671a40a0fa2df682812c9e72607601a55cd99f",
+    "adapters/files/project-store.ts": "e0b6d347bd0c8dac05be3ddbdd47339eac2db815abf44ef21e55290446ffa696",
+    "adapters/files/event-log.ts": "a568304659f2e4b8eb04eb69cd2ce6c329bf2a7db24c1e444abe1c3545d47002",
+    "adapters/tools/repository-tools.ts": "2037c0da677d6810da1e78994f8cd0ce958cfe987abaa84d29829d49de581de7"
+  },
+  "entries": [
+    {
+      "id": "R01",
+      "area": "runtime",
+      "title": "Run generation quota",
+      "classification": "optional aggregate quota",
+      "sources": [
+        {
+          "path": "protocol/run-budget.ts",
+          "line": 42
+        },
+        {
+          "path": "core/run-budget.ts",
+          "line": 289
+        }
+      ],
+      "value": 64,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Managed owner run without explicit managedBudget; factory injects ProjectRunBudgets.",
+      "stopScope": "Next generation refused with RUN_BUDGET_EXHAUSTED.",
+      "effect": "Next generation refused with RUN_BUDGET_EXHAUSTED.",
+      "recommendation": "Versioned optional aggregate cap; preserve explicit user limits and historical charges.",
+      "tests": "Beyond64 without cap; explicit64 blocks before dispatch; restart/idempotency preserve charges.",
+      "priority": "P0"
+    },
+    {
+      "id": "R02",
+      "area": "runtime",
+      "title": "Run output reservation quota",
+      "classification": "optional aggregate quota",
+      "sources": [
+        {
+          "path": "protocol/run-budget.ts",
+          "line": 45
+        },
+        {
+          "path": "core/run-budget.ts",
+          "line": 294
+        }
+      ],
+      "value": 131072,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Reserves request output allowance, not actual completion tokens.",
+      "stopScope": "Output grant shrinks; less than minimum headroom stops generation.",
+      "effect": "Output grant shrinks; less than minimum headroom stops generation.",
+      "recommendation": "Make aggregate cap optional; retain reserved/observed/unknown usage as distinct facts.",
+      "tests": "Unlimited total with finite request output; exact finite-cap shrink; unknown outcome never refunded.",
+      "priority": "P0"
+    },
+    {
+      "id": "R03",
+      "area": "runtime",
+      "title": "Run tool and check quota",
+      "classification": "optional aggregate quota",
+      "sources": [
+        {
+          "path": "protocol/run-budget.ts",
+          "line": 46
+        },
+        {
+          "path": "core/run-budget.ts",
+          "line": 338
+        }
+      ],
+      "value": 256,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Model batches and selected service checks share the same owner ledger.",
+      "stopScope": "Next tool/check rejected before effects.",
+      "effect": "Next tool/check rejected before effects.",
+      "recommendation": "Optional user cap; preserve atomic effect admission.",
+      "tests": "More than256 known effects without cap; explicit cap; service-check charges; no duplicated effects.",
+      "priority": "P0"
+    },
+    {
+      "id": "R04",
+      "area": "runtime",
+      "title": "Review reserve reduces work allowance",
+      "classification": "optional aggregate quota",
+      "sources": [
+        {
+          "path": "protocol/run-budget.ts",
+          "line": 47
+        },
+        {
+          "path": "core/run-budget.ts",
+          "line": 289
+        },
+        {
+          "path": "core/run-budget.ts",
+          "line": 338
+        }
+      ],
+      "value": {
+        "reviewRequests": 8,
+        "reviewOutputTokens": 16384,
+        "reviewTools": 32,
+        "effectiveWorkRequests": 56,
+        "effectiveWorkOutputTokens": 114688,
+        "effectiveWorkTools": 224
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Default64/131072/256 policy; coordinator/planning/integration share work phase.",
+      "stopScope": "Work stops at56 requests despite global64; review reserve is a protected minimum, not a review maximum.",
+      "effect": "Work stops at56 requests despite global64; review reserve is a protected minimum, not a review maximum.",
+      "recommendation": "Reserve only within an explicitly finite user envelope.",
+      "tests": "Work56 blocked, review8 available; no artificial subtraction in observation-only mode.",
+      "priority": "P0"
+    },
+    {
+      "id": "R05",
+      "area": "runtime",
+      "title": "Finite required cap schema and constructor",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "protocol/run-budget.ts",
+          "line": 20
+        },
+        {
+          "path": "protocol/resources.ts",
+          "line": 75
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 77
+        },
+        {
+          "path": "adapters/files/managed-sessions.ts",
+          "line": 162
+        }
+      ],
+      "value": "Required positive integer caps; missing settings acquire defaults; null/zero/Infinity unsupported",
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Runtime construction, policy parsing and checkpoint load.",
+      "stopScope": "Deleting settings does not create unlimited mode.",
+      "effect": "Deleting settings does not create unlimited mode.",
+      "recommendation": "Explicit version2 optional caps, separate mandatory model/request capacity; avoid huge sentinels.",
+      "tests": "Omitted/null wire behavior; oldv1 roundtrip; new no-cap state; migration retains receipts.",
+      "priority": "P0"
+    },
+    {
+      "id": "R06",
+      "area": "runtime",
+      "title": "Budget operation-count storage ceiling",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "core/run-budget.ts",
+          "line": 130
+        }
+      ],
+      "value": 17408,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Every ledger validation.",
+      "stopScope": "More than17408 operation keys invalidates ledger even after numeric quotas are removed.",
+      "effect": "More than17408 operation keys invalidates ledger even after numeric quotas are removed.",
+      "recommendation": "Paged/append-only receipts with bounded summaries and versioned validation.",
+      "tests": "More than17408 receipts; duplicate/conflicting operations; recovery and summaries.",
+      "priority": "P0"
+    },
+    {
+      "id": "R07",
+      "area": "runtime",
+      "title": "Per-turn generation quota",
+      "classification": "optional aggregate quota",
+      "sources": [
+        {
+          "path": "protocol/resources.ts",
+          "line": 79
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 423
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 849
+        }
+      ],
+      "value": 24,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Includes work, closing and final JSON within each turn.",
+      "stopScope": "Loop exhausts MODEL_BUDGET_EXHAUSTED independently of run cap.",
+      "effect": "Loop exhausts MODEL_BUDGET_EXHAUSTED independently of run cap.",
+      "recommendation": "Optional turn cap or resumable yielding; no hidden replacement for absent run cap.",
+      "tests": "Beyond24 requests, close/final charges, pending-chain-preserving yield.",
+      "priority": "P0"
+    },
+    {
+      "id": "R08",
+      "area": "runtime",
+      "title": "Per-turn model-tool and check quota",
+      "classification": "optional aggregate quota",
+      "sources": [
+        {
+          "path": "protocol/resources.ts",
+          "line": 80
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 604
+        },
+        {
+          "path": "core/managed-worker-checks.ts",
+          "line": 55
+        }
+      ],
+      "value": 64,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Requested tool calls plus worker service checks.",
+      "stopScope": "TOOL_BUDGET_EXHAUSTED can prevent the check itself.",
+      "effect": "TOOL_BUDGET_EXHAUSTED can prevent the check itself.",
+      "recommendation": "Optional user quota; retain batch/payload and effect safety.",
+      "tests": "Valid large batches; checks counted; no reset on rollover; explicit cap stops before effects.",
+      "priority": "P0"
+    },
+    {
+      "id": "R09",
+      "area": "runtime",
+      "title": "Lifetime session request quota",
+      "classification": "optional aggregate quota",
+      "sources": [
+        {
+          "path": "protocol/resources.ts",
+          "line": 81
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 425
+        }
+      ],
+      "value": 256,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Cumulative across explicit turns and windows.",
+      "stopScope": "MODEL_BUDGET_EXHAUSTED despite larger/unlimited owning-run allowance.",
+      "effect": "MODEL_BUDGET_EXHAUSTED despite larger/unlimited owning-run allowance.",
+      "recommendation": "Optional user cap; never reset session history/accounting to fake unlimited.",
+      "tests": "Beyond256 across turns/restarts without cap; explicit cap remains enforced.",
+      "priority": "P0"
+    },
+    {
+      "id": "R10",
+      "area": "runtime",
+      "title": "Configured model context",
+      "classification": "per-request hardware/provider",
+      "sources": [
+        {
+          "path": "protocol/resources.ts",
+          "line": 77
+        },
+        {
+          "path": "adapters/models/ollama.ts",
+          "line": 183
+        }
+      ],
+      "value": 32768,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Managed default; actual model capability may differ.",
+      "stopScope": "Configured above inspected Ollama capability rejects; local schema also forbids capacities outside its range.",
+      "effect": "Configured above inspected Ollama capability rejects; local schema also forbids capacities outside its range.",
+      "recommendation": "Use inspected model/hardware capacity and explicit preference, with safe context assembly.",
+      "tests": "Below/above32K models, larger model capabilities, runtime identity and no silent truncation.",
+      "priority": "P1"
+    },
+    {
+      "id": "R11",
+      "area": "runtime",
+      "title": "Per-request output setting and incomplete finish",
+      "classification": "per-request hardware/provider",
+      "sources": [
+        {
+          "path": "protocol/resources.ts",
+          "line": 78
+        },
+        {
+          "path": "adapters/models/ollama.ts",
+          "line": 215
+        },
+        {
+          "path": "adapters/models/deepseek.ts",
+          "line": 93
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 562
+        }
+      ],
+      "value": 4096,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Ollama num_predict or DeepSeek max_tokens; must be below context.",
+      "stopScope": "Provider length/failed finish becomes MODEL_INCOMPLETE; partial result is not completion.",
+      "effect": "Provider length/failed finish becomes MODEL_INCOMPLETE; partial result is not completion.",
+      "recommendation": "Model/task-aware request headroom distinct from goal total; support proven known-outcome continuation.",
+      "tests": "Large patches; partial tool JSON not executed; final length outcome; finite request plus unlimited total.",
+      "priority": "P1"
+    },
+    {
+      "id": "R12",
+      "area": "runtime",
+      "title": "Byte-based context admission and minimum headroom",
+      "classification": "per-request hardware/provider",
+      "sources": [
+        {
+          "path": "core/request-policy.ts",
+          "line": 23
+        },
+        {
+          "path": "core/request-policy.ts",
+          "line": 31
+        },
+        {
+          "path": "core/request-policy.ts",
+          "line": 66
+        }
+      ],
+      "value": "UTF8 bytes of serialized messages/tools/schema +16/message; require min(128, configuredOutput) headroom",
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Before each HTTP generation.",
+      "stopScope": "MODEL_CONTEXT_EXHAUSTED can be a conservative rejection before provider sees the prompt, not physical overflow.",
+      "effect": "MODEL_CONTEXT_EXHAUSTED can be a conservative rejection before provider sees the prompt, not physical overflow.",
+      "recommendation": "Trusted tokenizer/provider-aware estimator and precise context views; never discard required constraints.",
+      "tests": "ASCII/Cyrillic/code/templates; compare observed prompt tokens; no underestimated dispatch; small JSON contracts.",
+      "priority": "P0"
+    },
+    {
+      "id": "R13",
+      "area": "runtime",
+      "title": "Estimator locked even for injected policy",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "core/request-policy.ts",
+          "line": 65
+        },
+        {
+          "path": "core/request-policy.ts",
+          "line": 75
+        }
+      ],
+      "value": "decision.estimatedInput must equal fixed estimateManagedRequest",
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Custom request-policy injection.",
+      "stopScope": "Accurate smaller tokenizer estimate is currently INVALID_REQUEST_POLICY.",
+      "effect": "Accurate smaller tokenizer estimate is currently INVALID_REQUEST_POLICY.",
+      "recommendation": "Separate trusted estimator port/revision from output policy; do not trust arbitrary smaller values.",
+      "tests": "Estimator provenance, revision pinning, malformed result and conservative fallback.",
+      "priority": "P0"
+    },
+    {
+      "id": "R14",
+      "area": "runtime",
+      "title": "Worker-only segmentation and early closing",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 368
+        },
+        {
+          "path": "core/work-segments.ts",
+          "line": 36
+        }
+      ],
+      "value": {
+        "toolRounds": 3,
+        "pressurePercent": 60
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Only assigned writable implementation sessions with injected evidence/policy; coordinator/reviewer do not segment.",
+      "stopScope": "Triggers handshake after3 completed tool rounds or60% estimated pressure, often before any edit. Other phases still hit context.",
+      "effect": "Triggers handshake after3 completed tool rounds or60% estimated pressure, often before any edit. Other phases still hit context.",
+      "recommendation": "Model/context/progress-aware phase views, without universal round-triggered close.",
+      "tests": "Pure reads vs novel evidence; coordinator/reviewer history; closure costs; scope and continuation retained.",
+      "priority": "P0"
+    },
+    {
+      "id": "R15",
+      "area": "runtime",
+      "title": "Raw-history pressure differs from actual request view",
+      "classification": "per-request hardware/provider",
+      "sources": [
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 444
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 466
+        }
+      ],
+      "value": "Rotation estimates raw session.messages; actual admission uses provider.contextMessages",
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Ollama non-thinking projection may omit known assistant commentary.",
+      "stopScope": "Can rotate earlier than the actual packet requires.",
+      "effect": "Can rotate earlier than the actual packet requires.",
+      "recommendation": "One versioned request view for admission and scheduling; retain full private log.",
+      "tests": "Raw/private history preserved; projected tool chains complete; consistent estimates.",
+      "priority": "P1"
+    },
+    {
+      "id": "R16",
+      "area": "runtime",
+      "title": "Four-window lifetime and archive schema ceiling",
+      "classification": "optional aggregate quota",
+      "sources": [
+        {
+          "path": "core/work-segments.ts",
+          "line": 41
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 736
+        },
+        {
+          "path": "core/managed-worker-checks.ts",
+          "line": 158
+        },
+        {
+          "path": "adapters/files/managed-sessions.ts",
+          "line": 155
+        }
+      ],
+      "value": {
+        "defaultWindows": 4,
+        "policyMaxWindows": 16,
+        "privateArchivesMax": 15
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Closing continue or check-feedback handoff; starts at index1.",
+      "stopScope": "WORK_SEGMENT_LIMIT at4; removing4 alone still fails policy/schema at17th window.",
+      "effect": "WORK_SEGMENT_LIMIT at4; removing4 alone still fails policy/schema at17th window.",
+      "recommendation": "No default lifetime-window quota; version/paginate archives and state-based continuation.",
+      "tests": "Five-plus and17-plus windows; same identity/scope/model/usage; old checkpoints; unknown effects never replay.",
+      "priority": "P0"
+    },
+    {
+      "id": "R17",
+      "area": "runtime",
+      "title": "Closing protocol consumes output and requests",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 485
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 787
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 811
+        },
+        {
+          "path": "core/work-segments.ts",
+          "line": 149
+        }
+      ],
+      "value": {
+        "closingOutputMax": 512,
+        "nextTaskCharsMax": 1000,
+        "closingGeneration": 1,
+        "completeThenFinalGeneration": 1
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Each forced close; ordinary Ollama work completion also requires separate final JSON.",
+      "stopScope": "All bookkeeping consumes request quotas/context; malformed/incomplete close stops.",
+      "effect": "All bookkeeping consumes request quotas/context; malformed/incomplete close stops.",
+      "recommendation": "Measure/minimize model bookkeeping at settled boundaries, preserving provider continuation and acceptance separation.",
+      "tests": "All closes/finals charged; malformed/length close; separate-turn tools forbidden in final phase; archive provenance.",
+      "priority": "P0"
+    },
+    {
+      "id": "R18",
+      "area": "runtime",
+      "title": "Two automatic worker-check feedback steps",
+      "classification": "optional aggregate quota",
+      "sources": [
+        {
+          "path": "core/managed-worker-checks.ts",
+          "line": 101
+        },
+        {
+          "path": "core/managed-worker-checks.ts",
+          "line": 153
+        },
+        {
+          "path": "core/worker-step-checks.ts",
+          "line": 49
+        },
+        {
+          "path": "adapters/files/managed-sessions.ts",
+          "line": 88
+        }
+      ],
+      "value": 2,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Sole assigned writable managed worker, frozen check failure.",
+      "stopScope": "WORKER_CHECK_FEEDBACK_LIMIT independently of run/session allowance.",
+      "effect": "WORKER_CHECK_FEEDBACK_LIMIT independently of run/session allowance.",
+      "recommendation": "Version optional user repair cap and progress-driven replanning; update literal2 checkpoint/type/transition constraints too.",
+      "tests": "Third-plus repair without cap; explicit cap; no stacked double allowance; restart retains counters.",
+      "priority": "P0"
+    },
+    {
+      "id": "R19",
+      "area": "runtime",
+      "title": "Step-check count and diagnostic projections",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "core/worker-step-checks.ts",
+          "line": 55
+        },
+        {
+          "path": "core/worker-step-checks.ts",
+          "line": 90
+        },
+        {
+          "path": "core/worker-step-checks.ts",
+          "line": 129
+        },
+        {
+          "path": "adapters/files/managed-sessions.ts",
+          "line": 62
+        }
+      ],
+      "value": {
+        "selectedCheckIdsMax": 8,
+        "perDiagnosticChars": 512,
+        "combinedDiagnosticChars": 2048,
+        "nextTaskFailedNamesChars": 400
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Worker-step check plans/results and focused feedback; check ID can run many assertions.",
+      "stopScope": "More than8 command IDs invalid; truncated detail may omit actionable errors.",
+      "effect": "More than8 command IDs invalid; truncated detail may omit actionable errors.",
+      "recommendation": "Batch complete check sets and expose authorized detailed evidence references; never silently skip checks.",
+      "tests": "Nine check IDs, partial/unavailable outcomes, long compiler errors, fingerprint-bound detail retrieval.",
+      "priority": "P1"
+    },
+    {
+      "id": "R20",
+      "area": "runtime",
+      "title": "Historical receipt handoff projection",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "core/work-segments.ts",
+          "line": 77
+        },
+        {
+          "path": "adapters/files/managed-sessions.ts",
+          "line": 139
+        }
+      ],
+      "value": {
+        "latestReceipts": 6,
+        "outputChars": 512,
+        "targetChars": 1000,
+        "availableToolsMax": 32
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Fresh worker window gets original anchor task plus bounded observed receipts.",
+      "stopScope": "May lose useful read text and require repeated reads; original source in anchor can now be stale.",
+      "effect": "May lose useful read text and require repeated reads; original source in anchor can now be stale.",
+      "recommendation": "Retrievable verified artifact references, explicit source revision, no private continuation exposure.",
+      "tests": "Needed seventh/long receipt; changed current file; historical outputs never treated as current or replay instructions.",
+      "priority": "P1"
+    },
+    {
+      "id": "R21",
+      "area": "runtime",
+      "title": "Changed-file evidence manifest bounds",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "adapters/tools/segment-evidence.ts",
+          "line": 12
+        },
+        {
+          "path": "core/work-segments.ts",
+          "line": 197
+        },
+        {
+          "path": "adapters/files/managed-sessions.ts",
+          "line": 58
+        }
+      ],
+      "value": {
+        "changedPaths": 256,
+        "fileBytes": 1048576,
+        "combinedChangedBytes": 33554432
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Changed/untracked public files, not all unchanged repository files.",
+      "stopScope": "SEGMENT_EVIDENCE_UNAVAILABLE prevents rollover/check if exceeded.",
+      "effect": "SEGMENT_EVIDENCE_UNAVAILABLE prevents rollover/check if exceeded.",
+      "recommendation": "Page manifests or split tasks without omitting affected paths; preserve symlink/privacy checks.",
+      "tests": "257 changed paths, big file,32MiB aggregate, deletions/modes, complete cross-page fingerprint.",
+      "priority": "P1"
+    },
+    {
+      "id": "R22",
+      "area": "runtime",
+      "title": "Git evidence operation bounds",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "adapters/tools/segment-evidence.ts",
+          "line": 86
+        }
+      ],
+      "value": {
+        "timeoutMs": 15000,
+        "stdoutBytes": 2097152
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Git identity/diff/untracked scans.",
+      "stopScope": "Slow Git/large filename output yields unavailable evidence.",
+      "effect": "Slow Git/large filename output yields unavailable evidence.",
+      "recommendation": "Keep operation-health and output safeguards; stream/page manifests for large tasks.",
+      "tests": "Slow disk, huge filename set, abort cleanup and partial evidence rejected.",
+      "priority": "P2"
+    },
+    {
+      "id": "R23",
+      "area": "runtime",
+      "title": "Inactivity watchdogs",
+      "classification": "correctness/safety",
+      "sources": [
+        {
+          "path": "protocol/domain.ts",
+          "line": 61
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 338
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 279
+        },
+        {
+          "path": "adapters/codex/runtime.ts",
+          "line": 375
+        }
+      ],
+      "value": {
+        "productionIdleMs": 600000,
+        "managedSubmitIdleMs": 600000
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Production uses10min; callers can choose another timeout. Research adapter120s is not production default.",
+      "stopScope": "Managed abort or native interruption after silence; preserves work, may require unknown-effect reconciliation.",
+      "effect": "Managed abort or native interruption after silence; preserves work, may require unknown-effect reconciliation.",
+      "recommendation": "Treat operation health separately from optional goal wall quota; expose waiting/loading states and resumable interruption.",
+      "tests": "Healthy long streams; long load/queue; genuine stalled stream; unknown state remains charged.",
+      "priority": "P1"
+    },
+    {
+      "id": "R24",
+      "area": "runtime",
+      "title": "Endpoint capacity and queue",
+      "classification": "concurrency",
+      "sources": [
+        {
+          "path": "protocol/resources.ts",
+          "line": 22
+        },
+        {
+          "path": "protocol/resources.ts",
+          "line": 30
+        },
+        {
+          "path": "adapters/models/http.ts",
+          "line": 3
+        },
+        {
+          "path": "adapters/resources/runtime-resources.ts",
+          "line": 102
+        }
+      ],
+      "value": {
+        "ollama": 1,
+        "deepseek": 2,
+        "sharedEndpointPolicy": "minimum configured capacity"
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "All runtimes sharing provider-kind/normalized endpoint share FIFO gate.",
+      "stopScope": "Limits simultaneous inference, not goal/session total; no queue-size ceiling here.",
+      "effect": "Limits simultaneous inference, not goal/session total; no queue-size ceiling here.",
+      "recommendation": "Keep capacity scheduling, queue rather than fail; use measured hardware/user preference.",
+      "tests": "Many sessions/one model; queued cancellation; aliases sharing gate; no excess parallel grants.",
+      "priority": "P1"
+    },
+    {
+      "id": "R25",
+      "area": "runtime",
+      "title": "Waiting can consume inactivity allowance",
+      "classification": "concurrency",
+      "sources": [
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 422
+        },
+        {
+          "path": "adapters/models/http.ts",
+          "line": 12
+        },
+        {
+          "path": "adapters/models/ollama.ts",
+          "line": 163
+        }
+      ],
+      "value": "Watchdog starts before provider metadata inspection/gate wait",
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Busy endpoint/model load with no stream progress.",
+      "stopScope": "Healthy queued work may be aborted as if generation stalled.",
+      "effect": "Healthy queued work may be aborted as if generation stalled.",
+      "recommendation": "Separate queued/loading/streaming/tool states; start silence clock at actual dispatch.",
+      "tests": "Queue waits longer than idle threshold; cancellation/fairness; metadata load vs stuck stream.",
+      "priority": "P1"
+    },
+    {
+      "id": "R26",
+      "area": "runtime",
+      "title": "HTTP stream response cap",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "adapters/models/http.ts",
+          "line": 111
+        }
+      ],
+      "value": 4194304,
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Entire response including reasoning/tool args; common JSON parser also uses it.",
+      "stopScope": "MODEL_RESPONSE_LIMIT above4MiB; reader cancels.",
+      "effect": "MODEL_RESPONSE_LIMIT above4MiB; reader cancels.",
+      "recommendation": "Keep technical safety bound or stream large artifact content; never silently accept partial response.",
+      "tests": "Oversized response, cancellation, UTF8 errors, partial tool args never dispatched.",
+      "priority": "P2"
+    },
+    {
+      "id": "R27",
+      "area": "runtime",
+      "title": "Native RPC and discovery bounds",
+      "classification": "correctness/safety",
+      "sources": [
+        {
+          "path": "adapters/codex/runtime.ts",
+          "line": 279
+        },
+        {
+          "path": "adapters/codex/runtime.ts",
+          "line": 477
+        }
+      ],
+      "value": {
+        "rpcAckTimeoutMs": 45000,
+        "mcpDiscoveryTimeoutMs": 15000,
+        "mcpStdoutBytes": 1048576
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Native startup and JSONL RPC acknowledgements; MCP list verified twice before app-server.",
+      "stopScope": "Session/RPC may fail before turn ID; inherited MCP hardening remains required.",
+      "effect": "Session/RPC may fail before turn ID; inherited MCP hardening remains required.",
+      "recommendation": "Operation-aware health/status and reconciliation, not a goal budget or blind retry.",
+      "tests": "Lost accepted ack; slow startup; large MCP list; inherited servers all disabled; abort before ID.",
+      "priority": "P1"
+    },
+    {
+      "id": "R28",
+      "area": "runtime",
+      "title": "Native shutdown escalation",
+      "classification": "correctness/safety",
+      "sources": [
+        {
+          "path": "adapters/codex/runtime.ts",
+          "line": 399
+        }
+      ],
+      "value": {
+        "stdinGraceMs": 1000,
+        "SIGTERMToSIGKILLMs": 1000
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Disposing owned app-server.",
+      "stopScope": "Closes/kills owned process and waits for close.",
+      "effect": "Closes/kills owned process and waits for close.",
+      "recommendation": "Retain lifecycle cleanup independently of resource policy.",
+      "tests": "Ignore graceful shutdown; pending RPC rejection; final checks only after process quiescence.",
+      "priority": "P2"
+    },
+    {
+      "id": "R29",
+      "area": "runtime",
+      "title": "Native accounting coverage",
+      "classification": "correctness/safety",
+      "sources": [
+        {
+          "path": "protocol/run-budget.ts",
+          "line": 19
+        },
+        {
+          "path": "adapters/resources/runtime-resources.ts",
+          "line": 124
+        }
+      ],
+      "value": "Hidden native API calls not metered by managed ledger",
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Codex route may provide observed tokens but not managed reservation coverage.",
+      "stopScope": "Cannot claim aggregate managed request/token enforcement for native internals.",
+      "effect": "Cannot claim aggregate managed request/token enforcement for native internals.",
+      "recommendation": "Capability-aware user controls, explicit unknown coverage, no fake zero-cost comparison.",
+      "tests": "Native/mixed usage, unknown vszero, unsupported cap enforcement visible.",
+      "priority": "P1"
+    },
+    {
+      "id": "R30",
+      "area": "runtime",
+      "title": "Unknown effects and usage-integrity gates",
+      "classification": "correctness/safety",
+      "sources": [
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 885
+        },
+        {
+          "path": "core/managed-worker-checks.ts",
+          "line": 47
+        },
+        {
+          "path": "core/run-budget.ts",
+          "line": 365
+        },
+        {
+          "path": "core/run-budget.ts",
+          "line": 385
+        }
+      ],
+      "value": "No replay of pending/unknown generation/action/check; invalid accounting poisons ledger",
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Incomplete saved outcome or provider usage exceeding request reservation.",
+      "stopScope": "Reconciliation-required or RUN_BUDGET_USAGE_EXCEEDED prevents more effects.",
+      "effect": "Reconciliation-required or RUN_BUDGET_USAGE_EXCEEDED prevents more effects.",
+      "recommendation": "Keep idempotency/unknown-state safeguards; separate telemetry/provider-contract failure from optional aggregate quota.",
+      "tests": "Restart/lost responses, no repeated side effect, malformed usage, observation-only recovery.",
+      "priority": "P0"
+    },
+    {
+      "id": "R31",
+      "area": "runtime",
+      "title": "Frozen policy identity complicates migration",
+      "classification": "correctness/safety",
+      "sources": [
+        {
+          "path": "adapters/resources/runtime-resources.ts",
+          "line": 174
+        },
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 919
+        },
+        {
+          "path": "adapters/files/managed-sessions.ts",
+          "line": 559
+        }
+      ],
+      "value": "Resource revision includes runtime limits + estimator revision + segment limits; private session limits immutable",
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Current defaults or strategy changed before resume.",
+      "stopScope": "Historical route/checkpoint can fail closed even with unchanged model/source.",
+      "effect": "Historical route/checkpoint can fail closed even with unchanged model/source.",
+      "recommendation": "Clean pre-release cutover: archive old runtime state without executing it; no legacy resolver or old checkpoint support. Preserve endpoint/model identity and durable recovery for new-format runs.",
+      "tests": "Old checkpoint explicitly unsupported without replay; new-format recovery and explicit quota change retain IDs/receipts; endpoint/model cannot silently move.",
+      "priority": "P0"
+    },
+    {
+      "id": "R32",
+      "area": "runtime",
+      "title": "Public display excerpt and long-run whole-record growth",
+      "classification": "payload/protocol",
+      "sources": [
+        {
+          "path": "core/managed-runtime.ts",
+          "line": 844
+        },
+        {
+          "path": "protocol/run-budget.ts",
+          "line": 12
+        },
+        {
+          "path": "adapters/files/private-json.ts",
+          "line": 34
+        },
+        {
+          "path": "adapters/files/private-json.ts",
+          "line": 47
+        }
+      ],
+      "value": {
+        "publicCompletionChars": 12000,
+        "counterMax": "Number.MAX_SAFE_INTEGER",
+        "privateRecordStorage": "whole JSON read/clone/atomic rewrite; no explicit byte cap"
+      },
+      "configuredBy": "See applicability and source declarations",
+      "condition": "Display projection versus complete private records and returned model text.",
+      "stopScope": "Display excerpt does not truncate acceptance parser; long histories can create memory/I/O/storage pressure after quota removal.",
+      "effect": "Display excerpt does not truncate acceptance parser; long histories can create memory/I/O/storage pressure after quota removal.",
+      "recommendation": "Bound public views; page/append private sessions/effect receipts with complete recovery provenance.",
+      "tests": "Full final envelope vs excerpt; long-run paging/restart; atomic writes; counters never wrap.",
+      "priority": "P1"
+    },
+    {
+      "id": "WF01",
+      "area": "workflow",
+      "title": "maxWorkers required 1..2; TeamPlan.team max 2; UI only 1/2; dispatch serial",
+      "classification": "workflow-count",
+      "sources": [
+        {
+          "path": "protocol/projects.ts",
+          "line": 32
+        },
+        {
+          "path": "protocol/execution.ts",
+          "line": 31
+        },
+        {
+          "path": "src/components/organisms/ProjectProfileForm.tsx",
+          "line": 216
+        },
+        {
+          "path": "core/worker-assignments.ts",
+          "line": 48
+        }
+      ],
+      "value": "maxWorkers required 1..2; TeamPlan.team max 2; UI only 1/2; dispatch serial",
+      "configuredBy": "project profile; default 2 in adapters/files/project-manager.ts:212",
+      "condition": "plan proposes more than two total roles, not more than two active workers",
+      "stopScope": "plan/run",
+      "effect": "Schema rejects larger teams before dispatch. UI calls this concurrent workers although dispatch is serial.",
+      "recommendation": "Split logical task/role count from active writer/inference capacity. Use incremental validated task decisions; retain one writer per shared worktree.",
+      "tests": [
+        "Plan more than two sequential tasks while one writer stays active.",
+        "UI automatic value and profile round-trip; native/managed plan schema compatibility."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF02",
+      "area": "workflow",
+      "title": "steps min 2, max 12",
+      "classification": "payload-protocol",
+      "sources": [
+        {
+          "path": "protocol/execution.ts",
+          "line": 7
+        }
+      ],
+      "value": "steps min 2, max 12",
+      "configuredBy": "hard-coded TeamPlan schema",
+      "condition": "one-step task or more than twelve plan steps",
+      "stopScope": "plan",
+      "effect": "Valid work can require artificial extra steps or fail schema.",
+      "recommendation": "Make plan milestones incremental/versioned. Keep per-message size protections without a goal-wide step limit.",
+      "tests": [
+        "Single coherent step and append of later milestones; no graph cycles or invalid owners."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF03",
+      "area": "workflow",
+      "title": "maxRepairs required 0..2; default 2; UI 0/1/2",
+      "classification": "optional-aggregate-quota",
+      "sources": [
+        {
+          "path": "protocol/projects.ts",
+          "line": 33
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 1240
+        },
+        {
+          "path": "src/components/organisms/ProjectProfileForm.tsx",
+          "line": 224
+        },
+        {
+          "path": "adapters/files/project-manager.ts",
+          "line": 213
+        }
+      ],
+      "value": "maxRepairs required 0..2; default 2; UI 0/1/2",
+      "configuredBy": "project profile",
+      "condition": "final verification/review still fails after configured repair count",
+      "stopScope": "run",
+      "effect": "Stops goal after finite corrections even if aggregate request quota is removed. 0 means no repair, not unlimited.",
+      "recommendation": "Version optional user repair cap; default progress-aware strategy transitions. Keep every acceptance gate and unknown-effect handling.",
+      "tests": [
+        "More than two improving repairs without explicit cap; explicit cap honored; mixed check/review failures share policy."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF04",
+      "area": "workflow",
+      "title": "two plan attempts",
+      "classification": "workflow-count",
+      "sources": [
+        {
+          "path": "core/execution.ts",
+          "line": 924
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 1065
+        }
+      ],
+      "value": "two plan attempts",
+      "configuredBy": "hard-coded loop",
+      "condition": "initial and corrected plan invalid",
+      "stopScope": "run/planning",
+      "effect": "Stops before implementation, including role-reference/schema mistakes from small models.",
+      "recommendation": "Return exact invalid field and permitted identifiers; adapt/replan on verified new information. Any total attempt ceiling should be user policy, not hidden default.",
+      "tests": [
+        "Third valid correction under observation-only policy; repeated identical invalid proposal changes strategy; no authority expansion."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF05",
+      "area": "workflow",
+      "title": "one automatic worker replan per run",
+      "classification": "workflow-count",
+      "sources": [
+        {
+          "path": "core/worker-recovery.ts",
+          "line": 7
+        },
+        {
+          "path": "core/worker-recovery.ts",
+          "line": 10
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 1143
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 1164
+        }
+      ],
+      "value": "one automatic worker replan per run",
+      "configuredBy": "presence of run.workerReplan",
+      "condition": "known scope-verified incomplete/context failure happens again",
+      "stopScope": "worker/run",
+      "effect": "A prior replan marker disables further automatic refinement; resuming does not restore allowance.",
+      "recommendation": "Keep strict known-outcome/scope eligibility. Separate recovery correctness from optional total replan policy and track progress instead of a one-ever flag.",
+      "tests": [
+        "Multiple distinct known failures preserve counters and criteria; unknown action still never replayed."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF06",
+      "area": "workflow",
+      "title": "one nonterminal run per project",
+      "classification": "concurrency",
+      "sources": [
+        {
+          "path": "core/execution.ts",
+          "line": 298
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 405
+        }
+      ],
+      "value": "one nonterminal run per project",
+      "configuredBy": "PROJECT_BUSY admission",
+      "condition": "start/resume while another run is nonterminal",
+      "stopScope": "project admission",
+      "effect": "Rejects even independent worktrees/goals; not just one writer per worktree.",
+      "recommendation": "Queue runs and schedule capacity independently of worktree writer leases.",
+      "tests": [
+        "Concurrent separate goal worktrees; one writer on each; queued resume and cancellation."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF07",
+      "area": "workflow",
+      "title": "project settings/research/verify/apply gated while run active; running goal cannot be edited",
+      "classification": "concurrency-correctness",
+      "sources": [
+        {
+          "path": "adapters/files/project-manager.ts",
+          "line": 473
+        },
+        {
+          "path": "adapters/files/project-manager.ts",
+          "line": 599
+        },
+        {
+          "path": "adapters/files/project-manager.ts",
+          "line": 665
+        },
+        {
+          "path": "core/project-research.ts",
+          "line": 31
+        },
+        {
+          "path": "core/services.ts",
+          "line": 41
+        }
+      ],
+      "value": "project settings/research/verify/apply gated while run active; running goal cannot be edited",
+      "configuredBy": "protected current-state guards",
+      "condition": "user adjusts project profile/research/apply or running goal",
+      "stopScope": "command/project",
+      "effect": "A new optional quota cannot be changed through existing profile save during an active run.",
+      "recommendation": "Retain frozen run authority and CAS. Add explicit audited per-run resource-policy update; allow unrelated configuration revisions for later runs where safe.",
+      "tests": [
+        "Update cap while active without changing write scope/checks; old attempt snapshots preserved; no action replay."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF08",
+      "area": "workflow",
+      "title": "600000 ms inactivity (10 minutes), overwritten on start/resume",
+      "classification": "inactivity-health",
+      "sources": [
+        {
+          "path": "protocol/domain.ts",
+          "line": 61
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 322
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 445
+        },
+        {
+          "path": "src/components/organisms/GoalModal.tsx",
+          "line": 208
+        }
+      ],
+      "value": "600000 ms inactivity (10 minutes), overwritten on start/resume",
+      "configuredBy": "hard-coded DEFAULT_IDLE_TIMEOUT_MS; no command field to disable",
+      "condition": "no runtime progress signal for 10 minutes",
+      "stopScope": "turn/run",
+      "effect": "No total-time limit, but mandatory inactivity stop remains even if financial/request quotas disabled.",
+      "recommendation": "Separate transport liveness from meaningful goal progress and user inactivity policy; preserve workspace and reconcile uncertain outcomes.",
+      "tests": [
+        "Silent but live long tool; provider disconnect; resume keeps explicit user choice; token streaming is not semantic progress."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF09",
+      "area": "workflow",
+      "title": "turnTimeoutMs accepts 10s..15min/default 360000 but execution passes run.timePolicy idle timeout",
+      "classification": "configuration-mismatch",
+      "sources": [
+        {
+          "path": "protocol/projects.ts",
+          "line": 34
+        },
+        {
+          "path": "adapters/files/project-manager.ts",
+          "line": 214
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 913
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 974
+        }
+      ],
+      "value": "turnTimeoutMs accepts 10s..15min/default 360000 but execution passes run.timePolicy idle timeout",
+      "configuredBy": "project profile snapshot versus actual turn dispatch",
+      "condition": "user configures turnTimeoutMs",
+      "stopScope": "configuration/turn",
+      "effect": "Stored numeric setting is not the active production completed-turn timeout; actual default is 10min.",
+      "recommendation": "Remove/rename dead field during versioned migration or wire explicit semantics; do not retain two misleading timeout settings.",
+      "tests": [
+        "Set 20s and 15min then assert effective policy; old snapshot migration; UI shows actual effective value."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF10",
+      "area": "workflow",
+      "title": "check timeout required 1s..15min; discovered check default 180000 ms",
+      "classification": "per-command-timeout",
+      "sources": [
+        {
+          "path": "protocol/projects.ts",
+          "line": 8
+        },
+        {
+          "path": "adapters/files/project-manager.ts",
+          "line": 198
+        },
+        {
+          "path": "adapters/checks/project-commands.ts",
+          "line": 59
+        }
+      ],
+      "value": "check timeout required 1s..15min; discovered check default 180000 ms",
+      "configuredBy": "protected check profile; UI does not expose timeout field",
+      "condition": "a check exceeds its configured wall time",
+      "stopScope": "check and acceptance",
+      "effect": "Owned process group is terminated; timeout exit -1 blocks acceptance.",
+      "recommendation": "Keep configurable command health policy, independent of goal budget; expose current timeout and allow long trusted checks explicitly.",
+      "tests": [
+        "Long active check; timeout/abort kills and reaps group; timeout is unavailable/failed evidence not code success."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF11",
+      "area": "workflow",
+      "title": "saving setup regenerates commands with timeoutMs=300000",
+      "classification": "ui-recreated-timeout",
+      "sources": [
+        {
+          "path": "src/components/organisms/ProjectProfileForm.tsx",
+          "line": 43
+        }
+      ],
+      "value": "saving setup regenerates commands with timeoutMs=300000",
+      "configuredBy": "UI hard-code",
+      "condition": "user saves profile with setup text",
+      "stopScope": "setup",
+      "effect": "Existing per-setup timeout can be overwritten to five minutes.",
+      "recommendation": "Preserve structured command IDs/timeouts on save; expose explicit timeout settings.",
+      "tests": [
+        "Round-trip customized setup timeout without change; intentional new defaults only for new commands."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF12",
+      "area": "workflow",
+      "title": "checkConcurrency optional 1..4/default1; UI offers1/2/4",
+      "classification": "concurrency",
+      "sources": [
+        {
+          "path": "protocol/projects.ts",
+          "line": 30
+        },
+        {
+          "path": "src/components/organisms/ProjectProfileForm.tsx",
+          "line": 196
+        },
+        {
+          "path": "adapters/checks/project-commands.ts",
+          "line": 171
+        }
+      ],
+      "value": "checkConcurrency optional 1..4/default1; UI offers1/2/4",
+      "configuredBy": "project profile and UI",
+      "condition": "many independent check commands",
+      "stopScope": "checks scheduling",
+      "effect": "Controls active check workers, not total checks or goal lifetime.",
+      "recommendation": "Retain capacity scheduling; consider capability-aware automatic concurrency. Do not interpret 0 as unlimited through ||1.",
+      "tests": [
+        "Independent checks parallelize; shared-output checks remain serial; no extra total quota."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF13",
+      "area": "workflow",
+      "title": "legacy NodeChecks sends SIGTERM after30000ms, no SIGKILL/reap deadline",
+      "classification": "legacy-command-health",
+      "sources": [
+        {
+          "path": "adapters/checks/node-checks.ts",
+          "line": 37
+        }
+      ],
+      "value": "legacy NodeChecks sends SIGTERM after30000ms, no SIGKILL/reap deadline",
+      "configuredBy": "hard-coded fallback checker only",
+      "condition": "no profile uses NodeChecks fallback and script stalls/ignores SIGTERM",
+      "stopScope": "legacy check",
+      "effect": "Attempted timeout is not guaranteed termination; stdout/stderr accumulate without bounds.",
+      "recommendation": "Use common owned-process executor, streaming artifacts and kill escalation; do not present30s as guaranteed full deadline.",
+      "tests": [
+        "Trusted child ignoring SIGTERM; bounded cleanup; no unbounded in-memory log; managed profile route unaffected."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF14",
+      "area": "workflow",
+      "title": "24000 UTF-8 bytes for planning instructions plus brief",
+      "classification": "context-envelope",
+      "sources": [
+        {
+          "path": "core/planning-policy.ts",
+          "line": 7
+        },
+        {
+          "path": "core/planning-policy.ts",
+          "line": 135
+        }
+      ],
+      "value": "24000 UTF-8 bytes for planning instructions plus brief",
+      "configuredBy": "hard-coded MAX_PLANNING_INPUT_BYTES",
+      "condition": "full required brief/material metadata exceeds envelope",
+      "stopScope": "planning",
+      "effect": "Fails PLANNING_INPUT_TOO_LARGE before model call independently of actual model capacity.",
+      "recommendation": "Construct versioned context views; page optional references while preserving required criteria; use model-aware admission.",
+      "tests": [
+        "Large material library; long genuine criteria; no silent omission; physical admission versus conservative rejection differentiated."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF15",
+      "area": "workflow",
+      "title": "128KiB worker instructions+serialized envelope; internal maxBytes injection",
+      "classification": "context-envelope",
+      "sources": [
+        {
+          "path": "core/worker-envelope.ts",
+          "line": 11
+        },
+        {
+          "path": "core/worker-envelope.ts",
+          "line": 196
+        }
+      ],
+      "value": "128KiB worker instructions+serialized envelope; internal maxBytes injection",
+      "configuredBy": "helper default; production dispatch passes none",
+      "condition": "assignment/role/material references exceed envelope",
+      "stopScope": "worker dispatch",
+      "effect": "Fails WORKER_ENVELOPE_TOO_LARGE without truncating requirements.",
+      "recommendation": "Retain complete contract via artifact references/chunked views; avoid treating one payload size as total goal/work lifetime.",
+      "tests": [
+        "Over128KiB references with recoverable paged evidence; required constraints not lost."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF16",
+      "area": "workflow",
+      "title": "2KiB total failed-check diagnostic allowance, <=1KiB each",
+      "classification": "diagnostic-view",
+      "sources": [
+        {
+          "path": "core/worker-envelope.ts",
+          "line": 12
+        },
+        {
+          "path": "core/worker-envelope.ts",
+          "line": 130
+        }
+      ],
+      "value": "2KiB total failed-check diagnostic allowance, <=1KiB each",
+      "configuredBy": "hard-coded prompt excerpt policy",
+      "condition": "many/long check failures",
+      "stopScope": "worker input",
+      "effect": "Only a short head/tail reaches worker; excerpt says complete log retained.",
+      "recommendation": "Use retrievable versioned full log artifacts plus bounded focused excerpt.",
+      "tests": [
+        "Many failures retain identifiers and first/last context; worker can request full selected diagnostic."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF17",
+      "area": "workflow",
+      "title": "only final30000 characters of stdout+stderr survive",
+      "classification": "lossy-log-retention",
+      "sources": [
+        {
+          "path": "adapters/checks/project-commands.ts",
+          "line": 66
+        },
+        {
+          "path": "core/agent-context.ts",
+          "line": 3
+        },
+        {
+          "path": "core/worker-envelope.ts",
+          "line": 14
+        }
+      ],
+      "value": "only final30000 characters of stdout+stderr survive",
+      "configuredBy": "hard-coded rolling string",
+      "condition": "command emits >30k characters",
+      "stopScope": "check evidence storage",
+      "effect": "Earlier output is discarded, contradicting complete-log-retained prompt markers.",
+      "recommendation": "Stream complete/redacted log to private artifact; keep bounded tail/read range with explicit truncation and reference.",
+      "tests": [
+        "Failure at beginning of >30k log remains retrievable; restart preserves log identity; no secrets leak."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF18",
+      "area": "workflow",
+      "title": "checkContext output6000chars; planning max12check summaries, names120/error300/output480",
+      "classification": "diagnostic-view",
+      "sources": [
+        {
+          "path": "core/agent-context.ts",
+          "line": 15
+        },
+        {
+          "path": "core/planning-policy.ts",
+          "line": 37
+        },
+        {
+          "path": "core/planning-policy.ts",
+          "line": 39
+        }
+      ],
+      "value": "checkContext output6000chars; planning max12check summaries, names120/error300/output480",
+      "configuredBy": "prompt projection",
+      "condition": "large check suite/output",
+      "stopScope": "planning/review input",
+      "effect": "Excerpts and omitted-results count are bounded; not a run quota.",
+      "recommendation": "Keep focused views but guarantee external full-artifact retrieval; do not mistake omitted diagnostics for omitted requirements.",
+      "tests": [
+        "Omitted checks recorded; actual acceptance still evaluates every registered check; full log references resolve."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF19",
+      "area": "workflow",
+      "title": "goal title200/body16000/criteria8000 chars; max32 material IDs",
+      "classification": "input-protocol",
+      "sources": [
+        {
+          "path": "protocol/schema.ts",
+          "line": 40
+        },
+        {
+          "path": "src/components/organisms/GoalModal.tsx",
+          "line": 118
+        },
+        {
+          "path": "src/components/organisms/GoalModal.tsx",
+          "line": 127
+        }
+      ],
+      "value": "goal title200/body16000/criteria8000 chars; max32 material IDs",
+      "configuredBy": "command schema and UI maxLength",
+      "condition": "large goal description or attachment selection",
+      "stopScope": "goal creation/update",
+      "effect": "Rejects or prevents input independently of resource quota.",
+      "recommendation": "Keep bounded command envelopes; support attachment references/paged selection rather than unlimited text in one frame.",
+      "tests": [
+        "UI and API agree; long requirements attached without silent field truncation; references retain provenance."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF20",
+      "area": "workflow",
+      "title": "role title120/description1000/instructions16000; role ID pattern max64",
+      "classification": "input-protocol",
+      "sources": [
+        {
+          "path": "protocol/schema.ts",
+          "line": 29
+        },
+        {
+          "path": "core/execution-ports.ts",
+          "line": 129
+        }
+      ],
+      "value": "role title120/description1000/instructions16000; role ID pattern max64",
+      "configuredBy": "command schema and new-role validation",
+      "condition": "oversized generated/user role",
+      "stopScope": "role catalog/plan",
+      "effect": "Can reject reusable role; huge accepted role instructions may exceed model context later.",
+      "recommendation": "Retain identity/closed-schema guards; model-aware context packaging and references for large instructions.",
+      "tests": [
+        "Role catalog references preserve exact constraints; invalid IDs never mapped silently to authority."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF21",
+      "area": "workflow",
+      "title": "context16000chars; allowed/protected paths40each; checks8; setup4; components12",
+      "classification": "profile-shape",
+      "sources": [
+        {
+          "path": "protocol/projects.ts",
+          "line": 23
+        }
+      ],
+      "value": "context16000chars; allowed/protected paths40each; checks8; setup4; components12",
+      "configuredBy": "project profile schema",
+      "condition": "large project config",
+      "stopScope": "configuration",
+      "effect": "Rejected profile even when execution resources are ample.",
+      "recommendation": "Use stable references/paged collections and independently scheduled checks; per-command envelope caps remain explicit.",
+      "tests": [
+        "More than8 logical checks or12 components via versioned profile; all registered checks still enforced."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF22",
+      "area": "workflow",
+      "title": "objective/expectedResult2000chars; inputs16paths*512chars; criteria1..8*1000chars",
+      "classification": "assignment-shape",
+      "sources": [
+        {
+          "path": "protocol/worker-tasks.ts",
+          "line": 4
+        }
+      ],
+      "value": "objective/expectedResult2000chars; inputs16paths*512chars; criteria1..8*1000chars",
+      "configuredBy": "WorkerTaskSchema",
+      "condition": "compact delegated task larger than schema",
+      "stopScope": "plan/worker replan",
+      "effect": "Rejects assignment; coordinator input list cannot expand during current refinement.",
+      "recommendation": "Keep coherent small task contracts but support multiple linked tasks/artifact refs; preserve all parent acceptance criteria.",
+      "tests": [
+        "Long task contract split without weaker criteria; inputs remain authorized; no hidden total-work cap."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF23",
+      "area": "workflow",
+      "title": "8MiB/file,48MiB/import,64files/import,directory nesting12",
+      "classification": "materials-import",
+      "sources": [
+        {
+          "path": "adapters/files/context-materials.ts",
+          "line": 10
+        },
+        {
+          "path": "adapters/files/context-materials.ts",
+          "line": 154
+        },
+        {
+          "path": "adapters/files/context-materials.ts",
+          "line": 180
+        }
+      ],
+      "value": "8MiB/file,48MiB/import,64files/import,directory nesting12",
+      "configuredBy": "hard-coded ingestion batch policy",
+      "condition": "large material/import tree",
+      "stopScope": "material import",
+      "effect": "Fails CONTEXT_LIMIT; per-import capacity not model budget.",
+      "recommendation": "Retain safe streaming/chunk limits; offer multiple/chunked imports and indexed references.",
+      "tests": [
+        "Boundary sizes/depth; no partial unsafe writes; large batch pagination preserves files and provenance."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF24",
+      "area": "workflow",
+      "title": "64activeproject materials;1000libraryrecords includinginactive; goal references32",
+      "classification": "materials-library",
+      "sources": [
+        {
+          "path": "adapters/files/context-materials.ts",
+          "line": 263
+        },
+        {
+          "path": "adapters/files/context-materials.ts",
+          "line": 281
+        },
+        {
+          "path": "core/context.ts",
+          "line": 10
+        }
+      ],
+      "value": "64activeproject materials;1000libraryrecords includinginactive; goal references32",
+      "configuredBy": "hard-coded library cap and command schema",
+      "condition": "repeated imports/removals or large active project library",
+      "stopScope": "project material library and run context",
+      "effect": "Remove only sets active=false; GC does not prune material rows. Project metadata all enters every goal and can hit brief/envelope caps.",
+      "recommendation": "Separate indexed library from selected context; page library and retain historical referenced versions; optional user storage policies rather than fixed lifetime record limit.",
+      "tests": [
+        "Import/remove repeatedly past1000 with old-run replay; project context selects relevant references; material IDs remain stable."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF25",
+      "area": "workflow",
+      "title": "PDF/DOCX extraction timeout30s, output buffer1MiB",
+      "classification": "material-extraction",
+      "sources": [
+        {
+          "path": "adapters/files/context-materials.ts",
+          "line": 85
+        },
+        {
+          "path": "adapters/files/context-materials.ts",
+          "line": 255
+        }
+      ],
+      "value": "PDF/DOCX extraction timeout30s, output buffer1MiB",
+      "configuredBy": "hard-coded converter options",
+      "condition": "large/slow document conversion",
+      "stopScope": "material text availability",
+      "effect": "Import can succeed with unavailable extraction note; original binary remains but managed text reader may not consume it.",
+      "recommendation": "Keep converter health bounds; streamed extraction with paged text and explicit incomplete-input status.",
+      "tests": [
+        "Large PDF/document preserves source, partial/unavailable clearly labelled; no false claim material read."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF26",
+      "area": "workflow",
+      "title": "WebSocket incoming max12MiB; uploadbase64 field max12MiB chars; decodedmaterial8MiB stricter",
+      "classification": "transport-payload",
+      "sources": [
+        {
+          "path": "daemon/websocket.ts",
+          "line": 32
+        },
+        {
+          "path": "protocol/schema.ts",
+          "line": 99
+        }
+      ],
+      "value": "WebSocket incoming max12MiB; uploadbase64 field max12MiB chars; decodedmaterial8MiB stricter",
+      "configuredBy": "transport+command schemas",
+      "condition": "large request/upload frame",
+      "stopScope": "connection/request",
+      "effect": "Inbound frame rejected/connection closed; does not cap outbound snapshots.",
+      "recommendation": "Retain frame protections; streaming/chunked upload and bounded command refs.",
+      "tests": [
+        "8MiBdecoded upload fits with JSON overhead; oversize typed error; no confusion with goal quota."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF27",
+      "area": "workflow",
+      "title": "default15s; verify4h; probe135s; models20s; import180s; apply60s",
+      "classification": "client-observation-timeout",
+      "sources": [
+        {
+          "path": "clients/socket-client.ts",
+          "line": 167
+        }
+      ],
+      "value": "default15s; verify4h; probe135s; models20s; import180s; apply60s",
+      "configuredBy": "client hard-coded method map",
+      "condition": "command response slow/lost",
+      "stopScope": "client pending receipt",
+      "effect": "Client timeout removes pending request but does not prove server cancellation; retry path may use new command ID.",
+      "recommendation": "Prefer job handles and receipt reconciliation; surface still-running/unknown response rather than imply action failed.",
+      "tests": [
+        "Lost response then reconnect reconciles original command ID; side effects not duplicated; long import visible."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF28",
+      "area": "workflow",
+      "title": "UIinitial connect8s; socket reconnect delay700ms",
+      "classification": "ui-connection-timeout",
+      "sources": [
+        {
+          "path": "src/data/provider.tsx",
+          "line": 87
+        },
+        {
+          "path": "clients/socket-client.ts",
+          "line": 137
+        }
+      ],
+      "value": "UIinitial connect8s; socket reconnect delay700ms",
+      "configuredBy": "client UI constants",
+      "condition": "service slow to connect/replay",
+      "stopScope": "UI connection",
+      "effect": "May show connection failure while service work continues.",
+      "recommendation": "Retain connectivity diagnostics and retries with backoff; separate UI transport state from durable goal state.",
+      "tests": [
+        "Long snapshot replay; reconnect retains current goal and in-flight command identity."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF29",
+      "area": "workflow",
+      "title": "beforeblob2MiB buffer; modifiedafterfile1MiB",
+      "classification": "verification-file-size",
+      "sources": [
+        {
+          "path": "adapters/files/git-workspaces.ts",
+          "line": 343
+        },
+        {
+          "path": "adapters/files/git-workspaces.ts",
+          "line": 356
+        }
+      ],
+      "value": "beforeblob2MiB buffer; modifiedafterfile1MiB",
+      "configuredBy": "hard-coded diff reader capacity",
+      "condition": "large changed source/artifact",
+      "stopScope": "verification/acceptance",
+      "effect": "Legitimate large file modification can fail verification even with no model quota.",
+      "recommendation": "Use full versioned blobs/stream hashes and paged review excerpts; never silently mark incomplete source as fully reviewed.",
+      "tests": [
+        "Modify/delete large file; complete before/after integrity; diff/review retrieval and scope checks remain correct."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "WF30",
+      "area": "workflow",
+      "title": "32MiB Git stdout maxBuffer; someoperations1MiB",
+      "classification": "git-buffer",
+      "sources": [
+        {
+          "path": "adapters/files/git-workspaces.ts",
+          "line": 318
+        },
+        {
+          "path": "adapters/processes/safe-git.ts",
+          "line": 70
+        }
+      ],
+      "value": "32MiB Git stdout maxBuffer; someoperations1MiB",
+      "configuredBy": "adapter subprocess buffer",
+      "condition": "huge path lists/Git operation output",
+      "stopScope": "workspace/verification/delivery",
+      "effect": "Process can fail due buffer instead of task semantics.",
+      "recommendation": "Stream/NUL-page metadata; separate full immutable artifact from UI output.",
+      "tests": [
+        "Large path lists; binary names; cancellation and no partial accepted result."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF31",
+      "area": "workflow",
+      "title": "environment recipe fingerprint max32MiB/10000files",
+      "classification": "environment-input-footprint",
+      "sources": [
+        {
+          "path": "adapters/environments/project-environments.ts",
+          "line": 307
+        }
+      ],
+      "value": "environment recipe fingerprint max32MiB/10000files",
+      "configuredBy": "hard-coded selected-input bound",
+      "condition": "recipe points to very broad source/dependency tree",
+      "stopScope": "environment preparation",
+      "effect": "Stops before setup; prevents expensive broad hashing but blocks overly broad valid recipe.",
+      "recommendation": "Select exact toolchain inputs, content-addressed incremental hashes; retain symlink/privacy guards.",
+      "tests": [
+        "Large genuine config with incremental hash; node_modules not accidentally selected; environment revisions invalidate correctly."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF32",
+      "area": "workflow",
+      "title": "recipe inputs40, variables40*4000chars, setup8, ready1..8; eachcommand1s..15min",
+      "classification": "environment-recipe-shape",
+      "sources": [
+        {
+          "path": "protocol/environment.ts",
+          "line": 10
+        }
+      ],
+      "value": "recipe inputs40, variables40*4000chars, setup8, ready1..8; eachcommand1s..15min",
+      "configuredBy": "environment schema",
+      "condition": "large generated recipe",
+      "stopScope": "environment discovery",
+      "effect": "Cannot represent large recipe in single response; reserved env-root replacement is forbidden separately.",
+      "recommendation": "Use reusable versioned recipe steps/dependencies; retain reserved root and command authority protections.",
+      "tests": [
+        "Long recipe split across saved phases; environment variables cannot override service roots."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF33",
+      "area": "workflow",
+      "title": "Docker rejected when privateDataIsolation=true",
+      "classification": "capability-not-quota",
+      "sources": [
+        {
+          "path": "adapters/environments/executors.ts",
+          "line": 55
+        },
+        {
+          "path": "src/components/organisms/ProjectProfileForm.tsx",
+          "line": 173
+        }
+      ],
+      "value": "Docker rejected when privateDataIsolation=true",
+      "configuredBy": "environment capability",
+      "condition": "managed API model needs prepared private isolation but Docker selected",
+      "stopScope": "preparation",
+      "effect": "UI permits choosing Docker although managed environment cannot supply required protection.",
+      "recommendation": "Capability-aware UI/preflight and supported isolated Docker executor; do not bypass isolation to remove a limit.",
+      "tests": [
+        "Ollama/DeepSeek Docker unavailable before inference; native supported mode unchanged; no host fallback."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF34",
+      "area": "workflow",
+      "title": "preview readiness60s; HTTPprobe1s; poll300ms; shutdowngrace1200ms",
+      "classification": "preview-health",
+      "sources": [
+        {
+          "path": "adapters/processes/project-operations.ts",
+          "line": 171
+        },
+        {
+          "path": "adapters/processes/project-operations.ts",
+          "line": 217
+        }
+      ],
+      "value": "preview readiness60s; HTTPprobe1s; poll300ms; shutdowngrace1200ms",
+      "configuredBy": "hard-coded preview adapter policy",
+      "condition": "slow application boot/stop",
+      "stopScope": "preview, not coding goal",
+      "effect": "Preview fails before app eventually starts; shutdown forceskill aftergrace.",
+      "recommendation": "Make readiness explicitly component-configurable; preserve owned cleanup and truthful unavailable state.",
+      "tests": [
+        "Slow valid boot; stuck readiness; siblings shut down; user goal acceptance not falsely changed."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF35",
+      "area": "workflow",
+      "title": "deploy command15min; postdeployHTTPverify15s",
+      "classification": "delivery-health",
+      "sources": [
+        {
+          "path": "adapters/processes/project-operations.ts",
+          "line": 351
+        },
+        {
+          "path": "adapters/processes/project-operations.ts",
+          "line": 365
+        }
+      ],
+      "value": "deploy command15min; postdeployHTTPverify15s",
+      "configuredBy": "hard-coded delivery adapter",
+      "condition": "slow deployment or verification",
+      "stopScope": "delivery action",
+      "effect": "Stops delivery or leaves external outcome needing reconciliation; cannot blindly retry.",
+      "recommendation": "Explicit deployment policy/job reconciliation independent of coding quota.",
+      "tests": [
+        "Remote effect completed despite lost response; no duplicate deployment; acceptedcode preserved."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF36",
+      "area": "workflow",
+      "title": "no explicit run/history cap; full in-memory snapshot and history replay; GC onlyrepersists/state-temp cleanup",
+      "classification": "scalability-unbounded-state",
+      "sources": [
+        {
+          "path": "adapters/files/project-store.ts",
+          "line": 213
+        },
+        {
+          "path": "adapters/files/project-store.ts",
+          "line": 248
+        },
+        {
+          "path": "adapters/files/event-log.ts",
+          "line": 49
+        }
+      ],
+      "value": "no explicit run/history cap; full in-memory snapshot and history replay; GC onlyrepersists/state-temp cleanup",
+      "configuredBy": "current file-store design",
+      "condition": "long-lived many-goal or no-default-quota operation",
+      "stopScope": "memory/transport/UI responsiveness",
+      "effect": "Physical memory/latency becomes effective ceiling; outgoing snapshots are not protected by inbound frame limit.",
+      "recommendation": "Paged read models, append-only event/artifact storage and incremental subscriptions; retain receipt/replay correctness.",
+      "tests": [
+        "Large history/reconnect boundedmemory; gaps/duplicates absent; old accepted evidence still readable."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "WF37",
+      "area": "workflow",
+      "title": "allowed/protected scope, nonoverlap, registeredchecks, freshreview, frozenCAS and unknown-outcome guards",
+      "classification": "scope-and-acceptance-correctness",
+      "sources": [
+        {
+          "path": "core/execution-ports.ts",
+          "line": 60
+        },
+        {
+          "path": "core/execution-ports.ts",
+          "line": 99
+        },
+        {
+          "path": "core/execution.ts",
+          "line": 1280
+        }
+      ],
+      "value": "allowed/protected scope, nonoverlap, registeredchecks, freshreview, frozenCAS and unknown-outcome guards",
+      "configuredBy": "core authority and evidence rules",
+      "condition": "proposal/changes exceed ownership or requiredcheck/review missing",
+      "stopScope": "action/acceptance",
+      "effect": "Stops unauthorized or unverified work irrespective of usage policy.",
+      "recommendation": "Retain. Observation-only quotas must not weaken authorization, protectedchecks, actual process observation or unknown-effect reconciliation.",
+      "tests": [
+        "Unlimited policy still rejects out-ofscope/forged/stale evidence and unknown-action replay."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "T01",
+      "area": "tool-broker",
+      "title": "Whole-file read ceiling precedes line selection",
+      "classification": "tool-input-size",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 146
+        }
+      ],
+      "value": 256000,
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "Any read_file/edit_file of a larger existing text file",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "Even a one-line read or small replacement is rejected before requested range selection.",
+      "recommendation": "Use bounded streaming/range reads and hash/version-fenced edits; do not remove the check while still loading entire files into memory.",
+      "tests": [
+        "Read and edit a small range of a >256000-byte file with bounded memory and intact source hash precondition.",
+        "Retain binary/symlink/private-path rejection."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "T02",
+      "area": "tool-broker",
+      "title": "Read view has no within-line continuation",
+      "classification": "tool-projection",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 228
+        }
+      ],
+      "value": {
+        "defaultLines": 120,
+        "maxLines": 200,
+        "textChars": 16000
+      },
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "Requested lines exceed the text-view cap, especially a long line",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "View can stop within a line; lineCount alone cannot retrieve the remainder.",
+      "recommendation": "Return explicit truncation metadata and a versioned continuation cursor; retain bounded per-response size.",
+      "tests": [
+        "Retrieve a long line across pages without skipped/duplicated text.",
+        "Reject cursors after source revision changes."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "T03",
+      "area": "tool-broker",
+      "title": "Directory enumeration and search corpus ceilings",
+      "classification": "tool-discovery",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 191
+        }
+      ],
+      "value": {
+        "visitedEntries": 5000,
+        "listedFiles": 300
+      },
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "Large directory traversal or search_text over a directory",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "Files after the cap cannot be reached through this listing without knowing narrower paths; truncated flag exists but there is no cursor.",
+      "recommendation": "Introduce indexed/paged discovery and search; a page bound should not be a lifetime corpus exclusion.",
+      "tests": [
+        "Discover a matching file after entry300 and5000 using explicit pages.",
+        "Maintain private/generated/symlink filtering."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "T04",
+      "area": "tool-broker",
+      "title": "Literal search result and snippet caps",
+      "classification": "tool-projection",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 251
+        }
+      ],
+      "value": {
+        "matches": 50,
+        "charsPerLine": 500
+      },
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "Many matches or a very long matching line",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "Large refactors may omit later matches; no match continuation cursor.",
+      "recommendation": "Versioned result pagination with stable ordering and fetchable full context for a selected hit.",
+      "tests": [
+        "Fetch >50 results and the remainder of a long matching line."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "T05",
+      "area": "tool-broker",
+      "title": "Exact replacement payload cap",
+      "classification": "tool-edit-format",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 34
+        }
+      ],
+      "value": {
+        "oldTextChars": 64000,
+        "newTextChars": 64000,
+        "matchingRule": "one exact unique oldText; existing file cannot use empty oldText"
+      },
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "Large replacement/create or an edit requiring a different format",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "Patch fails validation or cannot be expressed; repeated attempts consume work without fixing the format mismatch.",
+      "recommendation": "Provide model-specific hash-fenced edit formats and bounded batch/chunk application through the same scoped broker.",
+      "tests": [
+        "Duplicate base hashes/ambiguous replacements/partial batch outcomes must not corrupt or replay.",
+        "Compare patch, exact replace and bounded whole-file format on same tasks."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "T06",
+      "area": "tool-broker",
+      "title": "Configured-command output is a truncated model view",
+      "classification": "tool-projection",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 329
+        }
+      ],
+      "value": 16000,
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "A registered check emits longer output",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "Tool reply retains only a tail; earlier evidence must be accessible separately.",
+      "recommendation": "Stream full logs to a private artifact and return a bounded view plus reference; fix underlying command collector tail loss tracked in WF17.",
+      "tests": [
+        "Early failure in a >30K log remains retrievable through a private artifact."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "T07",
+      "area": "tool-broker",
+      "title": "Diff body truncation lacks an explicit completeness receipt",
+      "classification": "tool-projection",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 406
+        }
+      ],
+      "value": {
+        "chars": 24000
+      },
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "Large tracked or untracked diff",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "The reviewer can receive a partial diff string without a full-content receipt.",
+      "recommendation": "Provide per-file paginated/full verified diff artifacts and explicit complete/truncated fields. Approval must not assume a clipped view is complete.",
+      "tests": [
+        "Place a defect after character24000 and require more context or block complete-evidence approval."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "T08",
+      "area": "tool-broker",
+      "title": "Diff path limits are separate from diff text size",
+      "classification": "tool-discovery",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 384
+        }
+      ],
+      "value": {
+        "trackedPaths": 300,
+        "untrackedPaths": 100
+      },
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "Large change sets",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "Some changed files are absent from the view even before text clipping.",
+      "recommendation": "Page manifests independently from file content and tie them to the same workspace revision.",
+      "tests": [
+        "Review a manifest beyond300 tracked/100 untracked paths without implying completeness."
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "T09",
+      "area": "tool-broker",
+      "title": "No explicit delete or rename model tool",
+      "classification": "capability-not-quota",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 21
+        }
+      ],
+      "value": {
+        "tools": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "edit_file",
+          "run_command",
+          "read_diff"
+        ]
+      },
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "A goal requires removing or moving source files",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "Empty replacement is not file deletion; arbitrary mv/rm commands are not authorized.",
+      "recommendation": "Add typed version/hash-fenced move/delete/change operations through the existing permission and effect journal. Do not add unrestricted shell as a shortcut.",
+      "tests": [
+        "Source and destination scope, protected targets, symlinks, cancellation and unknown partial effects."
+      ],
+      "priority": "P0"
+    },
+    {
+      "id": "T10",
+      "area": "tool-broker",
+      "title": "Read-only and configured command authority",
+      "classification": "correctness/safety",
+      "sources": [
+        {
+          "path": "adapters/tools/repository-tools.ts",
+          "line": 98
+        }
+      ],
+      "value": {
+        "reviewerWrites": "denied",
+        "commands": "exact registered project checks",
+        "privatePaths": "denied",
+        "symlinks": "denied"
+      },
+      "configuredBy": "RepositoryTools implementation/schema",
+      "condition": "Any model tool dispatch",
+      "stopScope": "tool result / edit capability / evidence view",
+      "effect": "Correctly prevents unauthorized effects; no-quota is not a permission expansion.",
+      "recommendation": "Retain these guards and explicit capability reporting while changing resource policies.",
+      "tests": [
+        "No quota mode cannot write outside assignment, alter protected checks, or execute an unregistered command."
+      ],
+      "priority": "P1"
+    }
+  ]
+}

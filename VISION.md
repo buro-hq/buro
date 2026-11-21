@@ -20,7 +20,7 @@ Ollama and DeepSeek use a Buro-managed agent runtime: Buro owns the tool loop, s
 2. Choose execution resources and data policy once. Installed local models are discovered; remote providers use private machine configuration.
 3. Describe the desired outcome. Project context and verification defaults are inherited; detailed overrides are available in place.
 4. The coordinator investigates and starts useful work. It chooses the team while learning about the task rather than requiring the user to approve a fixed roster.
-5. Buro runs independent checks, obtains a fresh review and sends concrete findings back for repair within the allowed budget.
+5. Buro runs independent checks, obtains a fresh review and returns concrete findings to the writing executor. Work continues toward the criteria without a default aggregate hard quota; explicit user caps, cancellation or a genuine blocker remain visible.
 6. The user receives the change, evidence, limitations and next available action. Acceptance, application, PR creation and deployment have separate states.
 
 Routine work proceeds under saved policy. Questions are reserved for missing requirements, unavailable resources, material product choices or actions outside that policy. One unanswered question should block only the work that depends on its answer.
@@ -41,19 +41,19 @@ The coordinator proposes what to do next. Buro validates decisions and owns sche
 
 The user can pin a role, change future defaults, clarify an active goal, pause work, answer a saved question or choose another available execution profile. Changes create revisions and invalidate affected evidence; they preserve completed work and previous attempts.
 
-Provider choice is subordinate to project policy. A local-only goal stays local. A hybrid goal can use DeepSeek or Codex for permitted context and tasks within its budget. A provider failure does not silently authorize sending local material to a remote service.
+Provider choice is subordinate to project policy. A local-only goal stays local. A hybrid goal can use DeepSeek or Codex for permitted context and tasks, honoring any explicitly configured user quota. A provider failure does not silently authorize sending local material to a remote service.
 
 Specialists default to automatic resource selection. A user can prefer a model or require one explicitly without changing the role's instructions. The coordinator proposes an allowed model for the assignment; Buro checks the policy and records the choice and reason. Several workers in one goal can use different models. A model change creates another assignment/session and preserves the earlier evidence.
 
 ## Quality with smaller models
 
-Assignments have a narrow objective, known inputs, file boundaries, expected artifacts and a verification contract. Workers receive the context needed for that assignment instead of the entire team's conversation. Context budgets use model tokens and include room for responses and tools.
+Assignments have a narrow objective, known inputs, file boundaries, expected artifacts and a verification contract. Workers receive the context needed for that assignment instead of the entire team's conversation. Context views respect the selected model capacity and include room for responses and tools; context capacity is separate from a goal-wide quota.
 
 Implementation and review use separate sessions. Buro runs trusted acceptance checks against the actual integrated change. A successful model response or another agent's agreement cannot substitute for command results, inspected diffs and satisfied criteria.
 
 The coordinator adapts the amount of delegation to task complexity and available resources. Several logical agents may share one local model and run sequentially. More simultaneous inference requests are useful only when resource capacity and task independence justify them.
 
-Repeated identical failures trigger a revised assignment, a permitted resource change or a precise request for help. They do not produce an unlimited conversation. A stronger remote model is an available option when configured and allowed, not a mandatory part of local operation.
+Repeated identical failures trigger a revised assignment, a permitted resource change or a precise request for help. Buro changes strategy instead of blindly repeating the same failed action; healthy work is not terminated by a hidden lifetime counter. A stronger remote model is an available option when configured and allowed, not a mandatory part of local operation.
 
 ## Interface
 
@@ -70,3 +70,11 @@ The project team presents reusable role definitions and their sessions compactly
 [Private-project evaluation details removed.]
 
 The first provider slice does not wait for a general task graph, automatic crash replay or SQLite migration. Those extensions follow through the same contracts. These criteria define the acceptance milestone; implemented provider routes and deterministic fixtures do not establish live coding quality.
+
+## Selected target: optional quotas and verified quality loops
+
+The [selected execution design](docs/EXECUTION-DESIGN-DECISION-2026-11-21.md) supersedes earlier mandatory default budget/repair/window assumptions as a target. A goal has no default total request, token, elapsed-time or session ceiling. The user may set one explicitly; usage accounting remains available. Physical model/memory capacity, scoped authority, evidence freshness and unknown-effect recovery remain distinct requirements.
+
+Prefer a scoped writer, service-owned checks, a fresh critic and repair by the same writer, adding coordination/test discovery/specialists as useful. Store complete recoverable history outside the active context view. Replace policy/storage/runtime contracts together so a hidden lower-level counter cannot recreate a supposedly disabled quota. Since the product is unreleased, no backward compatibility with prototype runtime state is required; archive it before an explicit clean cutover. This is a target decision; the current implementation still has the audited finite defaults until cutover.
+
+[Private-project evaluation details removed.]

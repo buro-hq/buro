@@ -1,5 +1,7 @@
 # First provider integrations
 
+> Resource-policy target update (2026-11-21): new execution will record usage without aggregate hard quotas unless the user configures them. The unreleased product will use a clean contract cutover without old runtime/checkpoint compatibility; current finite defaults remain unchanged until implementation. See the [selected design and hidden-constraint audit](EXECUTION-DESIGN-DECISION-2026-11-21.md). Context/provider capacity and effect correctness are separate from optional quotas.
+
 Status: implementation contract and acceptance criteria. The daemon supports native Codex and configured managed Ollama/DeepSeek routes, including mixed profiles. Deterministic contracts cover real temporary worktrees, tools, independent checks and review through both HTTP adapters; live acceptance is tracked separately. [Configuration](RESOURCES.md), [implementation progress](IMPLEMENTATION.md), [product vision](../VISION.md), [architecture](../ARCHITECTURE.md) and [roadmap](../ROADMAP.md) share this scope.
 
 ## Supported routes in the first milestone

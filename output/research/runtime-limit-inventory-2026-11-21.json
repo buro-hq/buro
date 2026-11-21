@@ -1,0 +1,868 @@
+[
+  {
+    "id": "R01",
+    "title": "Run generation quota",
+    "category": "optional aggregate quota",
+    "sources": [
+      {
+        "path": "protocol/run-budget.ts",
+        "line": 42
+      },
+      {
+        "path": "core/run-budget.ts",
+        "line": 289
+      }
+    ],
+    "defaultValue": 64,
+    "appliesWhen": "Managed owner run without explicit managedBudget; factory injects ProjectRunBudgets.",
+    "stops": "Next generation refused with RUN_BUDGET_EXHAUSTED.",
+    "recommendedChange": "Versioned optional aggregate cap; preserve explicit user limits and historical charges.",
+    "requiredTests": "Beyond64 without cap; explicit64 blocks before dispatch; restart/idempotency preserve charges.",
+    "priority": "P0"
+  },
+  {
+    "id": "R02",
+    "title": "Run output reservation quota",
+    "category": "optional aggregate quota",
+    "sources": [
+      {
+        "path": "protocol/run-budget.ts",
+        "line": 45
+      },
+      {
+        "path": "core/run-budget.ts",
+        "line": 294
+      }
+    ],
+    "defaultValue": 131072,
+    "appliesWhen": "Reserves request output allowance, not actual completion tokens.",
+    "stops": "Output grant shrinks; less than minimum headroom stops generation.",
+    "recommendedChange": "Make aggregate cap optional; retain reserved/observed/unknown usage as distinct facts.",
+    "requiredTests": "Unlimited total with finite request output; exact finite-cap shrink; unknown outcome never refunded.",
+    "priority": "P0"
+  },
+  {
+    "id": "R03",
+    "title": "Run tool and check quota",
+    "category": "optional aggregate quota",
+    "sources": [
+      {
+        "path": "protocol/run-budget.ts",
+        "line": 46
+      },
+      {
+        "path": "core/run-budget.ts",
+        "line": 338
+      }
+    ],
+    "defaultValue": 256,
+    "appliesWhen": "Model batches and selected service checks share the same owner ledger.",
+    "stops": "Next tool/check rejected before effects.",
+    "recommendedChange": "Optional user cap; preserve atomic effect admission.",
+    "requiredTests": "More than256 known effects without cap; explicit cap; service-check charges; no duplicated effects.",
+    "priority": "P0"
+  },
+  {
+    "id": "R04",
+    "title": "Review reserve reduces work allowance",
+    "category": "optional aggregate quota",
+    "sources": [
+      {
+        "path": "protocol/run-budget.ts",
+        "line": 47
+      },
+      {
+        "path": "core/run-budget.ts",
+        "line": 289
+      },
+      {
+        "path": "core/run-budget.ts",
+        "line": 338
+      }
+    ],
+    "defaultValue": {
+      "reviewRequests": 8,
+      "reviewOutputTokens": 16384,
+      "reviewTools": 32,
+      "effectiveWorkRequests": 56,
+      "effectiveWorkOutputTokens": 114688,
+      "effectiveWorkTools": 224
+    },
+    "appliesWhen": "Default64/131072/256 policy; coordinator/planning/integration share work phase.",
+    "stops": "Work stops at56 requests despite global64; review reserve is a protected minimum, not a review maximum.",
+    "recommendedChange": "Reserve only within an explicitly finite user envelope.",
+    "requiredTests": "Work56 blocked, review8 available; no artificial subtraction in observation-only mode.",
+    "priority": "P0"
+  },
+  {
+    "id": "R05",
+    "title": "Finite required cap schema and constructor",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "protocol/run-budget.ts",
+        "line": 20
+      },
+      {
+        "path": "protocol/resources.ts",
+        "line": 75
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 77
+      },
+      {
+        "path": "adapters/files/managed-sessions.ts",
+        "line": 162
+      }
+    ],
+    "defaultValue": "Required positive integer caps; missing settings acquire defaults; null/zero/Infinity unsupported",
+    "appliesWhen": "Runtime construction, policy parsing and checkpoint load.",
+    "stops": "Deleting settings does not create unlimited mode.",
+    "recommendedChange": "Explicit version2 optional caps, separate mandatory model/request capacity; avoid huge sentinels.",
+    "requiredTests": "Omitted/null wire behavior; oldv1 roundtrip; new no-cap state; migration retains receipts.",
+    "priority": "P0",
+    "schemaRange": {
+      "runRequests": [
+        1,
+        1024
+      ],
+      "runOutput": [
+        1,
+        16777216
+      ],
+      "runTools": [
+        1,
+        16384
+      ]
+    }
+  },
+  {
+    "id": "R06",
+    "title": "Budget operation-count storage ceiling",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "core/run-budget.ts",
+        "line": 130
+      }
+    ],
+    "defaultValue": 17408,
+    "appliesWhen": "Every ledger validation.",
+    "stops": "More than17408 operation keys invalidates ledger even after numeric quotas are removed.",
+    "recommendedChange": "Paged/append-only receipts with bounded summaries and versioned validation.",
+    "requiredTests": "More than17408 receipts; duplicate/conflicting operations; recovery and summaries.",
+    "priority": "P0"
+  },
+  {
+    "id": "R07",
+    "title": "Per-turn generation quota",
+    "category": "optional aggregate quota",
+    "sources": [
+      {
+        "path": "protocol/resources.ts",
+        "line": 79
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 423
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 849
+      }
+    ],
+    "defaultValue": 24,
+    "appliesWhen": "Includes work, closing and final JSON within each turn.",
+    "stops": "Loop exhausts MODEL_BUDGET_EXHAUSTED independently of run cap.",
+    "recommendedChange": "Optional turn cap or resumable yielding; no hidden replacement for absent run cap.",
+    "requiredTests": "Beyond24 requests, close/final charges, pending-chain-preserving yield.",
+    "priority": "P0",
+    "schemaRange": [
+      1,
+      64
+    ]
+  },
+  {
+    "id": "R08",
+    "title": "Per-turn model-tool and check quota",
+    "category": "optional aggregate quota",
+    "sources": [
+      {
+        "path": "protocol/resources.ts",
+        "line": 80
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 604
+      },
+      {
+        "path": "core/managed-worker-checks.ts",
+        "line": 55
+      }
+    ],
+    "defaultValue": 64,
+    "appliesWhen": "Requested tool calls plus worker service checks.",
+    "stops": "TOOL_BUDGET_EXHAUSTED can prevent the check itself.",
+    "recommendedChange": "Optional user quota; retain batch/payload and effect safety.",
+    "requiredTests": "Valid large batches; checks counted; no reset on rollover; explicit cap stops before effects.",
+    "priority": "P0",
+    "schemaRange": [
+      1,
+      128
+    ]
+  },
+  {
+    "id": "R09",
+    "title": "Lifetime session request quota",
+    "category": "optional aggregate quota",
+    "sources": [
+      {
+        "path": "protocol/resources.ts",
+        "line": 81
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 425
+      }
+    ],
+    "defaultValue": 256,
+    "appliesWhen": "Cumulative across explicit turns and windows.",
+    "stops": "MODEL_BUDGET_EXHAUSTED despite larger/unlimited owning-run allowance.",
+    "recommendedChange": "Optional user cap; never reset session history/accounting to fake unlimited.",
+    "requiredTests": "Beyond256 across turns/restarts without cap; explicit cap remains enforced.",
+    "priority": "P0",
+    "schemaRange": [
+      1,
+      1024
+    ]
+  },
+  {
+    "id": "R10",
+    "title": "Configured model context",
+    "category": "per-request hardware/provider",
+    "sources": [
+      {
+        "path": "protocol/resources.ts",
+        "line": 77
+      },
+      {
+        "path": "adapters/models/ollama.ts",
+        "line": 183
+      }
+    ],
+    "defaultValue": 32768,
+    "appliesWhen": "Managed default; actual model capability may differ.",
+    "stops": "Configured above inspected Ollama capability rejects; local schema also forbids capacities outside its range.",
+    "recommendedChange": "Use inspected model/hardware capacity and explicit preference, with safe context assembly.",
+    "requiredTests": "Below/above32K models, larger model capabilities, runtime identity and no silent truncation.",
+    "priority": "P1",
+    "schemaRange": [
+      1024,
+      262144
+    ]
+  },
+  {
+    "id": "R11",
+    "title": "Per-request output setting and incomplete finish",
+    "category": "per-request hardware/provider",
+    "sources": [
+      {
+        "path": "protocol/resources.ts",
+        "line": 78
+      },
+      {
+        "path": "adapters/models/ollama.ts",
+        "line": 215
+      },
+      {
+        "path": "adapters/models/deepseek.ts",
+        "line": 93
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 562
+      }
+    ],
+    "defaultValue": 4096,
+    "appliesWhen": "Ollama num_predict or DeepSeek max_tokens; must be below context.",
+    "stops": "Provider length/failed finish becomes MODEL_INCOMPLETE; partial result is not completion.",
+    "recommendedChange": "Model/task-aware request headroom distinct from goal total; support proven known-outcome continuation.",
+    "requiredTests": "Large patches; partial tool JSON not executed; final length outcome; finite request plus unlimited total.",
+    "priority": "P1",
+    "schemaRange": [
+      128,
+      32768
+    ]
+  },
+  {
+    "id": "R12",
+    "title": "Byte-based context admission and minimum headroom",
+    "category": "per-request hardware/provider",
+    "sources": [
+      {
+        "path": "core/request-policy.ts",
+        "line": 23
+      },
+      {
+        "path": "core/request-policy.ts",
+        "line": 31
+      },
+      {
+        "path": "core/request-policy.ts",
+        "line": 66
+      }
+    ],
+    "defaultValue": "UTF8 bytes of serialized messages/tools/schema +16/message; require min(128, configuredOutput) headroom",
+    "appliesWhen": "Before each HTTP generation.",
+    "stops": "MODEL_CONTEXT_EXHAUSTED can be a conservative rejection before provider sees the prompt, not physical overflow.",
+    "recommendedChange": "Trusted tokenizer/provider-aware estimator and precise context views; never discard required constraints.",
+    "requiredTests": "ASCII/Cyrillic/code/templates; compare observed prompt tokens; no underestimated dispatch; small JSON contracts.",
+    "priority": "P0"
+  },
+  {
+    "id": "R13",
+    "title": "Estimator locked even for injected policy",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "core/request-policy.ts",
+        "line": 65
+      },
+      {
+        "path": "core/request-policy.ts",
+        "line": 75
+      }
+    ],
+    "defaultValue": "decision.estimatedInput must equal fixed estimateManagedRequest",
+    "appliesWhen": "Custom request-policy injection.",
+    "stops": "Accurate smaller tokenizer estimate is currently INVALID_REQUEST_POLICY.",
+    "recommendedChange": "Separate trusted estimator port/revision from output policy; do not trust arbitrary smaller values.",
+    "requiredTests": "Estimator provenance, revision pinning, malformed result and conservative fallback.",
+    "priority": "P0"
+  },
+  {
+    "id": "R14",
+    "title": "Worker-only segmentation and early closing",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 368
+      },
+      {
+        "path": "core/work-segments.ts",
+        "line": 36
+      }
+    ],
+    "defaultValue": {
+      "toolRounds": 3,
+      "pressurePercent": 60
+    },
+    "appliesWhen": "Only assigned writable implementation sessions with injected evidence/policy; coordinator/reviewer do not segment.",
+    "stops": "Triggers handshake after3 completed tool rounds or60% estimated pressure, often before any edit. Other phases still hit context.",
+    "recommendedChange": "Model/context/progress-aware phase views, without universal round-triggered close.",
+    "requiredTests": "Pure reads vs novel evidence; coordinator/reviewer history; closure costs; scope and continuation retained.",
+    "priority": "P0",
+    "schemaRange": {
+      "toolRounds": [
+        1,
+        16
+      ],
+      "pressurePercent": [
+        20,
+        80
+      ]
+    }
+  },
+  {
+    "id": "R15",
+    "title": "Raw-history pressure differs from actual request view",
+    "category": "per-request hardware/provider",
+    "sources": [
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 444
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 466
+      }
+    ],
+    "defaultValue": "Rotation estimates raw session.messages; actual admission uses provider.contextMessages",
+    "appliesWhen": "Ollama non-thinking projection may omit known assistant commentary.",
+    "stops": "Can rotate earlier than the actual packet requires.",
+    "recommendedChange": "One versioned request view for admission and scheduling; retain full private log.",
+    "requiredTests": "Raw/private history preserved; projected tool chains complete; consistent estimates.",
+    "priority": "P1"
+  },
+  {
+    "id": "R16",
+    "title": "Four-window lifetime and archive schema ceiling",
+    "category": "optional aggregate quota",
+    "sources": [
+      {
+        "path": "core/work-segments.ts",
+        "line": 41
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 736
+      },
+      {
+        "path": "core/managed-worker-checks.ts",
+        "line": 158
+      },
+      {
+        "path": "adapters/files/managed-sessions.ts",
+        "line": 155
+      }
+    ],
+    "defaultValue": {
+      "defaultWindows": 4,
+      "policyMaxWindows": 16,
+      "privateArchivesMax": 15
+    },
+    "appliesWhen": "Closing continue or check-feedback handoff; starts at index1.",
+    "stops": "WORK_SEGMENT_LIMIT at4; removing4 alone still fails policy/schema at17th window.",
+    "recommendedChange": "No default lifetime-window quota; version/paginate archives and state-based continuation.",
+    "requiredTests": "Five-plus and17-plus windows; same identity/scope/model/usage; old checkpoints; unknown effects never replay.",
+    "priority": "P0"
+  },
+  {
+    "id": "R17",
+    "title": "Closing protocol consumes output and requests",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 485
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 787
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 811
+      },
+      {
+        "path": "core/work-segments.ts",
+        "line": 149
+      }
+    ],
+    "defaultValue": {
+      "closingOutputMax": 512,
+      "nextTaskCharsMax": 1000,
+      "closingGeneration": 1,
+      "completeThenFinalGeneration": 1
+    },
+    "appliesWhen": "Each forced close; ordinary Ollama work completion also requires separate final JSON.",
+    "stops": "All bookkeeping consumes request quotas/context; malformed/incomplete close stops.",
+    "recommendedChange": "Measure/minimize model bookkeeping at settled boundaries, preserving provider continuation and acceptance separation.",
+    "requiredTests": "All closes/finals charged; malformed/length close; separate-turn tools forbidden in final phase; archive provenance.",
+    "priority": "P0"
+  },
+  {
+    "id": "R18",
+    "title": "Two automatic worker-check feedback steps",
+    "category": "optional aggregate quota",
+    "sources": [
+      {
+        "path": "core/managed-worker-checks.ts",
+        "line": 101
+      },
+      {
+        "path": "core/managed-worker-checks.ts",
+        "line": 153
+      },
+      {
+        "path": "core/worker-step-checks.ts",
+        "line": 49
+      },
+      {
+        "path": "adapters/files/managed-sessions.ts",
+        "line": 88
+      }
+    ],
+    "defaultValue": 2,
+    "appliesWhen": "Sole assigned writable managed worker, frozen check failure.",
+    "stops": "WORKER_CHECK_FEEDBACK_LIMIT independently of run/session allowance.",
+    "recommendedChange": "Version optional user repair cap and progress-driven replanning; update literal2 checkpoint/type/transition constraints too.",
+    "requiredTests": "Third-plus repair without cap; explicit cap; no stacked double allowance; restart retains counters.",
+    "priority": "P0"
+  },
+  {
+    "id": "R19",
+    "title": "Step-check count and diagnostic projections",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "core/worker-step-checks.ts",
+        "line": 55
+      },
+      {
+        "path": "core/worker-step-checks.ts",
+        "line": 90
+      },
+      {
+        "path": "core/worker-step-checks.ts",
+        "line": 129
+      },
+      {
+        "path": "adapters/files/managed-sessions.ts",
+        "line": 62
+      }
+    ],
+    "defaultValue": {
+      "selectedCheckIdsMax": 8,
+      "perDiagnosticChars": 512,
+      "combinedDiagnosticChars": 2048,
+      "nextTaskFailedNamesChars": 400
+    },
+    "appliesWhen": "Worker-step check plans/results and focused feedback; check ID can run many assertions.",
+    "stops": "More than8 command IDs invalid; truncated detail may omit actionable errors.",
+    "recommendedChange": "Batch complete check sets and expose authorized detailed evidence references; never silently skip checks.",
+    "requiredTests": "Nine check IDs, partial/unavailable outcomes, long compiler errors, fingerprint-bound detail retrieval.",
+    "priority": "P1"
+  },
+  {
+    "id": "R20",
+    "title": "Historical receipt handoff projection",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "core/work-segments.ts",
+        "line": 77
+      },
+      {
+        "path": "adapters/files/managed-sessions.ts",
+        "line": 139
+      }
+    ],
+    "defaultValue": {
+      "latestReceipts": 6,
+      "outputChars": 512,
+      "targetChars": 1000,
+      "availableToolsMax": 32
+    },
+    "appliesWhen": "Fresh worker window gets original anchor task plus bounded observed receipts.",
+    "stops": "May lose useful read text and require repeated reads; original source in anchor can now be stale.",
+    "recommendedChange": "Retrievable verified artifact references, explicit source revision, no private continuation exposure.",
+    "requiredTests": "Needed seventh/long receipt; changed current file; historical outputs never treated as current or replay instructions.",
+    "priority": "P1"
+  },
+  {
+    "id": "R21",
+    "title": "Changed-file evidence manifest bounds",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "adapters/tools/segment-evidence.ts",
+        "line": 12
+      },
+      {
+        "path": "core/work-segments.ts",
+        "line": 197
+      },
+      {
+        "path": "adapters/files/managed-sessions.ts",
+        "line": 58
+      }
+    ],
+    "defaultValue": {
+      "changedPaths": 256,
+      "fileBytes": 1048576,
+      "combinedChangedBytes": 33554432
+    },
+    "appliesWhen": "Changed/untracked public files, not all unchanged repository files.",
+    "stops": "SEGMENT_EVIDENCE_UNAVAILABLE prevents rollover/check if exceeded.",
+    "recommendedChange": "Page manifests or split tasks without omitting affected paths; preserve symlink/privacy checks.",
+    "requiredTests": "257 changed paths, big file,32MiB aggregate, deletions/modes, complete cross-page fingerprint.",
+    "priority": "P1"
+  },
+  {
+    "id": "R22",
+    "title": "Git evidence operation bounds",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "adapters/tools/segment-evidence.ts",
+        "line": 86
+      }
+    ],
+    "defaultValue": {
+      "timeoutMs": 15000,
+      "stdoutBytes": 2097152
+    },
+    "appliesWhen": "Git identity/diff/untracked scans.",
+    "stops": "Slow Git/large filename output yields unavailable evidence.",
+    "recommendedChange": "Keep operation-health and output safeguards; stream/page manifests for large tasks.",
+    "requiredTests": "Slow disk, huge filename set, abort cleanup and partial evidence rejected.",
+    "priority": "P2"
+  },
+  {
+    "id": "R23",
+    "title": "Inactivity watchdogs",
+    "category": "correctness/safety",
+    "sources": [
+      {
+        "path": "protocol/domain.ts",
+        "line": 61
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 338
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 279
+      },
+      {
+        "path": "adapters/codex/runtime.ts",
+        "line": 375
+      }
+    ],
+    "defaultValue": {
+      "productionIdleMs": 600000,
+      "managedSubmitIdleMs": 600000
+    },
+    "appliesWhen": "Production uses10min; callers can choose another timeout. Research adapter120s is not production default.",
+    "stops": "Managed abort or native interruption after silence; preserves work, may require unknown-effect reconciliation.",
+    "recommendedChange": "Treat operation health separately from optional goal wall quota; expose waiting/loading states and resumable interruption.",
+    "requiredTests": "Healthy long streams; long load/queue; genuine stalled stream; unknown state remains charged.",
+    "priority": "P1"
+  },
+  {
+    "id": "R24",
+    "title": "Endpoint capacity and queue",
+    "category": "concurrency",
+    "sources": [
+      {
+        "path": "protocol/resources.ts",
+        "line": 22
+      },
+      {
+        "path": "protocol/resources.ts",
+        "line": 30
+      },
+      {
+        "path": "adapters/models/http.ts",
+        "line": 3
+      },
+      {
+        "path": "adapters/resources/runtime-resources.ts",
+        "line": 102
+      }
+    ],
+    "defaultValue": {
+      "ollama": 1,
+      "deepseek": 2,
+      "sharedEndpointPolicy": "minimum configured capacity"
+    },
+    "appliesWhen": "All runtimes sharing provider-kind/normalized endpoint share FIFO gate.",
+    "stops": "Limits simultaneous inference, not goal/session total; no queue-size ceiling here.",
+    "recommendedChange": "Keep capacity scheduling, queue rather than fail; use measured hardware/user preference.",
+    "requiredTests": "Many sessions/one model; queued cancellation; aliases sharing gate; no excess parallel grants.",
+    "priority": "P1",
+    "schemaRange": [
+      1,
+      8
+    ]
+  },
+  {
+    "id": "R25",
+    "title": "Waiting can consume inactivity allowance",
+    "category": "concurrency",
+    "sources": [
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 422
+      },
+      {
+        "path": "adapters/models/http.ts",
+        "line": 12
+      },
+      {
+        "path": "adapters/models/ollama.ts",
+        "line": 163
+      }
+    ],
+    "defaultValue": "Watchdog starts before provider metadata inspection/gate wait",
+    "appliesWhen": "Busy endpoint/model load with no stream progress.",
+    "stops": "Healthy queued work may be aborted as if generation stalled.",
+    "recommendedChange": "Separate queued/loading/streaming/tool states; start silence clock at actual dispatch.",
+    "requiredTests": "Queue waits longer than idle threshold; cancellation/fairness; metadata load vs stuck stream.",
+    "priority": "P1"
+  },
+  {
+    "id": "R26",
+    "title": "HTTP stream response cap",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "adapters/models/http.ts",
+        "line": 111
+      }
+    ],
+    "defaultValue": 4194304,
+    "appliesWhen": "Entire response including reasoning/tool args; common JSON parser also uses it.",
+    "stops": "MODEL_RESPONSE_LIMIT above4MiB; reader cancels.",
+    "recommendedChange": "Keep technical safety bound or stream large artifact content; never silently accept partial response.",
+    "requiredTests": "Oversized response, cancellation, UTF8 errors, partial tool args never dispatched.",
+    "priority": "P2"
+  },
+  {
+    "id": "R27",
+    "title": "Native RPC and discovery bounds",
+    "category": "correctness/safety",
+    "sources": [
+      {
+        "path": "adapters/codex/runtime.ts",
+        "line": 279
+      },
+      {
+        "path": "adapters/codex/runtime.ts",
+        "line": 477
+      }
+    ],
+    "defaultValue": {
+      "rpcAckTimeoutMs": 45000,
+      "mcpDiscoveryTimeoutMs": 15000,
+      "mcpStdoutBytes": 1048576
+    },
+    "appliesWhen": "Native startup and JSONL RPC acknowledgements; MCP list verified twice before app-server.",
+    "stops": "Session/RPC may fail before turn ID; inherited MCP hardening remains required.",
+    "recommendedChange": "Operation-aware health/status and reconciliation, not a goal budget or blind retry.",
+    "requiredTests": "Lost accepted ack; slow startup; large MCP list; inherited servers all disabled; abort before ID.",
+    "priority": "P1"
+  },
+  {
+    "id": "R28",
+    "title": "Native shutdown escalation",
+    "category": "correctness/safety",
+    "sources": [
+      {
+        "path": "adapters/codex/runtime.ts",
+        "line": 399
+      }
+    ],
+    "defaultValue": {
+      "stdinGraceMs": 1000,
+      "SIGTERMToSIGKILLMs": 1000
+    },
+    "appliesWhen": "Disposing owned app-server.",
+    "stops": "Closes/kills owned process and waits for close.",
+    "recommendedChange": "Retain lifecycle cleanup independently of resource policy.",
+    "requiredTests": "Ignore graceful shutdown; pending RPC rejection; final checks only after process quiescence.",
+    "priority": "P2"
+  },
+  {
+    "id": "R29",
+    "title": "Native accounting coverage",
+    "category": "correctness/safety",
+    "sources": [
+      {
+        "path": "protocol/run-budget.ts",
+        "line": 19
+      },
+      {
+        "path": "adapters/resources/runtime-resources.ts",
+        "line": 124
+      }
+    ],
+    "defaultValue": "Hidden native API calls not metered by managed ledger",
+    "appliesWhen": "Codex route may provide observed tokens but not managed reservation coverage.",
+    "stops": "Cannot claim aggregate managed request/token enforcement for native internals.",
+    "recommendedChange": "Capability-aware user controls, explicit unknown coverage, no fake zero-cost comparison.",
+    "requiredTests": "Native/mixed usage, unknown vszero, unsupported cap enforcement visible.",
+    "priority": "P1"
+  },
+  {
+    "id": "R30",
+    "title": "Unknown effects and usage-integrity gates",
+    "category": "correctness/safety",
+    "sources": [
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 885
+      },
+      {
+        "path": "core/managed-worker-checks.ts",
+        "line": 47
+      },
+      {
+        "path": "core/run-budget.ts",
+        "line": 365
+      },
+      {
+        "path": "core/run-budget.ts",
+        "line": 385
+      }
+    ],
+    "defaultValue": "No replay of pending/unknown generation/action/check; invalid accounting poisons ledger",
+    "appliesWhen": "Incomplete saved outcome or provider usage exceeding request reservation.",
+    "stops": "Reconciliation-required or RUN_BUDGET_USAGE_EXCEEDED prevents more effects.",
+    "recommendedChange": "Keep idempotency/unknown-state safeguards; separate telemetry/provider-contract failure from optional aggregate quota.",
+    "requiredTests": "Restart/lost responses, no repeated side effect, malformed usage, observation-only recovery.",
+    "priority": "P0"
+  },
+  {
+    "id": "R31",
+    "title": "Frozen policy identity complicates migration",
+    "category": "correctness/safety",
+    "sources": [
+      {
+        "path": "adapters/resources/runtime-resources.ts",
+        "line": 174
+      },
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 919
+      },
+      {
+        "path": "adapters/files/managed-sessions.ts",
+        "line": 559
+      }
+    ],
+    "defaultValue": "Resource revision includes runtime limits + estimator revision + segment limits; private session limits immutable",
+    "appliesWhen": "Current defaults or strategy changed before resume.",
+    "stops": "Historical route/checkpoint can fail closed even with unchanged model/source.",
+    "recommendedChange": "Clean pre-release cutover: archive old runtime state without executing it; no legacy resolver or old checkpoint support. Preserve endpoint/model identity and durable recovery for new-format runs.",
+    "requiredTests": "Old checkpoint explicitly unsupported without replay; new-format recovery and explicit quota change retain IDs/receipts; endpoint/model cannot silently move.",
+    "priority": "P0"
+  },
+  {
+    "id": "R32",
+    "title": "Public display excerpt and long-run whole-record growth",
+    "category": "payload/protocol",
+    "sources": [
+      {
+        "path": "core/managed-runtime.ts",
+        "line": 844
+      },
+      {
+        "path": "protocol/run-budget.ts",
+        "line": 12
+      },
+      {
+        "path": "adapters/files/private-json.ts",
+        "line": 34
+      },
+      {
+        "path": "adapters/files/private-json.ts",
+        "line": 47
+      }
+    ],
+    "defaultValue": {
+      "publicCompletionChars": 12000,
+      "counterMax": "Number.MAX_SAFE_INTEGER",
+      "privateRecordStorage": "whole JSON read/clone/atomic rewrite; no explicit byte cap"
+    },
+    "appliesWhen": "Display projection versus complete private records and returned model text.",
+    "stops": "Display excerpt does not truncate acceptance parser; long histories can create memory/I/O/storage pressure after quota removal.",
+    "recommendedChange": "Bound public views; page/append private sessions/effect receipts with complete recovery provenance.",
+    "requiredTests": "Full final envelope vs excerpt; long-run paging/restart; atomic writes; counters never wrap.",
+    "priority": "P1"
+  }
+]

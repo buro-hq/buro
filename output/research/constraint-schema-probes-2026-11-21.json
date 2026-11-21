@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "date": "2026-11-21",
+  "sourceCommit": "1ee8a55",
+  "scope": "Pure schema/decision probes; no runtime/model/network invocation.",
+  "productionDefaults": {
+    "contextTokens": 32768,
+    "maxOutputTokens": 4096,
+    "maxRequestsPerTurn": 24,
+    "maxToolCallsPerTurn": 64,
+    "maxSessionRequests": 256
+  },
+  "runDefaults": {
+    "version": 1,
+    "maxRequests": 64,
+    "maxReservedOutputTokens": 131072,
+    "maxToolCalls": 256,
+    "reviewReserve": {
+      "requests": 8,
+      "outputTokens": 16384,
+      "toolCalls": 32
+    }
+  },
+  "nullSessionQuotaAccepted": false,
+  "zeroRunRequestQuotaAccepted": false,
+  "contextProbe": {
+    "asciiCharacters": 900,
+    "estimatedInput": 951,
+    "context": 1024,
+    "requestedOutput": 128,
+    "outcome": "MODEL_CONTEXT_EXHAUSTED",
+    "interpretation": "Conservative byte admission, not a tokenizer or provider context measurement."
+  },
+  "seventeenWindowPolicy": "INVALID_SEGMENT_POLICY"
+}
