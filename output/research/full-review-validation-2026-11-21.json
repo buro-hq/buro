@@ -1,0 +1,72 @@
+{
+  "date": "2026-11-21",
+  "baselineCommit": "a4f7e233012032c16ab3268f392b2e6cae31848f",
+  "productionChanged": false,
+  "checks": {
+    "nodeTests": {
+      "passed": 605,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "Current deterministic contracts; not a new live-model evaluation",
+      "initialSandboxAttempt": "Loopback listen denied; complete suite rerun with local test-server permissions"
+    },
+    "buildAndTypecheck": "passed",
+    "format": "passed",
+    "productionBrowserSmoke": {
+      "passed": true,
+      "desktopAndMobile": true,
+      "mode": "offline replay empty drafts",
+      "errors": [],
+      "scope": "Not live service-goal end-to-end or design-quality approval"
+    },
+    "auditReproducer": {
+      "observations": [
+        {
+          "case": "scope-after-check",
+          "status": "completed",
+          "scope": true,
+          "commitContainsOutOfScopeReadme": true,
+          "reportedChangePaths": [
+            "src/code.mjs"
+          ]
+        },
+        {
+          "case": "unknown-worker-replacement",
+          "first": "failed",
+          "after": "completed",
+          "workers": 2,
+          "replacementWhileUnknown": true,
+          "unknownPending": true
+        },
+        {
+          "case": "planning-json",
+          "status": "failed",
+          "planningCalls": 1,
+          "planRejectedEvents": 0
+        }
+      ],
+      "meaning": "Three PASS assertions reproduce current defects; they do not establish correctness"
+    },
+    "documentation": {
+      "localLinksValidated": 134,
+      "independentReview": "clear",
+      "scope": "Source references and current-vs-target distinctions; not an implementation proof"
+    }
+  },
+  "noLiveModels": true,
+  "offlineRtxUntouched": true,
+  "originalUserRepositoriesUntouched": true,
+  "productionSourceHashes": {
+    "package.json": "1d192eb83d4bb83e695fe9ab686a3ef5132e91942707a92a9ccb67b1b1bef0df",
+    "core/execution.ts": "621aa7e6c98ae1254247a52aba58641660c9c509a92e0c2d4e4c98e90bed5bce",
+    "core/managed-runtime.ts": "1430d52217ca9ded0f0badf08c86f0b39884656e1ab7636957015799bec1214a",
+    "core/ports.ts": "33fc852ab759c46ac37850ac80a214b4b7de32cb50ee7ccdbc68ff11d7b78f46",
+    "core/worker-assignments.ts": "45afedb4d50401cccdfa22d48973677ce51da598ecf7c0432b920199c7fec7b4",
+    "adapters/files/git-workspaces.ts": "d045921e857759f92195c5e9e24f950b60921d7b71cd10445f8f963921ff4dbb",
+    "adapters/files/project-manager.ts": "e8ab6007ea7cc76046f3589f4036600ada3e1db3748a526a59a9b61e888a6eb6",
+    "plugins/host.ts": "13c0bbe5be7f6d6ed1ed27c3ac032970a29321c43b851414a8a8f3e093829155",
+    "adapters/resources/runtime-resources.ts": "f2c6b60c1e98140d212cafc52b7df5b1aea619daa7e04332bae9c0254c38581c",
+    "protocol/resources.ts": "b856415b5f5d283319ac809097b59ce0065ac5c12bfd65bb45e1cf7abc0a42b7",
+    "tests/boundaries.test.ts": "1cf069d476894ed8b98ce2ce0d199fe048ef18713ff7cf099330cc2b0522d6bb"
+  }
+}

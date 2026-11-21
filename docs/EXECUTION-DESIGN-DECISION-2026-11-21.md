@@ -12,6 +12,8 @@ This is the best-supported choice for the current product and observed failures,
 
 The user explicitly confirmed that this unreleased product does not need backward compatibility. Use a clean contract/storage cutover: no legacy runtime strategies, old checkpoint resume, dual schemas or inference of old quota intent. Extract reusable agent packages behind these clean contracts; keep Buro's repository and acceptance domain outside them. See [reusable package boundaries](REUSABLE-AGENT-PACKAGES-2026-11-21.md).
 
+Subsequent user decisions: Codex is an equal AgentBackend adapter, never the owner of orchestration; the reusable target now has four packages including optional external-client adapters. Planned task paths are advisory by default within a working copy, with strict opt-in. The [autonomy policy](AUTONOMY-POLICY-2026-11-21.md) defines transparent effective settings and recoverable stops. Exact checked/reviewed/committed revision identity remains mandatory regardless of scope mode.
+
 ## What to reuse and how
 
 | Reference | Adopted mechanism | Buro change | Avoid |
@@ -31,7 +33,7 @@ These are mechanism-level adaptations. No third-party runtime code was imported.
 2. Production check/review repair goes back to the coordinator. Return concrete validated findings to the original executor, then check and freshly review the changed revision. Preserve the coordinator's responsibility for scope/dependencies and unresolved decisions.
 3. The request estimator uses UTF-8 bytes plus overhead as an upper bound, not tokenization. Injecting a policy cannot change that estimate today. Introduce an explicit trusted footprint/estimation contract that measures the provider-projected packet, including tool/schema/template overhead. Exact counts, estimates and unknown measurements must remain distinct. Do not use a guessed lower multiplier.
 4. Segment closing uses raw history pressure while real requests use a provider projection. Use one request-view identity for pressure and admission. Investigate service-generated continuation at fully settled boundaries to avoid extra closing/serialization calls; preserve unresolved tool chains, provider continuation and unknown-effect protection.
-5. Old file/search/diff interfaces can block or hide needed input. Use bounded streaming/pages with versioned cursors and explicit completeness, not blanket removal of memory checks. Add typed, scoped delete/move operations rather than grant arbitrary shell commands.
+5. Old file/search/diff interfaces can block or hide needed input. Use bounded streaming/pages with versioned cursors and explicit completeness, not blanket removal of memory checks. Add typed delete/move operations and permitted sandbox exploration rather than grant unrestricted host shell access.
 6. Preserve full check/tool logs in private artifacts before taking model/UI excerpts. The current30K collector tail makes the promise of retained full logs inaccurate. A view limit is acceptable when the complete evidence is retrievable.
 
 ## Hidden constraints actually found
@@ -56,7 +58,7 @@ The [combined machine-readable inventory](../output/research/buro-constraints-in
 | Incoming WebSocket12MiB; client observation timeouts; snapshots/history unpaged | Uploads may fail earlier; client can stop waiting while server continues; history can exhaust memory | Chunk/page transport, durable command status and lazy snapshot/history queries |
 | No explicit delete/move tool | Certain normal source-edit tasks are unsupported | Typed scoped operations with source/target preconditions and durable receipts |
 
-Keep symlink/private-file restrictions, scoped authority, registered checks, stale-evidence rejection, operation-ID conflicts and no blind replay of unknown actions. Nonoverlap remains a correctness guard for the current shared-workspace topology; sequential same-file tasks need explicit ownership/dependency rules before that guard changes. Endpoint/GPU capacity queues inference independently of logical team size. Native RPC/command cancellation escalation is not a product quota to delete.
+Keep private-file restrictions, actual working-copy authority, service-owned acceptance checks, stale-evidence rejection, operation-ID conflicts and no blind replay of unknown actions. Planned paths are advisory by default, with strict opt-in; exploratory sandbox commands are distinct from acceptance checks. Nonoverlap remains a correctness guard for the current shared-workspace topology; sequential same-file tasks need explicit ownership/dependency rules before that guard changes. Endpoint/GPU capacity queues inference independently of logical team size. Native RPC/command cancellation escalation is not a product quota to delete.
 
 ## Quota policy and accounting
 
@@ -98,11 +100,12 @@ See the [migration design](../output/research/optional-quota-migration-2026-11-2
 
 ## Rollout: one selected sequence
 
-1. **Clean contracts and package boundaries:** separate quota/accounting/request-capacity/health; one supported execution schema; UI/CLI distinguish inherit, none and finite settings. Extract domain-neutral agent contracts/runtime/provider policies from Buro-specific repository and acceptance logic. Define a meaningful verified-progress signal without assuming every new diff is an improvement.
-2. **Durable storage:** transactional project/usage/event receipts, paged private archives and full streamed logs. Create a new-format store, archive old prototype state before an explicit cutover, optionally reimport domain inputs and atomically activate. No live dual writing, old runtime ledger import or checkpoint compatibility layer.
-3. **Activate no-quota workflow end-to-end:** remove terminal request/session/repair/window fallback, support cooperative continuation and queueing, preserve operation sequence and private continuation. Activate default-none only after all consumers pass—not a partially unlimited mode with another hidden stop.
-4. **Production quality loop:** verified review packets, typed missing context, same-executor repairs and fresh review per revision. Add model-appropriate editing strategies and typed move/delete capabilities.
-5. **Prove useful work:** compare minimal execution, writer/critic, coordinator/test discovery, and compute-matched self-debug/candidate selection across repeated held-out real issues. Hidden tests are post-selection only. RepeatRTX/Qwen9B only after the user reports the machine available.
+1. **Close confirmed correctness gaps first:** bind check/review/checkpoint to one revision; gate replacement workers on owner-run effect reconciliation; record/reconcile result application intent. Add targeted regression tests before moving packages or storage. Safely recover malformed structured responses rather than failing before the correction path.
+2. **Clean contracts and visible autonomy:** separate quota/accounting/request-capacity/health; one supported execution schema; common AgentBackend capabilities and contribution registries instead of client-name workflow branches. UI/CLI distinguish inherit, none, finite settings and advisory/strict task scope. Define verified progress and service-provided stop/continuation reasons.
+3. **Compare reusable foundations before writing replacements:** test SDK/provider/agent-loop and optional external harness integration at the new ports. Reuse upstream implementations where they preserve host authority, private continuation and actual backend capabilities; do not adopt a second durable workflow owner.
+4. **Durable storage and no-quota activation:** transactional project/usage/event receipts, paged private archives and full streamed logs. Create a new-format store; archive prototype state before explicit cutover. Remove terminal request/session/repair/window fallbacks across all consumers; support cooperative continuation and queues without resetting operations. No live dual writing or old checkpoint compatibility layer.
+5. **Production quality loop and packages:** verified review packets, typed missing context, same-executor repairs and fresh review per revision. Add model-appropriate editing and move/delete capabilities. Extract the four packages incrementally and install built artifacts in an independent consumer.
+6. **Prove useful work:** compare minimal execution, writer/critic, coordinator/test discovery, and compute-matched self-debug/candidate selection across repeated held-out real issues. Hidden tests are post-selection only. RepeatRTX/Qwen9B only after the user reports the machine available.
 
 Complete log retention and verified review packets can be implemented independently while the storage/runtime cutover is prepared. Do not activate new no-quota claims until their end-to-end gates pass.
 
@@ -116,5 +119,6 @@ Complete log retention and verified review packets can be implemented independen
 - A second host can execute a fake-provider agent/tool session using only the reusable packages, without importing Buro's projects, Git, Cordis host or UI. Enforce the package dependency graph and test cancellation/streaming/unknown effects at public boundaries.
 - Large files, >300discovery results, long diff/log output and >1000material histories remain accessible through bounded pages/artifact references; missing content cannot masquerade as complete review evidence.
 - Fresh review detects a public-check-passing defect, repair uses the same executor, changed code invalidates approval, and final tests/scope/evidence remain mandatory.
+- Advisory task paths permit and disclose necessary adjacent edits; strict scope is effective only when explicitly configured. Both modes accept only the actual checked/reviewed revision. An old unresolved worker cannot be bypassed by creating a replacement session.
 
-This research applied no production default, model, GPU, user-source or runtime configuration change. Pure schema/decision probes and source-reference validation are the evidence for the audit; prior605test results are the implementation baseline, not newly run migration tests.
+This research applied no production default, model, GPU, user-source or runtime configuration change. The subsequent full-project audit reran605tests, build/typecheck and formatting successfully; those tests describe the current implementation, not the proposed migration. Controlled audit reproducers expose additional coverage gaps. Source inventories and pure schema probes remain separate evidence from live-model quality.

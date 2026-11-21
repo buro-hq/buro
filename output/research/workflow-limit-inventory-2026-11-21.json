@@ -938,9 +938,9 @@
     "condition": "proposal/changes exceed ownership or requiredcheck/review missing",
     "stopScope": "action/acceptance",
     "effect": "Stops unauthorized or unverified work irrespective of usage policy.",
-    "recommendation": "Retain. Observation-only quotas must not weaken authorization, protectedchecks, actual process observation or unknown-effect reconciliation.",
+    "recommendation": "Separate optional strict planned-path scope from mandatory host/read-only/evidence/unknown-effect integrity. Planned paths advisory by default; dependency/ownership rules govern sequential same-file work.",
     "tests": [
-      "Unlimited policy still rejects out-ofscope/forged/stale evidence and unknown-action replay."
+      "Default advisory and explicit strict paths; identical checked/reviewed/committed bytes; reject forged/stale evidence and unknown conflicting-effect replay."
     ],
     "priority": "P0"
   }

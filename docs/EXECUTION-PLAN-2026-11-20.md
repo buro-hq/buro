@@ -127,3 +127,9 @@ Completed five-role research/audit on2026-11-21: runtime32groups, workflow37grou
 [Private-project evaluation details removed.]
 
 The chosen sequence and acceptance gates are in `docs/EXECUTION-DESIGN-DECISION-2026-11-21.md`; reusable boundaries in `docs/REUSABLE-AGENT-PACKAGES-2026-11-21.md`; inventory `output/research/buro-constraints-inventory-2026-11-21.json`; supporting reuse/quota/independentreview reports are retained. Target VISION/ARCHITECTURE documentation is aligned. Production behavior and all existing records remain unchanged by this research; implementation of the clean cutover is the next work.
+
+## Full-project review and user autonomy clarification, 21 November 2026
+
+The full review in `docs/PROJECT-ARCHITECTURE-REVIEW-2026-11-21.md` supersedes the previous implementation order. Fix revision-bound acceptance, owning-run unresolved effects and result-apply reconciliation first, before package/storage extraction. Fresh605tests, build/typecheck, formatting and production offline browser smoke passed; a separate controlled three-case reproducer exposes gaps not covered by that suite.
+
+Codex is an equal AgentBackend; four target packages include agent-adapters. Task path scope is advisory by default, strict only explicitly; accepted bytes must always match check/review evidence. `docs/AUTONOMY-POLICY-2026-11-21.md` defines no default aggregate quota, visible effective policy, queues and typed stop/continue actions. SDK reuse starts with a narrow pi-ai/pi-agent-core spike, AI SDK transport fallback/control and optional mini backend; no SDK/dependency/code adoption has occurred. Future implementation keeps one host transaction authority and no legacy checkpoint compatibility.

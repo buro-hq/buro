@@ -17,6 +17,8 @@ The [implementation sequence](docs/IMPLEMENTATION.md) tracks the transition from
 
 The [selected execution design](docs/EXECUTION-DESIGN-DECISION-2026-11-21.md) turns the [workflow research](docs/ARCHITECTURE-RESEARCH-2026-11-21.md) into a concrete plan: audited hidden constraints, optional quotas, a clean pre-release cutover and [reusable agent packages](docs/REUSABLE-AGENT-PACKAGES-2026-11-21.md).
 
+The [full project architecture review](docs/PROJECT-ARCHITECTURE-REVIEW-2026-11-21.md) records fresh verification, reproduced gaps, SDK reuse choices and the revised implementation order. [Autonomy policy](docs/AUTONOMY-POLICY-2026-11-21.md) defines the target defaults and transparent stop/continuation behavior; those changes are not implemented yet.
+
 ![Buro project office with the coordinator, developer, test author and reviewer](docs/images/office.png)
 
 *Screenshots show the actual interface with a fictional project and sample run data.*

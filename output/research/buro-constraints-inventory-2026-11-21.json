@@ -3,7 +3,7 @@
   "date": "2026-11-21",
   "sourceCommit": "1ee8a55",
   "scope": "Layered runtime/workflow/protocol/UI/transport/storage/tool-broker audit; some entries describe overlapping guards at distinct layers. Not a claim that every field length is a defect.",
-  "policyDecision": "Clean pre-release contract cutover, no legacy runtime/checkpoint support. No aggregate hard quota by default for new runs; explicit user caps optional. Archive old data without deleting it. No production change applied by this audit.",
+  "policyDecision": "Clean pre-release cutover, equal AgentBackend adapters; no default aggregate quota; planned task scope advisory within working copy, strict enforcement explicit. Keep exact accepted revision identity and unknown-effect reconciliation. No production behavior changed by audit.",
   "groups": 79,
   "validatedSourceReferences": 185,
   "sourceHashes": {
@@ -1985,9 +1985,9 @@
       "condition": "proposal/changes exceed ownership or requiredcheck/review missing",
       "stopScope": "action/acceptance",
       "effect": "Stops unauthorized or unverified work irrespective of usage policy.",
-      "recommendation": "Retain. Observation-only quotas must not weaken authorization, protectedchecks, actual process observation or unknown-effect reconciliation.",
+      "recommendation": "Separate optional strict planned-path scope from mandatory host/read-only/evidence/unknown-effect integrity. Planned paths advisory by default; dependency/ownership rules govern sequential same-file work.",
       "tests": [
-        "Unlimited policy still rejects out-ofscope/forged/stale evidence and unknown-action replay."
+        "Default advisory and explicit strict paths; identical checked/reviewed/committed bytes; reject forged/stale evidence and unknown conflicting-effect replay."
       ],
       "priority": "P0"
     },
@@ -2242,9 +2242,10 @@
       "condition": "Any model tool dispatch",
       "stopScope": "tool result / edit capability / evidence view",
       "effect": "Correctly prevents unauthorized effects; no-quota is not a permission expansion.",
-      "recommendation": "Retain these guards and explicit capability reporting while changing resource policies.",
+      "recommendation": "Preserve host/private/read-only authority; planned task paths are advisory by default with strict opt-in. Separate exploratory sandbox tools from service-owned acceptance checks; report real adapter capabilities.",
       "tests": [
-        "No quota mode cannot write outside assignment, alter protected checks, or execute an unregistered command."
+        "Advisory scope permits a legitimate adjacent edit inside the working copy; strict scope enforces the chosen boundary.",
+        "No-quota mode cannot bypass private paths, reviewer read-only authority or trusted check definitions; accepted bytes match verified evidence."
       ],
       "priority": "P1"
     }
