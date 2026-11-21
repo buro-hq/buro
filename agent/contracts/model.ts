@@ -15,6 +15,17 @@ export type ModelMessage = {
   continuation?: unknown;
 };
 export type ModelUsage = { inputTokens?: number; outputTokens?: number };
+export type ModelFinish = 'stop' | 'tools' | 'length' | 'failed';
+/**
+ * Public response observations, not durable receipts or authority to dispatch a tool.
+ * Text is provisional until a validated response terminal; reasoning and private
+ * continuation never appear here. Usage is emitted only when actually reported.
+ */
+export type ModelStreamEvent =
+  | { type: 'text.delta'; text: string }
+  | { type: 'usage'; usage: ModelUsage }
+  /** An observed wire terminal, including incomplete output, never goal acceptance. */
+  | { type: 'response.completed'; model: string; finish: ModelFinish };
 export type ModelContext = {
   phase: 'work' | 'final';
   /** Host-owned completion-note indexes from the private checkpoint, never model-generated tags. */
@@ -37,10 +48,12 @@ export interface ModelProvider {
     contextTokens: number;
     signal: AbortSignal;
     onProgress: () => void;
+    /** Best-effort observer: implementations isolate callback errors from the request outcome. */
+    onEvent?: (event: ModelStreamEvent) => void;
   }): Promise<{
     message: ModelMessage & { role: 'assistant' };
     model: string;
     usage?: ModelUsage;
-    finish: 'stop' | 'tools' | 'length' | 'failed';
+    finish: ModelFinish;
   }>;
 }

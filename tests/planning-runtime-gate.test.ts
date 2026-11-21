@@ -160,7 +160,14 @@ test('the explicit next service turn restores ordinary tools without changing th
   const f = await fixture(
     t,
     async (input) => {
-      requests.push(structuredClone({ ...input, signal: undefined, onProgress: undefined }) as any);
+      requests.push(
+        structuredClone({
+          ...input,
+          signal: undefined,
+          onProgress: undefined,
+          onEvent: undefined,
+        }) as any,
+      );
       return requests.length === 2 ? call() : answer();
     },
     true,

@@ -7,6 +7,7 @@ import {
   assertRunReconciled,
   isKnownTurnRejection,
   observedTurnFailure,
+  recordTurnOutcome,
   reconciliationForError,
   reconciliationForPendingTurn,
   reconciliationIssue,
@@ -20,6 +21,7 @@ import type { ModelProvider } from '../agent/contracts/model.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { parseDomainEvent, parseSnapshot } from '../protocol/schema.ts';
 import { sampleRun } from './fixtures/sample-run.ts';
+import { recordableRuntimeEvent, type RuntimeEvent } from '../core/runtime-events.ts';
 
 const detectedAt = '2026-11-21T12:00:00.000Z';
 
@@ -81,6 +83,24 @@ test('unobserved turn survives a crash boundary while known failures do not beco
     isKnownTurnRejection(new DomainError('MODEL_UNAVAILABLE', 'HTTP 500/network')),
     false,
   );
+});
+
+test('transport uncertainty overrides a familiar rejection code and cannot be cleared by generic observation', () => {
+  const error = new DomainError('MODEL_REQUEST_REJECTED', 'The stream failed after dispatch.');
+  assert.equal(isKnownTurnRejection(error), true);
+  recordTurnOutcome(error, 'unknown');
+  assert.equal(isKnownTurnRejection(error), false);
+  observedTurnFailure(error);
+  recordTurnOutcome(error, 'rejected');
+  assert.equal(isKnownTurnRejection(error), false);
+  for (const outcome of ['not-dispatched', 'rejected'] as const) {
+    const unavailable = recordTurnOutcome(
+      new DomainError('MODEL_UNAVAILABLE', 'Observed'),
+      outcome,
+    );
+    assert.equal(isKnownTurnRejection(unavailable), true);
+  }
+  assert.equal(isKnownTurnRejection({ code: 'MODEL_RATE_LIMITED', outcome: 'rejected' }), false);
 });
 
 test('reconciliation marker and issue survive store restart and both public transport projections', async (t) => {
@@ -265,4 +285,106 @@ test('an observed model rejection settles the request and permits a later delibe
   assert.equal(f.records.get(threadId)?.generation?.outcome, 'completed');
   assert.equal((await f.runtime.turn(threadId, 'Try after known rejection', options)).text, '{}');
   assert.equal(requests, 2);
+});
+
+test('an explicitly unknown streamed rejection retains the generation boundary and never permits replay', async (t) => {
+  let requests = 0;
+  const f = managedFixture(async () => {
+    requests++;
+    throw recordTurnOutcome(new DomainError('MODEL_REQUEST_REJECTED', 'Partial stream'), 'unknown');
+  });
+  t.after(() => f.runtime.dispose());
+  const { threadId } = await f.runtime.start({ projectId: 'p', instructions: 'Fixture' });
+  const options = { schema: {}, signal: new AbortController().signal, timeoutMs: 1000 };
+  await assert.rejects(f.runtime.turn(threadId, 'Work', options), {
+    code: 'GENERATION_RECONCILIATION_REQUIRED',
+  });
+  assert.equal(f.records.get(threadId)?.generation?.outcome, 'unknown');
+  await assert.rejects(f.runtime.turn(threadId, 'Do not replay', options), {
+    code: 'GENERATION_RECONCILIATION_REQUIRED',
+  });
+  assert.equal(requests, 1);
+});
+
+test('confirmed model preflight failures settle the generation without blocking a later explicit attempt', async (t) => {
+  let requests = 0;
+  const f = managedFixture(async () => {
+    requests++;
+    if (requests === 1)
+      throw recordTurnOutcome(
+        new DomainError('MODEL_UNSUPPORTED', 'No chat was dispatched'),
+        'not-dispatched',
+      );
+    return { model: 'fixture', message: { role: 'assistant', content: '{}' }, finish: 'stop' };
+  });
+  t.after(() => f.runtime.dispose());
+  const { threadId } = await f.runtime.start({ projectId: 'p', instructions: 'Fixture' });
+  const options = { schema: {}, signal: new AbortController().signal, timeoutMs: 1000 };
+  await assert.rejects(f.runtime.turn(threadId, 'Work', options), { code: 'MODEL_UNSUPPORTED' });
+  assert.equal(f.records.get(threadId)?.generation?.outcome, 'completed');
+  assert.equal(f.records.get(threadId)?.generation?.rejectionCode, 'MODEL_UNSUPPORTED');
+  assert.equal(
+    (await f.runtime.turn(threadId, 'Try the configured model again', options)).text,
+    '{}',
+  );
+  assert.equal(requests, 2);
+});
+
+test('streamed text remains transient until the complete response is durably observed', async (t) => {
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let observed!: () => void;
+  const delta = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const f = managedFixture(async (input) => {
+    input.onEvent?.({ type: 'text.delta', text: '{"ok":' });
+    await wait;
+    input.onEvent?.({ type: 'text.delta', text: 'true}' });
+    return {
+      model: 'fixture',
+      message: { role: 'assistant', content: '{"ok":true}' },
+      finish: 'stop',
+    };
+  });
+  t.after(() => f.runtime.dispose());
+  const events: RuntimeEvent[] = [];
+  f.runtime.subscribe((event) => {
+    events.push(event);
+    if (event.type === 'message.delta') observed();
+  });
+  const { threadId } = await f.runtime.start({ projectId: 'p', instructions: 'Fixture' });
+  const turn = f.runtime.turn(threadId, 'Work', {
+    schema: {},
+    signal: new AbortController().signal,
+    timeoutMs: 1000,
+  });
+  try {
+    await delta;
+    assert.equal(f.records.get(threadId)?.generation?.outcome, 'pending');
+    assert.equal(f.records.get(threadId)?.generation?.response, undefined);
+    assert.equal(
+      f.records.get(threadId)?.messages.filter((message) => message.role === 'assistant').length,
+      0,
+    );
+    assert.equal(
+      events.some((event) => event.type === 'message.completed'),
+      false,
+    );
+    const first = events.find((event) => event.type === 'message.delta')!;
+    assert.equal(first.type, 'message.delta');
+    if (first.type === 'message.delta') assert.equal(first.requestId, `${first.turnId}:0`);
+    assert.equal(recordableRuntimeEvent({ ...first, runId: 'R-fixture' }), false);
+  } finally {
+    release();
+  }
+  assert.equal((await turn).text, '{"ok":true}');
+  assert.equal(f.records.get(threadId)?.generation?.response?.message.content, '{"ok":true}');
+  assert.deepEqual(
+    events.filter((event) => event.type === 'message.delta').map((event) => event.text),
+    ['{"ok":', 'true}'],
+  );
+  assert.equal(events.filter((event) => event.type === 'message.completed').length, 1);
 });

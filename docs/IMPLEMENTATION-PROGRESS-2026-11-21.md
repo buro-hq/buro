@@ -72,6 +72,18 @@ The service projects effective file, model, check and actual current usage polic
 
 Bounded follow-ups retained: readonly operational preparation still lacks a separate durable preparation-outcome receipt; a failed preparation never dispatches delivery. Machine-default selection refreshes the initiating client, while cross-client invalidation requires the later service contribution/API work. Neither is evidence of complete operational effect recovery or multi-client policy broadcasts. Custom environment role IDs also need contribution-aware catalog eligibility; actual delivery dispatch still validates its operation requirements.
 
+## Stage 3 — neutral execution and SDK integration
+
+### Substep 3A — portable provider implementation and explicit request outcomes
+
+Status: complete. Final full suite **812/812 passed**, with no skips; build/typecheck and formatting passed. Real portable wire parsing, a compiled source-removed consumer and composed private-journal/reopen outcomes passed independently. The UI bundle is unchanged from 2C; transient runtime deltas do not imply a WebSocket/UI streaming feature. Five agent roles contributed implementation and independent review in waves. [Validation receipt](../output/research/stage3a-validation-2026-11-22.json), [architecture/outcome review](../output/research/stage3a-architecture-review-2026-11-22.md), [independent durable host tests](../output/research/stage3a-tests-review-2026-11-22.md). Stage 2C is committed as `02aa411`.
+
+The real Ollama/DeepSeek HTTP transports, streaming parsers and continuation codecs are extracted into `agent/providers`, using explicit fetch/configuration and only neutral contracts. Buro wrappers retain connection identity, endpoint trust, locality admission and application error translation. Optional visible-text/usage/terminal observers are separate from private reasoning and canonical complete responses. Transient runtime text deltas are not durable event receipts or per-token project transactions.
+
+Explicit provider outcomes distinguish confirmed preflight/non-dispatch, observed rejection and unknown dispatched results; unknown overrides a familiar error code and generic positive observation. This avoids poisoning a generation with a failed metadata lookup while preventing a partial stream error from silently permitting replay. Default aggregate quotas are unchanged.
+
+[Private-project evaluation details removed.]
+
 ## Remaining authorized stages
 
 Stage 2A–2C is complete within the recorded scope. Portable ModelProvider contracts, capabilities, common role choices, scope and policy projection are implemented; the neutral AgentBackend loop belongs to stage 3 below.

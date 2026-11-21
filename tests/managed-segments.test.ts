@@ -185,6 +185,7 @@ async function fixture(
             ...input,
             signal: undefined,
             onProgress: undefined,
+            onEvent: undefined,
           }) as unknown as Request,
         );
         return options.script ? options.script(input, requests.length) : response();

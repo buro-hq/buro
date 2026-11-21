@@ -5,6 +5,7 @@ import type {
   RunReconciliation,
 } from '../protocol/reconciliation.ts';
 import { DomainError } from './ports.ts';
+import type { ProviderOutcome } from '../agent/contracts/provider-errors.ts';
 
 const messages: Record<ReconciliationCode, string> = {
   SESSION_RECONCILIATION_REQUIRED:
@@ -35,6 +36,14 @@ export class UnresolvedEffectError extends DomainError {
 }
 
 const observedFailures = new WeakSet<object>();
+const providerOutcomes = new WeakMap<object, ProviderOutcome>();
+
+/** A trusted transport observation takes precedence over a generic exception code. */
+export function recordTurnOutcome<T>(error: T, outcome: ProviderOutcome): T {
+  if (error !== null && (typeof error === 'object' || typeof error === 'function'))
+    if (providerOutcomes.get(error) !== 'unknown') providerOutcomes.set(error, outcome);
+  return error;
+}
 
 /** Preserve the original error while recording a backend-confirmed settled/no-dispatch outcome. */
 export function observedTurnFailure<T>(error: T): T {
@@ -66,6 +75,10 @@ const knownRejections = new Set([
 
 /** A receipt-based observation is stronger than classification by exception text. */
 export function isKnownTurnRejection(error: unknown): boolean {
+  if (error !== null && (typeof error === 'object' || typeof error === 'function')) {
+    const outcome = providerOutcomes.get(error);
+    if (outcome !== undefined) return outcome !== 'unknown';
+  }
   return (
     (error !== null && typeof error === 'object' && observedFailures.has(error)) ||
     (error instanceof DomainError && knownRejections.has(error.code))

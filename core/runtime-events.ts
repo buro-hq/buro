@@ -24,6 +24,8 @@ export type RuntimeEvent = EventBase &
         /** Temporary metadata for legacy native children, never a permission grant. */
         legacyAssignment?: { path?: string; prompt?: string; name?: string };
       }
+    /** Transient text only; completion and durable generation receipts are separate. */
+    | { type: 'message.delta'; turnId: string; requestId: string; text: string }
     | { type: 'message.completed'; text: string }
     | { type: 'tool.started'; actionId: string; toolName: string }
     | { type: 'tool.completed'; actionId: string; toolName: string; isError: boolean }
@@ -42,6 +44,7 @@ export function recordableRuntimeEvent(event: RuntimeEvent) {
   return (
     !!event.runId &&
     !/^(setup-|result-|environment-)/.test(event.runId) &&
-    event.type !== 'progress'
+    event.type !== 'progress' &&
+    event.type !== 'message.delta'
   );
 }

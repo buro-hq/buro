@@ -28,6 +28,23 @@ test('neutral agent contracts depend only on other neutral contracts', async () 
       assert.ok(target.startsWith(root + path.sep), `${file}: application dependency ${name}`);
     }
 });
+test('portable providers import only their own modules and neutral contracts', async () => {
+  const allowed = ['agent/providers', 'agent/contracts'].map(
+    (directory) => path.resolve(directory) + path.sep,
+  );
+  for (const file of await sources('agent/providers')) {
+    const source = await fs.readFile(file, 'utf8');
+    assert.doesNotMatch(source, /^\s*import\s*['"]/m, `${file}: side-effect import`);
+    for (const name of imports(source)) {
+      assert.ok(name.startsWith('.'), `${file}: external or platform dependency ${name}`);
+      const target = path.resolve(path.dirname(file), name);
+      assert.ok(
+        allowed.some((root) => target.startsWith(root)),
+        `${file}: application dependency ${name}`,
+      );
+    }
+  }
+});
 test('domain and protocol have no framework/platform imports; clients never import backend', async () => {
   for (const dir of ['core', 'protocol'])
     for (const file of await sources(dir))

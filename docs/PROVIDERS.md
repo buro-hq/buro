@@ -95,3 +95,11 @@ Required cases:
 - Changing a profile affects future assignments under a new revision while preserving earlier session snapshots and evidence.
 
 The release gate is a verified coding workflow through both providers and a mixed team, not a successful text response or a green connection indicator.
+
+## Portable transport implementation (3A)
+
+[Private-project evaluation details removed.]
+
+`ModelProvider.complete` accepts an optional best-effort `onEvent` for visible text deltas, reported usage and observed terminal finish. Thinking/reasoning and tool fragments remain private. Observers cannot change canonical usage or completion; synchronous/asynchronous callback failures are isolated. A terminal event can report length/failed output and is never goal acceptance. Buro emits transient request-correlated runtime deltas without writing a project transaction per token; current WebSocket/UI history still consumes durable events.
+
+`ProviderFailure` records not-dispatched, rejected or unknown request outcome. Buro translates direct transport failures and gives explicit unknown precedence over familiar error codes. Failed model discovery before generation is a distinct operation; a partially received generation cannot acquire that safe preflight classification. Complete normalized responses/private continuation still enter the host journal before usage settlement or tool dispatch. The existing aggregate reservations and the current single managed loop remain in place.

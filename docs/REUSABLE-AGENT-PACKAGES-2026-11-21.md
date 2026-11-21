@@ -2,6 +2,8 @@
 
 [Private-project evaluation details removed.]
 
+[Private-project evaluation details removed.]
+
 ## Selected split
 
 Keep one repository and one Buro application, with four independently consumable workspace packages. Names are provisional until actual package publication. The fourth package follows the user's explicit requirement that Codex and other agent clients remain equal adapters reusable outside Buro. Do not split each policy or client into another package or introduce independent services.
@@ -31,7 +33,7 @@ Equal authority does not imply fabricated capabilities. Tools-free decisions, re
 
 Planned task paths are advisory by default inside the authorized working copy; strict planned-path enforcement is an explicit user option. Capability validation uses that effective policy, rather than imposing strict task scope on every backend. Actual checked/reviewed/saved revision identity remains mandatory in both modes. See [autonomy and visible policy](AUTONOMY-POLICY-2026-11-21.md).
 
-Current code still has Codex-specific IDs/default profiles and client-kind branches for planning and check isolation. Replace these through the clean contract cutover, not cosmetic registry renaming. The [backend parity review](../output/research/backend-parity-review-2026-11-21.md) inventories the current exceptions and required tests.
+The original audit recorded Codex-specific IDs/default profiles and client-kind planning/check rules. Stage 2 replaced the planning/role capability rules; startup defaults and the neutral backend lifecycle still require the later contribution/AgentBackend cutover. The [backend parity review](../output/research/backend-parity-review-2026-11-21.md) inventories the current exceptions and required tests.
 
 ## Why existing directories cannot simply become packages
 

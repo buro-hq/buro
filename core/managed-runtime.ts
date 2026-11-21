@@ -597,6 +597,15 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
             contextTokens: limits.contextTokens,
             signal,
             onProgress: touch,
+            onEvent: (event) => {
+              if (event.type === 'text.delta')
+                emit({
+                  type: 'message.delta',
+                  turnId,
+                  requestId: `${turnId}:${round}`,
+                  text: event.text,
+                });
+            },
           });
         } catch (error) {
           responseSettled = isKnownTurnRejection(error);
