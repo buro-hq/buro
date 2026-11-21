@@ -5,7 +5,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { safeGit } from '../processes/safe-git.ts';
-import { DomainError } from '../../core/ports.ts';
+import { DomainError, type ProjectDocument } from '../../core/ports.ts';
+import { resultApplyReceiptId, type ResultApplyIntent } from '../../core/result-apply.ts';
 import {
   terminal,
   type ExecutionPolicy,
@@ -663,42 +664,155 @@ export class ProjectManager {
         throw new DomainError('NOT_ACCEPTED', 'Only an accepted result can be applied.');
       if (snapshot.runs.some((r) => !terminal(r)))
         throw new DomainError('PROJECT_BUSY', 'Wait for the current goal to finish.');
-      const info = await this.inspect(snapshot.project.root);
-      if (info.head !== input.expectedHead || info.branch !== input.expectedBranch)
+      const prepareId = resultApplyReceiptId('prepare', requestId),
+        dispatchId = resultApplyReceiptId('dispatch', requestId);
+      let intent = store.receipt(prepareId, fingerprint) as ResultApplyIntent | undefined;
+      const change = (doc: ProjectDocument) => {
+        const live = doc.runs.find((r) => r.id === input.runId);
+        if (!live || live.status !== 'completed' || live.commit !== run.commit)
+          throw new DomainError('NOT_ACCEPTED', 'The accepted result changed.');
+        const goal = doc.goals.find((g) => g.id === live.goalId);
+        if (!goal) throw new DomainError('NOT_FOUND', 'Goal not found.');
+        return { type: 'run.changed' as const, run: live, goal };
+      };
+      if (!intent) {
+        const info = await this.inspect(snapshot.project.root);
+        if (info.head !== input.expectedHead || info.branch !== input.expectedBranch)
+          throw new DomainError(
+            'BRANCH_CHANGED',
+            'The branch or its commit changed. Refresh the result before applying.',
+          );
+        if (!info.branch)
+          throw new DomainError('DETACHED_HEAD', 'Switch the source repository to a branch first.');
+        if (info.dirty)
+          throw new DomainError(
+            'DIRTY_WORKTREE',
+            'The source directory has changes. Commit them to Git first.',
+          );
+        try {
+          await safeGit(['merge-base', '--is-ancestor', info.head, run.commit], { cwd: info.root });
+        } catch {
+          throw new DomainError(
+            'BRANCH_DIVERGED',
+            'The branch changed independently of the result. Merge or cherry-pick manually.',
+          );
+        }
+        const prepared: ResultApplyIntent = {
+          version: 1,
+          requestId,
+          fingerprint,
+          projectId: input.projectId,
+          runId: input.runId,
+          root: info.root,
+          branch: info.branch,
+          baseHead: info.head,
+          targetCommit: run.commit,
+          startedAt: new Date().toISOString(),
+          status: 'prepared',
+        };
+        intent = await store.transact(prepareId, fingerprint, (doc) => {
+          const event = change(doc);
+          if (doc.runs.some((r) => !terminal(r)))
+            throw new DomainError('PROJECT_BUSY', 'Wait for the current goal to finish.');
+          doc.resultApplyIntents ||= {};
+          Object.defineProperty(doc.resultApplyIntents, requestId, {
+            value: prepared,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          });
+          return { result: prepared, change: event };
+        });
+      }
+      if (
+        intent.requestId !== requestId ||
+        intent.fingerprint !== fingerprint ||
+        intent.projectId !== input.projectId ||
+        intent.runId !== input.runId ||
+        intent.root !== snapshot.project.root ||
+        intent.baseHead !== input.expectedHead ||
+        intent.branch !== input.expectedBranch ||
+        intent.targetCommit !== run.commit
+      )
         throw new DomainError(
-          'BRANCH_CHANGED',
-          'The branch or its commit changed. Refresh the result before applying.',
+          'IDEMPOTENCY_CONFLICT',
+          'The saved application has different inputs.',
         );
-      if (!info.branch)
-        throw new DomainError('DETACHED_HEAD', 'Switch the source repository to a branch first.');
+      const saved = intent;
+      const reconciliationRequired = () =>
+        new DomainError(
+          'APPLY_RECONCILIATION_REQUIRED',
+          'The saved application outcome needs reconciliation. The branch will not be merged again automatically.',
+        );
+      const observe = async () => {
+        const info = await this.inspect(saved.root);
+        if (info.root !== saved.root || info.branch !== saved.branch)
+          throw reconciliationRequired();
+        return info;
+      };
+      const settle = () =>
+        store.transact(requestId, fingerprint, (doc) => {
+          const event = change(doc),
+            live = event.run,
+            current = doc.resultApplyIntents?.[requestId];
+          if (!current || current.targetCommit !== saved.targetCommit)
+            throw reconciliationRequired();
+          const at = new Date().toISOString();
+          current.status = 'completed';
+          current.completedAt = at;
+          live.appliedAt = live.appliedAt || at;
+          live.appliedBranch = saved.branch;
+          return {
+            result: { commit: saved.targetCommit, branch: saved.branch },
+            change: event,
+          };
+        });
+      let info = await observe();
+      if (info.head === saved.targetCommit) return settle();
+      if (info.head !== saved.baseHead) throw reconciliationRequired();
+      // A prior dispatch can still have an unknown outcome, even if HEAD currently looks unchanged.
+      if (store.receipt(dispatchId, fingerprint) !== undefined) throw reconciliationRequired();
       if (info.dirty)
         throw new DomainError(
           'DIRTY_WORKTREE',
           'The source directory has changes. Commit them to Git first.',
         );
+      const owner = randomUUID();
+      const grant = await store.transact(dispatchId, fingerprint, (doc) => {
+        const event = change(doc),
+          current = doc.resultApplyIntents?.[requestId];
+        if (!current || current.status !== 'prepared') throw reconciliationRequired();
+        if (
+          Object.values(doc.resultApplyIntents || {}).some(
+            (pending) => pending.requestId !== requestId && pending.status === 'dispatched',
+          )
+        )
+          throw new DomainError(
+            'APPLY_IN_PROGRESS',
+            'Reconcile the previous result application first.',
+          );
+        current.status = 'dispatched';
+        current.dispatchOwner = owner;
+        return { result: { owner }, change: event };
+      });
+      // Two managers can share a store. Only the caller whose nonce was committed owns dispatch.
+      if (grant.owner !== owner) {
+        if ((await observe()).head === saved.targetCommit) return settle();
+        throw reconciliationRequired();
+      }
+      info = await observe();
+      if (info.head === saved.targetCommit) return settle();
+      if (info.head !== saved.baseHead || info.dirty) throw reconciliationRequired();
       try {
-        await safeGit(['merge-base', '--is-ancestor', info.head, run.commit], {
-          cwd: info.root,
+        await safeGit(['merge', '--ff-only', '--no-verify', saved.targetCommit], {
+          cwd: saved.root,
         });
       } catch {
-        throw new DomainError(
-          'BRANCH_DIVERGED',
-          'The branch changed independently of the result. Merge or cherry-pick manually.',
-        );
+        if ((await observe()).head === saved.targetCommit) return settle();
+        throw reconciliationRequired();
       }
-      if (info.head !== run.commit)
-        await safeGit(['merge', '--ff-only', '--no-verify', run.commit], { cwd: info.root });
-      return store.transact(requestId, fingerprint, (doc) => {
-        const live = doc.runs.find((r) => r.id === input.runId)!;
-        live.appliedAt = live.appliedAt || new Date().toISOString();
-        live.appliedBranch = info.branch;
-        const goal = doc.goals.find((g) => g.id === live.goalId);
-        if (!goal) throw new DomainError('NOT_FOUND', 'Goal not found.');
-        return {
-          result: { commit: live.commit, branch: info.branch },
-          change: { type: 'run.changed', run: live, goal },
-        };
-      });
+      if ((await observe()).head !== saved.targetCommit) throw reconciliationRequired();
+      return settle();
     });
   }
   async dispose() {

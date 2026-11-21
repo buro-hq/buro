@@ -6,6 +6,7 @@ import readline from 'node:readline';
 import type { AgentRuntime, ProjectRegistry, RuntimeEvent } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
 import { normalizeCodexEvent } from './events.ts';
+import { observedTurnFailure, UnresolvedEffectError } from '../../core/run-reconciliation.ts';
 
 export type RuntimeOptions = {
   projects: ProjectRegistry;
@@ -320,9 +321,16 @@ class Connection {
     text: string,
     options: { schema: unknown; signal: AbortSignal; timeoutMs: number },
   ): Promise<{ turnId: string; text: string }> {
-    if (options.signal.aborted) throw new DOMException('Interrupted', 'AbortError');
+    if (options.signal.aborted)
+      throw observedTurnFailure(new DOMException('Interrupted', 'AbortError'));
+    if (this.closed || this.closePromise)
+      throw observedTurnFailure(Error('Codex app-server is closed.'));
     let turnId = '',
       answer = '';
+    let terminalObserved = false;
+    let cancellationRequested = false;
+    const earlyTerminals = new Map<string, any>();
+    const turnAnswers = new Map<string, string>();
     let settle: (m: any) => void = () => {};
     const done = new Promise<any>((resolve) => (settle = resolve));
     let touch = () => {};
@@ -341,20 +349,47 @@ class Connection {
       )
         touch();
       if (p?.threadId !== threadId) return;
-      if (message.method === 'item/completed' && p.item?.type === 'agentMessage')
-        answer = p.item.text || '';
-      if (message.method === 'turn/completed' && (!turnId || p.turn?.id === turnId)) settle(p.turn);
+      if (
+        message.method === 'item/completed' &&
+        p.item?.type === 'agentMessage' &&
+        typeof p.turnId === 'string'
+      ) {
+        if (!turnId) turnAnswers.set(p.turnId, p.item.text || '');
+        else if (p.turnId === turnId) answer = p.item.text || '';
+      }
+      if (
+        message.method === 'turn/completed' &&
+        typeof p.turn?.id === 'string' &&
+        ['completed', 'failed', 'interrupted'].includes(p.turn.status) &&
+        (!turnId || p.turn.id === turnId)
+      ) {
+        if (!turnId) earlyTerminals.set(p.turn.id, p.turn);
+        else {
+          terminalObserved = true;
+          settle(p.turn);
+        }
+      }
     };
     this.turnListeners.add(listener);
     const abort = () => {
-      if (turnId) void this.call('turn/interrupt', { threadId, turnId }).catch(() => {});
+      if (cancellationRequested || terminalObserved) return;
+      cancellationRequested = true;
+      if (turnId) {
+        void this.call('turn/interrupt', { threadId, turnId }).catch(() =>
+          settle({ status: 'unknown' }),
+        );
+        cancelTimer = setTimeout(() => settle({ status: 'unknown' }), 1000);
+      }
       // The server may have accepted the request before replying with an ID. Close this
       // owned transport rather than retrying an operation with an unknown native outcome.
-      else void this.close().catch(() => {});
-      settle({ status: 'interrupted' });
+      else
+        void this.close()
+          .finally(() => settle({ status: 'unknown' }))
+          .catch(() => {});
     };
     options.signal.addEventListener('abort', abort, { once: true });
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const result = (await this.call(
         'turn/start',
@@ -367,6 +402,13 @@ class Connection {
         options.signal,
       )) as { turn: { id: string } };
       turnId = result.turn.id;
+      answer = turnAnswers.get(turnId) || '';
+      turnAnswers.clear();
+      if (earlyTerminals.has(turnId)) {
+        terminalObserved = true;
+        settle(earlyTerminals.get(turnId));
+      }
+      earlyTerminals.clear();
       if (options.signal.aborted) abort();
       const ended = await Promise.race([
         done,
@@ -390,8 +432,16 @@ class Connection {
       if (ended.status !== 'completed')
         throw Error(ended.error?.message || 'The Codex phase failed.');
       return { turnId, text: answer };
+    } catch (error) {
+      if (terminalObserved) throw observedTurnFailure(error);
+      throw new UnresolvedEffectError(
+        'SESSION_RECONCILIATION_REQUIRED',
+        { backendSessionId: threadId, ...(turnId ? { operationId: turnId } : {}) },
+        error,
+      );
     } finally {
       clearTimeout(timer);
+      clearTimeout(cancelTimer);
       this.turnListeners.delete(listener);
       options.signal.removeEventListener('abort', abort);
     }

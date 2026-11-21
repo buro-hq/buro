@@ -387,7 +387,9 @@ test('a lost closing response remains charged and unknown across a fresh runtime
   });
   const runtime = f.make();
   const { threadId } = await f.start(runtime);
-  await assert.rejects(runtime.turn(threadId, 'Work', turnOptions()), /Lost terminal model stream/);
+  await assert.rejects(runtime.turn(threadId, 'Work', turnOptions()), {
+    code: 'GENERATION_RECONCILIATION_REQUIRED',
+  });
   assert.equal(f.reservations.length, 2);
   assert.equal(f.observations.at(-1)?.outcome, 'unknown');
   assert.equal((await f.files.load(threadId))?.generation?.outcome, 'unknown');
@@ -423,7 +425,9 @@ test('a pending generation checkpoint survives process replacement and cannot be
   });
   const runtime = f.make();
   const { threadId } = await f.start(runtime);
-  await assert.rejects(runtime.turn(threadId, 'Work', turnOptions()), /Crash before terminal/);
+  await assert.rejects(runtime.turn(threadId, 'Work', turnOptions()), {
+    code: 'GENERATION_RECONCILIATION_REQUIRED',
+  });
   assert.equal(f.executed, 0, 'A terminal reply must be checkpointed before its requested tool');
   assert.equal((await f.files.load(threadId))?.generation?.outcome, 'pending');
   await runtime.release(threadId);
@@ -442,7 +446,9 @@ test('an ambiguous tool outcome prevents closing, rollover and replay after reop
   });
   const runtime = f.make();
   const { threadId } = await f.start(runtime);
-  await assert.rejects(runtime.turn(threadId, 'Work', turnOptions()), /external effect/);
+  await assert.rejects(runtime.turn(threadId, 'Work', turnOptions()), {
+    code: 'ACTION_RECONCILIATION_REQUIRED',
+  });
   const saved = (await f.files.load(threadId))!;
   assert.equal(saved.generation?.outcome, 'completed');
   assert.equal(saved.actions[0].status, 'unknown');
@@ -471,7 +477,8 @@ test('failed budget observation stops before tool dispatch or a work-step transi
   assert.equal(f.executed, 0);
   assert.equal(f.requests.length, 1);
   const saved = (await f.files.load(threadId))!;
-  assert.equal(saved.generation?.outcome, 'unknown');
+  assert.equal(saved.generation?.outcome, 'completed');
+  assert.equal(saved.generation?.response?.finish, 'tools');
   assert.equal(saved.actions.length, 0);
   assert.equal(saved.workSegments?.archives.length, 0);
 });

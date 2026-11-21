@@ -276,7 +276,7 @@ else {
   if(m.method==='thread/start')send({id:m.id,result:{thread:{id:'native'}}});
   if(m.method==='turn/start'){
    const turn={id:'turn',status:'completed'};send({id:m.id,result:{turn}});
-   send({method:'item/completed',params:{threadId:'native',item:{id:'answer',type:'agentMessage',text:'{}'}}});
+   send({method:'item/completed',params:{threadId:'native',turnId:'turn',item:{id:'answer',type:'agentMessage',text:'{}'}}});
    send({method:'turn/completed',params:{threadId:'native',turn}});
   }
  }

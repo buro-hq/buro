@@ -11,6 +11,7 @@ import type { ResourceSnapshot, RuntimeResource } from '../protocol/resources.ts
 import { ProjectChecks } from '../adapters/checks/project-commands.ts';
 import { EnvironmentExecutors, type Launch } from '../adapters/environments/executors.ts';
 import { ProjectEnvironments } from '../adapters/environments/project-environments.ts';
+import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
 
 const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
 const native: RuntimeResource = {
@@ -137,6 +138,8 @@ test('baseline and final verification never run managed-pool checks on the host 
         if (++observations % 2 === 0) world = undefined;
         return [];
       },
+      captureRevision: async (_workspace: string, base: string) =>
+        virtualWorkspaceRevision([], base),
     } as any,
     environments: {
       prepare: async () => {
@@ -184,7 +187,11 @@ test('native-only and legacy verification preserve the existing trusted host-che
     const service = new ExecutionService({
       projects: f.projects,
       runtime,
-      workspaces: { changes: async () => [] } as any,
+      workspaces: {
+        changes: async () => [],
+        captureRevision: async (_workspace: string, base: string) =>
+          virtualWorkspaceRevision([], base),
+      } as any,
       checks,
       policies: { p: f.policy },
       now: () => '2026-11-20T00:00:00Z',

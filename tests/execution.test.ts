@@ -1,3 +1,5 @@
+import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
+import { observedTurnFailure } from '../core/run-reconciliation.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -130,7 +132,7 @@ async function fixture(
         await new Promise<void>((resolve) =>
           signal.addEventListener('abort', () => resolve(), { once: true }),
         );
-        throw new DOMException('Aborted', 'AbortError');
+        throw observedTurnFailure(new DOMException('Aborted', 'AbortError'));
       }
       if (text.startsWith('First,'))
         return {
@@ -192,10 +194,12 @@ async function fixture(
         starts.find((start) => start.id === id)?.role ===
           (options.workerFailureRole || 'builder') &&
         workerFailures++ < (options.workerFailures || 1)
-      )
-        throw new DomainError(options.workerFailureCode, 'Synthetic known worker failure');
+      ) {
+        const error = new DomainError(options.workerFailureCode, 'Synthetic worker outcome');
+        throw options.workerFailureCode === 'MODEL_INCOMPLETE' ? observedTurnFailure(error) : error;
+      }
       if (options.noWorkers && text.startsWith('Execute your assigned work'))
-        throw Error('Worker unavailable');
+        throw observedTurnFailure(Error('Worker unavailable'));
       if (options.nativeChildren)
         for (const kind of ['started', 'completed'])
           for (const listener of events)
@@ -233,6 +237,9 @@ async function fixture(
           return [
             { path: options.outOfScope ? 'README.md' : 'src/code.mjs', before: '', after: 'ok' },
           ];
+        },
+        async captureRevision(workspace: string, base: string) {
+          return virtualWorkspaceRevision(await this.changes(workspace, base), base);
         },
         async checkpoint() {
           return 'a'.repeat(40);
@@ -333,7 +340,10 @@ test('unknown outcomes and legacy tasks never trigger an automatic refinement', 
     const f = await fixture(t, { compactTask, workerFailureCode: code });
     const { runId } = await f.start();
     const run = await f.drain(runId);
-    assert.equal(run.status, 'failed');
+    assert.equal(
+      run.status,
+      ['MODEL_INTERRUPTED', 'MODEL_UNAVAILABLE'].includes(code) ? 'needs-attention' : 'failed',
+    );
     assert.equal(run.workerReplan, undefined);
     assert.equal(
       f.turns.some((turn) => turn.text.startsWith('Refine the failed worker assignment')),
@@ -376,7 +386,7 @@ test('a failed or weakening refinement retains its durable intent without a repl
     });
     const { runId } = await f.start();
     const run = await f.drain(runId);
-    assert.equal(run.status, 'failed');
+    assert.equal(run.status, options.refinementFails ? 'needs-attention' : 'failed');
     assert.equal(run.workerReplan?.status, 'requested');
     assert.equal(f.starts.filter((start) => start.role === 'builder').length, 1);
     assert.equal(
@@ -819,7 +829,11 @@ test('runtime allows ongoing child progress beyond a wall deadline but interrupt
       signal: new AbortController().signal,
       timeoutMs: 80,
     }),
-    /No coordinator or agent progress/,
+    (error: any) => {
+      assert.equal(error.code, 'SESSION_RECONCILIATION_REQUIRED');
+      assert.match(error.cause?.message || '', /No coordinator or agent progress/);
+      return true;
+    },
   );
 });
 

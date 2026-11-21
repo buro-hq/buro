@@ -202,6 +202,17 @@ const schema = z
       .strictObject({
         requestId: z.string().min(1).max(256),
         outcome: z.enum(['pending', 'completed', 'unknown']),
+        response: z
+          .strictObject({
+            message: message.extend({ role: z.literal('assistant') }),
+            model: z.string(),
+            usage: z
+              .object({ inputTokens: z.number().optional(), outputTokens: z.number().optional() })
+              .optional(),
+            finish: z.enum(['stop', 'tools', 'length', 'failed']),
+          })
+          .optional(),
+        rejectionCode: z.string().optional(),
       })
       .optional(),
     status: z.enum(['ready', 'running', 'interrupted', 'failed']),
@@ -536,6 +547,29 @@ function validateTurnAuthorityTransition(previous: ManagedSession, next: Managed
 function validateTransition(previous: ManagedSession | undefined, next: ManagedSession) {
   if (!previous) return;
   validateWorkerCheckTransition(previous, next);
+  if (previous.generation) {
+    const before = previous.generation,
+      after = next.generation;
+    if (
+      !after ||
+      (before.outcome === 'unknown' && !same(before, after)) ||
+      (before.requestId === after.requestId &&
+        before.response &&
+        !same(before.response, after.response)) ||
+      (before.requestId === after.requestId &&
+        before.rejectionCode &&
+        before.rejectionCode !== after.rejectionCode) ||
+      (before.outcome === 'pending' && before.requestId !== after.requestId) ||
+      (before.requestId === after.requestId &&
+        before.outcome === 'completed' &&
+        after.outcome !== 'completed') ||
+      (before.requestId !== after.requestId &&
+        (before.outcome !== 'completed' ||
+          after.outcome !== 'pending' ||
+          next.requests <= previous.requests))
+    )
+      invalidSegment('An unresolved generation cannot be erased or automatically replayed.');
+  }
   // Coordination sessions do not have work segments. Their authority and cumulative
   // accounting still require the same protection as implementation checkpoints.
   if (previous.turnAuthorities || next.turnAuthorities)
@@ -600,23 +634,6 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
       (action.status === 'pending' && candidate.status === 'pending' && !same(action, candidate))
     )
       invalidSegment('A segmented session cannot rewrite an action receipt.');
-  }
-  if (previous.generation) {
-    const before = previous.generation,
-      after = next.generation;
-    if (
-      !after ||
-      (before.outcome === 'unknown' && !same(before, after)) ||
-      (before.outcome === 'pending' && before.requestId !== after.requestId) ||
-      (before.requestId === after.requestId &&
-        before.outcome === 'completed' &&
-        after.outcome !== 'completed') ||
-      (before.requestId !== after.requestId &&
-        (before.outcome !== 'completed' ||
-          after.outcome !== 'pending' ||
-          next.requests <= previous.requests))
-    )
-      invalidSegment('An unresolved generation cannot be erased or automatically replayed.');
   }
   const before = previous.workSegments,
     after = next.workSegments;

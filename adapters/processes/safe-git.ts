@@ -9,6 +9,8 @@ type Options = {
   signal?: AbortSignal;
   gitDirectory?: string;
   literalPathspecs?: boolean;
+  /** Host-owned temporary index; never taken from a model or repository configuration. */
+  indexFile?: string;
 };
 
 /** Local repository bookkeeping must never activate executable repository configuration. */
@@ -25,6 +27,7 @@ export async function safeGit(args: string[], options: Options) {
     GIT_NO_REPLACE_OBJECTS: '1',
     GIT_TERMINAL_PROMPT: '0',
     GIT_PAGER: 'cat',
+    ...(options.indexFile ? { GIT_INDEX_FILE: options.indexFile } : {}),
   });
   const global = [
     '--no-optional-locks',
@@ -61,6 +64,7 @@ export async function safeGit(args: string[], options: Options) {
   const {
     gitDirectory: _gitDirectory,
     literalPathspecs: _literalPathspecs,
+    indexFile: _indexFile,
     ...execution
   } = options;
   const config = {

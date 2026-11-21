@@ -1,3 +1,4 @@
+import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -199,6 +200,9 @@ test('resume archives the frozen planning policy despite changed current plannin
         },
         async changes() {
           return [];
+        },
+        async captureRevision(workspace: string, base: string) {
+          return virtualWorkspaceRevision(await this.changes(workspace, base), base);
         },
         async checkpoint() {
           return 'a'.repeat(40);

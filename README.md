@@ -19,6 +19,8 @@ The [selected execution design](docs/EXECUTION-DESIGN-DECISION-2026-11-21.md) tu
 
 The [full project architecture review](docs/PROJECT-ARCHITECTURE-REVIEW-2026-11-21.md) records fresh verification, reproduced gaps, SDK reuse choices and the revised implementation order. [Autonomy policy](docs/AUTONOMY-POLICY-2026-11-21.md) defines the target defaults and transparent stop/continuation behavior; those changes are not implemented yet.
 
+[Implementation progress](docs/IMPLEMENTATION-PROGRESS-2026-11-21.md) distinguishes completed refactor steps and their checks from the remaining target design.
+
 ![Buro project office with the coordinator, developer, test author and reviewer](docs/images/office.png)
 
 *Screenshots show the actual interface with a fictional project and sample run data.*

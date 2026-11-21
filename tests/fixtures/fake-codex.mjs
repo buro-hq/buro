@@ -26,6 +26,7 @@ for await (const line of lines) {
         method: 'item/completed',
         params: {
           threadId: m.params.threadId,
+          turnId: id,
           item: {
             id: 'spawn',
             type: 'subAgentActivity',
@@ -48,6 +49,7 @@ for await (const line of lines) {
           method: 'item/completed',
           params: {
             threadId: m.params.threadId,
+            turnId: id,
             item: { id: 'answer-long', type: 'agentMessage', text: 'done' },
           },
         });
@@ -63,6 +65,7 @@ for await (const line of lines) {
         method: 'item/completed',
         params: {
           threadId: m.params.threadId,
+          turnId: id,
           item: {
             id: 'answer-' + turn,
             type: 'agentMessage',

@@ -1,3 +1,4 @@
+import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { FileChange, Role, Run } from '../protocol/domain.ts';
@@ -349,6 +350,9 @@ async function dispatchFailure(
           after: 'Partial but known edit',
         },
       ];
+    },
+    async captureRevision(workspace: string, base: string) {
+      return virtualWorkspaceRevision(await this.changes(workspace, base), base);
     },
     async checkpoint() {
       return 'commit';

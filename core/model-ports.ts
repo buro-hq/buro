@@ -102,7 +102,18 @@ export type ManagedSession = {
   workSegments?: ManagedWorkSegments;
   workerStepChecks?: ManagedWorkerStepChecks;
   /** Segmented sessions fail closed after an unknown generation, including a lost closing reply. */
-  generation?: { requestId: string; outcome: 'pending' | 'completed' | 'unknown' };
+  generation?: {
+    requestId: string;
+    outcome: 'pending' | 'completed' | 'unknown';
+    /** Private normalized response, durable before usage settlement or tool dispatch. */
+    response?: {
+      message: ModelMessage & { role: 'assistant' };
+      model: string;
+      usage?: ModelUsage;
+      finish: 'stop' | 'tools' | 'length' | 'failed';
+    };
+    rejectionCode?: string;
+  };
   status: 'ready' | 'running' | 'interrupted' | 'failed';
   cancelRequested?: boolean;
   requests: number;

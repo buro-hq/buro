@@ -1,4 +1,5 @@
 import { DomainError } from '../../core/ports.ts';
+import { observedTurnFailure } from '../../core/run-reconciliation.ts';
 
 export class RequestGate {
   private active = 0;
@@ -10,7 +11,8 @@ export class RequestGate {
   }
   private capacity: number;
   async run<T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> {
-    signal.throwIfAborted();
+    if (signal.aborted)
+      throw observedTurnFailure(new DOMException('Interrupted before dispatch', 'AbortError'));
     await new Promise<void>((resolve, reject) => {
       const entry = {
         signal,
@@ -23,7 +25,7 @@ export class RequestGate {
       const abort = () => {
         const index = this.waiting.indexOf(entry);
         if (index >= 0) this.waiting.splice(index, 1);
-        reject(new DOMException('Interrupted', 'AbortError'));
+        reject(observedTurnFailure(new DOMException('Interrupted before dispatch', 'AbortError')));
       };
       if (this.active < this.capacity) entry.grant();
       else {
@@ -32,7 +34,8 @@ export class RequestGate {
       }
     });
     try {
-      signal.throwIfAborted();
+      if (signal.aborted)
+        throw observedTurnFailure(new DOMException('Interrupted before dispatch', 'AbortError'));
       return await action();
     } finally {
       this.active--;
@@ -77,6 +80,8 @@ export function tokenCount(value: unknown) {
 }
 
 export async function request(options: HttpOptions, route: string, init: RequestInit) {
+  if (init.signal?.aborted)
+    throw observedTurnFailure(new DOMException('Interrupted before dispatch', 'AbortError'));
   let response: Response;
   try {
     response = await (options.fetch || fetch)(new URL(route, endpointURL(options.endpoint)), {

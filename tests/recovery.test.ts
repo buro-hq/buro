@@ -12,6 +12,7 @@ import { FileProjectRegistry } from '../adapters/files/registry.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { CodexRuntime } from '../adapters/codex/runtime.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
+import { DomainError } from '../core/ports.ts';
 import { unchangedDependencyFailures } from '../core/check-failures.ts';
 const exec = promisify(execFile);
 async function fixture(t: any) {
@@ -220,6 +221,123 @@ test('recheck retains run/worktree/history, reruns gates, and accepts without re
     }),
     { runId: before.id },
   );
+});
+
+test('check-time workspace edits invalidate evidence and preserve the actual change for recheck', async (t) => {
+  const f = await fixture(t);
+  const original = f.engine.env.checks.run;
+  let checks = 0;
+  f.engine.env.checks.run = async (...args) => {
+    const result = await original(...args);
+    if (++checks === 2)
+      await fs.writeFile(path.join(args[1], 'README.md'), 'A check changed this file.');
+    return result;
+  };
+  const run = await f.start();
+  assert.equal(run.status, 'needs-attention', run.result);
+  assert.equal(run.commit, undefined);
+  assert.match(run.result, /changed|revision/i);
+  assert.ok(run.changedFiles.some((file) => file.path === 'README.md'));
+  assert.equal(
+    await fs.readFile(path.join(run.workspace!, 'README.md'), 'utf8'),
+    'A check changed this file.',
+  );
+  await assert.rejects(fs.stat(path.join(f.root, 'README.md')), { code: 'ENOENT' });
+});
+
+test('a workspace edit during reviewer execution cannot enter an accepted commit', async (t) => {
+  const f = await fixture(t);
+  const turn = f.runtime.turn.bind(f.runtime);
+  f.runtime.turn = async (id, text) => {
+    const result = await turn(id, text);
+    if (text.startsWith('Review goal:')) {
+      const workspace = f.store.snapshot().runs.at(-1)!.workspace!;
+      await fs.writeFile(path.join(workspace, 'src/code.mjs'), 'export const value=999;');
+    }
+    return result;
+  };
+  const run = await f.start();
+  assert.equal(run.status, 'needs-attention', run.result);
+  assert.equal(run.commit, undefined);
+  assert.match(run.result, /changed|revision/i);
+});
+
+test('repair and recheck cannot replace a worker with an unresolved effect, including after reopening the store', async (t) => {
+  const f = await fixture(t);
+  const turn = f.runtime.turn.bind(f.runtime);
+  let workers = 0;
+  f.runtime.turn = async (id, text) => {
+    if (text.startsWith('Execute your assigned work')) {
+      workers++;
+      throw new DomainError(
+        'ACTION_RECONCILIATION_REQUIRED',
+        'The previous tool outcome is unknown.',
+      );
+    }
+    return turn(id, text);
+  };
+  const run = await f.start();
+  assert.equal(run.status, 'needs-attention', run.result);
+  assert.equal(run.reconciliation?.code, 'ACTION_RECONCILIATION_REQUIRED');
+  assert.equal(workers, 1);
+  for (const mode of ['repair', 'recheck'] as const)
+    await assert.rejects(
+      f.engine.resume('blocked-' + mode, mode, {
+        projectId: 'p',
+        runId: run.id,
+        mode,
+        instructions: '',
+        useCurrentProfile: true,
+      }),
+      { code: 'RUN_RECONCILIATION_REQUIRED' },
+    );
+  await f.engine.dispose();
+  await f.store.close();
+  const reopened = await FileProjectStore.open({
+    directory: path.join(f.root, '.buro'),
+    project: { id: 'p', name: 'P', root: f.root },
+  });
+  try {
+    assert.deepEqual(reopened.snapshot().runs[0].reconciliation, run.reconciliation);
+    assert.equal(workers, 1);
+  } finally {
+    await reopened.close();
+  }
+});
+
+test('restart retains a pending host turn as an owning-run reconciliation requirement', async (t) => {
+  const f = await fixture(t);
+  const completed = await f.start();
+  await f.store.transact('simulate-crash', 'simulate-crash', (doc) => {
+    const run = doc.runs.find((candidate) => candidate.id === completed.id)!;
+    run.status = 'running';
+    run.commit = undefined;
+    run.pendingTurn = {
+      version: 1,
+      id: 'OT-unobserved',
+      threadId: run.threadId,
+      runtimeId: 'fixture',
+      startedAt: new Date().toISOString(),
+    };
+    return { result: null, change: { type: 'run.changed', run, goal: doc.goals[0] } };
+  });
+  const calls = f.turns.length;
+  await f.engine.recover();
+  const stopped = f.engine.get('p', completed.id);
+  assert.equal(stopped.status, 'needs-attention');
+  assert.equal(stopped.reconciliation?.operationId, 'OT-unobserved');
+  assert.equal(f.turns.length, calls);
+  await assert.rejects(
+    f.engine.resume('after-crash', 'after-crash', {
+      projectId: 'p',
+      runId: stopped.id,
+      mode: 'repair',
+      instructions: '',
+      useCurrentProfile: false,
+    }),
+    { code: 'RUN_RECONCILIATION_REQUIRED' },
+  );
+  assert.equal(f.turns.length, calls);
 });
 test('editing a stopped goal is versioned; repair resumes the original coordinator with revised requirements', async (t) => {
   const f = await fixture(t);

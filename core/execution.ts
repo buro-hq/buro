@@ -44,6 +44,15 @@ import {
 } from './environment-repair.ts';
 import { unchangedDependencyFailures } from './check-failures.ts';
 import { canAccept } from './services.ts';
+import { sameWorkspaceRevision, type WorkspaceRevision } from './workspace-revision.ts';
+import {
+  assertRunReconciled,
+  isKnownTurnRejection,
+  reconciliationForError,
+  reconciliationForPendingTurn,
+  reconciliationIssue,
+  retainRunReconciliation,
+} from './run-reconciliation.ts';
 import {
   TeamPlanSchema,
   EnvelopeSchema,
@@ -108,6 +117,29 @@ export class ExecutionService {
         'Environment repair requires a managed project and an execution environment.',
       );
   }
+  private async requireRevision(
+    projectId: string,
+    runId: string,
+    workspace: { path: string; base: string },
+    expected: WorkspaceRevision,
+    phase: string,
+  ) {
+    const current = await this.env.workspaces.captureRevision(workspace.path, workspace.base);
+    if (sameWorkspaceRevision(expected, current)) return;
+    const message = `The workspace revision changed during ${phase}. The changes are saved, but checks and review must be rerun before acceptance.`;
+    await this.update(projectId, runId, (run) => {
+      run.changedFiles = current.changes;
+      run.review = undefined;
+      run.independentReviewer = false;
+      run.acceptance = {
+        passed: 0,
+        total: 1,
+        results: [{ name: 'Verified workspace revision', passed: false, error: message }],
+      };
+      run.events.push({ at: this.env.now(), type: 'checks.invalidated', text: message });
+    });
+    throw new DomainError('VERIFICATION_REVISION_CHANGED', message);
+  }
   async verify(
     projectId: string,
     runId: string,
@@ -125,6 +157,7 @@ export class ExecutionService {
     const blocked = () => ({
       changes,
       scope: false,
+      revision: undefined,
       checks: {
         passed: 0,
         total: 1,
@@ -159,11 +192,19 @@ ${installation.output || installation.error || ''}`,
           }),
         );
         if (!installation.passed)
-          return { changes, scope: true, checks: { passed: 0, total: 1, results: [installation] } };
+          return {
+            changes,
+            scope: true,
+            checks: { passed: 0, total: 1, results: [installation] },
+            revision: undefined,
+          };
         changes = await this.env.workspaces.changes(workspace.path, workspace.base);
         if (!safe()) return blocked();
       }
     }
+    const revision = await this.env.workspaces.captureRevision(workspace.path, workspace.base);
+    changes = revision.changes;
+    if (!safe()) return blocked();
     const resources = this.get(projectId, runId).resources;
     const requirePreparedIsolation =
       !!policy.profile &&
@@ -184,7 +225,8 @@ ${installation.output || installation.error || ''}`,
         { requirePreparedIsolation },
       ),
     );
-    return { changes, scope: true, checks };
+    await this.requireRevision(projectId, runId, workspace, revision, 'verification');
+    return { changes, scope: true, checks, revision };
   }
   async prepareEnvironment(
     projectId: string,
@@ -242,22 +284,60 @@ ${installation.output || installation.error || ''}`,
   ) {
     if (signal.aborted) throw new DOMException('Interrupted', 'AbortError');
     if (!this.env.runtime.turn) throw Error('The runtime does not support completed phases.');
-    const answer = await this.measure(projectId, runId, 'agent.turn', () =>
-      this.env.runtime.turn!(threadId, text, {
-        schema,
-        signal,
-        timeoutMs,
-        ...(toolPolicy ? { toolPolicy } : {}),
-      }),
-    );
-    if (answer.model)
-      await this.update(projectId, runId, (r) => {
+    const pending = {
+      version: 1 as const,
+      id: 'OT-' + this.env.id(),
+      threadId,
+      runtimeId: this.env.runtime.id,
+      startedAt: this.env.now(),
+    };
+    await this.update(projectId, runId, (run) => {
+      assertRunReconciled(run);
+      run.pendingTurn = pending;
+    });
+    let answer: Awaited<ReturnType<NonNullable<AgentRuntime['turn']>>>;
+    try {
+      answer = await this.measure(projectId, runId, 'agent.turn', () =>
+        this.env.runtime.turn!(threadId, text, {
+          schema,
+          signal,
+          timeoutMs,
+          ...(toolPolicy ? { toolPolicy } : {}),
+        }),
+      );
+    } catch (error) {
+      await this.update(projectId, runId, (run) => {
+        const unknown =
+          reconciliationForError(error, { detectedAt: this.env.now(), threadId }) ||
+          (!isKnownTurnRejection(error)
+            ? reconciliationForPendingTurn(pending, this.env.now())
+            : undefined);
+        run.reconciliation = retainRunReconciliation(run.reconciliation, unknown);
+        if (run.reconciliation) run.issue = reconciliationIssue(run.reconciliation);
+        else run.pendingTurn = undefined;
+      });
+      throw error;
+    }
+    await this.update(projectId, runId, (r) => {
+      if (r.pendingTurn?.id !== pending.id)
+        throw new DomainError('RUN_RECONCILIATION_REQUIRED', 'The saved turn identity changed.');
+      r.pendingTurn = undefined;
+      if (answer.model) {
         if (r.threadId === threadId && r.coordinatorSession)
           r.coordinatorSession.reportedModel = answer.model;
         const session = r.agents.find((agent) => agent.threadId === threadId)?.session;
         if (session) session.reportedModel = answer.model;
-      });
-    return JSON.parse(answer.text);
+      }
+    });
+    try {
+      return JSON.parse(answer.text);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      throw new DomainError(
+        'INVALID_AGENT_OUTPUT',
+        'The completed response is not valid JSON. Return one complete object matching the requested schema.',
+      );
+    }
   }
   async measure<T>(
     projectId: string,
@@ -387,6 +467,7 @@ ${installation.output || installation.error || ''}`,
         const run = doc.runs.find((r) => r.id === input.runId),
           goal = doc.goals.find((g) => g.id === run?.goalId);
         if (!run || !goal) throw new DomainError('NOT_FOUND', 'Run or goal not found.');
+        assertRunReconciled(run);
         this.assertManagedBudgetOpen(run);
         if (
           input.mode === 'recheck' &&
@@ -484,6 +565,7 @@ ${installation.output || installation.error || ''}`,
         run.executionPolicySnapshot || this.policy(projectId),
         !!run.repairEnvironment,
       );
+    assertRunReconciled(run);
     if (!run.workspace || !run.baseCommit || !this.env.workspaces.restore)
       throw new DomainError(
         'NO_WORKSPACE',
@@ -590,15 +672,23 @@ ${installation.output || installation.error || ''}`,
       await this.update(projectId, runId, (r) => {
         r.delegation = 'buro';
       });
-      const workerResults = await this.dispatchWorkers(
+      const previousGoal = run.attempts?.at(-1)?.goalText;
+      const pendingRoles = previousGoal !== run.goalText ? roles : pendingWorkerRoles(run, roles);
+      await this.dispatchWorkers(
         projectId,
         runId,
-        roles,
+        pendingRoles,
         workspace,
         policy,
         signal,
         threads,
         ask,
+      );
+      const observed = this.get(projectId, runId);
+      const workerResults = roles.map(
+        (role) =>
+          [...observed.agents].reverse().find((agent) => agent.session?.roleId === role.id)
+            ?.session,
       );
       envelope = EnvelopeSchema.parse(
         await ask(
@@ -703,7 +793,22 @@ ${installation.output || installation.error || ''}`,
     for (const project of this.env.projects.list())
       for (const run of this.env.projects.get(project.id).snapshot().runs) {
         if (terminal(run)) continue;
-        if (run.status === 'queued' && !run.cancelRequested) this.schedule(project.id, run.id);
+        if (run.pendingTurn) {
+          await this.update(project.id, run.id, (current) => {
+            current.reconciliation = retainRunReconciliation(
+              current.reconciliation,
+              reconciliationForPendingTurn(run.pendingTurn!, this.env.now()),
+            );
+            current.issue = reconciliationIssue(current.reconciliation!);
+          });
+          await this.finish(
+            project.id,
+            run.id,
+            'needs-attention',
+            reconciliationIssue(this.get(project.id, run.id).reconciliation!).message,
+          );
+        } else if (run.status === 'queued' && !run.cancelRequested)
+          this.schedule(project.id, run.id);
         else
           await this.finish(
             project.id,
@@ -749,6 +854,7 @@ ${installation.output || installation.error || ''}`,
       ),
       threads: string[] = [];
     const abort = () => {
+      assertRunReconciled(this.get(projectId, runId));
       if (signal.aborted || this.get(projectId, runId).cancelRequested)
         throw new DOMException('Interrupted', 'AbortError');
     };
@@ -792,6 +898,17 @@ ${installation.output || installation.error || ''}`,
       });
       await this.planAndImplement(projectId, runId, workspace, policy, signal, threads);
     } catch (error) {
+      const run = this.get(projectId, runId);
+      const unknown = reconciliationForError(error, { detectedAt: this.env.now() });
+      if (unknown || (!run.reconciliation && run.pendingTurn))
+        await this.update(projectId, runId, (current) => {
+          current.reconciliation = retainRunReconciliation(
+            current.reconciliation,
+            unknown || reconciliationForPendingTurn(run.pendingTurn!, this.env.now()),
+          );
+          current.issue = reconciliationIssue(current.reconciliation!);
+        });
+      const reconciliation = this.get(projectId, runId).reconciliation;
       const interrupted =
         signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
       const budgetFailure =
@@ -802,27 +919,34 @@ ${installation.output || installation.error || ''}`,
       await this.finish(
         projectId,
         runId,
-        interrupted
-          ? 'interrupted'
-          : budgetCode ||
-              (error instanceof DomainError &&
-                [
-                  'BASELINE_CHECKS_FAILED',
-                  'ENVIRONMENT_FAILED',
-                  'ENVIRONMENT_UNAVAILABLE',
-                  'FIXED_RUNTIME_UNAVAILABLE',
-                ].includes(error.code))
-            ? 'needs-attention'
-            : 'failed',
+        reconciliation
+          ? 'needs-attention'
+          : interrupted
+            ? 'interrupted'
+            : budgetCode ||
+                (error instanceof DomainError &&
+                  [
+                    'BASELINE_CHECKS_FAILED',
+                    'ENVIRONMENT_FAILED',
+                    'ENVIRONMENT_UNAVAILABLE',
+                    'FIXED_RUNTIME_UNAVAILABLE',
+                    'VERIFICATION_REVISION_CHANGED',
+                  ].includes(error.code))
+              ? 'needs-attention'
+              : 'failed',
         error instanceof Error ? error.message : String(error),
-        !interrupted && budgetCode
-          ? {
-              code: 'MANAGED_BUDGET_BLOCKED',
-              budgetCode,
-              message: error instanceof Error ? error.message : String(error),
-              checks: [],
-            }
-          : undefined,
+        reconciliation
+          ? reconciliationIssue(reconciliation)
+          : !interrupted && budgetCode
+            ? {
+                code: 'MANAGED_BUDGET_BLOCKED',
+                budgetCode,
+                message: error instanceof Error ? error.message : String(error),
+                checks: [],
+              }
+            : error instanceof DomainError && error.code === 'VERIFICATION_REVISION_CHANGED'
+              ? { code: 'EXECUTION_FAILED', message: error.message, checks: [] }
+              : undefined,
       );
     } finally {
       await Promise.all(threads.map((id) => this.env.runtime.release?.(id)));
@@ -963,19 +1087,28 @@ Catalog: ${JSON.stringify(roleContext(workerCatalog))}
 Permitted worker runtimes: ${JSON.stringify(pool.map(({ id, client, providerId, model, local }) => ({ id, client, providerId, model, local })))}.
 Choose a runtime for each worker only from this pool when that improves its assignment. Use runtimeId null and runtimeReason "" to follow its user preference or the profile default. Respect fixed user preferences. Explain a different choice when a user prefers another runtime. A runtime selection applies only to this assignment; never put it in reusable role instructions or create a new connection. Runtime metadata is not evidence of coding quality; the service still checks capabilities, scope, tests and independent review.
 ${correction}`;
-      const answer = boundedTurn
-        ? await this.completedTurn(
-            projectId,
-            runId,
-            root.threadId,
-            boundedTurn.text,
-            planningSchema,
-            signal,
-            run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-            boundedTurn.toolPolicy,
-          )
-        : await ask(root.threadId, legacyPrompt, teamOutputSchema);
+      let answer: unknown;
+      let formatError: DomainError | undefined;
       try {
+        answer = boundedTurn
+          ? await this.completedTurn(
+              projectId,
+              runId,
+              root.threadId,
+              boundedTurn.text,
+              planningSchema,
+              signal,
+              run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
+              boundedTurn.toolPolicy,
+            )
+          : await ask(root.threadId, legacyPrompt, teamOutputSchema);
+      } catch (error) {
+        // Only an observed response with invalid JSON is eligible for format correction.
+        if (!(error instanceof DomainError) || error.code !== 'INVALID_AGENT_OUTPUT') throw error;
+        formatError = error;
+      }
+      try {
+        if (formatError) throw formatError;
         const candidatePlan = TeamPlanSchema.parse(answer);
         const workerTasks = Object.fromEntries(
           candidatePlan.team
@@ -1112,8 +1245,9 @@ Use relevant user materials at their staged paths. Return the formal execution r
     threads: string[],
     ask: (threadId: string, text: string, schema: unknown) => Promise<unknown>,
   ) {
-    const dispatch = (selected: Role[]) =>
-      runWorkerAssignments({
+    const dispatch = (selected: Role[]) => {
+      assertRunReconciled(this.get(projectId, runId));
+      return runWorkerAssignments({
         projectId,
         run: this.get(projectId, runId),
         roles: selected,
@@ -1129,6 +1263,7 @@ Use relevant user materials at their staged paths. Return the formal execution r
         flush: () => this.eventQueue,
         ask,
       });
+    };
     try {
       return await dispatch(roles);
     } catch (error) {
@@ -1231,12 +1366,14 @@ Return a shorter complete objective and only needed inputs from the saved input 
     } = ctx;
     let envelope = ctx.envelope;
     const abort = () => {
+      assertRunReconciled(this.get(projectId, runId));
       if (signal.aborted || this.get(projectId, runId).cancelRequested)
         throw new DOMException('Interrupted', 'AbortError');
     };
     let accepted = false,
       finalText = '',
       acceptedRoles: Role[] = [];
+    let acceptedRevision: WorkspaceRevision | undefined;
     for (let iteration = 0; iteration <= policy.maxRepairs; iteration++) {
       abort();
       await this.phase(
@@ -1245,7 +1382,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
         'checking',
         'The service is verifying changes and running independent checks',
       );
-      const { changes, scope, checks } = await this.verify(
+      const { changes, scope, checks, revision } = await this.verify(
         projectId,
         runId,
         workspace,
@@ -1260,7 +1397,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
         r.events.push({
           at: this.env.now(),
           type: 'checks.completed',
-          text: `Checks: ${checks.passed}/${checks.total}; boundaries: ${scope ? 'respected' : 'violated'}`,
+          text: `Checks: ${checks.passed}/${checks.total}; boundaries: ${scope ? 'respected' : 'violated'}${revision ? '; source tree: ' + revision.tree : ''}`,
         });
       });
       const environment = unchangedDependencyFailures(
@@ -1302,6 +1439,11 @@ Return a shorter complete objective and only needed inputs from the saved input 
         );
         continue;
       }
+      if (!revision)
+        throw new DomainError(
+          'VERIFICATION_REVISION_REQUIRED',
+          'No verified source revision was captured.',
+        );
       await this.phase(projectId, runId, 'review', 'Independent reviewer is checking the result');
       const reviewerRole = initial.roles.find((r) => r.id === 'reviewer');
       const reviewerSession = {
@@ -1389,6 +1531,7 @@ Read relevant sources and verify actual correctness, including preservation of e
       });
       await this.env.runtime.release?.(reviewer.threadId);
       await this.eventQueue;
+      await this.requireRevision(projectId, runId, workspace, revision, 'independent review');
       const observed = this.get(projectId, runId);
       this.assertManagedBudgetOpen(observed);
       const workersReady = team.roles.every((role) => {
@@ -1411,7 +1554,10 @@ Read relevant sources and verify actual correctness, including preservation of e
           review: { verdict: review.verdict, blockingFindings: review.blockingFindings.length },
         });
       finalText = envelope.summary;
-      if (accepted) break;
+      if (accepted) {
+        acceptedRevision = revision;
+        break;
+      }
       if (iteration === policy.maxRepairs)
         throw Error(
           `Acceptance failed: ${checks.passed}/${checks.total} checks; scope=${scope}; workers=${workersReady}; ${review.blockingFindings.join('; ') || review.verdict}; ${envelope.summary}`,
@@ -1447,8 +1593,14 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
       if (!current) acceptedRoles.push(role);
     }
     this.assertManagedBudgetOpen(this.get(projectId, runId));
+    assertRunReconciled(this.get(projectId, runId));
+    if (!acceptedRevision)
+      throw new DomainError(
+        'VERIFICATION_REVISION_REQUIRED',
+        'No verified source revision was accepted.',
+      );
     const commit = await this.measure(projectId, runId, 'workspace.checkpoint', () =>
-      this.env.workspaces.checkpoint(workspace.path, runId),
+      this.env.workspaces.checkpoint(workspace.path, runId, acceptedRevision),
     );
     abort();
     await this.eventQueue;
@@ -1457,6 +1609,7 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
       runId,
       (r, g, doc) => {
         this.assertManagedBudgetOpen(r);
+        assertRunReconciled(r);
         for (const role of acceptedRoles) {
           if (doc.roleVersions.some((x) => x.id === role.id))
             throw Error('Role catalog conflict: ' + role.id);

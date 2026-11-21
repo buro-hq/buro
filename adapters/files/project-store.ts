@@ -18,6 +18,8 @@ import type {
 import { packEvent, expandEvent, type StoredEvent } from './event-log.ts';
 import { validateProjectRunBudgets } from './project-run-budgets.ts';
 import { validateProjectPlanningPolicies } from './project-planning-policy.ts';
+import { validateResultApplyIntents } from '../../core/result-apply.ts';
+import { validateRunReconciliationTransitions } from '../../core/reconciliation-transitions.ts';
 type StoredDocument = ProjectDocument & { events: StoredEvent[]; eventEncoding?: 'run-delta-v1' };
 type Options = {
   directory: string;
@@ -100,6 +102,7 @@ export class FileProjectStore implements ProjectStore {
         doc.profile = options.profile;
       validateProjectRunBudgets(doc);
       validateProjectPlanningPolicies(doc);
+      validateResultApplyIntents(doc);
       store = new FileProjectStore(options, doc, nonce);
       doc.eventEncoding = 'run-delta-v1';
       await store.persist(doc);
@@ -168,6 +171,8 @@ export class FileProjectStore implements ProjectStore {
         { result, change } = apply(draft);
       validateProjectRunBudgets(draft, this.doc);
       validateProjectPlanningPolicies(draft, this.doc);
+      validateResultApplyIntents(draft, this.doc);
+      validateRunReconciliationTransitions(this.doc.runs, draft.runs);
       draft.revision++;
       draft.sequence++;
       const event: DomainEvent = {

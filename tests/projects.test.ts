@@ -399,6 +399,7 @@ test('verification retries share one command execution and return the persisted 
     },
     changes: f.workspaces.changes.bind(f.workspaces),
     checkpoint: f.workspaces.checkpoint.bind(f.workspaces),
+    captureRevision: f.workspaces.captureRevision.bind(f.workspaces),
   };
   const meta = { id: 'verify-once', fingerprint: 'same' };
   const [first, second] = await Promise.all([

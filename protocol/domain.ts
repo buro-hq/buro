@@ -168,12 +168,18 @@ export type RunContinuation = {
   requestedAt: string;
 };
 export type RunIssue = {
-  code: 'BASELINE_CHECKS_FAILED' | 'EXECUTION_FAILED' | 'MANAGED_BUDGET_BLOCKED';
+  code:
+    | 'BASELINE_CHECKS_FAILED'
+    | 'EXECUTION_FAILED'
+    | 'MANAGED_BUDGET_BLOCKED'
+    | 'RECONCILIATION_REQUIRED';
   budgetCode?: import('./run-budget.ts').ManagedBudgetErrorCode;
   message: string;
   checks: string[];
 };
 export type Run = {
+  reconciliation?: import('./reconciliation.ts').RunReconciliation;
+  pendingTurn?: import('./reconciliation.ts').PendingRunTurn;
   planningPolicy?: { version: 1; mode: 'bounded' | 'legacy'; revision: string };
   managedBudget?: import('./run-budget.ts').ManagedRunBudgetSummary;
   workerTasks?: Record<string, import('./worker-tasks.ts').WorkerTask>;

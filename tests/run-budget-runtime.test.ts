@@ -237,7 +237,14 @@ test('an unknown provider outcome remains charged and cannot disappear through a
   t.after(() => f.dispose());
   const runtime = f.make();
   const worker = await f.start(runtime);
-  await assert.rejects(runtime.turn(worker.threadId, 'Work.', turn()), /Lost provider stream/);
+  await assert.rejects(
+    runtime.turn(worker.threadId, 'Work.', turn()),
+    (error: unknown) =>
+      error instanceof DomainError &&
+      error.code === 'GENERATION_RECONCILIATION_REQUIRED' &&
+      error.cause instanceof Error &&
+      error.cause.message === 'Lost provider stream',
+  );
   assert.equal(f.observations[0].outcome, 'unknown');
   assert.equal(f.observations[0].usage, undefined);
   const replacement = await f.start(runtime);

@@ -331,20 +331,23 @@ test('tool intent and result persistence failures never repeat a possibly comple
     };
     const runtime = f.make(p, { sessions, tools });
     const { threadId } = await f.start(runtime);
-    await assert.rejects(runtime.turn(threadId, 'Edit', turnOptions()), /disk failed/);
+    await assert.rejects(
+      runtime.turn(threadId, 'Edit', turnOptions()),
+      failure === 'intent' ? /disk failed/ : { code: 'ACTION_RECONCILIATION_REQUIRED' },
+    );
     assert.equal(effects, failure === 'intent' ? 0 : 1);
     await runtime.dispose();
     const restored = f.make(p);
-    await assert.rejects(
+    const restore = () =>
       restored.resume({
         projectId: 'p',
         threadId,
         workspace: f.root,
         runId: 'R-fixture',
         instructions: 'Continue',
-      }),
-      { code: 'ACTION_RECONCILIATION_REQUIRED' },
-    );
+      });
+    if (failure === 'intent') await restore();
+    else await assert.rejects(restore(), { code: 'ACTION_RECONCILIATION_REQUIRED' });
     assert.equal(requests, 1);
     assert.equal(effects, failure === 'intent' ? 0 : 1);
   }
@@ -1015,7 +1018,7 @@ test('interrupt intent survives cancellation and concurrent turns cannot share a
   });
   const { threadId } = await f.start(runtime);
   const turn = runtime.turn(threadId, 'Wait', turnOptions());
-  const rejected = assert.rejects(turn, { name: 'AbortError' });
+  const rejected = assert.rejects(turn, { code: 'GENERATION_RECONCILIATION_REQUIRED' });
   await ready;
   await assert.rejects(runtime.turn(threadId, 'Other', turnOptions()), { code: 'SESSION_BUSY' });
   await runtime.interrupt(threadId, turnId);

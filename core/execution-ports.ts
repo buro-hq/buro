@@ -1,6 +1,7 @@
 import { PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
 import { roleIdPattern } from '../protocol/domain.ts';
 import type { TeamPlan } from '../protocol/execution.ts';
+import type { WorkspaceRevision } from './workspace-revision.ts';
 export type { TeamPlan } from '../protocol/execution.ts';
 import type {
   Run,
@@ -38,7 +39,8 @@ export interface WorkspacePort {
   ): Promise<{ path: string; base: string }>;
   synchronizeDependencies?(workspace: string, signal: AbortSignal): Promise<Check | undefined>;
   changes(workspace: string, base: string): Promise<FileChange[]>;
-  checkpoint(workspace: string, runId: string): Promise<string>;
+  captureRevision(workspace: string, base: string): Promise<WorkspaceRevision>;
+  checkpoint(workspace: string, runId: string, expected?: WorkspaceRevision): Promise<string>;
 }
 export interface CheckPort {
   run(

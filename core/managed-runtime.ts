@@ -22,6 +22,11 @@ import type { ManagedRunBudgetPort } from './run-budget.ts';
 import { checkManagedWorkerStep } from './managed-worker-checks.ts';
 import type { WorkerStepCheckPort } from './worker-step-checks.ts';
 import {
+  isKnownTurnRejection,
+  observedTurnFailure,
+  UnresolvedEffectError,
+} from './run-reconciliation.ts';
+import {
   assertSegmentScope,
   decideWorkSegment,
   parseSegmentClosing,
@@ -333,6 +338,9 @@ export class ManagedAgentRuntime implements AgentRuntime {
     let closing = false;
     let segmentCompleteEmitted = false;
     let responseSettled = false;
+    let effectDispatched = false;
+    let generationDispatched = false;
+    const dispatchedActions = new Set<string>();
     let sequence = 0,
       calls = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -517,12 +525,14 @@ export class ManagedAgentRuntime implements AgentRuntime {
           );
         session.requests++;
         responseSettled = false;
-        if (session.workSegments)
-          session.generation = { requestId: `${turnId}:${round}`, outcome: 'pending' };
+        generationDispatched = false;
+        session.generation = { requestId: `${turnId}:${round}`, outcome: 'pending' };
         await sessions.save(session);
         check();
         let response: Awaited<ReturnType<ModelProvider['complete']>>;
         try {
+          effectDispatched = true;
+          generationDispatched = true;
           response = await provider.complete({
             requestId: `${turnId}:${round}`,
             model: session.requestedModel,
@@ -535,7 +545,10 @@ export class ManagedAgentRuntime implements AgentRuntime {
             onProgress: touch,
           });
         } catch (error) {
-          if (session.workSegments && session.generation) session.generation.outcome = 'unknown';
+          responseSettled = isKnownTurnRejection(error);
+          session.generation!.outcome = responseSettled ? 'completed' : 'unknown';
+          if (responseSettled && error instanceof DomainError)
+            session.generation!.rejectionCode = error.code;
           if (reservation && budgets && budgetOwner)
             await budgets.recordUsage({
               ...budgetOwner,
@@ -544,6 +557,14 @@ export class ManagedAgentRuntime implements AgentRuntime {
             });
           throw error;
         }
+        session.generation = {
+          ...session.generation!,
+          outcome: 'completed',
+          response: structuredClone(response),
+        };
+        // Preserve observed response/continuation before a usage-ledger failure can interrupt us.
+        await sessions.save(session);
+        responseSettled = true;
         if (reservation && budgets && budgetOwner)
           await budgets.recordUsage({
             ...budgetOwner,
@@ -551,7 +572,6 @@ export class ManagedAgentRuntime implements AgentRuntime {
             usage: response.usage,
             outcome: 'observed',
           });
-        responseSettled = true;
         check();
         session.reportedModel = response.model;
         if (response.usage) {
@@ -622,7 +642,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
         session.actions.push(...actions);
         // A complete response and its tool intents become durable with the generation receipt.
         // Never publish a completed generation whose response/continuation could still be lost.
-        if (session.workSegments && session.generation) session.generation.outcome = 'completed';
+        if (session.generation) session.generation.outcome = 'completed';
         await sessions.save(session);
         for (const pending of actions) {
           check();
@@ -635,13 +655,14 @@ export class ManagedAgentRuntime implements AgentRuntime {
               ? String((action.call.arguments as Record<string, unknown>).command || '')
               : undefined;
           emit({ type: 'tool.started', actionId: action.id, toolName: action.call.name });
+          effectDispatched = true;
+          dispatchedActions.add(action.id);
           const result = await tools.execute(action.call, session.scope, {
             actionId: action.id,
             signal,
             onCommandStart: (observed) =>
               emit({ type: 'command.started', commandId: action.id, command: observed }),
           });
-          check();
           action.status = 'completed';
           action.result = result;
           session.messages.push({
@@ -651,6 +672,7 @@ export class ManagedAgentRuntime implements AgentRuntime {
             toolName: action.call.name,
           });
           await sessions.save(session);
+          check();
           emit({
             type: 'tool.completed',
             actionId: action.id,
@@ -850,13 +872,71 @@ export class ManagedAgentRuntime implements AgentRuntime {
     } catch (error) {
       session.status = signal.aborted || session.cancelRequested ? 'interrupted' : 'failed';
       if (session.generation?.outcome === 'pending')
-        session.generation.outcome =
-          responseSettled && !signal.aborted && !session.cancelRequested ? 'completed' : 'unknown';
+        if (!generationDispatched) {
+          session.generation.outcome = 'completed';
+          session.generation.rejectionCode = 'TURN_NOT_DISPATCHED';
+        } else session.generation.outcome = responseSettled ? 'completed' : 'unknown';
       for (const action of session.actions)
-        if (action.status === 'pending') action.status = 'unknown';
-      await sessions.save(session).catch(() => {});
+        if (action.status === 'pending') {
+          if (dispatchedActions.has(action.id)) action.status = 'unknown';
+          else {
+            action.status = 'completed';
+            action.result = {
+              content: 'Tool was not dispatched because the turn stopped before execution.',
+              isError: true,
+            };
+            session.messages.push({
+              role: 'tool',
+              content: action.result.content,
+              toolCallId: action.call.id,
+              toolName: action.call.name,
+            });
+          }
+        }
+      let durable = session;
+      try {
+        await sessions.save(session);
+      } catch {
+        if (effectDispatched) {
+          try {
+            durable = (await sessions.load(session.id)) || session;
+          } catch {
+            emit({ type: 'turn.completed', turnId, status: session.status });
+            throw new UnresolvedEffectError(
+              'SESSION_RECONCILIATION_REQUIRED',
+              { backendSessionId: session.id, runtimeId: this.id, operationId: turnId },
+              error,
+            );
+          }
+        }
+      }
       emit({ type: 'turn.completed', turnId, status: session.status });
-      throw error;
+      if (effectDispatched) {
+        const reference = { backendSessionId: session.id, runtimeId: this.id };
+        const unresolvedCheck = durable.workerStepChecks?.entries.find(
+          (entry) => entry.status !== 'completed',
+        );
+        if (unresolvedCheck)
+          throw new UnresolvedEffectError(
+            'WORKER_CHECK_RECONCILIATION_REQUIRED',
+            { ...reference, operationId: unresolvedCheck.id },
+            error,
+          );
+        if (durable.generation && durable.generation.outcome !== 'completed')
+          throw new UnresolvedEffectError(
+            'GENERATION_RECONCILIATION_REQUIRED',
+            { ...reference, operationId: durable.generation.requestId },
+            error,
+          );
+        const unresolvedAction = durable.actions.find((action) => action.status !== 'completed');
+        if (unresolvedAction)
+          throw new UnresolvedEffectError(
+            'ACTION_RECONCILIATION_REQUIRED',
+            { ...reference, operationId: unresolvedAction.id },
+            error,
+          );
+      }
+      throw observedTurnFailure(error);
     } finally {
       clearTimeout(timer);
     }

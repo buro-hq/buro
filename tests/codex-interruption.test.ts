@@ -41,11 +41,35 @@ input.on('line', (line) => {
       later(() => reply({ turn }), 5000);
       return;
     }
+    if (mode === 'stale-completion-before-ack') {
+      send({ method: 'turn/completed', params: {
+        threadId, turn: { id: 'old-turn', status: 'completed' },
+      }});
+      later(() => {
+        reply({ turn });
+        send({ method: 'item/completed', params: {
+          threadId, turnId: turn.id, item: { id: 'fresh-answer', type: 'agentMessage', text: 'fresh accepted answer' },
+        }});
+        send({ method: 'turn/completed', params: { threadId, turn }});
+      }, 30);
+      return;
+    }
+    if (mode === 'stale-answer-before-ack') {
+      send({ method: 'item/completed', params: {
+        threadId, turnId: 'old-turn', item: { id: 'old-answer', type: 'agentMessage', text: '{"status":"success"}' },
+      }});
+      send({ method: 'turn/completed', params: { threadId, turn: { id: 'old-turn', status: 'completed' } }});
+      later(() => {
+        reply({ turn });
+        send({ method: 'turn/completed', params: { threadId, turn }});
+      }, 30);
+      return;
+    }
     reply({ turn });
     send({ method: 'turn/started', params: { threadId, turn } });
     if (mode === 'cancel-known') return;
     send({ method: 'item/completed', params: {
-      threadId, item: { id: 'answer', type: 'agentMessage', text: mode === 'partial-exit' ? 'partial visible answer' : 'resumed answer' },
+      threadId, turnId: turn.id, item: { id: 'answer', type: 'agentMessage', text: mode === 'partial-exit' ? 'partial visible answer' : 'resumed answer' },
     }});
     if (mode === 'partial-exit') later(() => process.exit(17), 20);
     else send({ method: 'turn/completed', params: { threadId, turn } });
@@ -188,11 +212,11 @@ test(
     // Attach a rejection handler before abort/cleanup so the deliberately delayed RPC cannot leak a rejection.
     const outcome = turn.then(
       () => 'completed',
-      (error) => error.name,
+      (error) => error.code,
     );
     await bounded(f.awaitingReply.promise);
     controller.abort();
-    assert.equal(await bounded(outcome), 'AbortError');
+    assert.equal(await bounded(outcome), 'SESSION_RECONCILIATION_REQUIRED');
     assert.equal(f.runtime.get(f.threadId).pending.size, 0);
     await assert.rejects(f.runtime.submit(f.threadId, 'no blind retry'), /closed/);
     await bounded(f.runtime.release(f.threadId), 1500);
@@ -225,6 +249,28 @@ test(
     );
   },
 );
+
+test('a stale native completion before the start acknowledgement cannot complete the new turn', async (t) => {
+  const f = await fixture(t);
+  const result = await f.runtime.turn(f.threadId, 'stale-completion-before-ack', {
+    schema: {},
+    signal: new AbortController().signal,
+    timeoutMs: 1000,
+  });
+  assert.equal(result.turnId, 'native-turn');
+  assert.equal(result.text, 'fresh accepted answer');
+});
+
+test('a stale native answer cannot become the result of a new turn without its own answer', async (t) => {
+  const f = await fixture(t);
+  const result = await f.runtime.turn(f.threadId, 'stale-answer-before-ack', {
+    schema: {},
+    signal: new AbortController().signal,
+    timeoutMs: 1000,
+  });
+  assert.equal(result.turnId, 'native-turn');
+  assert.equal(result.text, '');
+});
 
 test(
   'native Codex already-aborted signals never submit a turn request',
@@ -260,7 +306,7 @@ test(
       signal: new AbortController().signal,
       timeoutMs: 10000,
     });
-    const rejected = assert.rejects(turn, /Codex app-server exited/);
+    const rejected = assert.rejects(turn, { code: 'SESSION_RECONCILIATION_REQUIRED' });
     await bounded(f.visibleAnswer.promise);
     await bounded(rejected);
     assert.ok(

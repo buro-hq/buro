@@ -4,6 +4,7 @@ import { roleIdPattern, type DomainEvent, type Snapshot } from './domain.ts';
 import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
 import { DeliverySchema, PreviewSchema, ResearchSchema, GoalOutcomeSchema } from './operations.ts';
 import { ContextMaterialSchema } from './context.ts';
+import { PendingRunTurnSchema, RunReconciliationSchema } from './reconciliation.ts';
 import {
   WorkerTaskSchema,
   WorkerEnvelopeSchema,
@@ -322,6 +323,8 @@ export const PlanningPolicySchema = z.discriminatedUnion('mode', [
 ]);
 const run = z
   .object({
+    reconciliation: RunReconciliationSchema.optional(),
+    pendingTurn: PendingRunTurnSchema.optional(),
     planningPolicy: PlanningPolicySchema.optional(),
     managedBudget: ManagedRunBudgetSummarySchema.optional(),
     workerTasks: z.record(z.string(), WorkerTaskSchema).optional(),
@@ -391,7 +394,12 @@ const run = z
       .optional(),
     issue: z
       .object({
-        code: z.enum(['BASELINE_CHECKS_FAILED', 'EXECUTION_FAILED', 'MANAGED_BUDGET_BLOCKED']),
+        code: z.enum([
+          'BASELINE_CHECKS_FAILED',
+          'EXECUTION_FAILED',
+          'MANAGED_BUDGET_BLOCKED',
+          'RECONCILIATION_REQUIRED',
+        ]),
         budgetCode: ManagedBudgetErrorCodeSchema.optional(),
         message: z.string(),
         checks: z.array(z.string()),
@@ -513,6 +521,16 @@ const run = z
     sourceHash: z.string(),
   })
   .superRefine((run, ctx) => {
+    if (run.status === 'completed' && (run.reconciliation || run.pendingTurn))
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A completed run cannot retain an unsettled effect.',
+      });
+    if (run.issue?.code === 'RECONCILIATION_REQUIRED' && !run.reconciliation)
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A reconciliation issue requires its durable reference.',
+      });
     if (run.planningPolicy?.mode === 'bounded' && run.resources?.coordinator.client !== 'managed')
       ctx.addIssue({ code: 'custom', message: 'Bounded planning requires a managed coordinator.' });
   });

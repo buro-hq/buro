@@ -16,6 +16,8 @@ import type { ResourceSnapshot, RuntimePurpose } from '../protocol/resources.ts'
 export type { RuntimeEvent } from './runtime-events.ts';
 export type Receipt = { fingerprint: string; result: unknown };
 export type ProjectDocument = {
+  /** Private source-branch intents; not exposed in snapshots or model context. */
+  resultApplyIntents?: Record<string, import('./result-apply.ts').ResultApplyIntent>;
   /** Private reservations; public snapshots contain only the run's bounded summary. */
   managedRunBudgets?: Record<string, import('./run-budget.ts').ManagedRunBudgetLedger>;
   contextMaterials?: ContextMaterial[];

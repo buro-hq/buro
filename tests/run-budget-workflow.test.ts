@@ -1,3 +1,4 @@
+import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -267,6 +268,9 @@ async function fixture(
         return actual === 'export const value=1;\n'
           ? []
           : [{ path: 'src/value.mjs', before: 'export const value=1;\n', after: actual }];
+      },
+      async captureRevision(workspace: string, base: string) {
+        return virtualWorkspaceRevision(await this.changes(workspace, base), base);
       },
       async checkpoint() {
         checkpoints++;

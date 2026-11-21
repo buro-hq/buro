@@ -1,9 +1,11 @@
+import { virtualWorkspaceRevision } from './fixtures/virtual-workspace.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { ExecutionService } from '../core/execution.ts';
+import { DomainError } from '../core/ports.ts';
 import { GoalService } from '../core/services.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { FileProjectRegistry } from '../adapters/files/registry.ts';
@@ -20,6 +22,8 @@ async function fixture(
     mode?: 'bounded' | 'legacy';
     invalidPlans?: number;
     managed16K?: boolean;
+    malformedPlans?: number;
+    planningFailure?: string;
   } = {},
 ) {
   const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'buro-planning-')));
@@ -29,7 +33,8 @@ async function fixture(
   });
   const projects = new FileProjectRegistry([store]);
   let sequence = 0,
-    plans = 0;
+    plans = 0,
+    malformedPlans = 0;
   const turns: { text: string; toolPolicy?: 'none'; threadId: string; schema?: unknown }[] = [];
   const providerCalls: Parameters<ModelProvider['complete']>[0][] = [];
   const sessions = new FileManagedSessions(path.join(directory, 'private-sessions'));
@@ -66,6 +71,12 @@ async function fixture(
         toolPolicy: turnOptions?.toolPolicy,
         schema: turnOptions?.schema,
       });
+      if (text.startsWith('First,')) {
+        if (options.planningFailure)
+          throw new DomainError(options.planningFailure, 'Planning request did not complete.');
+        if (malformedPlans++ < (options.malformedPlans || 0))
+          return { turnId: 'malformed', text: '{"summary":' };
+      }
       const answer = text.startsWith('First,')
         ? {
             summary: 'One coherent edit',
@@ -223,6 +234,9 @@ async function fixture(
       async changes() {
         return [{ path: 'src/value.ts', before: 'one', after: 'two' }];
       },
+      async captureRevision(workspace: string, base: string) {
+        return virtualWorkspaceRevision(await this.changes(workspace, base), base);
+      },
       async checkpoint() {
         return 'a'.repeat(40);
       },
@@ -349,6 +363,30 @@ test('invalid bounded planning still stops after the existing two attempts', asy
   assert.equal(run.commit, undefined);
 });
 
+test('an observed malformed planning response is corrected in the same session', async (t) => {
+  const f = await fixture(t, { malformedPlans: 1 });
+  const run = await f.run();
+  assert.equal(run.status, 'completed', run.result);
+  const plans = f.turns.filter((turn) => turn.text.startsWith('First,'));
+  assert.equal(plans.length, 2);
+  assert.equal(plans[0].threadId, plans[1].threadId);
+  assert.ok(plans.every((turn) => turn.toolPolicy === 'none'));
+  assert.match(plans[1].text, /not valid JSON/);
+  assert.equal(run.events.filter((event) => event.type === 'plan.rejected').length, 1);
+  assert.equal(run.independentReviewer, true);
+});
+
+test('planning transport and admission failures never become JSON correction retries', async (t) => {
+  for (const code of ['PROVIDER_UNAVAILABLE', 'RUN_BUDGET_REQUESTS_EXCEEDED']) {
+    const f = await fixture(t, { planningFailure: code });
+    const run = await f.run();
+    assert.notEqual(run.status, 'completed');
+    assert.equal(f.turns.length, 1);
+    assert.equal(run.events.filter((event) => event.type === 'plan.rejected').length, 0);
+    assert.equal(run.commit, undefined);
+  }
+});
+
 test('historical missing planning policy remains legacy even when current environment enables bounded', async (t) => {
   const f = await fixture(t);
   const original = await f.run();
@@ -356,6 +394,8 @@ test('historical missing planning policy remains legacy even when current enviro
     const historical = {
       ...structuredClone(original),
       id: 'R-historical',
+      status: 'running' as const,
+      commit: undefined,
       planningPolicy: undefined,
       managedBudget: undefined,
     };
@@ -386,6 +426,8 @@ for (const revision of ['bounded-planning-v1', 'bounded-planning-v2'] as const)
       const historical = {
         ...structuredClone(original),
         id: 'R-historical-v1',
+        status: 'running' as const,
+        commit: undefined,
         planningPolicy: {
           version: 1 as const,
           mode: 'bounded' as const,

@@ -367,6 +367,15 @@ function assertInterrupted(events: RuntimeEvent[], status: 'failed' | 'interrupt
   );
   assertPrivate(events);
 }
+function unknownGenerationCause(expected: { code?: string; name?: string }) {
+  return (error: any) => {
+    assert.equal(error.code, 'GENERATION_RECONCILIATION_REQUIRED');
+    assert.ok(error.cause, 'Keep the original observed transport cause');
+    if (expected.code) assert.equal(error.cause.code, expected.code);
+    if (expected.name) assert.equal(error.cause.name, expected.name);
+    return true;
+  };
+}
 
 for (const kind of ['ollama', 'deepseek'] as const) {
   test(`${kind}: partial and complete tool frames without a terminal marker never dispatch an edit`, async (t) => {
@@ -374,9 +383,10 @@ for (const kind of ['ollama', 'deepseek'] as const) {
       const f = await fixture(t, kind);
       const rig = f.make(() => response(wire(kind, { call, terminal: false })));
       const started = await rig.start();
-      await assert.rejects(rig.router.turn(started.threadId, 'Edit the fixture', turnOptions()), {
-        code: 'MODEL_STREAM_INTERRUPTED',
-      });
+      await assert.rejects(
+        rig.router.turn(started.threadId, 'Edit the fixture', turnOptions()),
+        unknownGenerationCause({ code: 'MODEL_STREAM_INTERRUPTED' }),
+      );
       const saved = await rig.sessions.load(started.nativeId);
       assert.equal(saved?.status, 'failed');
       assert.deepEqual(saved?.actions, []);
@@ -392,17 +402,21 @@ for (const kind of ['ollama', 'deepseek'] as const) {
       assert.equal(f.edits(), 0);
       assert.equal(await f.read(), 'export const value=1;\n');
       assertInterrupted(rig.events, 'failed');
+      await assert.rejects(rig.router.turn(started.threadId, 'Do not replay', turnOptions()), {
+        code: 'GENERATION_RECONCILIATION_REQUIRED',
+      });
+      assert.equal(rig.requests.length, 1);
     }
   });
 
-  test(`${kind}: restart retains the exact edit result, private continuation and saved Buro route after the following stream is lost`, async (t) => {
+  test(`${kind}: restart retains the exact edit result, private continuation and saved Buro route after a known follow-up rejection`, async (t) => {
     const f = await fixture(t, kind);
     const first = f.make((_body, _signal, index) =>
-      response(wire(kind, index === 0 ? { call: 'full' } : { terminal: false })),
+      index === 0 ? response(wire(kind, { call: 'full' })) : new Response(null, { status: 429 }),
     );
     const started = await first.start();
     await assert.rejects(first.router.turn(started.threadId, 'Edit the fixture', turnOptions()), {
-      code: 'MODEL_STREAM_INTERRUPTED',
+      code: 'MODEL_RATE_LIMITED',
     });
     const checkpoint = await first.sessions.load(started.nativeId),
       route = await first.routes.load(started.threadId);
@@ -411,7 +425,8 @@ for (const kind of ['ollama', 'deepseek'] as const) {
     assert.equal(checkpoint?.actions[0].status, 'completed');
     assert.match(checkpoint!.actions[0].result!.content, /Edited src\/value.mjs/);
     assert.equal(f.edits(), 1);
-    assert.equal(first.requests.length, 2, 'Stop on the first lost follow-up stream');
+    assert.equal(first.requests.length, 2, 'A known rejection must not start a hidden retry');
+    assert.equal(checkpoint?.generation?.outcome, 'completed');
     assert.equal(await f.read(), 'export const value=2;\n');
     assertInterrupted(first.events, 'failed');
     await first.close();
@@ -480,6 +495,52 @@ for (const kind of ['ollama', 'deepseek'] as const) {
     assertPrivate(resumed.events);
   });
 
+  test(`${kind}: a lost follow-up stream retains the completed edit but blocks generation replay after reopening`, async (t) => {
+    const f = await fixture(t, kind);
+    const first = f.make((_body, _signal, index) =>
+      response(wire(kind, index === 0 ? { call: 'full' } : { terminal: false })),
+    );
+    const started = await first.start();
+    await assert.rejects(
+      first.router.turn(started.threadId, 'Edit the fixture', turnOptions()),
+      unknownGenerationCause({ code: 'MODEL_STREAM_INTERRUPTED' }),
+    );
+    const checkpoint = await first.sessions.load(started.nativeId);
+    const route = await first.routes.load(started.threadId);
+    assert.equal(checkpoint?.generation?.outcome, 'unknown');
+    assert.equal(checkpoint?.actions.length, 1);
+    assert.equal(checkpoint?.actions[0].status, 'completed');
+    assert.match(checkpoint!.actions[0].result!.content, /Edited src\/value.mjs/);
+    assert.equal(f.edits(), 1);
+    assert.equal(first.requests.length, 2);
+    assert.equal(await f.read(), 'export const value=2;\n');
+    await first.close();
+    f.pinSavedRoutes();
+    const reopened = f.make(() => {
+      throw Error('Unknown requests must not reach HTTP');
+    });
+    assert.deepEqual(await reopened.routes.load(started.threadId), route);
+    await assert.rejects(
+      reopened.router.resume({
+        projectId: 'p',
+        threadId: started.threadId,
+        runId: 'R-fixture',
+        workspace: f.root,
+        instructions: 'A new session must not hide an unknown outcome.',
+      }),
+      { code: 'GENERATION_RECONCILIATION_REQUIRED' },
+    );
+    await assert.rejects(reopened.router.turn(started.threadId, 'Do not replay', turnOptions()), {
+      code: 'GENERATION_RECONCILIATION_REQUIRED',
+    });
+    assert.equal(reopened.requests.length, 0);
+    assert.equal(f.edits(), 1);
+    assert.equal(f.selections(), 1);
+    assert.equal(await f.read(), 'export const value=2;\n');
+    assertPrivate(first.events);
+    assertPrivate(reopened.events);
+  });
+
   for (const afterEdit of [false, true])
     test(`${kind}: cancelling active and queued streams ${afterEdit ? 'after a durable edit' : 'before a terminal tool call'} releases endpoint capacity`, async (t) => {
       const f = await fixture(t, kind);
@@ -523,7 +584,10 @@ for (const kind of ['ollama', 'deepseek'] as const) {
       const active = await rig.start(),
         waiting = await rig.start();
       const activeWork = rig.router.turn(active.threadId, 'active-capacity', turnOptions());
-      const activeRejected = assert.rejects(activeWork, { name: 'AbortError' });
+      const activeRejected = assert.rejects(
+        activeWork,
+        unknownGenerationCause({ name: 'AbortError' }),
+      );
       await opened.promise;
       const waitingWork = rig.router.turn(waiting.threadId, 'queued-capacity', turnOptions());
       const waitingRejected = assert.rejects(waitingWork, { name: 'AbortError' });
@@ -552,6 +616,12 @@ for (const kind of ['ollama', 'deepseek'] as const) {
         assert.equal(saved?.status, 'interrupted');
         assert.equal(saved?.cancelRequested, true);
       }
+      assert.equal(activeSaved?.generation?.outcome, 'unknown');
+      assert.equal(
+        queuedSaved?.generation?.outcome,
+        'completed',
+        'Cancellation before HTTP dispatch is a known no-effect outcome, not a poisoned session',
+      );
       assert.equal(activeSaved?.actions.length, afterEdit ? 1 : 0);
       if (afterEdit) assert.equal(activeSaved?.actions[0].status, 'completed');
       assert.deepEqual(queuedSaved?.actions, []);
@@ -582,6 +652,23 @@ for (const kind of ['ollama', 'deepseek'] as const) {
         false,
         'A cancelled queue entry must never reach HTTP generation',
       );
+      assert.equal(f.edits(), afterEdit ? 1 : 0);
+      assertPrivate(rig.events);
+      await rig.router.resume({
+        projectId: 'p',
+        threadId: waiting.threadId,
+        runId: 'R-fixture',
+        workspace: f.root,
+        instructions: 'Continue after the queue cancellation was confirmed.',
+      });
+      await rig.router.turn(
+        waiting.threadId,
+        'Explicit continuation after queue cancellation',
+        turnOptions(),
+      );
+      const continued = await rig.sessions.load(waiting.nativeId);
+      assert.equal(continued?.generation?.outcome, 'completed');
+      assert.equal(continued?.cancelRequested, false);
       assert.equal(f.edits(), afterEdit ? 1 : 0);
       assertPrivate(rig.events);
     });

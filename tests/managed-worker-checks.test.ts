@@ -54,6 +54,21 @@ const turnOptions = (signal = new AbortController().signal) => ({
   signal,
   timeoutMs: 5000,
 });
+function unknownCheckCause(expected: RegExp | { code?: string; name?: string }) {
+  return (error: any) => {
+    assert.equal(error.code, 'WORKER_CHECK_RECONCILIATION_REQUIRED');
+    assert.ok(
+      error.cause,
+      'Preserve the observed failure behind the durable unknown-check boundary',
+    );
+    if (expected instanceof RegExp) assert.match(error.cause.message, expected);
+    else {
+      if (expected.code) assert.equal(error.cause.code, expected.code);
+      if (expected.name) assert.equal(error.cause.name, expected.name);
+    }
+    return true;
+  };
+}
 const plan: WorkerStepCheckPlan = {
   version: 1,
   checkIds: ['test'],
@@ -465,7 +480,10 @@ test('a lost check outcome blocks resume and never silently dispatches the check
   });
   const runtime = f.make();
   const { threadId } = await f.start(runtime);
-  await assert.rejects(runtime.turn(threadId, 'Finish', turnOptions()), /result lost/);
+  await assert.rejects(
+    runtime.turn(threadId, 'Finish', turnOptions()),
+    unknownCheckCause(/result lost/),
+  );
   assert.equal((await f.files.load(threadId))?.workerStepChecks?.entries[0].status, 'unknown');
   await runtime.release(threadId);
   const reopened = f.make();
@@ -497,7 +515,10 @@ test('a pending check intent left by process loss prevents replay after reopenin
   const runtime = f.make();
   const { threadId } = await f.start(runtime);
   f.value = 2;
-  await assert.rejects(runtime.turn(threadId, 'Finish', turnOptions()), /receipt checkpoint/);
+  await assert.rejects(
+    runtime.turn(threadId, 'Finish', turnOptions()),
+    unknownCheckCause(/receipt checkpoint/),
+  );
   assert.equal((await f.files.load(threadId))?.workerStepChecks?.entries[0].status, 'pending');
   await runtime.release(threadId);
   await assert.rejects(f.make().turn(threadId, 'Continue', turnOptions()), {
@@ -545,9 +566,10 @@ for (const [name, fabricate] of [
     });
     const runtime = f.make();
     const { threadId } = await f.start(runtime);
-    await assert.rejects(runtime.turn(threadId, 'Finish', turnOptions()), {
-      code: 'INVALID_STEP_CHECK',
-    });
+    await assert.rejects(
+      runtime.turn(threadId, 'Finish', turnOptions()),
+      unknownCheckCause({ code: 'INVALID_STEP_CHECK' }),
+    );
     const saved = (await f.files.load(threadId))!;
     assert.equal(saved.workerStepChecks?.entries[0].status, 'unknown');
     assert.equal(saved.workSegments?.archives.length, 0);
@@ -620,9 +642,10 @@ test('cancellation before pending intent and after check completion cannot trigg
     });
     const runtime = f.make();
     const { threadId } = await f.start(runtime);
-    await assert.rejects(runtime.turn(threadId, 'Finish', turnOptions(abort.signal)), {
-      name: 'AbortError',
-    });
+    await assert.rejects(
+      runtime.turn(threadId, 'Finish', turnOptions(abort.signal)),
+      phase === 'after' ? unknownCheckCause({ name: 'AbortError' }) : { name: 'AbortError' },
+    );
     const saved = (await f.files.load(threadId))!;
     assert.equal(saved.workSegments?.archives.length, 0);
     assert.equal(saved.workerStepChecks?.feedbackSteps || 0, 0);
@@ -673,9 +696,10 @@ test('a changed workspace after the registered check invalidates its evidence an
   });
   const runtime = f.make();
   const { threadId } = await f.start(runtime);
-  await assert.rejects(runtime.turn(threadId, 'Finish', turnOptions()), {
-    code: 'WORKER_CHECK_STALE',
-  });
+  await assert.rejects(
+    runtime.turn(threadId, 'Finish', turnOptions()),
+    unknownCheckCause({ code: 'WORKER_CHECK_STALE' }),
+  );
   const saved = (await f.files.load(threadId))!;
   assert.equal(saved.workerStepChecks?.entries[0].status, 'unknown');
   assert.equal(saved.workerStepChecks?.feedbackSteps, 0);
@@ -702,9 +726,10 @@ test('an out-of-scope change made during a service check cannot become a trusted
   });
   const runtime = f.make();
   const { threadId } = await f.start(runtime);
-  await assert.rejects(runtime.turn(threadId, 'Finish', turnOptions()), {
-    code: 'SEGMENT_SCOPE_CHANGED',
-  });
+  await assert.rejects(
+    runtime.turn(threadId, 'Finish', turnOptions()),
+    unknownCheckCause({ code: 'SEGMENT_SCOPE_CHANGED' }),
+  );
   assert.equal((await f.files.load(threadId))?.workerStepChecks?.entries[0].status, 'unknown');
   assert.equal((await f.files.load(threadId))?.workSegments?.archives.length, 0);
   assert.equal(f.requests.length, 1);
