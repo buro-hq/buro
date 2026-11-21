@@ -1,4 +1,4 @@
-import type { ModelMessage, ModelProvider, ToolDefinition } from '../agent/contracts/model.ts';
+import type { ModelMessage, ModelCompletion, ToolDefinition } from '../agent/contracts/model.ts';
 import type { ManagedSession, ToolScope } from './model-ports.ts';
 import type { ManagedRuntimeOptions } from './managed-runtime-options.ts';
 import type { RuntimeEvent } from './runtime-events.ts';
@@ -35,7 +35,7 @@ export type ManagedPreparedRequest = {
   schema: unknown;
   budget: ReturnType<typeof prepareManagedRequest>;
 };
-export type ManagedModelCompletion = Awaited<ReturnType<ModelProvider['complete']>>;
+export type ManagedModelCompletion = ModelCompletion;
 export type ManagedTurnResult = { turnId: string; text: string; model?: string };
 export type ManagedResponseDecision =
   | { kind: 'continue' }

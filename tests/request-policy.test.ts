@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -166,6 +167,7 @@ function runtimeFixture(
     maxSessionRequests: 8,
   };
   const settings: ManagedRuntimeOptions = {
+    loopRunner: new PiAgentLoopRunner(),
     id: 'managed-test',
     model: 'model-test',
     provider: {

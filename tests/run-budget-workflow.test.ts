@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import {
   virtualWorkspaceRevision,
   virtualVerificationViews,
@@ -195,6 +196,7 @@ async function fixture(
     },
   };
   const runtime = new ManagedAgentRuntime({
+    loopRunner: new PiAgentLoopRunner(),
     id: 'managed',
     model: 'fixture-model',
     provider,

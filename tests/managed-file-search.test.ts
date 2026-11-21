@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -112,6 +113,7 @@ test('file search feeds real edits and check-feedback repair while preserving pr
   };
   const repositoryTools = new RepositoryTools(new EnvironmentExecutors());
   const runtime = new ManagedAgentRuntime({
+    loopRunner: new PiAgentLoopRunner(),
     id: 'managed-fixture',
     model: 'fixture-model',
     provider,

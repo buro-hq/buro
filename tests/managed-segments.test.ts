@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -126,6 +127,7 @@ async function fixture(
     },
   };
   const settings: ManagedRuntimeOptions = {
+    loopRunner: new PiAgentLoopRunner(),
     id: 'managed-fixture',
     model: 'fixture-model',
     projects,
@@ -195,7 +197,11 @@ async function fixture(
   };
   const runtimes: ManagedAgentRuntime[] = [];
   const make = (changes: Partial<ManagedRuntimeOptions> = {}) => {
-    const runtime = new ManagedAgentRuntime({ ...settings, ...changes });
+    const runtime = new ManagedAgentRuntime({
+      loopRunner: new PiAgentLoopRunner(),
+      ...settings,
+      ...changes,
+    });
     runtime.subscribe((event) => events.push(structuredClone(event)));
     runtimes.push(runtime);
     return runtime;

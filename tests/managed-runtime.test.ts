@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { fixtureExecutionSelection } from './fixtures/execution-resources.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -98,6 +99,7 @@ async function fixture(t: any) {
   const runtimes: ManagedAgentRuntime[] = [];
   const make = (p: ModelProvider, overrides: Partial<ManagedRuntimeOptions> = {}) => {
     const runtime = new ManagedAgentRuntime({
+      loopRunner: new PiAgentLoopRunner(),
       id: 'managed-fixture',
       model: 'fixture-model',
       provider: p,
@@ -570,7 +572,11 @@ test('context projection uses a cloned request view for both the guard and infer
   const p: ModelProvider = {
     ...provider(async (input) => {
       requests++;
-      assert.deepEqual(input.messages, views.at(-1), 'Send the same packet whose size passed the guard');
+      assert.deepEqual(
+        input.messages,
+        views.at(-1),
+        'Send the same packet whose size passed the guard',
+      );
       assert.notEqual(input.messages, views.at(-1), 'The provider cannot mutate the prepared view');
       if (requests === 1)
         return {

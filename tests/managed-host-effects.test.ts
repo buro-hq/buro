@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -493,7 +494,11 @@ test('a permanently lost receipt leaves a real effect unresolved and public resu
     durable.actions.map((action) => action.status),
     ['pending', 'pending'],
   );
-  const runtime = new ManagedAgentRuntime({ ...f.host.options, sessions: reopened });
+  const runtime = new ManagedAgentRuntime({
+    loopRunner: new PiAgentLoopRunner(),
+    ...f.host.options,
+    sessions: reopened,
+  });
   t.after(() => runtime.dispose());
   await assert.rejects(
     runtime.resume({
@@ -567,6 +572,7 @@ for (const known of [false, true])
     assert.equal(f.effects(), 0);
     if (!known) {
       const runtime = new ManagedAgentRuntime({
+        loopRunner: new PiAgentLoopRunner(),
         ...f.host.options,
         sessions: new FileManagedSessions(f.directory),
       });

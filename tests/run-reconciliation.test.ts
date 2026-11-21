@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -172,6 +173,7 @@ function managedFixture(
   };
   let id = 0;
   const runtime = new ManagedAgentRuntime({
+    loopRunner: new PiAgentLoopRunner(),
     id: 'local',
     model: 'fixture',
     provider: {

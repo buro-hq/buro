@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -136,6 +137,7 @@ async function fixture(t: any) {
     effects = 0,
     nextId = 0;
   const runtime = new ManagedAgentRuntime({
+    loopRunner: new PiAgentLoopRunner(),
     id: 'managed-fixture',
     model: 'qwen3:4b',
     sessions,

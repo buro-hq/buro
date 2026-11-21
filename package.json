@@ -28,6 +28,8 @@
     "docs:screenshots": "node scripts/screenshot-docs.cjs"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "1.6.0",
+    "@earendil-works/pi-ai": "1.6.0",
     "@mantine/core": "8.3.8",
     "@mantine/hooks": "8.3.8",
     "cordis": "4.0.0-rc.12",

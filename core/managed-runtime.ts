@@ -5,19 +5,13 @@ import {
   type RuntimeEvent,
 } from './ports.ts';
 import type { BackendCapabilities } from '../agent/contracts/capabilities.ts';
+import { isAgentLoopFailure } from '../agent/contracts/loop-errors.ts';
 import type { ManagedSession } from './model-ports.ts';
 import { validateSegmentLimits } from './work-segments.ts';
 import type { ManagedTurnState, ManagedTurnHost } from './managed-turn-state.ts';
-import {
-  generateManagedBatch,
-  dispatchManagedAction,
-  failManagedTurn,
-} from './managed-host-effects.ts';
-import {
-  initializeManagedCodingContext,
-  prepareManagedCodingRequest,
-  afterManagedResponse,
-} from './managed-coding-context.ts';
+import { failManagedTurn } from './managed-host-effects.ts';
+import { initializeManagedCodingContext } from './managed-coding-context.ts';
+import { ManagedLoopHost } from './managed-loop-host.ts';
 import type { ManagedRuntimeOptions } from './managed-runtime-options.ts';
 import {
   prepareManagedSession,
@@ -28,7 +22,7 @@ import {
   managedToolDefinitions,
 } from './managed-session-authority.ts';
 
-/** Buro owns this loop. Providers never execute tools or accept a coding result. */
+/** Managed lifecycle; the injected runner schedules while Buro owns authority and receipts. */
 export class ManagedAgentRuntime implements RegisteredRuntime {
   readonly id: string;
   readonly capabilities: BackendCapabilities = Object.freeze({
@@ -65,6 +59,11 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
       throw new DomainError(
         'INVALID_RUNTIME_LIMITS',
         'Managed runtime limits must be positive and reserve input context.',
+      );
+    if (!options.loopRunner || typeof options.loopRunner.run !== 'function')
+      throw new DomainError(
+        'AGENT_LOOP_UNAVAILABLE',
+        'Configure an agent loop runner before starting managed sessions.',
       );
     this.id = options.id;
     this.options = options;
@@ -182,7 +181,6 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
       round: 0,
       calls: 0,
     };
-    const limits = session.limits;
     let sequence = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const host: ManagedTurnHost = {
@@ -256,18 +254,27 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
           segmentIndex: state.session.workSegments.active.index,
         });
       host.touch();
-      for (state.round = 0; state.round < limits.maxRequestsPerTurn; state.round++) {
+      const loopHost = new ManagedLoopHost(state, host);
+      // Resume committed context windows; model/tool scheduling belongs only to the runner.
+      while (true) {
         host.check();
-        if (state.session.requests >= limits.maxSessionRequests)
+        const previousRound = state.round;
+        const outcome = await this.options.loopRunner.run(loopHost, host.signal);
+        host.check();
+        const result = loopHost.result;
+        if (outcome.kind === 'yield') {
+          if (result || state.round <= previousRound)
+            throw new DomainError(
+              'AGENT_LOOP_INVALID_STATE',
+              'A scheduler yield must follow a committed context transition.',
+            );
+          continue;
+        }
+        if (outcome.kind !== 'complete' || !result)
           throw new DomainError(
-            'MODEL_BUDGET_EXHAUSTED',
-            'The session request budget is exhausted.',
+            'AGENT_LOOP_INVALID_STATE',
+            'The scheduler ended without a host-confirmed result.',
           );
-        const request = await prepareManagedCodingRequest(state, host);
-        const batch = await generateManagedBatch(state, host, request);
-        for (const actionId of batch.actionIds) await dispatchManagedAction(state, host, actionId);
-        const decision = await afterManagedResponse(state, host);
-        if (decision.kind === 'continue') continue;
         state.session.status = 'ready';
         await host.commit(state.session);
         if (state.session.workSegments && !state.segmentCompleteEmitted)
@@ -277,12 +284,16 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
             segmentIndex: state.session.workSegments.active.index,
             reason: 'complete',
           });
-        host.emit({ type: 'message.completed', text: decision.result.text.slice(0, 12000) });
+        host.emit({ type: 'message.completed', text: result.text.slice(0, 12000) });
         host.emit({ type: 'turn.completed', turnId, status: 'completed' });
-        return decision.result;
+        return result;
       }
-      throw new DomainError('MODEL_BUDGET_EXHAUSTED', 'The turn request budget is exhausted.');
     } catch (error) {
+      if (isAgentLoopFailure(error)) {
+        const applicationError = new DomainError(error.code, error.message);
+        Object.defineProperty(applicationError, 'cause', { value: error });
+        return await failManagedTurn(state, host, applicationError);
+      }
       return await failManagedTurn(state, host, error);
     } finally {
       clearTimeout(timer);

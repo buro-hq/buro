@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -55,6 +56,7 @@ async function fixture(t: any, complete: ModelProvider['complete'], separate = f
     effects: string[] = [];
   let nextId = 0;
   const runtime = new ManagedAgentRuntime({
+    loopRunner: new PiAgentLoopRunner(),
     id: 'managed-fixture',
     model: 'fixture-model',
     projects,

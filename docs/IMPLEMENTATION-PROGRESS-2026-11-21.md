@@ -94,10 +94,20 @@ The full tool batch must be admitted and durable before any effect. Dispatch use
 
 The original scheduler remains the sole loop; Pi is not adopted by this extraction. The following bridge must provide single-use phase sequencing (including exactly one context decision per batch), cooperative yield for SDK transcript memory, original fatal-error preservation and cleanup that drains in-flight host work. No new lifetime limit, provider fallback, SDK ledger, default-none quota or generic package distribution is claimed. Existing operational preparation, custom delivery-role catalog and cross-client machine-profile follow-ups remain unchanged.
 
+### Substep 3B2 — one pinned SDK scheduler behind a neutral host port
+
+Status: complete. Final full suite **865/865 passed**, with no skips; build/typecheck and formatting passed. All existing managed fixtures and the production factory use the actual pinned Pi runner. Five agent roles contributed implementation and independent reviews in waves. [Validation receipt](../output/research/stage3b2-validation-2026-11-22.json), [SDK/authority review](../output/research/stage3b2-architecture-review-2026-11-22.md), [composed private-journal recovery review](../output/research/stage3b2-tests-review-2026-11-22.md).
+
+Pi 1.6.0 now owns managed model/tool scheduling through the domain-neutral AgentLoopRunner/AgentLoopHost contract. The former request-round and action loops are removed; the lifecycle pumps only committed context windows. ManagedLoopHost uses private fields, explicit phases, single-use opaque IDs and canonical saved responses. The runner cannot replace model/tool arguments, skip context checks or manufacture completion. Whole-batch executability is validated before any SDK projection; ordinary known tool errors remain repairable, while original host failures end the SDK window after callbacks drain.
+
+The production factory lazily loads the SDK for managed backends. Direct model calls remain behind the verified ModelProvider; SDK catalog, credentials, default transport and retries are not enabled. SDK messages/usage are disposable projections. Parent cancellation and internal SDK failure remain distinct, and exact pending/unknown markers survive reopen. Durable context compaction yields a scheduler window without resetting logical requests/tools/usage or changing the original goal.
+
+This is actual scheduler adoption, not merely a fake spike or interface move. It does not complete a portable backend lifecycle, four installable packages, history paging, default-none quotas, operational-preparation recovery or live-model quality evaluation. Those remain in contribution/persistence/package work below; no public alias over Buro-specific session data is called a reusable AgentBackend. [Source-derived SDK integration plan](../output/research/stage3-sdk-integration-plan-2026-11-22.md) records the earlier gates and why host authority was retained.
+
 ## Remaining authorized stages
 
 Stage 2A–2C is complete within the recorded scope. Portable ModelProvider contracts, capabilities, common role choices, scope and policy projection are implemented; the neutral AgentBackend loop belongs to stage 3 below.
-3. A pinned TS SDK contract spike: pi-ai/pi-agent-core first, AI SDK transport fallback/control, optional mini backend. Confirm actual package availability and behavior before adoption; use one loop and one host effect authority.
+The pinned SDK spike and production scheduler adoption are complete in 3A/3B1/3B2. Portable backend lifecycle/package exports still require the contribution/persistence/package cutover below; an optional mini backend remains conditional, not a required second loop.
 4. Contribution-based Cordis composition, project services/store factory and empty production startup; demo fixtures remain explicit.
 5. One transactional SQLite authority, incremental accounting, complete private artifacts and paged context/history; clean pre-release cutover and default-none quotas only after every hidden lifetime stop is removed.
 6. Same-writer repair, fresh criticism, complete revision-bound review packets and independently consumable packages proved by a second host.

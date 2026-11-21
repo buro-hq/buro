@@ -164,7 +164,9 @@ export async function createRuntimeResources(options: {
       });
     } else {
       const provider = providers.get(runtime.connectionId)!;
+      const { PiAgentLoopRunner } = await import('../agents/pi-loop.ts');
       const adapter = new ManagedAgentRuntime({
+        loopRunner: new PiAgentLoopRunner(),
         id: runtime.id,
         model: runtime.model,
         provider,

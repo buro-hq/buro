@@ -16,6 +16,13 @@ export type ModelMessage = {
 };
 export type ModelUsage = { inputTokens?: number; outputTokens?: number };
 export type ModelFinish = 'stop' | 'tools' | 'length' | 'failed';
+/** A complete normalized response, including private host-owned continuation. */
+export type ModelCompletion = {
+  message: ModelMessage & { role: 'assistant' };
+  model: string;
+  usage?: ModelUsage;
+  finish: ModelFinish;
+};
 /**
  * Public response observations, not durable receipts or authority to dispatch a tool.
  * Text is provisional until a validated response terminal; reasoning and private
@@ -50,10 +57,5 @@ export interface ModelProvider {
     onProgress: () => void;
     /** Best-effort observer: implementations isolate callback errors from the request outcome. */
     onEvent?: (event: ModelStreamEvent) => void;
-  }): Promise<{
-    message: ModelMessage & { role: 'assistant' };
-    model: string;
-    usage?: ModelUsage;
-    finish: ModelFinish;
-  }>;
+  }): Promise<ModelCompletion>;
 }

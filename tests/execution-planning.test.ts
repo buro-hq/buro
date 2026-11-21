@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { fixtureExecutionCapabilities } from './fixtures/execution-resources.ts';
 import { observedTurnFailure, UnresolvedEffectError } from '../core/run-reconciliation.ts';
 import {
@@ -149,6 +150,7 @@ async function fixture(
   };
   const runtime: AgentRuntime = options.managed16K
     ? new ManagedAgentRuntime({
+        loopRunner: new PiAgentLoopRunner(),
         id: 'local-qwen',
         model: 'fixture-qwen',
         projects,

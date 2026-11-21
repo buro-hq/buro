@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -69,6 +70,7 @@ async function contextFixture(t: any, response: ManagedModelCompletion) {
   let providerCalls = 0,
     toolCalls = 0;
   const options: ManagedRuntimeOptions = {
+    loopRunner: new PiAgentLoopRunner(),
     id: 'managed-fixture',
     model: 'fixture-model',
     projects: projects(directory),
@@ -239,6 +241,7 @@ test(
       providerCalls = 0,
       turnId = '';
     const runtime = new ManagedAgentRuntime({
+      loopRunner: new PiAgentLoopRunner(),
       id: 'managed-fixture',
       model: 'fixture-model',
       limits,

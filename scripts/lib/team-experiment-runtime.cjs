@@ -335,7 +335,9 @@ async function runTeamExperimentTrial(options = {}) {
       if (!info.local || info.remote) throw codeError('TEAM_EXPERIMENT_LOCAL_PROVIDER_REQUIRED');
       if (found.digest && /^[a-f0-9]{64}$/i.test(found.digest)) result.modelDigest = found.digest;
     }
+    const { PiAgentLoopRunner } = await import('../../adapters/agents/pi-loop.ts');
     runtime = new ManagedAgentRuntime({
+      loopRunner: new PiAgentLoopRunner(),
       id: 'team-ollama',
       model,
       provider,

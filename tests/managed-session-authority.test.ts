@@ -1,3 +1,4 @@
+import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Run } from '../protocol/domain.ts';
@@ -26,6 +27,7 @@ function fixture() {
   const state = { project: { id: 'p', root: '/source' }, runs: [run] };
   let effects = 0;
   const options: ManagedRuntimeOptions = {
+    loopRunner: new PiAgentLoopRunner(),
     id: 'managed',
     model: 'fixture',
     idGenerator: () => {
