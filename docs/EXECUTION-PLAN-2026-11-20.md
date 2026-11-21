@@ -103,3 +103,11 @@ Committed the controlled comparison harness and first eight synthetic results in
 [Private-project evaluation details removed.]
 
 [Private-project evaluation details removed.]
+
+## Same-model team-quality experiment — 2026-11-21
+
+Implement a research-only comparison of executor/checks, executor/checks/fresh-review/repair, and coordinator/independent-test-author/executor/checks/fresh-review/repair. Preserve the same model/settings, initial fixture and final public/holdout oracles, bounded aggregate generations/output/tools/wall time and source scope. Baseline without LLM review must never become a production acceptance option or create an accepted commit. All role overhead consumes the same envelope. Test-author proposals are bounded declarative inputs; the trusted controller derives expected results from fixed requirements and runs candidate code only in the confined child. Generated probes supplement frozen checks rather than rewrite them.
+
+Use five delegated roles in waves: pure control flow/contracts, actual managed runtime/private accounting adapter, matrix/CLI, independent recovery/integration tests and architecture review. Core owns bounded flow/evidence staleness/repair decisions; adapters own file/network/process effects. Keep one logical executor for at most two total repair steps, fresh readonly review per changed candidate, no unknown-action replay and no model-claimed success. Compare final code correctness separately from experiment workflow completion, with all stopped candidates externally checked after cleanup.
+
+RTX remains offline until the user explicitly reports it available. Prepare and test on Mac; first live smoke uses only Mac-loopback Ollama and synthetic inputs. The larger Qwen3.5 9B/RTX repeat is the meaningful later hardware/model comparison; success on Mac does not prove faster or higher-quality RTX results. Preserve original projects and untracked UX files. Run focused/full tests, build, independent boundary review, then commit/report and proceed to bounded local smoke.

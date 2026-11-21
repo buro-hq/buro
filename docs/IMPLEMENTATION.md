@@ -202,3 +202,9 @@ The live v2 Qwen pilot completed both planning generations but twice exceeded th
 Worker diagnostics also exposed a real broker defect: `search_text` accepted a file target but attempted `readdir`, returning `ENOTDIR` (two local and four mixed-worker occurrences in the v1 fixtures). File targets now use the same validated filename, no-follow reader, size/binary/privacy checks and bounded match output. Directory behavior and write scope are unchanged. Regression coverage includes the actual managed worker tool journal, check-feedback repair, protected-write denial and cumulative budgets; a successful tool fix alone does not prove model quality.
 
 V3 plus broker repair validation: 567 default tests, production build/typecheck, formatting and independent runtime boundary tests passed. Prior failed v1/v2 live receipts remain saved.
+
+## Same-model team-quality research runner
+
+Added a separate experimental control flow and local-only matrix for executor/checks, executor/review/repair, and coordinator/test-author/executor/review/repair. The production execution workflow and acceptance policy are unchanged. It uses actual managed sessions, scoped tools, isolated worktrees/checks and a single durable accounting ledger. Five delegated roles implemented core control flow, runtime wiring, comparison/CLI, independent integration and architecture review.
+
+Validation: 605 default tests, production build/typecheck, formatting and independent architecture review passed. New tests cover known check-passing defects repaired after fresh review, shared repair allowance, stale approvals, forbidden author tools, unknown cancellation outcomes, late success after deadline and Ollama's separate work/finalization protocol. The independent generated-probe oracle also now serializes without candidate `toJSON` hooks. Live model results remain separately recorded.

@@ -7,6 +7,7 @@ const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
 const { normalizedLimits, runLiveProviderEvaluation } = require('./live-provider-runner.cjs');
 const exec = promisify(execFile);
+const { SAFE_JSON_SOURCE } = require('./oracle-serialization.cjs');
 
 const ARMS = Object.freeze([
   'codex-direct',
@@ -102,7 +103,7 @@ const ORACLE_CHILD = `
 import { readFileSync, writeSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
-const stringify = JSON.stringify.bind(JSON);
+${SAFE_JSON_SOURCE}
 const parse = JSON.parse.bind(JSON);
 const map = Function.call.bind(Array.prototype.map);
 const isArray = Array.isArray;
