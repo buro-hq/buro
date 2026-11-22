@@ -75,6 +75,7 @@ export function managedContribution(
           .update(
             JSON.stringify([
               host.requestPolicy.revision,
+              host.tools.revision,
               host.segmentPolicy ? [host.segmentPolicy.revision, host.segmentPolicy.limits] : null,
               host.workerStepChecks ? WORKER_STEP_CHECK_REVISION : null,
             ]),

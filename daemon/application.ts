@@ -7,7 +7,7 @@ import { NodeChecks } from '../adapters/checks/node-checks.ts';
 import { NativeProjectOperations } from '../adapters/processes/project-operations.ts';
 import type { ProjectStoreFactory } from '../core/ports.ts';
 import type { ExecutionPolicy } from '../core/execution-ports.ts';
-import { createHost } from '../plugins/host.ts';
+import { createHost, type HostOptions } from '../plugins/host.ts';
 import { resourcesPlugin } from '../plugins/resources.ts';
 import { projectManagementPlugin } from '../plugins/project-management.ts';
 import { projectOperationsPlugin } from '../plugins/project-operations.ts';
@@ -21,6 +21,7 @@ export async function createBuroApplication(options: {
   storeFactory?: ProjectStoreFactory;
   fetch?: typeof fetch;
   credentials?: (reference: string) => string | undefined;
+  configure?: HostOptions['configure'];
 }) {
   const fixture = options.demo
     ? (await import('./demo.ts')).demoBootstrap(options.root, options.directory)
@@ -28,6 +29,7 @@ export async function createBuroApplication(options: {
   const host = await createHost({
     projects: fixture?.projects,
     storeFactory: options.storeFactory,
+    configure: options.configure,
   });
   try {
     const policies: Record<string, ExecutionPolicy> = fixture?.policies || {};

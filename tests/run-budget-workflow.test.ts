@@ -1,3 +1,4 @@
+import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import {
   virtualWorkspaceRevision,
@@ -177,6 +178,8 @@ async function fixture(
     },
   };
   const broker: ToolBroker = {
+    revision: 'fixture-tools-v1',
+    effect: fixtureToolEffect,
     definitions: (scope) =>
       scope.readOnly
         ? []

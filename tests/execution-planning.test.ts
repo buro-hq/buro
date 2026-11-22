@@ -1,3 +1,4 @@
+import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { fixtureExecutionCapabilities } from './fixtures/execution-resources.ts';
 import { observedTurnFailure, UnresolvedEffectError } from '../core/run-reconciliation.ts';
@@ -164,6 +165,8 @@ async function fixture(
           maxSessionRequests: 12,
         },
         tools: {
+          revision: 'fixture-tools-v1',
+          effect: fixtureToolEffect,
           definitions: () => [
             {
               name: 'read_file',

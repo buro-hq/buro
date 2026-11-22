@@ -138,6 +138,8 @@ test('file search feeds real edits and check-feedback repair while preserving pr
       maxSessionRequests: 12,
     },
     tools: {
+      revision: repositoryTools.revision,
+      effect: (name) => repositoryTools.effect(name),
       definitions: (scope) => repositoryTools.definitions(scope),
       execute: async (call, scope, options) => {
         executed.push(structuredClone(call));

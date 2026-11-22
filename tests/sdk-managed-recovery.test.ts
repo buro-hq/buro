@@ -1,3 +1,4 @@
+import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -104,6 +105,8 @@ async function fixture(t: any) {
         maxSessionRequests: 32,
       },
       tools: {
+        revision: 'fixture-tools-v1',
+        effect: fixtureToolEffect,
         definitions: () => [
           {
             name: 'append_fixture',

@@ -20,6 +20,8 @@ import {
   assertManagedCurrentWorkspace,
   managedBudgetOwner,
   managedToolDefinitions,
+  managedToolRevision,
+  assertManagedToolRevision,
 } from './managed-session-authority.ts';
 
 /** Managed lifecycle; the injected runner schedules while Buro owns authority and receipts. */
@@ -51,6 +53,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
   private disposal?: Promise<void>;
 
   constructor(options: ManagedRuntimeOptions) {
+    managedToolRevision(options);
     const limits = options.limits;
     if (
       Object.values(limits).some((n) => !Number.isSafeInteger(n) || n < 1) ||
@@ -193,6 +196,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
         if (controller.signal.aborted || state.session.cancelRequested)
           throw new DOMException('Interrupted', 'AbortError');
         const current = state.session;
+        assertManagedToolRevision(this.options, current);
         if (
           current.purpose === 'review' ||
           current.scope.verificationViewId ||
@@ -309,7 +313,10 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
       session = await this.options.sessions.load(id);
       if (!session) throw new DomainError('THREAD_NOT_FOUND', 'Managed session not found.');
       const cached = this.loaded.get(id);
-      if (cached) return cached;
+      if (cached) {
+        assertManagedToolRevision(this.options, cached);
+        return cached;
+      }
       if (
         session.runtimeId !== this.id ||
         session.providerId !== this.options.provider.id ||
@@ -336,8 +343,10 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
           'WORKER_CHECK_CHANGED',
           'The saved worker check service is unavailable.',
         );
+      assertManagedToolRevision(this.options, session);
       this.loaded.set(id, session);
     }
+    assertManagedToolRevision(this.options, session);
     return session;
   }
   subscribe(listener: (event: RuntimeEvent) => void) {

@@ -1,3 +1,4 @@
+import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -77,6 +78,7 @@ async function fixture(
     limits,
     providerId: 'provider',
     providerRevision: 'v1',
+    toolRevision: 'fixture-tools-v1',
     requestedModel: 'small-model',
     purpose: options.segmented ? 'implementation' : 'coordination',
     scope,
@@ -152,6 +154,8 @@ async function fixture(
       },
       loopRunner: new PiAgentLoopRunner(),
       tools: {
+        revision: 'fixture-tools-v1',
+        effect: fixtureToolEffect,
         definitions: () => [
           { name: 'edit_file', description: 'Edit public source', parameters: { type: 'object' } },
         ],

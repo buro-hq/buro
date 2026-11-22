@@ -173,6 +173,7 @@ const schema = z
     }),
     providerId: z.string(),
     providerRevision: z.string(),
+    toolRevision: z.string().min(1),
     requestedModel: z.string(),
     reportedModel: z.string().optional(),
     purpose: z
@@ -565,6 +566,8 @@ function validateTurnAuthorityTransition(previous: ManagedSession, next: Managed
 
 function validateTransition(previous: ManagedSession | undefined, next: ManagedSession) {
   if (!previous) return;
+  if (previous.toolRevision !== next.toolRevision)
+    invalidSegment('A saved session cannot change its tool configuration.');
   validateWorkerCheckTransition(previous, next);
   if (previous.generation) {
     const before = previous.generation,

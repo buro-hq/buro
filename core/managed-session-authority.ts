@@ -11,6 +11,27 @@ import { observedTurnFailure } from './run-reconciliation.ts';
 import { toolScopeInstructions } from './work-segments.ts';
 import { planPathAllowed } from './execution-ports.ts';
 
+export function managedToolRevision(options: ManagedRuntimeOptions): string {
+  if (
+    typeof options.tools.revision !== 'string' ||
+    !options.tools.revision.trim() ||
+    typeof options.tools.effect !== 'function'
+  )
+    throw new DomainError(
+      'INVALID_TOOL_BROKER',
+      'Managed tools require explicit revision and effect metadata.',
+    );
+  return options.tools.revision;
+}
+export function assertManagedToolRevision(options: ManagedRuntimeOptions, session: ManagedSession) {
+  if (session.toolRevision !== managedToolRevision(options))
+    throw new DomainError(
+      'TOOL_CONFIGURATION_CHANGED',
+      'The saved session uses another tool configuration. Restore it before continuing.',
+    );
+}
+import { toolEffectAllowed } from './tool-contributions.ts';
+
 /** Derive a detached initial grant; the owning runtime alone saves/adopts it. */
 export function prepareManagedSession(
   options: ManagedRuntimeOptions,
@@ -59,6 +80,7 @@ export function prepareManagedSession(
     limits: structuredClone(options.limits),
     providerId: options.provider.id,
     providerRevision: options.provider.revision,
+    toolRevision: managedToolRevision(options),
     requestedModel: options.model,
     ...(input.purpose ? { purpose: input.purpose } : {}),
     scope: {
@@ -132,6 +154,7 @@ export function prepareManagedResume(
       'The checkpoint belongs to another project, run or workspace.',
     );
   assertManagedReconciled(session);
+  assertManagedToolRevision(options, session);
   const next = structuredClone(session);
   const snapshot = options.projects.get(input.projectId).snapshot();
   const ownerRunId = input.ownerRunId || session.scope.ownerRunId || input.runId;
@@ -206,13 +229,7 @@ export function managedToolDefinitions(
 ): ToolDefinition[] {
   return options.tools
     .definitions(structuredClone(scope))
-    .filter(
-      (definition) =>
-        !(
-          definition.name === 'run_command' &&
-          (scope.readOnly || scope.writeScope.mode === 'strict')
-        ) && !(definition.name === 'edit_file' && scope.readOnly),
-    );
+    .filter((definition) => toolEffectAllowed(options.tools.effect(definition.name), scope));
 }
 export function assertManagedScopeGrant(policy: WorkScope, assigned: WorkScope) {
   const protections = (scope: WorkScope) =>

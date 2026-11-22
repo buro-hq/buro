@@ -257,6 +257,8 @@ async function fixture(t: any, kind: Provider) {
     const routes = new FileRuntimeRoutes(path.join(directory, 'routes'));
     const actualTools = new RepositoryTools(new EnvironmentExecutors());
     const tools: ToolBroker = {
+      revision: actualTools.revision,
+      effect: (name) => actualTools.effect(name),
       definitions: (scope) => actualTools.definitions(scope),
       execute: async (...args) => {
         const [call, scope, options] = args;

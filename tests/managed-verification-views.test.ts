@@ -1,3 +1,4 @@
+import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -87,6 +88,8 @@ async function fixture(t: any, withBudget = false) {
         maxSessionRequests: 16,
       },
       tools: {
+        revision: 'fixture-tools-v1',
+        effect: fixtureToolEffect,
         definitions(scope) {
           scopes.push(structuredClone(scope));
           return [];

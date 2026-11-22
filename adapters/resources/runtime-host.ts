@@ -17,6 +17,8 @@ import { ProjectRunBudgets } from '../files/project-run-budgets.ts';
 import { RepositorySegmentEvidence } from '../tools/segment-evidence.ts';
 import { WorkerStepChecks } from '../checks/worker-step-checks.ts';
 import type { EnvironmentExecutors } from '../environments/executors.ts';
+import type { ToolBroker } from '../../core/model-ports.ts';
+import type { ToolContributionCatalog } from '../../core/tool-contributions.ts';
 
 /** Explicit services captured by trusted first-party backend registrations. */
 export type RuntimeHostOptions = {
@@ -40,13 +42,15 @@ export type RuntimeHostOptions = {
   segmentEvidence?: SegmentEvidencePort;
   checks?: CheckPort;
   workerStepChecks?: WorkerStepCheckPort;
+  tools?: ToolBroker;
+  toolContributions?: ToolContributionCatalog;
 };
 
 export function prepareRuntimeHost(options: RuntimeHostOptions) {
   const local = path.join(options.directory, 'local');
   options.executors.protectPrivatePaths([local]);
   const sessions = new FileManagedSessions(path.join(local, 'managed-sessions'));
-  const tools = new RepositoryTools(options.executors);
+  const tools = options.tools || new RepositoryTools(options.executors, options.toolContributions);
   const budgets = options.budgets || new ProjectRunBudgets(options.projects);
   const requestPolicy = options.requestPolicy || conservativeRequestPolicy;
   const segmentEvidence =

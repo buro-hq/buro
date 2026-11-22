@@ -1,0 +1,51 @@
+{
+  "stage": "4C1",
+  "date": "2026-11-22",
+  "parentCommit": "d4239d9",
+  "tests": {
+    "total": 963,
+    "passed": 963,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 67416.954917,
+    "log": "/private/tmp/buro-stage4c1-final-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage4c1-build.log"
+  },
+  "format": {
+    "passed": true,
+    "logs": [
+      "/private/tmp/buro-stage4c1-format.log",
+      "/private/tmp/buro-stage4c1-server-format.log"
+    ]
+  },
+  "browser": {
+    "emptyServiceOnboarding": true,
+    "frontendBundleUnchangedFrom4B2": "index-B96ivm--.js",
+    "desktopMobileEvidence": "stage4b2-validation-2026-11-22.json",
+    "modelRequests": 0,
+    "pageErrors": 0,
+    "log": "/private/tmp/buro-stage4c1-bootstrap-browser.log"
+  },
+  "independentReviews": [
+    "stage4c1-architecture-review-2026-11-22.md",
+    "stage4c1-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementationAndNextContracts": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Trusted in-process plugins do not isolate hostile code.",
+    "Zod semantic-definition liveness is specialized to the pinned dependency and covered by mutation/default/refinement tests.",
+    "Composite command tools still need complete per-helper command timeline evidence.",
+    "Context/analysis/check/workflow contributions and empty-model onboarding remain subsequent.",
+    "Finite quotas, file persistence, operational preparation receipts and reusable backend packages remain subsequent."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

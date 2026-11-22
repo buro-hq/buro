@@ -1,3 +1,4 @@
+import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { fixtureExecutionSelection } from './fixtures/execution-resources.ts';
 import test from 'node:test';
@@ -329,6 +330,8 @@ test('tool intent and result persistence failures never repeat a possibly comple
       },
     };
     const tools: ToolBroker = {
+      revision: f.tools.revision,
+      effect: (name) => f.tools.effect(name),
       definitions: (scope) => f.tools.definitions(scope),
       execute: async (...args) => {
         effects++;
@@ -371,6 +374,8 @@ test('duplicate tool IDs and exhausted token budgets stop before dispatch', asyn
     ]);
   });
   const tools: ToolBroker = {
+    revision: 'fixture-tools-v1',
+    effect: fixtureToolEffect,
     definitions: () => [],
     execute: async () => {
       effects++;
@@ -903,6 +908,8 @@ test('essential tool results and private continuation still exhaust projected co
     const runtime = f.make(p, {
       limits: { ...limits, contextTokens: 16000, maxOutputTokens: 1000 },
       tools: {
+        revision: 'fixture-tools-v1',
+        effect: fixtureToolEffect,
         definitions: () => [
           { name: 'read_file', description: 'Read assigned input', parameters: { type: 'object' } },
         ],

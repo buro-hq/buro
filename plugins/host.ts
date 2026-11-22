@@ -13,6 +13,7 @@ import type {
 } from '../core/ports.ts';
 import { localFilesPlugin } from './local-files.ts';
 import { resourceContributionsPlugin } from './resource-contributions.ts';
+import { toolContributionsPlugin } from './tool-contributions.ts';
 
 declare module 'cordis' {
   interface Events {
@@ -162,17 +163,24 @@ export const rolesPlugin: Plugin.Object = {
   },
 };
 /** Cordis is confined to this composition layer; core use cases take explicit ports. */
-export async function createHost(
-  options: { projects?: ProjectStoreOpenSpec[]; storeFactory?: ProjectStoreFactory } = {},
-) {
+export type HostOptions = {
+  projects?: ProjectStoreOpenSpec[];
+  storeFactory?: ProjectStoreFactory;
+  /** Trusted Cordis plugins register before tool and application catalogs are sealed. */
+  configure?: (ctx: Context) => void | Promise<void>;
+};
+export async function createHost(options: HostOptions = {}) {
   const ctx = new Context();
   try {
     await ctx.plugin(Commands);
     await ctx.plugin(resourceContributionsPlugin);
+    await ctx.plugin(toolContributionsPlugin);
     await ctx.plugin(storagePlugin, {
       projects: options.projects || [],
       factory: options.storeFactory || new FileProjectStoreFactory(),
     });
+    await options.configure?.(ctx);
+    ctx.toolContributions.catalog.seal();
     await ctx.plugin(projectsPlugin);
     await ctx.plugin(localFilesPlugin);
     await ctx.plugin(goalsPlugin);

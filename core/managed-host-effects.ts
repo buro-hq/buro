@@ -4,6 +4,7 @@ import {
   observedTurnFailure,
   UnresolvedEffectError,
 } from './run-reconciliation.ts';
+import { toolEffectAllowed } from './tool-contributions.ts';
 import type {
   ManagedModelCompletion,
   ManagedPreparedRequest,
@@ -172,7 +173,7 @@ export async function generateManagedBatch(
     requested.some(
       (call) =>
         !advertised.has(call.name) ||
-        (session.scope.writeScope.mode === 'strict' && call.name === 'run_command'),
+        !toolEffectAllowed(host.options.tools.effect(call.name), session.scope),
     )
   )
     throw new DomainError(
@@ -235,12 +236,7 @@ export async function dispatchManagedAction(
   const call = structuredClone(action.call);
   const scope = structuredClone(session.scope);
   state.calls++;
-  const command =
-    action.call.name === 'run_command' &&
-    action.call.arguments !== null &&
-    typeof action.call.arguments === 'object'
-      ? String((action.call.arguments as Record<string, unknown>).command || '')
-      : undefined;
+  let command: string | undefined;
   batch.inFlight = action.id;
   try {
     host.emit({ type: 'tool.started', actionId: action.id, toolName: action.call.name });
@@ -250,8 +246,10 @@ export async function dispatchManagedAction(
       await host.options.tools.execute(call, scope, {
         actionId: action.id,
         signal: host.signal,
-        onCommandStart: (observed) =>
-          host.emit({ type: 'command.started', commandId: action.id, command: observed }),
+        onCommandStart: (observed) => {
+          command = observed;
+          host.emit({ type: 'command.started', commandId: action.id, command: observed });
+        },
       }),
     );
     action.status = 'completed';

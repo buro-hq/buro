@@ -35,12 +35,13 @@ export const resourcesPlugin: Plugin.Object<{
   builtins?: boolean;
 }> = {
   name: 'execution-resources',
-  inject: ['projects', 'commands', 'resourceContributions'],
+  inject: ['projects', 'commands', 'resourceContributions', 'toolContributions'],
   async apply(ctx, options) {
     const resources = await createRuntimeResources({
       ...options,
       projects: ctx.projects.registry,
       contributions: ctx.resourceContributions.catalog,
+      toolContributions: ctx.toolContributions.catalog,
       onConfigurationChange: (change) => ctx.emit('service/change', change),
     });
     let drainBackends: (() => Promise<void>) | undefined;

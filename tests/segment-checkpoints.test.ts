@@ -53,6 +53,7 @@ function checkpoint(): ManagedSession {
     },
     providerId: 'ollama-rtx',
     providerRevision: 'frozen',
+    toolRevision: 'fixture-tools-v1',
     requestedModel: 'small-fixture',
     purpose: 'implementation',
     scope,

@@ -71,6 +71,7 @@ function checkpoint(): ManagedSession {
     runtimeId: 'managed',
     providerId: 'ollama',
     providerRevision: 'frozen',
+    toolRevision: 'fixture-tools-v1',
     requestedModel: 'fixture-small',
     purpose: 'implementation',
     limits: {

@@ -1,3 +1,4 @@
+import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import assert from 'node:assert/strict';
@@ -186,6 +187,8 @@ async function fixture(t: any) {
       },
     },
     tools: {
+      revision: 'fixture-tools-v1',
+      effect: fixtureToolEffect,
       definitions: () => [
         {
           name: 'read_file',

@@ -24,7 +24,10 @@ export type ToolScope = {
   baseCommit?: string;
 };
 export type ToolResult = { content: string; isError?: boolean; exitCode?: number | null };
+export type ToolEffect = 'read' | 'write' | 'command';
 export interface ToolBroker {
+  readonly revision: string;
+  effect(name: string): ToolEffect;
   definitions(scope: ToolScope): ToolDefinition[];
   execute(
     call: ModelToolCall,
@@ -45,6 +48,7 @@ export type ManagedSession = {
   };
   providerId: string;
   providerRevision: string;
+  toolRevision: string;
   requestedModel: string;
   reportedModel?: string;
   /** Service-owned immutable routing purpose; absent legacy values use the work allowance. */
