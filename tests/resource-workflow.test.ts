@@ -126,7 +126,7 @@ function taskContext(body: any) {
   if (
     !body.tools?.length &&
     userIndex > 0 &&
-    /^Return only the final JSON for (the preceding task|the original assignment)\./.test(
+    /^(Return only the final JSON for (the preceding task|the original assignment)\.|Return one registered service action as the formal decision for the next useful work\.)/.test(
       messages[userIndex].content,
     )
   ) {

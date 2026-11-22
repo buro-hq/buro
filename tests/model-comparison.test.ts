@@ -96,6 +96,39 @@ test('fresh comparison fixtures have identical frozen task, content and oracle i
   assert.deepEqual((await inspectScope(a.root)).changedFiles, []);
 });
 
+test('comparison validates and records explicit provider context without changing other pilot limits', async () => {
+  for (const contextTokensByProvider of [
+    { ollama: NaN },
+    { ollama: 32769 },
+    { ollama: 2048 },
+    { ollama: 16384.5 },
+    { unknown: 16384 },
+  ]) {
+    assert.throws(
+      () => validateComparison({ env, arms: ['ollama-buro'], contextTokensByProvider }),
+      { code: 'LIVE_INVALID_CONTEXT_BUDGET' },
+    );
+  }
+  assert.equal(validateComparison({ env }).contexts.ollama, 16384);
+  let dispatched = false;
+  const report = await runModelComparison({
+    env,
+    arms: ['ollama-buro'],
+    contextTokensByProvider: { ollama: 32768 },
+    runProvider: async (input: any) => {
+      dispatched = true;
+      assert.equal(input.contextTokensByProvider.ollama, 32768);
+      assert.equal(input.budgets.maxGenerationRequests, 24);
+      assert.equal(input.budgets.maxOutputTokens, 2048);
+      assert.equal(input.budgets.codingWallTimeMs, 300000);
+      return { status: 'blocked' };
+    },
+  });
+  assert.equal(dispatched, true);
+  assert.equal(report.contextTokensByProvider.ollama, 32768);
+  assert.equal(report.results[0].accepted, false);
+});
+
 test('parent oracle rejects baseline and validates the two-file fix and immutable inputs', async (t) => {
   const fixture = await fixtureIn(t);
   const before = await canonicalOracle(fixture, fixture.root, 'public', {

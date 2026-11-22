@@ -77,6 +77,7 @@ export async function runGoalOrchestration(
     'Do not start native child agents; delegate through Buro actions. Do not commit, reset, checkout or modify .git. ' +
     'Respect the saved scope and protected files. Service checks and fresh independent review must approve the exact final revision. ' +
     'Do not claim a tool result, check or review you did not observe. Ask the user when information is missing.\n' +
+    'Service checks are obtained through the registered check action; a repository command result does not replace service verification.\n' +
     'Project context: ' +
     (policy.context || '') +
     materialInstructions(run.contextMaterials || [], workspace.path, true) +
@@ -184,7 +185,16 @@ export async function runGoalOrchestration(
               run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
             ),
         );
-        return observed({ assignmentId: grant.id, roleId: grant.role.id, result });
+        // Routing/session metadata stays in its authority; current worker envelopes are
+        // supplied once in the next state packet rather than serialized a second time.
+        return observed({
+          assignmentId: grant.id,
+          roleId: grant.role.id,
+          results: result.map((session) => ({
+            status: session.result?.status,
+            summary: session.result?.summary,
+          })),
+        });
       } catch (error) {
         assertCurrent(service, ctx);
         // Only a host-observed settled worker failure may return to the coordinator.
@@ -267,45 +277,8 @@ export async function runGoalOrchestration(
       return observed({ recorded: true, dispatchAuthority: false });
     },
   };
-  let feedback =
-    'Goal: ' +
-    run.title +
-    '\n' +
-    run.goalText +
-    '\nAvailable actions: ' +
-    JSON.stringify(actions.definitions().map(({ id, description }) => ({ id, description }))) +
-    '\nFile policy: ' +
-    JSON.stringify(policy.scope) +
-    '\nTeam allowance: ' +
-    policy.maxWorkers +
-    '. Reuse only existing worker IDs; otherwise create a reusable specialist role.' +
-    '\nAllowed worker runtimes: ' +
-    JSON.stringify(
-      run.resources
-        ? workerResourcePool(run.resources).map(({ id, model, providerId, local }) => ({
-            id,
-            model,
-            providerId,
-            local,
-          }))
-        : [],
-    ) +
-    '\nSaved work: ' +
-    JSON.stringify({
-      plan: run.plan,
-      checks: checkContext(run.acceptance),
-      review: run.review,
-      continuation: run.continuation,
-      workers: run.agents
-        .filter((item) => item.assignment)
-        .map((item) => ({
-          roleId: item.session?.roleId,
-          status: item.status,
-          result: item.session?.result,
-        })),
-    }) +
-    '\nChoose useful work. Return one registered action when service work or user input is needed.';
-  let lastCatalog: string | undefined;
+  let feedback = 'Goal: ' + run.title + '\nChoose useful work from the available actions.';
+  let lastRejectedProposal: unknown;
   while (true) {
     if (terminal(service.get(projectId, runId))) return;
     run = assertCurrent(service, ctx);
@@ -313,8 +286,30 @@ export async function runGoalOrchestration(
     expectedInput = await runs.planningInput(runId);
     expectedRoles = service.env.projects.get(projectId).snapshot().roles;
     expectedAssignments = await runs.assignments(runId);
-    const catalog = JSON.stringify(
-      expectedRoles
+    // This complete service packet remains usable after a context rollover. Historical
+    // model text is never the authority for current assignments, checks or review.
+    const currentState = {
+      goal: { title: run.title, text: run.goalText },
+      ...(lastRejectedProposal ? { untrustedRejectedProposal: lastRejectedProposal } : {}),
+      plan: run.plan,
+      checks: checkContext(run.acceptance),
+      review: run.review,
+      continuation: run.continuation,
+      assignments: expectedAssignments.map((item) => ({
+        id: item.id,
+        roleId: item.role.id,
+        task: item.task,
+        paths: item.paths,
+        resourceId: item.resource.resource.id,
+      })),
+      workers: run.agents
+        .filter((item) => item.assignment)
+        .map((item) => ({
+          roleId: item.session?.roleId,
+          status: item.status,
+          result: item.session?.result,
+        })),
+      reusableSpecialists: expectedRoles
         .filter((item) => isWorkerRoleId(item.id))
         .map(({ id, version, title, description, kind, runtimePreference }) => ({
           id,
@@ -324,24 +319,38 @@ export async function runGoalOrchestration(
           kind,
           runtimePreference,
         })),
-    );
-    if (catalog !== lastCatalog) {
-      feedback += '\nCurrent reusable specialist catalog: ' + catalog;
-      lastCatalog = catalog;
-    }
+      workerRuntimes: run.resources
+        ? workerResourcePool(run.resources).map(({ id, model, providerId, local }) => ({
+            id,
+            model,
+            providerId,
+            local,
+          }))
+        : [],
+      teamAllowance: policy.maxWorkers,
+      filePolicy: policy.scope,
+      availableActions: actions.definitions().map(({ id, description }) => ({ id, description })),
+    };
+    const task =
+      feedback +
+      '\nCurrent service-owned execution state: ' +
+      JSON.stringify(currentState) +
+      '\nReuse only existing worker IDs; otherwise create a reusable specialist role. ' +
+      'Return one registered action when service work or user input is needed.';
     let proposal: unknown;
     try {
       proposal = await service.completedTurn(
         projectId,
         runId,
         root.threadId,
-        feedback,
+        task,
         actions.outputSchema(),
         signal,
         run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       );
       assertCurrent(service, ctx);
       const choice = actions.parse(proposal);
+      lastRejectedProposal = undefined;
       await service.update(projectId, runId, (current) => {
         current.events.push({
           at: service.env.now(),
@@ -356,13 +365,16 @@ export async function runGoalOrchestration(
       feedback =
         'Service observation for ' +
         choice.action +
+        (result.isError ? ' (error)' : '') +
         ': ' +
-        JSON.stringify(result) +
+        result.content +
+        (result.exitCode !== undefined ? '\nService exit code: ' + result.exitCode : '') +
         '\nChoose the next useful work from the actual evidence. Repository tools remain available.';
     } catch (error) {
       if (terminal(service.get(projectId, runId))) return;
       assertCurrent(service, ctx);
       if (!(error instanceof DomainError) || !correctable.has(error.code)) throw error;
+      lastRejectedProposal = proposal;
       if (error.code === 'VERIFICATION_REVISION_CHANGED') checked = undefined;
       feedback =
         'The service rejected this action before acceptance: ' +

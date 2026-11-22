@@ -325,7 +325,7 @@ test('context advances once; replaying advance cannot append another finalizatio
   assert.equal(checkpoint.intermediateNotes?.length, 1);
   assert.equal(
     checkpoint.messages.filter((message) =>
-      message.content.startsWith('Return only the final JSON'),
+      message.content.startsWith('Return one registered service action as the formal decision'),
     ).length,
     1,
   );

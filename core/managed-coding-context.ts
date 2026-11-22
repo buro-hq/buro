@@ -16,10 +16,51 @@ import {
   resolveWorkSegmentPolicy,
   segmentActionReceipts,
   segmentClosingInstruction,
+  coordinatorSegmentClosingInstruction,
   segmentClosingSchema,
+  segmentFinalFormatTask,
   segmentMessages,
   validateSegmentEvidence,
 } from './work-segments.ts';
+
+const finalResponseInstruction =
+  'Return only the final JSON for the preceding task. Reconstruct it from the original task and recorded tool results; do not serialize or rely on an intermediate completion note. No tools are available in this final response.';
+const closingFinalResponseInstruction =
+  'Return only the final JSON for the original assignment, reconstructed from the original task and recorded tool results. ' +
+  'A work-step closure is not acceptance. No tools are available.';
+const coordinatorFinalResponseInstruction =
+  'Return one registered service action as the formal decision for the next useful work. The overall goal need not be complete. ' +
+  'Use the current goal packet and actual recorded observations. No repository tools are available in this response. ' +
+  'A service action does not itself certify acceptance.';
+const finalInstruction = (session: Pick<ManagedSession, 'purpose'>, closing = false) =>
+  session.purpose === 'coordination'
+    ? coordinatorFinalResponseInstruction
+    : closing
+      ? closingFinalResponseInstruction
+      : finalResponseInstruction;
+
+function finalContextState(
+  state: Pick<
+    ManagedTurnState,
+    'session' | 'schema' | 'noTools' | 'separate' | 'finalizing' | 'closing'
+  >,
+  instruction: string | undefined = !state.finalizing && state.separate
+    ? finalInstruction(state.session)
+    : undefined,
+) {
+  return {
+    ...state,
+    closing: false,
+    finalizing: true,
+    session:
+      instruction !== undefined
+        ? {
+            ...state.session,
+            messages: [...state.session.messages, { role: 'user' as const, content: instruction }],
+          }
+        : state.session,
+  };
+}
 
 /** Coding context is application policy; it never schedules a model or dispatches model tools. */
 export async function initializeManagedCodingContext(
@@ -27,16 +68,19 @@ export async function initializeManagedCodingContext(
   host: ManagedTurnHost,
   task: string,
 ) {
-  const session = state.session;
+  let session = state.session;
+  const coordinator = session.purpose === 'coordination';
   if (
     state.noTools ||
     !host.options.segmentPolicy ||
     !host.options.segmentEvidence ||
-    session.purpose !== 'implementation' ||
-    !session.assignment ||
+    (!coordinator && (session.purpose !== 'implementation' || !session.assignment)) ||
     session.scope.readOnly
   )
     return;
+  // Preparing a new coordinator window must not mutate the cached settled checkpoint
+  // before its archive, current packet and turn authority are durably committed together.
+  if (coordinator) state.session = session = structuredClone(session);
   const anchor = {
     turnId: state.turnId,
     instructions:
@@ -59,6 +103,89 @@ export async function initializeManagedCodingContext(
       archives: [],
     };
   } else {
+    const step = session.workSegments;
+    if (coordinator && session.requests > step.active.startedAtRequest) {
+      const projectedState = {
+        ...state,
+        session: {
+          ...session,
+          messages: [...session.messages, { role: 'user' as const, content: task }],
+        },
+      };
+      const work = projectManagedRequestContext(projectedState, host);
+      const final = projectManagedRequestContext(finalContextState(projectedState), host);
+      const estimate = (view: typeof work) =>
+        estimateManagedRequest({
+          messages: view.messages,
+          tools: view.definitions,
+          schema: view.schema,
+        });
+      const decision = decideWorkSegment(
+        {
+          limits: step.limits,
+          toolRounds: step.active.toolRounds,
+          segmentCount: step.active.index,
+          estimatedInput: Math.max(estimate(work), estimate(final)),
+          contextTokens: session.limits.contextTokens,
+          maxOutputTokens: session.limits.maxOutputTokens,
+        },
+        resolveWorkSegmentPolicy(step.limits, host.options.segmentPolicy),
+      );
+      if (decision === 'close') {
+        host.assertReconciled(session);
+        // Explicit resume may append host-owned system instruction revisions after
+        // the completed assistant reply. They remain in the archived conversation.
+        const last = [...session.messages].reverse().find((message) => message.role !== 'system');
+        if (
+          session.status !== 'ready' ||
+          session.cancelRequested ||
+          session.actions.some((action) => action.status !== 'completed') ||
+          session.generation?.outcome !== 'completed' ||
+          session.generation.response?.finish !== 'stop' ||
+          last?.role !== 'assistant' ||
+          last.toolCalls?.length
+        )
+          throw new DomainError(
+            'INCOMPLETE_WORK_SEGMENT',
+            'A service-turn boundary requires a fully settled coordinator turn.',
+          );
+        if (step.limits.maxSegments !== undefined && step.active.index >= step.limits.maxSegments)
+          throw new DomainError('WORK_SEGMENT_LIMIT', 'The saved work segment limit is exhausted.');
+        const evidence = await host.options.segmentEvidence.inspect(session.scope, host.signal);
+        host.check();
+        assertSegmentScope(step.baseline, evidence, session.scope);
+        const handoff = {
+          version: 1 as const,
+          kind: 'service-turn' as const,
+          nextTask: 'Continue the goal using the current service observations.',
+          evidence,
+          completedActions: session.actions.length,
+          receipts: segmentActionReceipts(session.actions),
+          availableTools: host.toolDefinitions(session.scope).map((tool) => tool.name),
+        };
+        step.archives.push({
+          index: step.active.index,
+          anchor: structuredClone(step.anchor),
+          startedAtRequest: step.active.startedAtRequest,
+          endedAtRequest: session.requests,
+          messages: structuredClone(session.messages),
+          ...(session.intermediateNotes
+            ? { intermediateNotes: [...session.intermediateNotes] }
+            : {}),
+          handoff,
+        });
+        step.active = {
+          index: step.active.index + 1,
+          startedAtRequest: session.requests,
+          toolRounds: 0,
+        };
+        step.anchor = anchor;
+        // The caller appends this exact current packet with the new turn authority in one save.
+        session.messages = segmentMessages(anchor, session.scope, handoff).slice(0, -1);
+        delete session.intermediateNotes;
+        return;
+      }
+    }
     session.workSegments.anchor = anchor;
     session.workSegments.active.toolRounds = 0;
   }
@@ -88,7 +215,9 @@ export function projectManagedRequestContext(
   const messages = structuredClone(session.messages);
   const instruction =
     schema === undefined
-      ? 'Use the available tools when needed to complete the task. When the work is complete, give a brief completion note; the final response is requested separately.'
+      ? session.purpose === 'coordination'
+        ? 'Use repository tools for the next useful piece of work. When a registered service action is needed, stop repository tool work and give a brief note for the structured decision requested separately. You need not complete the whole goal before requesting an action. Repository commands do not replace service checks or independent review.'
+        : 'Use the available tools when needed to complete the task. When the work is complete, give a brief completion note; the final response is requested separately.'
       : host.options.provider.structuredOutputMode === 'schema'
         ? 'Return your final answer as JSON matching the response format supplied by the service.'
         : (state.finalizing || state.closing
@@ -119,23 +248,31 @@ export async function prepareManagedCodingRequest(
   let projected = projectManagedRequestContext(state, host);
   if (
     !state.noTools &&
-    !state.finalizing &&
     !state.closing &&
+    !state.segmentCompleteEmitted &&
     session.workSegments &&
-    session.workSegments.active.toolRounds > 0 &&
+    session.requests > session.workSegments.active.startedAtRequest &&
     host.options.segmentPolicy
   ) {
     const step = session.workSegments;
+    const final = projectManagedRequestContext(finalContextState(state), host);
     const decision = decideWorkSegment(
       {
         limits: step.limits,
         toolRounds: step.active.toolRounds,
         segmentCount: step.active.index,
-        estimatedInput: estimateManagedRequest({
-          messages: projected.messages,
-          tools: projected.definitions,
-          schema: projected.schema,
-        }),
+        estimatedInput: Math.max(
+          estimateManagedRequest({
+            messages: projected.messages,
+            tools: projected.definitions,
+            schema: projected.schema,
+          }),
+          estimateManagedRequest({
+            messages: final.messages,
+            tools: final.definitions,
+            schema: final.schema,
+          }),
+        ),
         contextTokens: limits.contextTokens,
         maxOutputTokens: limits.maxOutputTokens,
       },
@@ -144,7 +281,13 @@ export async function prepareManagedCodingRequest(
     if (decision === 'close') {
       host.assertReconciled(session);
       const next = structuredClone(session);
-      next.messages.push({ role: 'user', content: segmentClosingInstruction });
+      next.messages.push({
+        role: 'user',
+        content:
+          session.purpose === 'coordination'
+            ? coordinatorSegmentClosingInstruction
+            : segmentClosingInstruction,
+      });
       await host.commit(next);
       session = state.session;
       state.closing = true;
@@ -254,12 +397,26 @@ export async function afterManagedResponse(
     const evidence = await host.options.segmentEvidence!.inspect(session.scope, host.signal);
     host.check();
     assertSegmentScope(step.baseline, evidence, session.scope);
-    if (decision.status === 'continue') {
-      if (step.active.index >= step.limits.maxSegments)
+    const final = projectManagedRequestContext(
+      finalContextState(state, finalInstruction(session, true)),
+      host,
+    );
+    const needsFinalRotation =
+      decision.status === 'complete' &&
+      estimateManagedRequest({
+        messages: final.messages,
+        tools: final.definitions,
+        schema: final.schema,
+      }) +
+        session.limits.maxOutputTokens >
+        session.limits.contextTokens;
+    if (decision.status === 'continue' || needsFinalRotation) {
+      if (step.limits.maxSegments !== undefined && step.active.index >= step.limits.maxSegments)
         throw new DomainError('WORK_SEGMENT_LIMIT', 'The saved work segment limit is exhausted.');
       const handoff = {
         version: 1 as const,
-        nextTask: decision.nextTask,
+        nextTask: needsFinalRotation ? segmentFinalFormatTask : decision.nextTask,
+        ...(needsFinalRotation ? { kind: 'final-format' as const } : {}),
         evidence,
         completedActions: session.actions.length,
         receipts: segmentActionReceipts(session.actions),
@@ -297,15 +454,15 @@ export async function afterManagedResponse(
         segmentIndex: state.session.workSegments!.active.index,
       });
       state.closing = false;
+      state.finalizing = needsFinalRotation;
+      state.segmentCompleteEmitted = false;
       return { kind: 'continue' };
     }
     const next = structuredClone(session);
     next.intermediateNotes = [...(next.intermediateNotes || []), next.messages.length - 1];
     next.messages.push({
       role: 'user',
-      content:
-        'Return only the final JSON for the original assignment, reconstructed from the original task and recorded tool results. ' +
-        'A work-step closure is not acceptance. No tools are available.',
+      content: finalInstruction(session, true),
     });
     await host.commit(next);
     host.emit({
@@ -329,8 +486,7 @@ export async function afterManagedResponse(
         ...session.messages,
         {
           role: 'user',
-          content:
-            'Return only the final JSON for the preceding task. Reconstruct it from the original task and recorded tool results; do not serialize or rely on an intermediate completion note. No tools are available in this final response.',
+          content: finalInstruction(session),
         },
       ],
     };

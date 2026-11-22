@@ -75,7 +75,7 @@ test('context policy rotates only when the projected request and full output all
     contextTokens: 16000,
     maxOutputTokens: 1024,
   };
-  assert.deepEqual(input.limits, { revision: 'managed-context-segments-v2', maxSegments: 4 });
+  assert.deepEqual(input.limits, { revision: 'managed-context-segments-v3' });
   assert.equal(decideWorkSegment(input, contextWorkSegmentPolicy), 'continue');
   assert.equal(
     decideWorkSegment({ ...input, estimatedInput: 14976 }, contextWorkSegmentPolicy),

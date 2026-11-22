@@ -1,0 +1,664 @@
+{
+  "version": 1,
+  "caseId": "synthetic-ready-queue-review-repair-v2",
+  "syntheticOnly": true,
+  "target": "local",
+  "model": "qwen3:4b-instruct-2507-q4_K_M",
+  "forceWorker": false,
+  "startedAt": "2026-11-22T21:03:44.580Z",
+  "limits": {
+    "maxGenerationRequests": 24,
+    "maxReservedOutputTokens": 65536,
+    "maxDiagnosticRequests": 2,
+    "diagnosticWallTimeMs": 120000,
+    "codingWallTimeMs": 300000,
+    "contextTokens": 32768,
+    "maxOutputTokens": 2048
+  },
+  "contextTokensByProvider": {
+    "ollama": 16384
+  },
+  "accepted": false,
+  "repairCoverage": false,
+  "fixture": {
+    "caseId": "synthetic-ready-queue-review-repair-v2",
+    "fixtureHash": "5b7ec623ba0facb895e2a09a1a7f8ad35e5bbb5251aac767d76fcacacf4730ed",
+    "sourceHash": "61dc708a6bc6fbd2941285ee8fa6268cdd44bc22d74bf6b76e0d1cd3df08e54b",
+    "taskHash": "a87f0dc0eb0d588fbec834430f4122770fac2e14d19761079f5a033bf4cc549f",
+    "oracleHash": "ffc074a31214cdae4bfb1df834738629f734b581ec333f78c38b578862781040",
+    "allowedPaths": [
+      "src/queue.mjs"
+    ],
+    "publicChecks": 3,
+    "holdoutChecks": 5,
+    "caseHash": "557fd6fcada28716b5b078095ede60bf72fd8bce577acf6d762f489c12154136"
+  },
+  "initialTree": "4ec76490edaf7489945cbb0746b7311876eea085",
+  "seed": {
+    "public": {
+      "passed": true,
+      "checks": 3,
+      "passedChecks": 3,
+      "rows": [
+        {
+          "name": "explicit-zero",
+          "passed": true
+        },
+        {
+          "name": "independent-task",
+          "passed": true
+        },
+        {
+          "name": "all-dependencies-required",
+          "passed": true
+        }
+      ],
+      "scope": {
+        "passed": true,
+        "changedFiles": [
+          "src/priority.mjs",
+          "src/queue.mjs"
+        ],
+        "unexpectedCount": 0,
+        "sourceHash": "74c285925e80206ff020c05ca68e07d773655995705dd66b897d69c1da0e723a"
+      }
+    },
+    "holdout": {
+      "passed": false,
+      "checks": 5,
+      "passedChecks": 4,
+      "rows": [
+        {
+          "name": "missing-priority",
+          "passed": true
+        },
+        {
+          "name": "null-priority",
+          "passed": true
+        },
+        {
+          "name": "zero-below-one",
+          "passed": false
+        },
+        {
+          "name": "completed-and-ready",
+          "passed": true
+        },
+        {
+          "name": "stable-equal-priorities",
+          "passed": true
+        }
+      ],
+      "scope": {
+        "passed": true,
+        "changedFiles": [
+          "src/priority.mjs",
+          "src/queue.mjs"
+        ],
+        "unexpectedCount": 0,
+        "sourceHash": "74c285925e80206ff020c05ca68e07d773655995705dd66b897d69c1da0e723a"
+      }
+    }
+  },
+  "evidence": {
+    "initialTree": "4ec76490edaf7489945cbb0746b7311876eea085",
+    "ordered": [
+      {
+        "index": 26,
+        "type": "action",
+        "action": "review"
+      }
+    ],
+    "initialRejectionObserved": false,
+    "correctedApprovalObserved": false,
+    "acceptedTree": null,
+    "repairObserved": false
+  },
+  "canonical": {
+    "public": {
+      "passed": true,
+      "checks": 3,
+      "passedChecks": 3,
+      "rows": [
+        {
+          "name": "explicit-zero",
+          "passed": true
+        },
+        {
+          "name": "independent-task",
+          "passed": true
+        },
+        {
+          "name": "all-dependencies-required",
+          "passed": true
+        }
+      ],
+      "scope": {
+        "passed": true,
+        "changedFiles": [
+          "src/priority.mjs",
+          "src/queue.mjs"
+        ],
+        "unexpectedCount": 0,
+        "sourceHash": "74c285925e80206ff020c05ca68e07d773655995705dd66b897d69c1da0e723a"
+      }
+    },
+    "holdout": {
+      "passed": false,
+      "checks": 5,
+      "passedChecks": 4,
+      "rows": [
+        {
+          "name": "missing-priority",
+          "passed": true
+        },
+        {
+          "name": "null-priority",
+          "passed": true
+        },
+        {
+          "name": "zero-below-one",
+          "passed": false
+        },
+        {
+          "name": "completed-and-ready",
+          "passed": true
+        },
+        {
+          "name": "stable-equal-priorities",
+          "passed": true
+        }
+      ],
+      "scope": {
+        "passed": true,
+        "changedFiles": [
+          "src/priority.mjs",
+          "src/queue.mjs"
+        ],
+        "unexpectedCount": 0,
+        "sourceHash": "74c285925e80206ff020c05ca68e07d773655995705dd66b897d69c1da0e723a"
+      }
+    }
+  },
+  "provider": {
+    "version": 1,
+    "startedAt": "2026-11-22T21:03:44.583Z",
+    "mode": "ollama",
+    "live": true,
+    "status": "budget-exhausted",
+    "stage": "coding-goal",
+    "caseId": "synthetic-ready-queue-review-repair-v2",
+    "forceWorker": false,
+    "segmentPolicy": {
+      "revision": "managed-context-segments-v3"
+    },
+    "models": {
+      "ollama": "qwen3:4b-instruct-2507-q4_K_M"
+    },
+    "contextTokensByProvider": {
+      "ollama": 16384
+    },
+    "fixtureDirectory": "/tmp/buro-provider-evaluation-SsOIiL",
+    "initialBaseline": {
+      "passed": 1,
+      "total": 1,
+      "source": "pre-dispatch-service-check"
+    },
+    "diagnostic": {
+      "status": "passed",
+      "runtimeId": "ollama-live",
+      "tools": true,
+      "structured": true
+    },
+    "runId": "R-f6731145-77e4-4580-bad4-897f430344f4",
+    "currentPhase": "implementation",
+    "run": {
+      "planSaved": false,
+      "planStepsCount": 0,
+      "lastPhaseBeforeDone": "implementation",
+      "planningPolicy": {
+        "version": 1,
+        "revision": "capability-planning-v1",
+        "strategy": "tools-free-structured",
+        "runtimeId": "ollama-live",
+        "configurationRevision": "dd633dd22e975a8541fab3fea4776b469f6047fa11dbd69267a89f8f2494003b",
+        "capabilitiesRevision": "managed-host-tools-scope-v2"
+      },
+      "managedBudget": {
+        "version": 1,
+        "coverage": "managed-api",
+        "policy": {
+          "version": 1,
+          "maxRequests": 64,
+          "maxReservedOutputTokens": 131072,
+          "maxToolCalls": 256,
+          "reviewReserve": {
+            "requests": 8,
+            "outputTokens": 16384,
+            "toolCalls": 32
+          }
+        },
+        "status": "open",
+        "used": {
+          "requests": 10,
+          "reservedOutputTokens": 17666,
+          "toolCalls": 7
+        },
+        "workUsed": {
+          "requests": 10,
+          "reservedOutputTokens": 17666,
+          "toolCalls": 7
+        },
+        "reviewUsed": {
+          "requests": 0,
+          "reservedOutputTokens": 0,
+          "toolCalls": 0
+        },
+        "observed": {
+          "inputTokens": 21245,
+          "outputTokens": 1053,
+          "completeUsageRequests": 10,
+          "unknownUsageRequests": 0
+        }
+      },
+      "status": "failed",
+      "phase": "done",
+      "profile": "evaluation",
+      "policy": "local-only",
+      "baselinePassed": 0,
+      "baselineTotal": 0,
+      "acceptancePassed": 0,
+      "acceptanceTotal": 0,
+      "independentReviewer": false,
+      "acceptedCommit": false,
+      "changedFiles": [],
+      "sessions": [
+        {
+          "role": "coordinator",
+          "runtimeId": "ollama-live",
+          "requestedModelMatchesConfigured": true,
+          "reportedModelMatchesConfigured": true
+        }
+      ]
+    },
+    "originalSourcePreserved": true,
+    "checkpoints": [
+      {
+        "requests": 10,
+        "actions": [
+          {
+            "status": "completed",
+            "tool": "list_files"
+          },
+          {
+            "status": "completed",
+            "tool": "read_file"
+          },
+          {
+            "status": "completed",
+            "tool": "search_text"
+          },
+          {
+            "status": "completed",
+            "tool": "search_text"
+          },
+          {
+            "status": "completed",
+            "tool": "read_file"
+          },
+          {
+            "status": "completed",
+            "tool": "run_command"
+          },
+          {
+            "status": "completed",
+            "tool": "run_command"
+          }
+        ],
+        "usage": {
+          "requestsWithUsage": 10,
+          "inputTokens": 21245,
+          "outputTokens": 1053
+        },
+        "workSegments": {
+          "archiveCount": 2,
+          "activeIndex": 3,
+          "policyRevision": "managed-context-segments-v3"
+        }
+      }
+    ],
+    "failureClassification": {
+      "category": "contextBudget",
+      "status": "budget-exhausted",
+      "code": "LIVE_CONTEXT_BUDGET_EXHAUSTED",
+      "evidence": "known-service-message",
+      "basis": "public-status-message heuristic"
+    },
+    "error": {
+      "code": "LIVE_CONTEXT_BUDGET_EXHAUSTED"
+    },
+    "http": {
+      "requests": [
+        {
+          "requestIndex": 1,
+          "provider": "ollama",
+          "maxOutputTokens": 1024,
+          "toolNames": [
+            "diagnostic_echo"
+          ]
+        },
+        {
+          "requestIndex": 2,
+          "provider": "ollama",
+          "maxOutputTokens": 1024,
+          "toolNames": []
+        },
+        {
+          "requestIndex": 3,
+          "provider": "ollama",
+          "maxOutputTokens": 2048,
+          "toolNames": [
+            "read_file",
+            "list_files",
+            "search_text",
+            "read_diff",
+            "edit_file",
+            "run_command"
+          ]
+        },
+        {
+          "requestIndex": 4,
+          "provider": "ollama",
+          "maxOutputTokens": 2048,
+          "toolNames": [
+            "read_file",
+            "list_files",
+            "search_text",
+            "read_diff",
+            "edit_file",
+            "run_command"
+          ]
+        },
+        {
+          "requestIndex": 5,
+          "provider": "ollama",
+          "maxOutputTokens": 2048,
+          "toolNames": [
+            "read_file",
+            "list_files",
+            "search_text",
+            "read_diff",
+            "edit_file",
+            "run_command"
+          ]
+        },
+        {
+          "requestIndex": 6,
+          "provider": "ollama",
+          "maxOutputTokens": 2048,
+          "toolNames": [
+            "read_file",
+            "list_files",
+            "search_text",
+            "read_diff",
+            "edit_file",
+            "run_command"
+          ]
+        },
+        {
+          "requestIndex": 7,
+          "provider": "ollama",
+          "maxOutputTokens": 2048,
+          "toolNames": [
+            "read_file",
+            "list_files",
+            "search_text",
+            "read_diff",
+            "edit_file",
+            "run_command"
+          ]
+        },
+        {
+          "requestIndex": 8,
+          "provider": "ollama",
+          "maxOutputTokens": 2048,
+          "toolNames": [
+            "read_file",
+            "list_files",
+            "search_text",
+            "read_diff",
+            "edit_file",
+            "run_command"
+          ]
+        },
+        {
+          "requestIndex": 9,
+          "provider": "ollama",
+          "maxOutputTokens": 2048,
+          "toolNames": [
+            "read_file",
+            "list_files",
+            "search_text",
+            "read_diff",
+            "edit_file",
+            "run_command"
+          ]
+        },
+        {
+          "requestIndex": 10,
+          "provider": "ollama",
+          "maxOutputTokens": 2048,
+          "toolNames": []
+        },
+        {
+          "requestIndex": 11,
+          "provider": "ollama",
+          "maxOutputTokens": 770,
+          "toolNames": [
+            "read_file",
+            "list_files",
+            "search_text",
+            "read_diff",
+            "edit_file",
+            "run_command"
+          ]
+        },
+        {
+          "requestIndex": 12,
+          "provider": "ollama",
+          "maxOutputTokens": 512,
+          "toolNames": []
+        }
+      ],
+      "responses": [
+        {
+          "requestIndex": 1,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [
+            "diagnostic_echo"
+          ],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 185,
+            "outputTokens": 23
+          }
+        },
+        {
+          "requestIndex": 2,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 107,
+            "outputTokens": 6
+          }
+        },
+        {
+          "requestIndex": 3,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [
+            "list_files"
+          ],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 1634,
+            "outputTokens": 20
+          }
+        },
+        {
+          "requestIndex": 4,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [
+            "read_file"
+          ],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 1686,
+            "outputTokens": 24
+          }
+        },
+        {
+          "requestIndex": 5,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [
+            "search_text"
+          ],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 1827,
+            "outputTokens": 31
+          }
+        },
+        {
+          "requestIndex": 6,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [
+            "search_text"
+          ],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 1905,
+            "outputTokens": 31
+          }
+        },
+        {
+          "requestIndex": 7,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [
+            "read_file"
+          ],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 2016,
+            "outputTokens": 24
+          }
+        },
+        {
+          "requestIndex": 8,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [
+            "run_command"
+          ],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 2085,
+            "outputTokens": 24
+          }
+        },
+        {
+          "requestIndex": 9,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 2135,
+            "outputTokens": 41
+          }
+        },
+        {
+          "requestIndex": 10,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 1589,
+            "outputTokens": 818
+          }
+        },
+        {
+          "requestIndex": 11,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [
+            "run_command"
+          ],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 3393,
+            "outputTokens": 24
+          }
+        },
+        {
+          "requestIndex": 12,
+          "provider": "ollama",
+          "status": 200,
+          "terminal": true,
+          "toolNames": [],
+          "finish": "stop",
+          "usage": {
+            "inputTokens": 2975,
+            "outputTokens": 16
+          }
+        }
+      ],
+      "metadata": {
+        "ollama": 13,
+        "deepseek": 0
+      }
+    },
+    "budget": {
+      "limits": {
+        "maxGenerationRequests": 24,
+        "maxReservedOutputTokens": 65536,
+        "maxDiagnosticRequests": 2,
+        "diagnosticWallTimeMs": 120000,
+        "codingWallTimeMs": 300000,
+        "contextTokens": 32768,
+        "maxOutputTokens": 2048
+      },
+      "generationRequests": 12,
+      "diagnosticRequests": 2,
+      "reservedOutputTokens": 19714,
+      "observedInputTokens": 21537,
+      "observedOutputTokens": 1082,
+      "requestsWithCompleteUsage": 12,
+      "requestsWithUnknownUsage": 0,
+      "reservationRefunds": 0,
+      "cost": "unknown"
+    },
+    "finishedAt": "2026-11-22T21:04:39.300Z"
+  },
+  "status": "budget-exhausted",
+  "finishedAt": "2026-11-22T21:04:39.305Z"
+}

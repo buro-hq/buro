@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "syntheticOnly": true,
+  "fixture": {
+    "caseId": "synthetic-ready-queue-v1",
+    "caseHash": "a4972e8be97d657c33c55aa3e949462dfefc2993708a49ff402798115d2965ce",
+    "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+    "sourceHash": "a0d2b6b03adcf61f46699b50c8c68e437cadd7d3e5587f9c19a018bac04215a3",
+    "taskHash": "dfedfa67f2f8f28845498eeef9a9f8de4a7d1c6821f786d3b9cdc8d3eea9a2b9",
+    "oracleHash": "ffc074a31214cdae4bfb1df834738629f734b581ec333f78c38b578862781040",
+    "allowedPaths": [
+      "src/priority.mjs",
+      "src/queue.mjs"
+    ],
+    "publicChecks": 3,
+    "holdoutChecks": 5
+  },
+  "startedAt": "2026-11-22T20:40:24.081Z",
+  "limits": {
+    "maxGenerationRequests": 24,
+    "maxReservedOutputTokens": 65536,
+    "maxDiagnosticRequests": 2,
+    "diagnosticWallTimeMs": 120000,
+    "codingWallTimeMs": 300000,
+    "contextTokens": 32768,
+    "maxOutputTokens": 2048
+  },
+  "contextTokensByProvider": {
+    "deepseek": 32768,
+    "ollama": 32768
+  },
+  "comparability": {
+    "sameFixture": true,
+    "sameTask": true,
+    "sameOracle": true,
+    "sameCodingWall": true,
+    "oracleWallTimeMs": 10000,
+    "managedTokenCeilingsApplyToNative": false,
+    "nativeContextLimitEnforced": false,
+    "sameToolReadBoundary": false,
+    "nativeToolReadBoundary": "native-default-host-read",
+    "managedToolReadBoundary": "isolated-workspace-with-private-path-denials",
+    "buroRequiresWorker": true,
+    "nativeModel": "gpt-6.1-sol",
+    "nativeReasoningEffort": "high"
+  },
+  "results": [
+    {
+      "arm": "ollama-buro",
+      "executionMode": "model-selected-actions",
+      "trialReport": "actions-qwen4b-context32k-trials/ollama-buro-model-selected-actions.json",
+      "orchestrationCoverage": "service-action-catalog",
+      "orchestrationPolicy": {
+        "strategy": "model-selected-actions",
+        "actionRequests": 3
+      },
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "status": "budget-exhausted",
+      "errorCode": "LIVE_REQUEST_BUDGET_EXHAUSTED",
+      "orchestration": {
+        "planSaved": false,
+        "baselinePassed": 0,
+        "baselineTotal": 0,
+        "acceptancePassed": 0,
+        "acceptanceTotal": 0,
+        "independentReviewer": false,
+        "reviewApproved": false,
+        "acceptedCommit": false
+      },
+      "budgetCoverage": {
+        "kind": "managed-enforced",
+        "requestsEnforced": true,
+        "tokensEnforced": true,
+        "generationRequests": 24,
+        "diagnosticRequests": 2,
+        "codingGenerationRequests": 22,
+        "reservedOutputTokens": 47104,
+        "observedInputTokens": 51688,
+        "observedOutputTokens": 2340,
+        "requestsWithCompleteUsage": 24,
+        "requestsWithUnknownUsage": 0
+      },
+      "elapsedMs": 86955,
+      "canonical": {
+        "public": {
+          "passed": true,
+          "checks": 3,
+          "passedChecks": 3,
+          "rows": [
+            {
+              "name": "explicit-zero",
+              "passed": true
+            },
+            {
+              "name": "independent-task",
+              "passed": true
+            },
+            {
+              "name": "all-dependencies-required",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "6d625dffa6882f4f38787b257e660cbd7f47deb791bc62dce361b37b0918f209"
+          }
+        },
+        "holdout": {
+          "passed": true,
+          "checks": 5,
+          "passedChecks": 5,
+          "rows": [
+            {
+              "name": "missing-priority",
+              "passed": true
+            },
+            {
+              "name": "null-priority",
+              "passed": true
+            },
+            {
+              "name": "zero-below-one",
+              "passed": true
+            },
+            {
+              "name": "completed-and-ready",
+              "passed": true
+            },
+            {
+              "name": "stable-equal-priorities",
+              "passed": true
+            }
+          ],
+          "scope": {
+            "passed": true,
+            "changedFiles": [
+              "src/priority.mjs",
+              "src/queue.mjs"
+            ],
+            "unexpectedCount": 0,
+            "sourceHash": "6d625dffa6882f4f38787b257e660cbd7f47deb791bc62dce361b37b0918f209"
+          }
+        }
+      },
+      "canonicalOrigin": "candidate-workspace",
+      "accepted": false
+    }
+  ],
+  "finishedAt": "2026-11-22T20:41:51.041Z"
+}

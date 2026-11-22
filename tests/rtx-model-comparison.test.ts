@@ -58,6 +58,8 @@ test('unified CLI rejects obsolete controls and unsafe targets before opening cr
     [['ollama-buro', 'bounded'], {}, 'COMPARISON_INVALID_ARGUMENTS'],
     [['ollama-buro', '--target'], {}, 'COMPARISON_INVALID_ARGUMENTS'],
     [['ollama-buro', '--target', 'arbitrary-lan'], {}, 'COMPARISON_INVALID_TARGET'],
+    [['ollama-buro', '--ollama-context=invalid'], {}, 'LIVE_INVALID_CONTEXT_BUDGET'],
+    [['ollama-buro', '--ollama-context=32769'], {}, 'LIVE_INVALID_CONTEXT_BUDGET'],
     [
       ['ollama-buro', '--target', 'rtx'],
       { BURO_RTX_ENDPOINT: RTX_EVALUATION_ENDPOINT, BURO_RTX_MODEL_COMPARISON: undefined },

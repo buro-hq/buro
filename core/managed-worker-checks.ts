@@ -158,7 +158,7 @@ export async function checkManagedWorkerStep(options: {
       'WORKER_CHECK_FEEDBACK_LIMIT',
       'The saved worker check feedback limit is exhausted.',
     );
-  if (step.active.index >= step.limits.maxSegments)
+  if (step.limits.maxSegments !== undefined && step.active.index >= step.limits.maxSegments)
     throw new DomainError('WORK_SEGMENT_LIMIT', 'The saved work segment limit is exhausted.');
   const handoff = {
     version: 1 as const,

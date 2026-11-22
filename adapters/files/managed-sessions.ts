@@ -9,6 +9,7 @@ import {
   parseSegmentClosing,
   segmentActionReceipts,
   segmentMessages,
+  segmentFinalFormatTask,
   validateSegmentEvidence,
   validateSegmentLimits,
 } from '../../core/work-segments.ts';
@@ -110,7 +111,7 @@ const workSegments = z.strictObject({
   limits: z.strictObject({
     revision: z.string(),
     maxToolRounds: z.number().int().optional(),
-    maxSegments: z.number().int(),
+    maxSegments: z.number().int().optional(),
     contextThresholdPercent: z.number().int().optional(),
   }),
   baseline: evidence,
@@ -120,44 +121,42 @@ const workSegments = z.strictObject({
     startedAtRequest: z.number().int().nonnegative(),
     toolRounds: z.number().int().nonnegative(),
   }),
-  archives: z
-    .array(
-      z.strictObject({
-        index: z.number().int().positive(),
-        anchor,
-        startedAtRequest: z.number().int().nonnegative(),
-        endedAtRequest: z.number().int().positive(),
-        messages: z.array(message).min(1),
-        intermediateNotes: z.array(z.number().int().nonnegative()).optional(),
-        handoff: z.strictObject({
-          version: z.literal(1),
-          nextTask: z.string().min(1).max(1000),
-          evidence,
-          completedActions: z.number().int().nonnegative(),
-          kind: z.literal('check-feedback').optional(),
-          checkFeedback: z
-            .strictObject({
-              receiptId: z.string().min(1),
-              result: workerStepCheckResult,
-            })
-            .optional(),
-          availableTools: z.array(z.string().min(1).max(100)).max(32).optional(),
-          receipts: z
-            .array(
-              z.strictObject({
-                actionId: z.string().min(1),
-                toolName: z.string().min(1),
-                target: z.string().max(1000).optional(),
-                isError: z.boolean(),
-                output: z.string().max(512),
-              }),
-            )
-            .max(6)
-            .optional(),
-        }),
+  archives: z.array(
+    z.strictObject({
+      index: z.number().int().positive(),
+      anchor,
+      startedAtRequest: z.number().int().nonnegative(),
+      endedAtRequest: z.number().int().positive(),
+      messages: z.array(message).min(1),
+      intermediateNotes: z.array(z.number().int().nonnegative()).optional(),
+      handoff: z.strictObject({
+        version: z.literal(1),
+        nextTask: z.string().min(1).max(1000),
+        evidence,
+        completedActions: z.number().int().nonnegative(),
+        kind: z.enum(['check-feedback', 'service-turn', 'final-format']).optional(),
+        checkFeedback: z
+          .strictObject({
+            receiptId: z.string().min(1),
+            result: workerStepCheckResult,
+          })
+          .optional(),
+        availableTools: z.array(z.string().min(1).max(100)).max(32).optional(),
+        receipts: z
+          .array(
+            z.strictObject({
+              actionId: z.string().min(1),
+              toolName: z.string().min(1),
+              target: z.string().max(1000).optional(),
+              isError: z.boolean(),
+              output: z.string().max(512),
+            }),
+          )
+          .max(6)
+          .optional(),
       }),
-    )
-    .max(15),
+    }),
+  ),
 });
 const schema = z
   .object({
@@ -335,7 +334,7 @@ function validateSegmentCheckpoint(session: ManagedSession) {
   validateSegmentEvidence(state.baseline);
   if (
     state.active.index !== state.archives.length + 1 ||
-    state.active.index > state.limits.maxSegments ||
+    (state.limits.maxSegments !== undefined && state.active.index > state.limits.maxSegments) ||
     state.active.startedAtRequest > session.requests ||
     state.active.toolRounds > session.requests - state.active.startedAtRequest
   )
@@ -424,7 +423,10 @@ function validateSegmentCheckpoint(session: ManagedSession) {
         }
       }
     }
-    const last = archive.messages.at(-1);
+    const last =
+      archive.handoff.kind === 'service-turn'
+        ? [...archive.messages].reverse().find((message) => message.role !== 'system')
+        : archive.messages.at(-1);
     if (pending.size || last?.role !== 'assistant' || last.toolCalls?.length)
       invalidSegment('A work segment was archived before its model round settled.');
     if (archive.handoff.kind === 'check-feedback') {
@@ -449,6 +451,25 @@ function validateSegmentCheckpoint(session: ManagedSession) {
           'A focused repair must reference one actual failed service check on the archived workspace.',
         );
       feedbackReceipts.add(entry.id);
+    } else if (archive.handoff.kind === 'service-turn') {
+      if (
+        session.purpose !== 'coordination' ||
+        session.assignment ||
+        session.scope.readOnly ||
+        archive.handoff.checkFeedback ||
+        archive.handoff.nextTask !== 'Continue the goal using the current service observations.'
+      )
+        invalidSegment('Only a settled coordinator service turn may issue this context boundary.');
+    } else if (archive.handoff.kind === 'final-format') {
+      const closing = parseSegmentClosing(last.content);
+      if (
+        archive.handoff.checkFeedback ||
+        closing.status !== 'complete' ||
+        archive.handoff.nextTask !== segmentFinalFormatTask
+      )
+        invalidSegment(
+          'A final-format boundary requires a completed closing reply and the original task.',
+        );
     } else {
       if (archive.handoff.checkFeedback)
         invalidSegment('Service check evidence requires an explicit check-feedback boundary.');
@@ -592,8 +613,7 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
     )
       invalidSegment('An unresolved generation cannot be erased or automatically replayed.');
   }
-  // Coordination sessions do not have work segments. Their authority and cumulative
-  // accounting still require the same protection as implementation checkpoints.
+  // Every session retains turn authority and cumulative accounting across context windows.
   if (previous.turnAuthorities || next.turnAuthorities)
     validateTurnAuthorityTransition(previous, next);
   if (previous.workSegments && !next.workSegments)
@@ -665,13 +685,18 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
     invalidSegment('The work segment archive and its frozen policy are append-only.');
   if (after.archives.length === before.archives.length + 1) {
     const archive = after.archives.at(-1)!;
+    const serviceTurn = archive.handoff.kind === 'service-turn';
+    const authority = next.turnAuthorities?.at(-1);
+    const previousReply = [...previous.messages]
+      .reverse()
+      .find((message) => message.role !== 'system');
     if (
       previous.cancelRequested ||
       next.cancelRequested ||
       next.generation?.outcome !== 'completed' ||
       next.actions.some((action) => action.status !== 'completed') ||
       !same(previous.scope, next.scope) ||
-      !same(before.anchor, after.anchor) ||
+      (!serviceTurn && !same(before.anchor, after.anchor)) ||
       !same(archive.anchor, before.anchor) ||
       archive.index !== before.active.index ||
       archive.startedAtRequest !== before.active.startedAtRequest ||
@@ -686,6 +711,33 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
     )
       invalidSegment(
         'A context rollover must atomically preserve a settled step and its frozen assignment.',
+      );
+    if (
+      serviceTurn &&
+      (previous.purpose !== 'coordination' ||
+        previous.assignment ||
+        previous.scope.readOnly ||
+        previous.status !== 'ready' ||
+        next.status !== 'running' ||
+        previous.generation?.outcome !== 'completed' ||
+        previous.generation.response?.finish !== 'stop' ||
+        !same(previous.generation, next.generation) ||
+        previous.actions.some((action) => action.status !== 'completed') ||
+        previousReply?.role !== 'assistant' ||
+        previousReply.toolCalls?.length ||
+        !same(previous.messages, archive.messages) ||
+        previous.requests !== next.requests ||
+        next.turnAuthorities?.length !== (previous.turnAuthorities?.length || 0) + 1 ||
+        !authority ||
+        authority.turnId !== after.anchor.turnId ||
+        authority.turnId === before.anchor.turnId ||
+        authority.toolPolicy !== 'normal' ||
+        authority.scopeRevision !== after.anchor.scopeRevision ||
+        after.anchor.scopeRevision !== next.scopeRevisions?.at(-1)?.revision ||
+        after.anchor.instructions !== next.scopeRevisions?.at(-1)?.instructions)
+    )
+      invalidSegment(
+        'A coordinator rollover requires an exact settled turn and a new frozen context packet.',
       );
   } else {
     if (

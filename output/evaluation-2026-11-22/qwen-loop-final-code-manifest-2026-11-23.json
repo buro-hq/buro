@@ -1,0 +1,17 @@
+{
+  "baselineCommit": "7daf7850f13e8c60f71b31feeeb49f89d27972e8",
+  "capturedAt": "2026-11-22T21:06:36.798834+00:00",
+  "trial": "actions-qwen4b-current-repair32k",
+  "files": {
+    "core/goal-orchestration.ts": "4a0cc1ee44d63f125149f96bd4e5f19d448422407e23e3550572868d81872042",
+    "core/managed-coding-context.ts": "22dcfb21a7fae94c2095a98cbe00248bcb5994f1ba6750fd2969e4e921b1df8b",
+    "core/work-segments.ts": "98689342c6b18b528caf8af343b2f1c40438fb0633e33c3d80efe78efe12d779",
+    "core/managed-worker-checks.ts": "2a6ba07b1cd0c7cd3c345e860987f5818eb42b501c84771458cc73be2e4a7ff4",
+    "adapters/files/managed-sessions.ts": "4e14c1dec8bba9b6b53978f286e4d9241ce140ef7bb0509783a12f290f80b5d9",
+    "scripts/lib/model-comparison.cjs": "ce448abdd586f7b11244d798fed00759039685f30a640731df33a85c7ba547ae",
+    "scripts/lib/live-provider-runner.cjs": "b18384390fb61ebe22fa604522695fbd7013545bae21622f2549b70a42612508",
+    "scripts/lib/model-repair.cjs": "69b5d3cb638c657b4a2e7d4c3e4f834a2e3bb4fed5384daadf3a290c28a6af54",
+    "scripts/check-model-comparison.cjs": "3aa5eeb5c3451bffa6f741b36bb39d1e12b7d81b0b112b032007bf42f4a9dd28",
+    "scripts/check-model-repair.cjs": "ef04d88aa6e264541bde4023a7edff439178e078e0bc6500e86fdcc4f796ea97"
+  }
+}

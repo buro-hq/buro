@@ -350,9 +350,8 @@ test('Ollama separate serialization closes a tool chain before rotation and only
   assert.equal((await f.files.load(threadId))?.workSegments?.archives.length, 1);
 });
 
-test('coordinator, reviewer, unassigned and read-only sessions retain their existing nonsegmented behavior', async (t) => {
+test('reviewer, unassigned workers and read-only sessions retain their existing nonsegmented behavior', async (t) => {
   for (const changes of [
-    { purpose: 'coordination' as const },
     { purpose: 'review' as const, readOnly: true, assignment: undefined },
     { assignment: undefined },
     { readOnly: true },

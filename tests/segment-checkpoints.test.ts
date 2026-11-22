@@ -290,7 +290,7 @@ test('lifetime accounting, action receipts, frozen provider settings and complet
       value.actions[0].result!.content = 'rewritten result';
     },
     (value) => {
-      value.workSegments!.limits.maxSegments++;
+      value.workSegments!.limits.maxSegments = value.workSegments!.limits.maxSegments! + 1;
     },
     (value) => {
       value.workSegments!.baseline.workspaceFingerprint = 'd'.repeat(64);

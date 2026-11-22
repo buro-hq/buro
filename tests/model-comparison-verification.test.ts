@@ -163,3 +163,51 @@ test('synthetic live checks register their issued immutable view for native revi
   await checks.releaseVerificationView(fixed);
   assert.throws(() => nativeAccess(fixed), { code: 'VERIFICATION_VIEW_CHANGED' });
 });
+
+test('evaluation records real initial checks independently of production Run.baseline', async (t) => {
+  const { verifyEvaluationBaseline } = require('../scripts/lib/live-provider-runner.cjs');
+  const root = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), 'buro-evaluation-baseline-')),
+  );
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const fixture = await prepareComparisonFixture({ temporaryDirectory: root });
+  const projects = {
+    get: () => ({ snapshot: () => ({ project: { root } }) }),
+  } as unknown as ProjectRegistry;
+  const executors = new EnvironmentExecutors();
+  const checks = await fixture.createChecks({ projects, executors });
+  const signal = new AbortController().signal;
+  const ports = { checks, executors, signal };
+  assert.deepEqual(await verifyEvaluationBaseline(fixture, ports), {
+    passed: 0,
+    total: 1,
+    source: 'pre-dispatch-service-check',
+  });
+  assert.equal(
+    executors.get(root),
+    undefined,
+    'The temporary initial check environment is released.',
+  );
+  await fs.writeFile(
+    path.join(root, 'src/priority.mjs'),
+    'export const priorityOf = task => task.priority ?? 2;\n',
+  );
+  await fs.writeFile(
+    path.join(root, 'src/queue.mjs'),
+    "import {priorityOf} from './priority.mjs'; export const selectReady=(tasks, completedIds=[])=>tasks.filter(t=>!completedIds.includes(t.id)&&(t.dependsOn||[]).every(id=>completedIds.includes(id))).sort((a,b)=>priorityOf(b)-priorityOf(a));\n",
+  );
+  await assert.rejects(verifyEvaluationBaseline(fixture, ports), {
+    code: 'LIVE_BASELINE_MISMATCH',
+  });
+  assert.deepEqual(
+    await verifyEvaluationBaseline(
+      { ...fixture, expectedBaseline: { passed: 1, total: 1 } },
+      ports,
+    ),
+    {
+      passed: 1,
+      total: 1,
+      source: 'pre-dispatch-service-check',
+    },
+  );
+});

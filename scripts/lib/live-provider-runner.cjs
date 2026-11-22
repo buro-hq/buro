@@ -617,6 +617,38 @@ async function sourceState(root) {
   };
 }
 
+/** Evaluation evidence before model dispatch, independent of optional production baseline actions. */
+async function verifyEvaluationBaseline(fixture, { checks, executors, signal }) {
+  if (!fixture.expectedBaseline) return undefined;
+  const original = await sourceState(fixture.root);
+  await executors.register(
+    fixture.root,
+    fixture.root,
+    fixture.profile.environment || { provider: 'native' },
+    signal,
+    { privateDataIsolation: true },
+  );
+  try {
+    const result = await checks.run(
+      'p',
+      fixture.root,
+      fixture.profile.defaultCheckIds,
+      signal,
+      fixture.profile,
+      { requirePreparedIsolation: true },
+    );
+    if (
+      result.passed !== fixture.expectedBaseline.passed ||
+      result.total !== fixture.expectedBaseline.total ||
+      JSON.stringify(await sourceState(fixture.root)) !== JSON.stringify(original)
+    )
+      throw new LiveEvaluationError('LIVE_BASELINE_MISMATCH');
+    return { passed: result.passed, total: result.total, source: 'pre-dispatch-service-check' };
+  } finally {
+    await executors.release(fixture.root);
+  }
+}
+
 async function prepareSyntheticFixture(temporaryDirectory, mode) {
   const root = temporaryDirectory;
   await git(root, ['init', '-b', 'main']);
@@ -642,7 +674,7 @@ async function prepareSyntheticFixture(temporaryDirectory, mode) {
       body:
         'Change src/value.mjs so its exported value equals 2. Preserve the protected checks and all other files. ' +
         (mode === 'mixed'
-          ? 'Delegate implementation to one real worker. The coordinator must plan and integrate; Buro starts the worker and independent reviewer. An empty worker team does not satisfy this goal.'
+          ? 'Delegate implementation to one real worker through a registered action. Choose the work needed from actual results; an empty worker team does not satisfy this goal.'
           : 'This is one tiny coherent edit; use a direct coordinator implementation or delegate only when useful.'),
       criteria:
         'The protected check passes; src/value.mjs exports value=2; only src/value.mjs changes.' +
@@ -1042,6 +1074,11 @@ async function runLiveProviderEvaluation(options = {}) {
           executors,
         );
     if (typeof checks?.run !== 'function') throw new LiveEvaluationError('LIVE_INVALID_CHECK_PORT');
+    report.initialBaseline = await verifyEvaluationBaseline(fixture, {
+      checks,
+      executors,
+      signal: budget.signal,
+    });
     await host.ctx.plugin(resourcesPlugin, {
       directory,
       executors,
@@ -1118,7 +1155,7 @@ async function runLiveProviderEvaluation(options = {}) {
           ? {
               body:
                 fixture.goal.body +
-                '\nDelegate the implementation to one real worker. The coordinator plans and integrates; Buro starts the worker and fresh reviewer. An empty team does not satisfy this evaluation. The worker must make the actual change in its own session.',
+                '\nDelegate the implementation to one real worker through a registered action. Choose subsequent work from actual results. The worker must make the actual change in its own session. An empty team does not satisfy this evaluation.',
               criteria:
                 fixture.goal.criteria +
                 ' A distinct worker session implements the change successfully.',
@@ -1236,10 +1273,6 @@ async function runLiveProviderEvaluation(options = {}) {
     }
     if (!report.originalSourcePreserved)
       throw new LiveEvaluationError('LIVE_ORIGINAL_FIXTURE_MODIFIED');
-    if (fixture.expectedBaseline) {
-      assert.equal(run.baseline.passed, fixture.expectedBaseline.passed);
-      assert.equal(run.baseline.total, fixture.expectedBaseline.total);
-    }
     assert.deepEqual(
       run.changedFiles.map((file) => file.path).sort(),
       [...fixture.expectedChangedPaths].sort(),
@@ -1375,6 +1408,7 @@ module.exports = {
   classifyEvaluationFailure,
   evaluationRunProgress,
   sourceCaseEvidence,
+  verifyEvaluationBaseline,
   prepareSyntheticFixture,
   runLiveProviderEvaluation,
 };

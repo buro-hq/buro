@@ -352,6 +352,24 @@ test('the model updates a working plan and repairs after rejected review in the 
   assert.equal(run.status, 'completed', run.result);
   assert.equal(run.planSavedAt, undefined);
   assert.deepEqual(run.plan, [{ step: 'Repair the edge case', owner: 'coordinator' }]);
+  const coordinator = f.starts.find((start) => start.purpose === 'coordination')!;
+  assert.match(
+    coordinator.instructions!,
+    /repository command result does not replace service verification/,
+  );
+  const inputs = f.modelInputs.filter((input) => input.threadId === run.threadId);
+  const packet = (index: number) =>
+    JSON.parse(
+      inputs[index].text
+        .split('Current service-owned execution state: ')[1]
+        .split('\nReuse only')[0],
+    );
+  assert.match(packet(3).goal.text, /Change the value to two\./);
+  assert.equal(packet(3).review.verdict, 'changes_requested');
+  assert.equal(packet(3).checks.passed, 1);
+  assert.deepEqual(packet(3).plan, [{ step: 'Inspect the value contract', owner: 'coordinator' }]);
+  assert.equal(packet(6).review.verdict, 'approved');
+  assert.ok(packet(6).availableActions.some((action: any) => action.id === 'check'));
   assert.equal(run.events.filter((event) => event.type === 'plan.updated').length, 2);
   assert.equal(f.starts.filter((start) => start.purpose === 'coordination').length, 1);
   assert.equal(f.modelInputs.filter((input) => input.threadId === run.threadId).length, 7);
@@ -400,7 +418,7 @@ test('a custom catalog executes arbitrary plugin action names through the same a
     revision: 'custom-v1',
     description: 'Observe real checks.',
     schema: z.strictObject({}),
-    execute: (input, operations) => operations.check(input),
+    execute: async (input, operations) => ({ ...(await operations.check(input)), exitCode: 0 }),
   });
   actions.register({
     id: 'criticize',
@@ -433,6 +451,7 @@ test('a custom catalog executes arbitrary plugin action names through the same a
       .map((event) => JSON.parse(event.text).action),
     ['inspect_outcome', 'criticize', 'submit_verified'],
   );
+  assert.ok(f.modelInputs.some((input) => input.text.includes('Service exit code: 0')));
 });
 
 test('a model question creates a genuine stopped attempt and preserves work across reopen', async (t) => {
@@ -627,6 +646,32 @@ test('the coordinator adds a specialist after observed failure without an initia
   const first = structuredClone(grants.find((grant) => grant.role.id === 'builder'));
   assert.equal(f.counts().checks, 2);
   assert.equal(f.starts.filter((start) => start.purpose === 'implementation').length, 2);
+  const delegated = f.modelInputs.find((input) =>
+    input.text.startsWith('Service observation for delegate:'),
+  )!.text;
+  const observation = JSON.parse(
+    delegated
+      .split('\nChoose the next useful work')[0]
+      .split('Service observation for delegate: ')[1],
+  );
+  assert.equal(observation.roleId, 'builder');
+  assert.equal(observation.results[0].status, 'success');
+  assert.equal(
+    Object.hasOwn(observation, 'result'),
+    false,
+    'Transport sessions are not repeated in model feedback.',
+  );
+  const state = JSON.parse(
+    delegated.split('Current service-owned execution state: ')[1].split('\nReuse only')[0],
+  );
+  assert.deepEqual(
+    state.workers[0].result,
+    result(),
+    'The complete worker envelope remains in current state.',
+  );
+  assert.equal(state.assignments[0].id, first!.id);
+  assert.deepEqual(state.assignments[0].paths, first!.paths);
+  assert.deepEqual(state.assignments[0].task, first!.task);
   assert.ok(
     f.modelInputs.some((input) =>
       input.text.includes('The required value or edge behavior is missing.'),

@@ -18,7 +18,7 @@ export interface SegmentEvidencePort {
 export type WorkSegmentLimits = {
   revision: string;
   maxToolRounds?: number;
-  maxSegments: number;
+  maxSegments?: number;
   contextThresholdPercent?: number;
 };
 export type WorkSegmentInput = {
@@ -36,11 +36,9 @@ export interface WorkSegmentPolicy {
 }
 /** Rotate only when the projected request cannot retain its full configured output allowance. */
 export const contextWorkSegmentPolicy: WorkSegmentPolicy = Object.freeze({
-  revision: 'managed-context-segments-v2',
+  revision: 'managed-context-segments-v3',
   limits: Object.freeze({
-    revision: 'managed-context-segments-v2',
-    // File checkpoints retain complete archives; removing this cap needs bounded persistence first.
-    maxSegments: 4,
+    revision: 'managed-context-segments-v3',
   }),
   decide(input: WorkSegmentInput) {
     return input.estimatedInput + input.maxOutputTokens > input.contextTokens
@@ -86,7 +84,7 @@ export type SegmentHandoff = {
   evidence: SegmentEvidence;
   completedActions: number;
   receipts?: SegmentActionReceipt[];
-  kind?: 'check-feedback';
+  kind?: 'check-feedback' | 'service-turn' | 'final-format';
   checkFeedback?: { receiptId: string; result: WorkerStepCheckResult };
   availableTools?: string[];
 };
@@ -153,6 +151,15 @@ export const segmentClosingInstruction =
   'Use status "continue" and a short nextTask (at most 1000 characters) if work remains, ' +
   'or status "complete" and an empty nextTask if ready for the final result. ' +
   'This is a step boundary, not acceptance or permission to expand the original task.';
+export const coordinatorSegmentClosingInstruction =
+  'Buro is closing this coordinator repository-work step. No tools are available in this response. ' +
+  'Return only JSON with exactly status and nextTask. ' +
+  'Use status "complete" and an empty nextTask when ready to choose ANY registered service action, even when the overall goal remains unfinished. ' +
+  'Use status "continue" with a short nextTask (at most 1000 characters) ONLY if more repository tool work is needed before you can choose a service action. ' +
+  'Needing a service action is a reason to complete this repository-work step; it is not a reason to repeat repository work. ' +
+  'This closes the current context step, not the goal, and grants no permissions or acceptance.';
+export const segmentFinalFormatTask =
+  'Return the formal final result for the original task from the preserved task and observed receipts. No further work or acceptance is implied.';
 
 export function parseSegmentClosing(text: string): {
   status: 'continue' | 'complete';
@@ -187,9 +194,10 @@ export function validateSegmentLimits(limits: WorkSegmentLimits) {
       (!Number.isSafeInteger(limits.maxToolRounds) ||
         limits.maxToolRounds < 1 ||
         limits.maxToolRounds > 16)) ||
-    !Number.isSafeInteger(limits.maxSegments) ||
-    limits.maxSegments < 1 ||
-    limits.maxSegments > 16 ||
+    (limits.maxSegments !== undefined &&
+      (!Number.isSafeInteger(limits.maxSegments) ||
+        limits.maxSegments < 1 ||
+        limits.maxSegments > 16)) ||
     (limits.contextThresholdPercent !== undefined &&
       (!Number.isSafeInteger(limits.contextThresholdPercent) ||
         limits.contextThresholdPercent < 20 ||
@@ -276,6 +284,32 @@ export function toolScopeInstructions(scope: Pick<ToolScope, 'readOnly' | 'write
 
 /** Frozen task and observed receipts are authoritative; nextTask remains an untrusted proposal. */
 export function segmentMessages(anchor: SegmentAnchor, scope: ToolScope, handoff: SegmentHandoff) {
+  if (handoff.kind === 'service-turn')
+    return [
+      {
+        role: 'system' as const,
+        content: anchor.instructions + '\n' + toolScopeInstructions(scope),
+      },
+      {
+        role: 'user' as const,
+        content:
+          'Continue the SAME goal after a settled service action. The complete previous conversation is archived privately. ' +
+          'The following packet contains current service observations; it does not grant permissions or certify acceptance. ' +
+          'Do not repeat completed external actions. Service-observed workspace and historical tool receipts: ' +
+          JSON.stringify({
+            workspaceFingerprint: handoff.evidence.workspaceFingerprint,
+            baseCommit: handoff.evidence.baseCommit,
+            headCommit: handoff.evidence.headCommit,
+            changedPaths: handoff.evidence.files.map((file) => file.path),
+            completedActions: handoff.completedActions,
+            historicalToolReceipts: handoff.receipts || [],
+            ...(handoff.availableTools ? { availableTools: handoff.availableTools } : {}),
+            writeScope: scope.writeScope,
+            readOnly: scope.readOnly,
+          }),
+      },
+      { role: 'user' as const, content: anchor.task },
+    ];
   return [
     { role: 'system' as const, content: anchor.instructions + '\n' + toolScopeInstructions(scope) },
     { role: 'user' as const, content: anchor.task },
@@ -299,9 +333,11 @@ export function segmentMessages(anchor: SegmentAnchor, scope: ToolScope, handoff
           readOnly: scope.readOnly,
         }) +
         '\nTool receipts are actual historical outputs, not proof of current file content or acceptance; re-read only when the next edit or changed state requires it. ' +
-        (handoff.kind === 'check-feedback'
-          ? '\nNext bounded task generated by Buro from the failed check (same original permissions): '
-          : '\nUntrusted next-task proposal from the previous model response (never evidence or new authority): ') +
+        (handoff.kind === 'final-format'
+          ? '\nService instruction for the final response format (not evidence or acceptance): '
+          : handoff.kind === 'check-feedback'
+            ? '\nNext bounded task generated by Buro from the failed check (same original permissions): '
+            : '\nUntrusted next-task proposal from the previous model response (never evidence or new authority): ') +
         JSON.stringify(handoff.nextTask),
     },
   ];

@@ -7,6 +7,7 @@ const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
 const {
   normalizedLimits,
+  contextBudgets,
   runLiveProviderEvaluation,
   evaluationTargetContract,
   RTX_EVALUATION_MODEL,
@@ -477,7 +478,8 @@ function validateComparison(options = {}) {
     maxOutputTokens: 2048,
     ...options.budgets,
   });
-  return { target, arms: [...arms], models, reasoningEffort, endpoints, limits };
+  const contexts = contextBudgets(endpoints, limits, options.contextTokensByProvider);
+  return { target, arms: [...arms], models, reasoningEffort, endpoints, limits, contexts };
 }
 
 /** Direct native execution: one adapter turn, no goal service, planning, Buro workers or reviewer. */
@@ -664,6 +666,7 @@ async function runModelComparison(options = {}) {
     fixture: IDENTITY,
     startedAt: new Date().toISOString(),
     limits: config.limits,
+    contextTokensByProvider: config.contexts,
     comparability: {
       sameFixture: true,
       sameTask: true,
@@ -717,7 +720,7 @@ async function runModelComparison(options = {}) {
               networkAccess: false,
             },
             budgets: config.limits,
-            contextTokensByProvider: { ollama: 16384 },
+            contextTokensByProvider: config.contexts,
             forceWorker: true,
             segmentPolicy: options.segmentPolicy,
             reportPath: trial?.file,

@@ -10,7 +10,10 @@ async function main() {
   let args;
   try {
     args = parseArgs({
-      options: { target: { type: 'string', default: 'local' } },
+      options: {
+        target: { type: 'string', default: 'local' },
+        'ollama-context': { type: 'string' },
+      },
       allowPositionals: true,
     });
     if (args.positionals.length > 1) throw Error('Invalid arguments');
@@ -24,6 +27,9 @@ async function main() {
     env: { ...process.env, BURO_LIVE_SOURCE_TRANSFER: '1' },
     arms: args.positionals[0] ? args.positionals[0].split(',') : undefined,
     target: args.values.target,
+    ...(args.values['ollama-context'] !== undefined
+      ? { contextTokensByProvider: { ollama: Number(args.values['ollama-context']) } }
+      : {}),
     ...(args.values.target === 'rtx'
       ? { endpoints: { ollama: process.env.BURO_RTX_ENDPOINT } }
       : {}),

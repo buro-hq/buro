@@ -1,0 +1,128 @@
+{
+  "date": "2026-11-23",
+  "baselineCommit": "7daf785",
+  "milestone": "Coordinator context windows and real Qwen diagnosis",
+  "fullSuite": {
+    "passed": 1442,
+    "failed": 0,
+    "log": "/private/tmp/buro-qwen-compact-state-full-tests.log",
+    "scope": "before final optional exitCode forwarding; final controller14 independentlypassed after this one-line metadata correction"
+  },
+  "build": {
+    "passed": true,
+    "log": "/private/tmp/buro-qwen-compact-state-build.log"
+  },
+  "browser": {
+    "scenarios": 17,
+    "errors": [],
+    "log": "/private/tmp/buro-qwen-compact-state-browser.log"
+  },
+  "independentReviews": {
+    "remainingBlockers": 0,
+    "logs": [
+      "/private/tmp/buro-qwen-action-boundary-final-review.log",
+      "/private/tmp/buro-qwen-compact-state-independent.log",
+      "/private/tmp/buro-qwen-exit-code-independent.log"
+    ]
+  },
+  "trials": [
+    {
+      "path": "output/evaluation-2026-11-22/actions-qwen4b-baseline-trials/ollama-buro-model-selected-actions.json",
+      "sha256": "f75e06f08aa88d8e3516930703c31c2044e719285c8041b5bcf14ac00aabde3d",
+      "status": "budget-exhausted",
+      "error": {
+        "code": "LIVE_CONTEXT_BUDGET_EXHAUSTED"
+      },
+      "generationRequests": 18,
+      "originalSourcePreserved": true,
+      "acceptedCommit": false,
+      "independentReviewer": false
+    },
+    {
+      "path": "output/evaluation-2026-11-22/actions-qwen4b-context32k-trials/ollama-buro-model-selected-actions.json",
+      "sha256": "1e25ca04796e369d8fb1426f767e3f65241ca4e9a8711ff933947b30979d92dc",
+      "status": "budget-exhausted",
+      "error": {
+        "code": "LIVE_REQUEST_BUDGET_EXHAUSTED"
+      },
+      "generationRequests": 24,
+      "originalSourcePreserved": true,
+      "acceptedCommit": false,
+      "independentReviewer": false
+    },
+    {
+      "path": "output/evaluation-2026-11-22/actions-qwen4b-current-repair16k-provider.json",
+      "sha256": "ec0ab08faa46e794abf30ff772d03226cc065fc6a133cb11815ea4cba4109c47",
+      "status": "budget-exhausted",
+      "error": {
+        "code": "LIVE_CONTEXT_BUDGET_EXHAUSTED"
+      },
+      "generationRequests": 12,
+      "originalSourcePreserved": true,
+      "acceptedCommit": false,
+      "independentReviewer": false
+    },
+    {
+      "path": "output/evaluation-2026-11-22/actions-qwen4b-current-repair32k-provider.json",
+      "sha256": "8e09e121c0519f49603dc4ef2447d1e5909b26874c838bcaafbdb4fa824cb6ad",
+      "status": "resource-blocked",
+      "error": {
+        "code": "LIVE_OUTPUT_INCOMPLETE"
+      },
+      "generationRequests": 24,
+      "originalSourcePreserved": true,
+      "acceptedCommit": false,
+      "independentReviewer": false
+    },
+    {
+      "path": "output/evaluation-2026-11-22/actions-qwen4b-current-team16k-trials/ollama-buro-model-selected-actions.json",
+      "sha256": "ba7892833768037b6a96e4e50ae0bcc418635f4d3760bf9c92499ed92c8d632b",
+      "status": "budget-exhausted",
+      "error": {
+        "code": "LIVE_CONTEXT_BUDGET_EXHAUSTED"
+      },
+      "generationRequests": 21,
+      "originalSourcePreserved": true,
+      "acceptedCommit": false,
+      "independentReviewer": false
+    },
+    {
+      "path": "output/evaluation-2026-11-22/actions-qwen4b-final-repair16k-provider.json",
+      "sha256": "bb2cc9aa7ddcb7a966219a16218ebbfd596b96b09c61aa14967d8347410f0e53",
+      "status": "budget-exhausted",
+      "error": {
+        "code": "LIVE_REQUEST_BUDGET_EXHAUSTED"
+      },
+      "generationRequests": 24,
+      "originalSourcePreserved": true,
+      "acceptedCommit": false,
+      "independentReviewer": false
+    },
+    {
+      "path": "output/evaluation-2026-11-22/actions-qwen4b-segmented-repair16k-provider.json",
+      "sha256": "f9f9adf5276a876745a64aa46d955d5a4ad95d58fd1edd691eaece5a480e7f82",
+      "status": "budget-exhausted",
+      "error": {
+        "code": "LIVE_CONTEXT_BUDGET_EXHAUSTED"
+      },
+      "generationRequests": 13,
+      "originalSourcePreserved": true,
+      "acceptedCommit": false,
+      "independentReviewer": false
+    }
+  ],
+  "rtx": {
+    "metadataTimeout": true,
+    "inferenceCalls": 0
+  },
+  "realModelAcceptanceProven": false,
+  "remaining": [
+    "default-none Run/runtime/evaluation budgets (user reprioritized immediate follow-up)",
+    "incremental File history/effect journals and paged active context",
+    "real Qwen end-to-end quality and available RTX comparison",
+    "other release gates in readiness"
+  ],
+  "originalProjectsChanged": false,
+  "outputUxPreserved": true,
+  "reducedBetaApproved": false
+}
