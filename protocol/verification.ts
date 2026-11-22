@@ -9,7 +9,7 @@ export const CheckOutputPathSchema = RelativePathSchema.transform((value) =>
     value.length > 0 &&
     !value
       .split('/')
-      .some((part) => ['', '.', '..', '.git', '.buro', '.проект', 'node_modules'].includes(part)),
+      .some((part) => ['', '.', '..', '.git', '.buro', 'node_modules'].includes(part)),
   'A regular relative output directory outside source-control and service files is required.',
 );
 

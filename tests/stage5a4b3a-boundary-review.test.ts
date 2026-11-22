@@ -238,7 +238,7 @@ test('File OPEN rejects drifted initial plan context behind an unchanged immutab
     const plan = saved.runPlans[saved.runPlanHeads[f.runId]];
     assert.equal(plan.context.contextSource, 'initial-admission');
     plan.context.goalText = 'Substituted original task';
-    if (relabel) plan.context.contextSource = 'legacy-continuation';
+    if (relabel) Reflect.set(plan.context, 'contextSource', 'unsupported-source');
     await fs.writeFile(file, JSON.stringify(saved));
     let reopened: FileProjectStore | undefined;
     try {

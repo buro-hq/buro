@@ -113,7 +113,12 @@ export class CodexRuntime implements AgentRuntime {
           this.options.executors!.verificationPolicy(view);
         },
       };
-      verificationArguments = ['-c', profile.argument];
+      verificationArguments = [
+        '-c',
+        profile.argument,
+        '-c',
+        `default_permissions=${JSON.stringify(profile.id)}`,
+      ];
       verificationVariables = access.variables;
     }
     const world = this.options.executors?.get(root);
@@ -245,7 +250,7 @@ export class CodexRuntime implements AgentRuntime {
     if (options.toolPolicy === 'none')
       throw new DomainError(
         'TOOL_POLICY_UNSUPPORTED',
-        'Native Codex cannot guarantee a tools-free turn. Use the frozen legacy planning policy.',
+        'Native Codex cannot guarantee a tools-free turn. Use capability-selected read-only planning.',
       );
     return this.get(threadId).turn(threadId, text, options);
   }

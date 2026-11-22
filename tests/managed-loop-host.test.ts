@@ -10,7 +10,7 @@ import { ManagedLoopHost } from '../core/managed-loop-host.ts';
 import { failManagedTurn } from '../core/managed-host-effects.ts';
 import { assertManagedReconciled } from '../core/managed-session-authority.ts';
 import { initializeManagedCodingContext } from '../core/managed-coding-context.ts';
-import { boundedWorkSegmentPolicy } from '../core/work-segments.ts';
+import { testBoundedWorkSegmentPolicy as boundedWorkSegmentPolicy } from './fixtures/work-segment-policy.ts';
 import { DomainError, type ProjectRegistry } from '../core/ports.ts';
 import { recordTurnOutcome } from '../core/run-reconciliation.ts';
 import type { ManagedSession } from '../core/model-ports.ts';

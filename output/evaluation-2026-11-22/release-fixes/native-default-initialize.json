@@ -1,0 +1,27 @@
+{
+  "offlineNetworkDenied": true,
+  "modelTurns": 0,
+  "threadStartSent": false,
+  "coverage": "Installed CLI config and initialize only; acknowledgement requires separate wire/live proof.",
+  "baseline": {
+    "withDefault": false,
+    "exitCode": 1,
+    "initialized": false,
+    "rpcError": false,
+    "timedOut": false,
+    "spawnFailed": false,
+    "missingDefaultError": true
+  },
+  "fixed": {
+    "withDefault": true,
+    "exitCode": 0,
+    "initialized": true,
+    "rpcError": false,
+    "timedOut": false,
+    "spawnFailed": false,
+    "missingDefaultError": false
+  },
+  "scriptSha256": "25e9c0ef218aa62287db432965cd6bd15b0d6d52c6de6ce3a7afb96580d2c560",
+  "parentCommit": "85ade5b",
+  "installedCli": "codex-cli 0.171.0"
+}

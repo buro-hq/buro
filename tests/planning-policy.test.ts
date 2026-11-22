@@ -71,12 +71,12 @@ test('planning output grammar narrows the frozen worker bound without mutating a
     [0, 0],
     [1, 1],
     [2, 2],
-    [50, 2],
+    [50, 50],
   ]) {
     const schema = planningOutputSchema(teamOutputSchema, maxWorkers);
     const team = (schema.properties as Record<string, Record<string, unknown>>).team;
     assert.equal(team.maxItems, cap);
-    team.maxItems = 2;
+    delete team.maxItems;
     assert.deepEqual(schema, original, 'Every other schema property must remain unchanged');
     assert.notEqual(schema, teamOutputSchema);
   }
@@ -86,7 +86,7 @@ test('planning output grammar narrows the frozen worker bound without mutating a
     properties: { team: { type: 'array', items: { type: 'string' } } },
   };
   assert.equal((planningOutputSchema(uncapped, 1).properties as any).team.maxItems, 1);
-  for (const maxWorkers of [-1, 1.5, Number.NaN])
+  for (const maxWorkers of [-1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])
     assert.throws(() => planningOutputSchema(teamOutputSchema, maxWorkers), {
       code: 'INVALID_PLANNING_SCHEMA',
     });
@@ -182,6 +182,25 @@ test('bounded planning disables tools explicitly and retains goal, constraints a
     { id: 'local-qwen', providerId: 'ollama', model: 'qwen3:4b', local: true },
   ]);
   assert.deepEqual(input(), source, 'Building the brief must not mutate its frozen inputs');
+});
+
+test('planning distinguishes existing worker reuse from complete new role creation', () => {
+  const source = input();
+  source.roles.push({ ...source.roles[0], id: 'coordinator' });
+  source.roles.push({ ...source.roles[0], id: 'local_preview' });
+  const request = planningTurn(source);
+  assert.ok(request.text.includes('action="reuse" only IDs=["builder"]'));
+  assert.match(request.text, /else action="create" full reusable role/);
+  assert.match(request.text, /not goal-specific\. No service roles/);
+  assert.deepEqual(
+    brief(request.text).roles.map((role: { id: string }) => role.id),
+    ['builder', 'coordinator', 'local_preview'],
+  );
+  const empty = planningTurn({ ...source, roles: source.roles.slice(1) });
+  assert.ok(empty.text.includes('action="reuse" only IDs=[]'));
+  assert.equal(empty.toolPolicy, 'none');
+  assert.deepEqual(brief(empty.text).scope, source.scope);
+  assert.equal(brief(empty.text).goal, source.goalText);
 });
 
 test('planning instructions describe advisory discovery and explicit strict authority without changing tools-free behavior', () => {

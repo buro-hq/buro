@@ -379,7 +379,7 @@ export const RunPlannerHandoffSchema = z.strictObject({
   sessionGrant: RunPlannerSessionGrantSchema,
 });
 export const RunPlanningInputSchema = z.strictObject({
-  contextSource: z.enum(['initial-admission', 'legacy-continuation', 'continuation-attempt']),
+  contextSource: z.enum(['initial-admission', 'continuation-attempt']),
   title: z.string(),
   goalText: z.string(),
   contextMaterials: z.array(ContextMaterialSchema.strict()),
@@ -922,7 +922,7 @@ export const DomainEventSchema = z
         type: z.literal('run.plan-accepted'),
         current: RunCurrentSchema,
         plan: RunPlanSchema,
-        assignments: z.array(RunWorkerAssignmentSchema).max(2),
+        assignments: z.array(RunWorkerAssignmentSchema),
         entries: z.array(RunTimelineEntrySchema.omit({ sequence: true })),
         view: RunAdmissionViewSchema.optional(),
       }),

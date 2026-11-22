@@ -1,5 +1,13 @@
 import { t } from '../../i18n/index.ts';
-import { ActionIcon, Button, Checkbox, Select, Textarea, TextInput } from '@mantine/core';
+import {
+  ActionIcon,
+  Button,
+  Checkbox,
+  NumberInput,
+  Select,
+  Textarea,
+  TextInput,
+} from '@mantine/core';
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { PathListInput } from '../molecules/PathInput';
@@ -267,12 +275,14 @@ export function ProjectProfileForm({
         minRows={2}
       />
       <div className="profile-paths">
-        <Select
-          label={t('Concurrent workers')}
-          value={String(profile.maxWorkers)}
+        <NumberInput
+          label={t('Maximum team size')}
+          value={profile.maxWorkers}
           onChange={(v) => update({ maxWorkers: Number(v) })}
-          data={['1', '2']}
-          allowDeselect={false}
+          min={1}
+          max={Number.MAX_SAFE_INTEGER}
+          allowDecimal={false}
+          allowNegative={false}
         />
         <Select
           label={t('Repair attempts')}

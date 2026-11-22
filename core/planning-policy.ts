@@ -8,6 +8,7 @@ import {
 } from '../protocol/planning-policy.ts';
 import { freezeBackendCapabilities } from './backend-capabilities.ts';
 import { DomainError } from './ports.ts';
+import { isWorkerRoleId } from './execution-ports.ts';
 
 /** Provider context envelope, not a run-wide quota; required goal input is never truncated. */
 export const MAX_PLANNING_INPUT_BYTES = 24000;
@@ -100,6 +101,7 @@ export function planningTurn(input: PlanningInput) {
     kind,
     ...(runtimePreference ? { runtimePreference } : {}),
   }));
+  const reusableWorkerIds = roles.filter((role) => isWorkerRoleId(role.id)).map((role) => role.id);
   if (input.reuseBrief && input.correction) {
     const text = `First, correct the plan using the saved brief and constraints in this thread. Return the complete plan, not a patch. ${toolsFree ? 'No tools.' : 'Inspect only as needed, read-only; no edits or state-changing commands.'}\nCorrect the previous plan: ${input.correction}${input.roleCatalogChanged ? '\nUpdated role catalog (replaces the previous catalog): ' + JSON.stringify(roles) : ''}`;
     return checkedTurn(text, input.sessionInstructions, toolsFree);
@@ -129,7 +131,7 @@ export function planningTurn(input: PlanningInput) {
       ? `First, plan from Brief. No tools, inspection, edits, commands or agents. Discovery is for implementation; never invent findings.`
       : `First, inspect the repository read-only as needed and return the structured plan from Brief. Never edit files, execute state-changing commands or start agents. Report only observed findings; defer unresolved discovery to implementation.`) +
     `
-Team: empty if small, else <=maxWorkers. Reuse roles; new roles reusable, not goal-specific. Exclude coordinator/reviewer/local_preview/delivery_pr/production_delivery. steps.owner=roleId or coordinator/reviewer.
+Choose a useful team within maxWorkers; [] is allowed. action="reuse" only IDs=${JSON.stringify(reusableWorkerIds)}; else action="create" full reusable role, not goal-specific. No service roles. steps.owner=roleId/coordinator/reviewer.
 Workers: nonoverlap planned paths; a directory if unknown. Assignment retains complete objective, inputs, result, criteria and constraints; null uses full goal/discovery.
 Runtime: workerRuntimes or null/default. Honor fixed pins; explain preferred deviations. Full plan only. The service validates permissions/checks/review.` +
     '\n' +

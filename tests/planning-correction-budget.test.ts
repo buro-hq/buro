@@ -253,6 +253,12 @@ test('compact correction handles a verbose plan on the same actual 16K managed s
     correction: correction(),
   });
   await f.turn(first.text);
+  const beforeReload = (await f.sessions.load(f.threadId))!;
+  assert.equal(
+    beforeReload.messages.find((message) => message.role === 'user')!.content,
+    first.text,
+  );
+  await f.runtime.release(f.threadId);
   const result = await f.turn(corrected.text);
   const saved = (await f.sessions.load(f.threadId))!;
   assert.equal(f.requests.length, 2);
@@ -285,7 +291,65 @@ test('compact correction handles a verbose plan on the same actual 16K managed s
   for (const request of f.requests) {
     assert.deepEqual(request.tools, []);
     assert.deepEqual(request.schema, teamOutputSchema);
+    assert.equal(
+      request.messages
+        .map((message) => message.content)
+        .join('\n')
+        .split(JSON.stringify(teamOutputSchema)).length - 1,
+      1,
+      'Only the current request view carries the host response schema.',
+    );
   }
+  assert.deepEqual(
+    saved.messages.filter((message) => message.role === 'user').map((message) => message.content),
+    [first.text, corrected.text],
+    'Reload and correction preserve the complete original tasks without historical host schemas.',
+  );
+});
+
+test('reloaded legacy and user-authored schema text remains intact alongside current response guidance', async (t) => {
+  const f = await fixture(t);
+  const legacySchema = { type: 'object', properties: { legacy_schema_marker: { type: 'string' } } };
+  const original =
+    'Original criteria include this literal JSON example: ' + JSON.stringify(legacySchema);
+  await f.runtime.turn(f.threadId, original, {
+    schema: legacySchema,
+    toolPolicy: 'none',
+    signal: new AbortController().signal,
+    timeoutMs: 1000,
+  });
+  await f.runtime.release(f.threadId);
+  const legacy = (await f.sessions.load(f.threadId))!;
+  const legacyUser = legacy.messages.find((message) => message.role === 'user')!;
+  legacyUser.content +=
+    '\nReturn your final answer as JSON matching this schema: ' + JSON.stringify(legacySchema);
+  await f.sessions.save(legacy);
+  const correction = 'Keep every original criterion and old output. Correct only the role owner.';
+  await f.turn(correction);
+  const reloaded = (await f.sessions.load(f.threadId))!;
+  assert.equal(
+    reloaded.messages.find((message) => message.role === 'user')!.content,
+    legacyUser.content,
+  );
+  assert.equal(
+    reloaded.messages.find((message) => message.role === 'assistant')!.content,
+    invalidPlan,
+  );
+  assert.equal(
+    f.requests[1].messages.find((message) => message.role === 'user')!.content,
+    legacyUser.content,
+  );
+  assert.equal(
+    f.requests[1].messages
+      .map((message) => message.content)
+      .join('\n')
+      .split(JSON.stringify(teamOutputSchema)).length - 1,
+    1,
+  );
+  assert.equal(
+    reloaded.messages.filter((message) => message.role === 'user').at(-1)!.content,
+    correction,
+  );
 });
 
 test('repeating the complete brief cannot discard history and stops before a second HTTP request at the same 16K limit', async (t) => {

@@ -12,11 +12,8 @@ import type { ManagedSession } from '../core/model-ports.ts';
 import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { RuntimeEvent, ProjectRegistry } from '../core/ports.ts';
 import type { ManagedRunBudgetPort } from '../core/run-budget.ts';
-import {
-  boundedWorkSegmentPolicy,
-  type SegmentEvidence,
-  type WorkSegmentPolicy,
-} from '../core/work-segments.ts';
+import { type SegmentEvidence, type WorkSegmentPolicy } from '../core/work-segments.ts';
+import { testBoundedWorkSegmentPolicy } from './fixtures/work-segment-policy.ts';
 
 const response = (content = '{"ok":true}') => ({
   model: 'fixture-model',
@@ -49,7 +46,7 @@ const evidence = (files: SegmentEvidence['files'] = []): SegmentEvidence => ({
   files,
 });
 const oneRoundPolicy: WorkSegmentPolicy = {
-  ...boundedWorkSegmentPolicy,
+  ...testBoundedWorkSegmentPolicy,
   revision: 'segment-integration-v1',
   limits: {
     revision: 'segment-integration-v1',

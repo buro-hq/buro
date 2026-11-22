@@ -372,7 +372,7 @@
   "No shared dependency directory": "No shared dependency directory",
   "Environment setup": "Environment setup",
   "Optional. One command per line, for example npm ci. Runs in the workspace before checks and goal execution.": "Optional. One command per line, for example npm ci. Runs in the workspace before checks and goal execution.",
-  "Concurrent workers": "Concurrent workers",
+  "Maximum team size": "Maximum team size",
   "Repair attempts": "Repair attempts",
   "Project research": "Project research",
   "An agent reads project files and suggests configuration. It does not modify sources, install dependencies or run migrations.": "An agent reads project files and suggests configuration. It does not modify sources, install dependencies or run migrations.",

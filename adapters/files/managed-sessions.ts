@@ -109,9 +109,9 @@ const workSegments = z.strictObject({
   version: z.literal(1),
   limits: z.strictObject({
     revision: z.string(),
-    maxToolRounds: z.number().int(),
+    maxToolRounds: z.number().int().optional(),
     maxSegments: z.number().int(),
-    contextThresholdPercent: z.number().int(),
+    contextThresholdPercent: z.number().int().optional(),
   }),
   baseline: evidence,
   anchor,

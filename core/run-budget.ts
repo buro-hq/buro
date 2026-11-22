@@ -73,7 +73,7 @@ const baseLedger = z.strictObject({
   version: z.literal(1),
   projectId: z.string().min(1).max(200),
   ownerRunId: z.string().min(1).max(200),
-  coverage: z.enum(['managed-api', 'legacy-managed-api']),
+  coverage: z.literal('managed-api'),
   policy: ManagedRunBudgetPolicySchema,
   operations: z.record(operationId, z.union([generation, tools])),
   violation: z.enum(['OUTPUT_RESERVATION_EXCEEDED', 'INVALID_USAGE']).optional(),

@@ -6,12 +6,12 @@ import path from 'node:path';
 import type { ManagedSession } from '../core/model-ports.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import {
-  boundedWorkSegmentPolicy,
   segmentActionReceipts,
   segmentClosingInstruction,
   segmentMessages,
   type SegmentEvidence,
 } from '../core/work-segments.ts';
+import { testBoundedWorkSegmentPolicy as boundedWorkSegmentPolicy } from './fixtures/work-segment-policy.ts';
 
 const evidence = (): SegmentEvidence => ({
   version: 1,

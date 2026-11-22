@@ -6,8 +6,38 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createBuroApplication } from '../daemon/application.ts';
+import { PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
 import { demoBootstrap } from '../daemon/demo.ts';
 
+test('production and demo reject a linked default metadata directory before opening stores', async (t) => {
+  const directory = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), 'buro-startup-metadata-')),
+  );
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const root = path.join(directory, 'host');
+  const target = path.join(directory, 'outside');
+  await fs.mkdir(root);
+  await fs.mkdir(target);
+  const metadata = path.join(root, PROJECT_DIRECTORY);
+  await fs.symlink(target, metadata, 'dir');
+  for (const demo of [false, true]) {
+    let configured = false;
+    await assert.rejects(
+      createBuroApplication({
+        root,
+        directory: metadata,
+        demo,
+        configure: () => {
+          configured = true;
+        },
+      }),
+      { code: 'UNSAFE_PATH' },
+    );
+    assert.equal(configured, false);
+    assert.deepEqual(await fs.readdir(target), []);
+    assert.equal((await fs.lstat(metadata)).isSymbolicLink(), true);
+  }
+});
 const execute = promisify(execFile);
 const meta = { id: 'startup-read', fingerprint: 'startup-read' };
 

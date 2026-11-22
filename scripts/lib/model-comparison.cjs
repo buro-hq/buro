@@ -5,7 +5,12 @@ const os = require('node:os');
 const { createHash, randomUUID } = require('node:crypto');
 const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
-const { normalizedLimits, runLiveProviderEvaluation } = require('./live-provider-runner.cjs');
+const {
+  normalizedLimits,
+  runLiveProviderEvaluation,
+  evaluationTargetContract,
+  RTX_EVALUATION_MODEL,
+} = require('./live-provider-runner.cjs');
 const exec = promisify(execFile);
 const { SAFE_JSON_SOURCE } = require('./oracle-serialization.cjs');
 
@@ -415,7 +420,9 @@ async function prepareComparisonFixture({ temporaryDirectory }) {
 function validateComparison(options = {}) {
   const env = options.env || process.env;
   if (env.BURO_MODEL_COMPARISON !== '1') throw codeError('COMPARISON_OPT_IN_REQUIRED');
-  const arms = options.arms || ARMS;
+  const target = options.target === undefined ? 'local' : options.target;
+  if (!['local', 'rtx'].includes(target)) throw codeError('COMPARISON_INVALID_TARGET');
+  const arms = options.arms || (target === 'rtx' ? ['mixed-buro', 'ollama-buro'] : ARMS);
   if (
     !Array.isArray(arms) ||
     !arms.length ||
@@ -423,12 +430,22 @@ function validateComparison(options = {}) {
     arms.some((arm) => !ARMS.includes(arm))
   )
     throw codeError('COMPARISON_INVALID_ARMS');
+  if (target === 'rtx') {
+    if (arms.some((arm) => !['ollama-buro', 'mixed-buro'].includes(arm)))
+      throw codeError('COMPARISON_RTX_INVALID_ARMS');
+    if (arms.includes('mixed-buro') && env.BURO_LIVE_DEEPSEEK !== '1')
+      throw codeError('COMPARISON_RTX_DEEPSEEK_OPT_IN_REQUIRED');
+  }
   const native = arms.some((arm) => arm.startsWith('codex-'));
   if (native && env.BURO_LIVE_CODEX !== '1') throw codeError('COMPARISON_NATIVE_OPT_IN_REQUIRED');
   const models = {
     codex: options.models?.codex || env.BURO_CODEX_MODEL || 'gpt-6.1-sol',
     deepseek: options.models?.deepseek || env.BURO_DEEPSEEK_MODEL || 'deepseek-flash',
-    ollama: options.models?.ollama || env.BURO_OLLAMA_MODEL || 'qwen3:4b-instruct-2507-q4_K_M',
+    ollama:
+      options.models?.ollama ||
+      (target === 'rtx'
+        ? RTX_EVALUATION_MODEL
+        : env.BURO_OLLAMA_MODEL || 'qwen3:4b-instruct-2507-q4_K_M'),
   };
   const required = [
     native && 'codex',
@@ -449,20 +466,11 @@ function validateComparison(options = {}) {
     throw codeError('COMPARISON_INVALID_REASONING');
   const endpoints = {
     deepseek: 'https://api.deepseek.com',
-    ollama: 'http://127.0.0.1:11434',
+    ...(target === 'local' ? { ollama: 'http://127.0.0.1:11434' } : {}),
     ...options.endpoints,
   };
-  const local = new URL(endpoints.ollama);
-  if (
-    local.protocol !== 'http:' ||
-    !['localhost', '127.0.0.1', '[::1]'].includes(local.hostname) ||
-    local.username ||
-    local.password ||
-    local.search ||
-    local.hash ||
-    local.pathname !== '/'
-  )
-    throw codeError('COMPARISON_LOCAL_OLLAMA_ONLY');
+  const route = evaluationTargetContract({ ...options, target, env, endpoints, models });
+  endpoints.ollama = route.endpoint;
   if (new URL(endpoints.deepseek).href !== 'https://api.deepseek.com/')
     throw codeError('COMPARISON_DEEPSEEK_ENDPOINT_REQUIRED');
   const limits = normalizedLimits({
@@ -470,7 +478,7 @@ function validateComparison(options = {}) {
     maxOutputTokens: 2048,
     ...options.budgets,
   });
-  return { arms: [...arms], models, reasoningEffort, endpoints, limits };
+  return { target, arms: [...arms], models, reasoningEffort, endpoints, limits };
 }
 
 /** Direct native execution: one adapter turn, no goal service, planning, Buro workers or reviewer. */
@@ -671,6 +679,7 @@ async function runModelComparison(options = {}) {
       buroRequiresWorker: true,
       nativeModel: config.models.codex || null,
       nativeReasoningEffort: config.reasoningEffort,
+      ...(config.target === 'rtx' ? { ollamaTarget: 'explicit-rtx-private-network' } : {}),
     },
     results: [],
   };
@@ -701,6 +710,7 @@ async function runModelComparison(options = {}) {
             credentials: options.credentials,
             endpoints: config.endpoints,
             models: config.models,
+            target: config.target,
             codex: {
               ...options.codex,
               model: config.models.codex,

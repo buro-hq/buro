@@ -12,6 +12,8 @@ import { resourcesPlugin } from '../plugins/resources.ts';
 import { projectManagementPlugin } from '../plugins/project-management.ts';
 import { projectOperationsPlugin } from '../plugins/project-operations.ts';
 import { executionPlugin } from '../plugins/execution.ts';
+import { findProjectDirectory } from '../adapters/files/project-directory.ts';
+import { PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
 
 /** Production composition without sockets, process handlers or implicit demo project state. */
 export async function createBuroApplication(options: {
@@ -27,6 +29,8 @@ export async function createBuroApplication(options: {
   analysisId?: string;
   workflowId?: string;
 }) {
+  if (path.resolve(options.directory) === path.join(path.resolve(options.root), PROJECT_DIRECTORY))
+    await findProjectDirectory(options.root);
   const fixture = options.demo
     ? (await import('./demo.ts')).demoBootstrap(options.root, options.directory)
     : undefined;

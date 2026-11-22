@@ -26,6 +26,17 @@ const initial: ProjectProfile = {
   turnTimeoutMs: 10000,
   baseBranch: 'main',
 };
+
+test('project configuration accepts a chosen team allowance and rejects invalid counts', () => {
+  const f = fixture();
+  const saved = f.tx.configure({ expectedRevision: 1, profile: { ...initial, maxWorkers: 5 } });
+  assert.equal(saved.maxWorkers, 5);
+  assert.equal(f.tx.profile()?.maxWorkers, 5);
+  for (const maxWorkers of [0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => f.tx.configure({ expectedRevision: 2, profile: { ...saved, maxWorkers } }));
+    assert.equal(f.tx.profile()?.maxWorkers, 5);
+  }
+});
 const proposal: ResearchProposal = {
   id: 'research',
   status: 'ready',

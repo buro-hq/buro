@@ -14,7 +14,7 @@ export const projectRunPlanSchema = `
     attempt_id TEXT NOT NULL REFERENCES run_attempts(attempt_id),
     created_at TEXT NOT NULL CHECK(length(created_at)>0),
     summary TEXT NOT NULL,
-    context_source TEXT NOT NULL CHECK(context_source IN ('initial-admission','legacy-continuation','continuation-attempt')),
+    context_source TEXT NOT NULL CHECK(context_source IN ('initial-admission','continuation-attempt')),
     title TEXT NOT NULL,
     goal_text TEXT NOT NULL,
     policy_json TEXT NOT NULL CHECK(json_valid(policy_json)),

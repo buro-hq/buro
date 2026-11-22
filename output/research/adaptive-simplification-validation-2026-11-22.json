@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-22",
+  "baselineCommit": "0b81f6f",
+  "scope": "request projection, context-based rotation, configured team size, one evaluation target entrypoint, runtime fixes and removal of pre-release compatibility",
+  "fullSuite": {
+    "passed": 1387,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 83130.598875,
+    "log": "/private/tmp/buro-adaptive-final-tests-2026-11-22.log",
+    "limitation": "Preceded the final startup metadata preflight correction and its new regression. That correction was verified separately below."
+  },
+  "finalStartupGuard": {
+    "passed": 7,
+    "failed": 0,
+    "skipped": 0,
+    "log": "/private/tmp/buro-adaptive-startup-guard-tests-2026-11-22.log",
+    "evidence": "Actual production and demo composition reject a linked default metadata directory before opening stores or writing outside it."
+  },
+  "browser": {
+    "scenarios": 17,
+    "errors": [],
+    "log": "/private/tmp/buro-adaptive-projects-browser-2026-11-22.log",
+    "evidence": "Production preview; selected team size of three persists across actual settings commands and restart; controlled goal/review/apply and responsive layout pass."
+  },
+  "buildAndTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-adaptive-final-build-2026-11-22.log"
+  },
+  "formattingAndDiffCheck": true,
+  "independentReview": {
+    "architecture": "Initial blocker: lost early metadata symlink check after removing migration. Corrected in application composition and independently reviewed as closed.",
+    "boundary": "No remaining blockers; final delta subset 61/61.",
+    "boundaryLog": "/private/tmp/buro-adaptive-boundary-final-delta-2026-11-22.log"
+  },
+  "countsOverlap": true,
+  "agentRoles": [
+    "request projection and correction tests",
+    "context policy and checkpoints",
+    "evaluation target simplification and architecture review",
+    "architecture audit and removal of metadata migration",
+    "independent boundary review"
+  ],
+  "realModelCalls": 0,
+  "rtxCalls": 0,
+  "originalProjectsChanged": false,
+  "outputUxPreserved": true,
+  "reducedBetaApproved": false,
+  "autonomousDispatchImplemented": false,
+  "defaultNoneImplemented": false,
+  "productionSqlActivated": false
+}

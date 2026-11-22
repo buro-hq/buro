@@ -12,11 +12,8 @@ import type { ManagedSession } from '../core/model-ports.ts';
 import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { ProjectRegistry, RuntimeEvent } from '../core/ports.ts';
 import type { ManagedRunBudgetPort } from '../core/run-budget.ts';
-import {
-  boundedWorkSegmentPolicy,
-  type SegmentEvidence,
-  type WorkSegmentPolicy,
-} from '../core/work-segments.ts';
+import { type SegmentEvidence, type WorkSegmentPolicy } from '../core/work-segments.ts';
+import { testBoundedWorkSegmentPolicy as boundedWorkSegmentPolicy } from './fixtures/work-segment-policy.ts';
 import type {
   WorkerStepCheckPlan,
   WorkerStepCheckPort,

@@ -1,4 +1,4 @@
-import { PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
+import { PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
 import { roleIdPattern } from '../protocol/domain.ts';
 import { WorkflowIdentitySchema, type WorkflowIdentity } from '../protocol/workflow-roles.ts';
 /** Shared admission policy for roles that the workflow may allocate as workers. */
@@ -101,7 +101,7 @@ export function hardPathAllowed(file: string, protectedPaths: readonly string[] 
     !/[\x00-\x1f\x7f]/.test(file) &&
     !segments.includes('..') &&
     !file.includes('\\') &&
-    !['.git', PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY, 'node_modules'].some((p) =>
+    !['.git', PROJECT_DIRECTORY, 'node_modules'].some((p) =>
       segments.some((part) => part.toLowerCase() === p.toLowerCase()),
     ) &&
     !protectedPaths.some((p) => matches(file, p))
@@ -166,7 +166,10 @@ export function resolveTeam(
     }
     const existing = catalog.find((r) => r.id === worker.roleId);
     if (worker.action === 'reuse') {
-      if (!existing) throw Error('The selected role is not in the catalog.');
+      if (!existing)
+        throw Error(
+          `roleId ${JSON.stringify(worker.roleId)} not in the catalog; action="create" or reuse Brief.roles.`,
+        );
       origins[worker.roleId] = 'reused';
       return existing;
     }

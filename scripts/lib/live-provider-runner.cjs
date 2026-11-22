@@ -25,6 +25,8 @@ const knownTools = new Set([
   'run_command',
   'read_diff',
 ]);
+const RTX_EVALUATION_ENDPOINT = 'http://192.168.50.10:11434/';
+const RTX_EVALUATION_MODEL = 'qwen3.5:9b-q4_K_M';
 const finiteCount = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : undefined);
 const object = (value) =>
   value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -34,6 +36,53 @@ class LiveEvaluationError extends Error {
     super(code);
     this.code = code;
   }
+}
+
+/** Evaluation-only route selection; private-network trust requires an exact synthetic target. */
+function evaluationTargetContract(options = {}) {
+  const target = options.target === undefined ? 'local' : options.target;
+  if (!['local', 'rtx'].includes(target))
+    throw new LiveEvaluationError('COMPARISON_INVALID_TARGET');
+  const endpoint = options.endpoints?.ollama;
+  let parsed;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    throw new LiveEvaluationError(
+      target === 'rtx' ? 'LIVE_RTX_ENDPOINT_REQUIRED' : 'COMPARISON_LOCAL_OLLAMA_ONLY',
+    );
+  }
+  if (target === 'local') {
+    if (
+      parsed.protocol !== 'http:' ||
+      !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.pathname !== '/'
+    )
+      throw new LiveEvaluationError('COMPARISON_LOCAL_OLLAMA_ONLY');
+    return { target, endpoint: parsed.href };
+  }
+  const env = options.env || process.env;
+  if (env.BURO_RTX_MODEL_COMPARISON !== '1' || env.BURO_LIVE_OLLAMA !== '1')
+    throw new LiveEvaluationError('LIVE_RTX_OPT_IN_REQUIRED');
+  if (
+    parsed.href !== RTX_EVALUATION_ENDPOINT ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash
+  )
+    throw new LiveEvaluationError('LIVE_RTX_ENDPOINT_REQUIRED');
+  if (options.mode !== undefined && !['ollama', 'mixed'].includes(options.mode))
+    throw new LiveEvaluationError('LIVE_RTX_INVALID_MODE');
+  if (options.sourceCase && options.sourceCase.synthetic !== true)
+    throw new LiveEvaluationError('LIVE_RTX_SYNTHETIC_REQUIRED');
+  const model = options.models?.ollama || env.BURO_OLLAMA_MODEL || RTX_EVALUATION_MODEL;
+  if (model !== RTX_EVALUATION_MODEL) throw new LiveEvaluationError('LIVE_RTX_MODEL_REQUIRED');
+  return { target, endpoint: parsed.href, model, trust: 'private-network' };
 }
 
 function normalizedLimits(input = {}) {
@@ -241,11 +290,15 @@ function preflight(options = {}) {
     if (typeof model !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(model))
       return { ok: false, code: 'LIVE_INVALID_MODEL' };
   try {
+    const target = options.target === undefined ? undefined : evaluationTargetContract(options);
     const endpoints = {
       ...(usesOllama
         ? {
             ollama: safeEndpoint(
-              options.endpoints?.ollama || env.BURO_OLLAMA_ENDPOINT || 'http://127.0.0.1:11434',
+              target?.endpoint ||
+                options.endpoints?.ollama ||
+                env.BURO_OLLAMA_ENDPOINT ||
+                'http://127.0.0.1:11434',
             ).href,
           }
         : {}),
@@ -266,6 +319,7 @@ function preflight(options = {}) {
       models,
       endpoints,
       limits,
+      ...(target?.trust ? { ollamaTrust: target.trust } : {}),
       contexts: contextBudgets(endpoints, limits, options.contextTokensByProvider),
     };
   } catch (error) {
@@ -897,7 +951,12 @@ async function runLiveProviderEvaluation(options = {}) {
               {
                 id: 'ollama',
                 provider: 'ollama',
-                config: { endpoint: checked.endpoints.ollama, capacity: 1, think: false },
+                config: {
+                  endpoint: checked.endpoints.ollama,
+                  capacity: 1,
+                  think: false,
+                  ...(checked.ollamaTrust ? { trust: checked.ollamaTrust } : {}),
+                },
               },
             ]
           : []),
@@ -1302,6 +1361,9 @@ async function runLiveProviderEvaluation(options = {}) {
 }
 
 module.exports = {
+  RTX_EVALUATION_ENDPOINT,
+  RTX_EVALUATION_MODEL,
+  evaluationTargetContract,
   DEFAULT_LIVE_LIMITS,
   LiveEvaluationError,
   EvaluationBudget,

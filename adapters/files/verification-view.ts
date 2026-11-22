@@ -24,9 +24,7 @@ const inside = (root: string, target: string) =>
 const overlap = (a: string, b: string) => inside(a, b) || inside(b, a);
 const unsupported = (message: string) => new DomainError('VERIFICATION_VIEW_UNAVAILABLE', message);
 const privatePart = (part: string) =>
-  ['.git', '.buro', '.проект', '.codex', '.claude', '.aws', '.ssh', '.npm'].includes(
-    part.toLowerCase(),
-  ) ||
+  ['.git', '.buro', '.codex', '.claude', '.aws', '.ssh', '.npm'].includes(part.toLowerCase()) ||
   (part.startsWith('.env') && part !== '.env.example') ||
   ['.npmrc', '.netrc', '.git-credentials', 'id_rsa', 'id_ed25519'].includes(part) ||
   /\.(pem|key|p12|pfx|keystore)$/i.test(part);

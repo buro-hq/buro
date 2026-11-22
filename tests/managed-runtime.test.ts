@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
+import { projectManagedRequestContext } from '../core/managed-coding-context.ts';
 import type { ManagedRuntimeOptions } from '../core/managed-runtime-options.ts';
 import type { ManagedSessionStore, ToolBroker, ToolScope } from '../core/model-ports.ts';
 import type {
@@ -457,6 +458,11 @@ test('separate structured output keeps the final schema out of tool requests and
   assert.equal(saved?.actions.length, 1);
   assert.equal(saved?.actions[0].status, 'completed');
   assert.ok(saved?.messages.some((message) => message.content === candidate));
+  assert.equal(
+    saved!.messages.find((message) => message.role === 'user')!.content,
+    'Inspect and report',
+  );
+  assert.ok(saved!.messages.every((message) => !message.content.includes(JSON.stringify(schema))));
   assert.deepEqual(
     events.filter((event) => event.type === 'message.completed').map((event) => event.text),
     [final],
@@ -467,24 +473,40 @@ test('separate structured output keeps the final schema out of tool requests and
   );
 });
 
-test('combined structured tools keep the original single-phase schema instruction', async (t) => {
+test('combined structured tools project exactly one current JSON schema without persisting it across reload and correction', async (t) => {
   const f = await fixture(t);
   const schema = {
     type: 'object',
     properties: { combined_marker: { type: 'boolean' } },
   };
   let requests = 0;
+  const correctionSchema = {
+    type: 'object',
+    properties: { corrected_marker: { type: 'boolean' } },
+  };
   const runtime = f.make(
     provider(async (input) => {
       requests++;
-      assert.deepEqual(input.schema, schema);
+      const current = requests === 1 ? schema : correctionSchema;
+      assert.deepEqual(input.schema, current);
       assert.ok(
         input.messages
           .at(-1)!
           .content.includes(
-            'Return your final answer as JSON matching this schema: ' + JSON.stringify(schema),
+            'Return your final answer as JSON matching this schema: ' + JSON.stringify(current),
           ),
       );
+      assert.equal(
+        input.messages
+          .map((message) => message.content)
+          .join('\n')
+          .split(JSON.stringify(current)).length - 1,
+        1,
+      );
+      if (requests > 1)
+        assert.ok(
+          input.messages.every((message) => !message.content.includes(JSON.stringify(schema))),
+        );
       return response([], '{"combined_marker":true}');
     }),
   );
@@ -498,7 +520,55 @@ test('combined structured tools keep the original single-phase schema instructio
     ).text,
     '{"combined_marker":true}',
   );
-  assert.equal(requests, 1);
+  await runtime.release(started.threadId);
+  await runtime.turn(
+    started.threadId,
+    'Correction: preserve the complete first task and prior result.',
+    {
+      ...turnOptions(),
+      schema: correctionSchema,
+    },
+  );
+  assert.equal(requests, 2);
+  const saved = (await f.sessions.load(started.threadId))!;
+  assert.deepEqual(
+    saved.messages.filter((message) => message.role === 'user').map((message) => message.content),
+    ['Inspect', 'Correction: preserve the complete first task and prior result.'],
+  );
+  const snapshot = structuredClone(saved);
+  let projections = 0;
+  const projected = projectManagedRequestContext(
+    {
+      session: saved,
+      schema: correctionSchema,
+      noTools: true,
+      separate: false,
+      finalizing: false,
+      closing: false,
+    },
+    {
+      options: {
+        provider: {
+          contextMessages(messages) {
+            projections++;
+            return messages as ModelMessage[];
+          },
+        },
+      } as unknown as ManagedRuntimeOptions,
+      toolDefinitions: () => {
+        throw Error('Tools must stay unavailable.');
+      },
+    },
+  );
+  assert.equal(projections, 1);
+  assert.equal(projected.phase, 'work');
+  assert.deepEqual(projected.definitions, []);
+  projected.messages[0].content = 'Mutated request view';
+  assert.deepEqual(
+    saved,
+    snapshot,
+    'Projection is detached from the complete private conversation.',
+  );
 });
 
 test('separate final serialization never accepts a truncated answer or publishes its intermediate candidate', async (t) => {
@@ -679,6 +749,10 @@ test('core-owned intermediate tags survive private reload and omit only marked n
   const actualViews: ModelMessage[][] = [];
   const events: RuntimeEvent[] = [];
   const notes = ['PRIVATE_NOTE_ONE '.repeat(1500), 'PRIVATE_NOTE_TWO '.repeat(1500)];
+  const schemas = [
+    { type: 'object', properties: { first_response_schema: { type: 'boolean' } } },
+    { type: 'object', properties: { second_response_schema: { type: 'boolean' } } },
+  ];
   const projector = new OllamaProvider({
     id: 'local',
     endpoint: 'http://127.0.0.1:11434',
@@ -689,6 +763,30 @@ test('core-owned intermediate tags survive private reload and omit only marked n
     ...provider(async (input) => {
       actualViews.push(structuredClone(input.messages));
       requests++;
+      if (requests % 2) {
+        assert.equal(input.schema, undefined);
+        for (const schema of schemas)
+          assert.ok(
+            input.messages.every((message) => !message.content.includes(JSON.stringify(schema))),
+          );
+      } else {
+        const schema = schemas[requests / 2 - 1];
+        assert.deepEqual(input.schema, schema);
+        assert.equal(
+          input.messages
+            .map((message) => message.content)
+            .join('\n')
+            .split(JSON.stringify(schema)).length - 1,
+          1,
+        );
+        assert.equal(
+          input.messages
+            .map((message) => message.content)
+            .join('\n')
+            .split('Return only the final JSON for the preceding task.').length - 1,
+          requests / 2,
+        );
+      }
       return response(
         [],
         requests % 2 ? notes[(requests - 1) / 2] : JSON.stringify({ result: requests }),
@@ -706,7 +804,8 @@ test('core-owned intermediate tags survive private reload and omit only marked n
   runtime.subscribe((event) => events.push(event));
   const started = await f.start(runtime);
   assert.equal(
-    (await runtime.turn(started.threadId, 'First task', turnOptions())).text,
+    (await runtime.turn(started.threadId, 'First task', { ...turnOptions(), schema: schemas[0] }))
+      .text,
     '{"result":2}',
   );
   const first = (await f.sessions.load(started.threadId))!;
@@ -728,7 +827,8 @@ test('core-owned intermediate tags survive private reload and omit only marked n
     instructions: 'Continue from the saved evidence.',
   });
   assert.equal(
-    (await restored.turn(started.threadId, 'Second task', turnOptions())).text,
+    (await restored.turn(started.threadId, 'Second task', { ...turnOptions(), schema: schemas[1] }))
+      .text,
     '{"result":4}',
   );
   assert.deepEqual(
@@ -751,6 +851,8 @@ test('core-owned intermediate tags survive private reload and omit only marked n
     });
   }
   assert.ok(saved.messages.some((message) => message.content === '{"result":2}'));
+  for (const schema of schemas)
+    assert.ok(saved.messages.every((message) => !message.content.includes(JSON.stringify(schema))));
   assert.equal(saved.actions.length, 0);
   assert.doesNotMatch(
     JSON.stringify(events),

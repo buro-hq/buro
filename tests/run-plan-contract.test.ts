@@ -76,8 +76,10 @@ async function fixture(
     createRole?: boolean;
     ready?: boolean;
     nondefaultCoordinator?: boolean;
+    maxWorkers?: number;
   } = {},
 ) {
+  const configuredProfile = { ...profile, maxWorkers: options.maxWorkers ?? profile.maxWorkers };
   const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'buro-run-plan-')));
   const root = path.join(directory, 'source');
   await fs.mkdir(root);
@@ -88,11 +90,11 @@ async function fixture(
   const open = async () => {
     authority =
       kind === 'file'
-        ? await FileProjectStore.open({ directory, project, profile })
+        ? await FileProjectStore.open({ directory, project, profile: configuredProfile })
         : await SqliteProjectUsageAuthority.open({
             directory,
             project,
-            profile,
+            profile: configuredProfile,
             onQuery: (query) => queries.push(query),
           });
   };
@@ -188,7 +190,7 @@ async function fixture(
   if (options.nondefaultCoordinator) resources.workerPool = [resources.worker, pinnedCoordinator];
   const service = new ExecutionService({
     ...env,
-    policies: { p: executionPolicy(profile) },
+    policies: { p: executionPolicy(configuredProfile) },
     workflowRoles: createBuiltinWorkflowRoles(),
     selection: { forProject: () => structuredClone(resources) },
     runtime: {
@@ -281,7 +283,7 @@ async function fixture(
     material,
     workspace,
     directory,
-    profile,
+    profile: configuredProfile,
     service,
     store,
     queries,
@@ -441,6 +443,68 @@ async function fixture(
 }
 
 for (const kind of ['file', 'sqlite'] as const) {
+  test(`${kind}: team size follows the captured project allowance and preserves every grant on reopen`, async (t) => {
+    const f = await fixture(t, kind, { createRole: true, maxWorkers: 3 });
+    const plan = candidate('create');
+    plan.team = ['builder', 'tester', 'researcher'].map((roleId) => ({
+      ...candidate('create').team[0],
+      roleId,
+      paths: ['src/' + roleId + '.ts'],
+    }));
+    const versions = { builder: null, tester: null, researcher: null };
+    const excessive = structuredClone(plan);
+    excessive.team.push({ ...plan.team[0], roleId: 'extra', paths: ['src/extra.ts'] });
+    const before = await f.events();
+    await assert.rejects(f.accept(excessive, { ...versions, extra: null }), {
+      code: 'INVALID_PLAN',
+    });
+    assert.deepEqual(await f.events(), before);
+    assert.equal(await f.runs().plan(f.runId), undefined);
+    const accepted = await f.accept(plan, versions);
+    assert.deepEqual(
+      accepted.assignments.map((assignment) => assignment.role.id),
+      ['builder', 'tester', 'researcher'],
+    );
+    assert.equal((await f.runs().planningInput(f.runId)).policy.maxWorkers, 3);
+    await f.reopen();
+    for (const assignment of accepted.assignments)
+      assert.deepEqual(await f.runs().assignment(f.runId, assignment.role.id), assignment);
+    assert.equal(f.effects(), 0);
+  });
+
+  test(`${kind}: actual plan rejection identifies a missing reused role and a corrected create preserves its original grant`, async (t) => {
+    const f = await fixture(t, kind, { createRole: true });
+    const proposed = candidate('reuse');
+    proposed.team[0].roleId = 'worker';
+    proposed.steps[0].owner = 'worker';
+    const before = await f.events();
+    const current = await f.runs().current(f.runId);
+    await assert.rejects(f.accept(proposed, { worker: null }), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /roleId "worker".*not in the catalog/);
+      assert.match(error.message, /reuse Brief.roles/);
+      assert.ok(error.message.includes('action="create"'));
+      return (error as { code?: string }).code === 'INVALID_PLAN';
+    });
+    assert.deepEqual(await f.runs().current(f.runId), current);
+    assert.deepEqual(await f.events(), before);
+    assert.equal(await f.runs().plan(f.runId), undefined);
+    assert.equal(await f.runs().assignment(f.runId, 'worker'), undefined);
+    assert.equal(f.effects(), 0);
+
+    const corrected = structuredClone(proposed);
+    corrected.team[0].action = 'create';
+    const accepted = await f.accept(corrected, { worker: null });
+    assert.equal(accepted.assignments[0].role.id, 'worker');
+    assert.equal(accepted.assignments[0].origin, 'created');
+    assert.deepEqual(accepted.assignments[0].task, proposed.team[0].assignment);
+    assert.deepEqual(accepted.assignments[0].paths, proposed.team[0].paths);
+    assert.equal(accepted.assignments[0].resource.resource.id, 'fake');
+    await f.reopen();
+    assert.deepEqual(await f.runs().assignment(f.runId, 'worker'), accepted.assignments[0]);
+    assert.equal(f.effects(), 0);
+  });
+
   test(`${kind}: a real coordinator fixed pin preserves its selected nondefault pool resource through planning acceptance and reopen`, async (t) => {
     const f = await fixture(t, kind, { nondefaultCoordinator: true });
     const input = await f.runs().planningInput(f.runId);

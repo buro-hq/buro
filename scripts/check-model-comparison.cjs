@@ -1,31 +1,44 @@
 const path = require('node:path');
-const { runModelComparison } = require('./lib/model-comparison.cjs');
+const { parseArgs } = require('node:util');
+const { validateComparison, runModelComparison } = require('./lib/model-comparison.cjs');
 
 async function main() {
   if (process.env.BURO_MODEL_COMPARISON !== '1')
     throw Object.assign(new Error('Explicit opt-in required.'), {
       code: 'COMPARISON_OPT_IN_REQUIRED',
     });
-  const selected = process.argv[2];
-  const planning = process.argv[3];
-  if (process.argv.length > 4 || (planning && !['legacy', 'bounded'].includes(planning)))
+  let args;
+  try {
+    args = parseArgs({
+      options: { target: { type: 'string', default: 'local' } },
+      allowPositionals: true,
+    });
+    if (args.positionals.length > 1) throw Error('Invalid arguments');
+  } catch {
     throw Object.assign(new Error('Invalid comparison arguments.'), {
       code: 'COMPARISON_INVALID_ARGUMENTS',
     });
-  const arms = selected ? selected.split(',') : undefined;
-  // A selected fixture is always synthetic. This does not authorize transfer of any user project.
-  const env = { ...process.env, BURO_LIVE_SOURCE_TRANSFER: '1' };
+  }
+  // This CLI selects only the fixed synthetic fixture, never an arbitrary user project.
+  const options = {
+    env: { ...process.env, BURO_LIVE_SOURCE_TRANSFER: '1' },
+    arms: args.positionals[0] ? args.positionals[0].split(',') : undefined,
+    target: args.values.target,
+    ...(args.values.target === 'rtx'
+      ? { endpoints: { ollama: process.env.BURO_RTX_ENDPOINT } }
+      : {}),
+  };
+  // Validate target and all comparison opt-ins before opening the credential store.
+  validateComparison(options);
   const { loadModelCredentials } = await import('../adapters/files/model-credentials.ts');
-  const { boundedWorkSegmentPolicy } = await import('../core/work-segments.ts');
+  const { contextWorkSegmentPolicy } = await import('../core/work-segments.ts');
   const reportPath = path.resolve(
     process.env.BURO_COMPARISON_REPORT || 'artifacts/model-comparison.json',
   );
   const report = await runModelComparison({
-    env,
-    arms,
-    planningControls: planning ? [{ id: planning, mode: planning }] : undefined,
+    ...options,
     credentials: await loadModelCredentials(path.resolve('.buro/local')),
-    segmentPolicy: boundedWorkSegmentPolicy,
+    segmentPolicy: contextWorkSegmentPolicy,
     reportPath,
   });
   console.log(

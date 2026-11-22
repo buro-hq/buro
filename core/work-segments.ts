@@ -17,9 +17,9 @@ export interface SegmentEvidencePort {
 }
 export type WorkSegmentLimits = {
   revision: string;
-  maxToolRounds: number;
+  maxToolRounds?: number;
   maxSegments: number;
-  contextThresholdPercent: number;
+  contextThresholdPercent?: number;
 };
 export type WorkSegmentInput = {
   limits: WorkSegmentLimits;
@@ -34,22 +34,46 @@ export interface WorkSegmentPolicy {
   readonly limits: WorkSegmentLimits;
   decide(input: WorkSegmentInput): 'continue' | 'close';
 }
-export const boundedWorkSegmentPolicy: WorkSegmentPolicy = Object.freeze({
-  revision: 'managed-work-segments-v1',
+/** Rotate only when the projected request cannot retain its full configured output allowance. */
+export const contextWorkSegmentPolicy: WorkSegmentPolicy = Object.freeze({
+  revision: 'managed-context-segments-v2',
   limits: Object.freeze({
-    revision: 'managed-work-segments-v1',
-    maxToolRounds: 3,
+    revision: 'managed-context-segments-v2',
+    // File checkpoints retain complete archives; removing this cap needs bounded persistence first.
     maxSegments: 4,
-    contextThresholdPercent: 60,
   }),
   decide(input: WorkSegmentInput) {
-    return input.toolRounds >= input.limits.maxToolRounds ||
-      input.estimatedInput + input.maxOutputTokens >=
-        (input.contextTokens * input.limits.contextThresholdPercent) / 100
+    return input.estimatedInput + input.maxOutputTokens > input.contextTokens
       ? 'close'
       : 'continue';
   },
 });
+
+function sameSegmentLimits(a: WorkSegmentLimits, b: WorkSegmentLimits) {
+  return (
+    a.revision === b.revision &&
+    a.maxSegments === b.maxSegments &&
+    a.maxToolRounds === b.maxToolRounds &&
+    a.contextThresholdPercent === b.contextThresholdPercent
+  );
+}
+
+/** A saved session requires its explicitly configured policy and exact frozen limits. */
+export function resolveWorkSegmentPolicy(
+  saved: WorkSegmentLimits,
+  configured: WorkSegmentPolicy | undefined,
+): WorkSegmentPolicy {
+  validateSegmentLimits(saved);
+  if (configured) {
+    validateSegmentLimits(configured.limits);
+    if (configured.revision === saved.revision && sameSegmentLimits(saved, configured.limits))
+      return configured;
+  }
+  throw new DomainError(
+    'SEGMENT_POLICY_CHANGED',
+    'The saved work segment policy is unavailable or changed.',
+  );
+}
 export type SegmentAnchor = {
   turnId: string;
   instructions: string;
@@ -159,15 +183,17 @@ export function validateSegmentLimits(limits: WorkSegmentLimits) {
   if (
     !limits ||
     !/^[A-Za-z0-9._:-]{1,100}$/.test(limits.revision) ||
-    !Number.isSafeInteger(limits.maxToolRounds) ||
-    limits.maxToolRounds < 1 ||
-    limits.maxToolRounds > 16 ||
+    (limits.maxToolRounds !== undefined &&
+      (!Number.isSafeInteger(limits.maxToolRounds) ||
+        limits.maxToolRounds < 1 ||
+        limits.maxToolRounds > 16)) ||
     !Number.isSafeInteger(limits.maxSegments) ||
     limits.maxSegments < 1 ||
     limits.maxSegments > 16 ||
-    !Number.isSafeInteger(limits.contextThresholdPercent) ||
-    limits.contextThresholdPercent < 20 ||
-    limits.contextThresholdPercent > 80
+    (limits.contextThresholdPercent !== undefined &&
+      (!Number.isSafeInteger(limits.contextThresholdPercent) ||
+        limits.contextThresholdPercent < 20 ||
+        limits.contextThresholdPercent > 80))
   )
     throw new DomainError('INVALID_SEGMENT_POLICY', 'The work segment limits are invalid.');
 }

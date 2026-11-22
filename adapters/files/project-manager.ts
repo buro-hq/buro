@@ -1,5 +1,4 @@
 import type { ExecutionEnvironmentPort } from '../../core/environment-ports.ts';
-import { LEGACY_PROJECT_DIRECTORY } from '../../protocol/project-directory.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -20,12 +19,12 @@ import {
   type ProjectCatalog,
 } from '../../core/project-application.ts';
 import { FileProjectStoreFactory } from './project-store-factory.ts';
-import { findProjectDirectory, migrateProjectDirectory } from './project-directory.ts';
+import { findProjectDirectory } from './project-directory.ts';
 import type { CheckRecipeCatalog, CheckRecipeDiscovery } from '../../core/check-recipes.ts';
 import { createBuiltinCheckRecipes } from '../discovery/check-recipes/builtins.ts';
 import { captureCheckRecipeFacts } from '../discovery/check-recipes/manifest-facts.ts';
 export { executionPolicy, policyView } from '../../core/project-application.ts';
-const ignoredMetadata = ['.', ':(exclude).buro', ':(exclude)' + LEGACY_PROJECT_DIRECTORY];
+const ignoredMetadata = ['.', ':(exclude).buro'];
 async function atomic(file: string, data: unknown) {
   const temp = file + '.' + randomUUID() + '.tmp';
   const handle = await fs.open(temp, 'wx', 0o600);
@@ -179,8 +178,6 @@ export class FileProjectRepository implements ProjectRepositoryPort {
     };
   }
   async load(root: string) {
-    await this.inspect(root);
-    await migrateProjectDirectory(root);
     const info = await this.inspect(root);
     const file = ProjectFileSchema.parse(
       JSON.parse(await fs.readFile(path.join(root, '.buro/project.json'), 'utf8')),
@@ -206,7 +203,6 @@ export class FileProjectRepository implements ProjectRepositoryPort {
     ignoreLocal?: boolean;
   }) {
     const info = { root: input.root };
-    await migrateProjectDirectory(info.root);
     const directory = await safeMetadata(info.root);
     await fs.mkdir(directory, { recursive: true });
     let file: ReturnType<typeof ProjectFileSchema.parse>;

@@ -1,0 +1,79 @@
+{
+  "date": "2026-11-22",
+  "baselineCommit": "85ade5b",
+  "sourceReport": "../evaluation-2026-11-22/current-synthetic-trials/ollama-buro-capability-selected.json",
+  "source": "Retained synthetic File authority and private managed checkpoint; no user source or live request",
+  "firstPlan": {
+    "selectedRoleId": "worker",
+    "action": "reuse",
+    "existingCatalogIds": ["coordinator", "reviewer"],
+    "accepted": false,
+    "responseFinish": "stop",
+    "responseOutputTokens": 1069,
+    "retainedAssistantContentBytes": 5373
+  },
+  "requestAllocation": {
+    "contextTokens": 16384,
+    "configuredMaxOutputTokens": 2048,
+    "firstEstimatedInput": 7764,
+    "firstOutputCap": 2048,
+    "secondEstimatedInput": 15595,
+    "secondOutputCap": 789,
+    "secondReason": "context-headroom",
+    "secondReportedInputTokens": 2813,
+    "secondResponseFinish": "length",
+    "secondOutputTokens": 789
+  },
+  "payload": {
+    "systemContentBytes": 860,
+    "firstUserContentBytes": 4730,
+    "firstAssistantContentBytes": 5373,
+    "correctionUserContentBytes": 1874,
+    "serializedMessagesBytes": 13908,
+    "currentSchemaBytes": 1617,
+    "hostAppendedPromptSchemaCopies": 2
+  },
+  "counterfactualOnly": {
+    "removedOnlyHostAppendedPromptSchemaSuffixes": true,
+    "currentStructuredSchemaRetained": true,
+    "removedContentBytes": 3346,
+    "estimatedInput": 11683,
+    "outputCap": 2048,
+    "productionProjectionImplemented": false,
+    "warning": "This numerical probe is not a safe provider-neutral dedup implementation; DeepSeek uses json_object rather than full native JSON-schema formatting."
+  },
+  "newGuidanceWithSameRejectedPlanCounterfactual": {
+    "estimatedInput": 15601,
+    "outputCap": 783,
+    "extraEstimatedBytes": 6,
+    "firstRequestStillConfiguredOutputCap": true,
+    "warning": "Role guidance aims to avoid/correct the semantic mistake; it does not solve historical context headroom."
+  },
+  "runBudgetAtStop": {
+    "status": "open",
+    "usedRequests": 2,
+    "maxRequests": 64,
+    "usedReservedOutputTokens": 2837,
+    "maxReservedOutputTokens": 131072
+  },
+  "pilot": {
+    "usedGenerationRequestsIncludingDiagnostics": 4,
+    "maxGenerationRequests": 24,
+    "diagnosticRequests": 2
+  },
+  "modelRequestsByReviewer": 0,
+  "rtxRequestsByReviewer": 0,
+  "originalUserProjectsModified": false,
+  "tests": {
+    "newCases": 3,
+    "focusedPassed": 64,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 5741.68325,
+    "log": "/private/tmp/buro-qwen-role-guidance-final.log",
+    "beforeFixNewCasesFailed": 3,
+    "beforeLog": "/private/tmp/buro-qwen-role-guidance-before.log"
+  },
+  "planningMechanicsRevisionChanged": false,
+  "historyOrEstimatorOrQuotasChanged": false
+}

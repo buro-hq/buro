@@ -6,7 +6,7 @@ import type { ManagedRunBudgetPort } from '../../core/run-budget.ts';
 import type { CheckPort, WorkspacePort } from '../../core/execution-ports.ts';
 import type { WorkerStepCheckPort } from '../../core/worker-step-checks.ts';
 import {
-  boundedWorkSegmentPolicy,
+  contextWorkSegmentPolicy,
   validateSegmentLimits,
   type SegmentEvidencePort,
   type WorkSegmentPolicy,
@@ -57,7 +57,7 @@ export function prepareRuntimeHost(options: RuntimeHostOptions) {
     options.segmentEvidence ||
     (options.workspaces ? new RepositorySegmentEvidence(options.workspaces) : undefined);
   const segmentPolicy =
-    options.segmentPolicy || (segmentEvidence ? boundedWorkSegmentPolicy : undefined);
+    options.segmentPolicy || (segmentEvidence ? contextWorkSegmentPolicy : undefined);
   if (segmentPolicy) {
     validateSegmentLimits(segmentPolicy.limits);
     if (!segmentEvidence || segmentPolicy.revision !== segmentPolicy.limits.revision)

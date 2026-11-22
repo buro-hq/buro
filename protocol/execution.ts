@@ -8,27 +8,25 @@ export const TeamPlanSchema = z.strictObject({
     .array(z.strictObject({ step: z.string().min(1), owner: z.string().min(1) }))
     .min(2)
     .max(12),
-  team: z
-    .array(
-      z.strictObject({
-        roleId: z
-          .string()
-          .regex(
-            roleIdPattern,
-            'roleId must start with a lowercase letter and contain only lowercase letters, digits, underscores or hyphens (max 64 characters).',
-          ),
-        action: z.enum(['reuse', 'create']),
-        title: z.string(),
-        description: z.string(),
-        instructions: z.string(),
-        kind: z.enum(['implementation', 'testing', 'general']),
-        paths: z.array(z.string()),
-        runtimeId: ResourceIdSchema.nullable().optional(),
-        runtimeReason: z.string().trim().max(1000).optional(),
-        assignment: WorkerTaskSchema.nullable().optional(),
-      }),
-    )
-    .max(2),
+  team: z.array(
+    z.strictObject({
+      roleId: z
+        .string()
+        .regex(
+          roleIdPattern,
+          'roleId must start with a lowercase letter and contain only lowercase letters, digits, underscores or hyphens (max 64 characters).',
+        ),
+      action: z.enum(['reuse', 'create']),
+      title: z.string(),
+      description: z.string(),
+      instructions: z.string(),
+      kind: z.enum(['implementation', 'testing', 'general']),
+      paths: z.array(z.string()),
+      runtimeId: ResourceIdSchema.nullable().optional(),
+      runtimeReason: z.string().trim().max(1000).optional(),
+      assignment: WorkerTaskSchema.nullable().optional(),
+    }),
+  ),
 });
 export const EnvelopeSchema = z.strictObject({
   status: z.enum(['success', 'fail']),
@@ -44,15 +42,13 @@ export const ReviewSchema = z.strictObject({
 // Native structured-output clients require every property to be required; null means automatic.
 export const teamOutputSchema = z.toJSONSchema(
   TeamPlanSchema.extend({
-    team: z
-      .array(
-        TeamPlanSchema.shape.team.element.extend({
-          runtimeId: ResourceIdSchema.nullable(),
-          runtimeReason: z.string().trim().max(1000),
-          assignment: WorkerTaskSchema.nullable(),
-        }),
-      )
-      .max(2),
+    team: z.array(
+      TeamPlanSchema.shape.team.element.extend({
+        runtimeId: ResourceIdSchema.nullable(),
+        runtimeReason: z.string().trim().max(1000),
+        assignment: WorkerTaskSchema.nullable(),
+      }),
+    ),
   }),
 );
 export const envelopeOutputSchema = z.toJSONSchema(EnvelopeSchema);

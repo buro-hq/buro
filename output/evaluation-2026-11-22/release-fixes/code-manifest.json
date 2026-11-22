@@ -1,0 +1,34 @@
+{
+  "baseCommit": "85ade5b",
+  "codeFiles": [
+    {
+      "file": "adapters/codex/runtime.ts",
+      "sha256": "853c7abc4f9b119688cadc96ff511f8c6d218f1da05e66fe62deb4b5cc4fa0bf"
+    },
+    {
+      "file": "core/planning-policy.ts",
+      "sha256": "607d9800651557160814b1674183323e62efaf06e3fa1d830f3e649bdda5cd7c"
+    },
+    {
+      "file": "core/execution-ports.ts",
+      "sha256": "36ed3f6eccea20dbeaba4ba61c950b232df3745fa91156f63733531b1d6f310b"
+    },
+    {
+      "file": "scripts/lib/model-comparison.cjs",
+      "sha256": "242490bd78d38499dea9e30e05e61ad2f567e701666460be6b71bb8ebefc2b18"
+    },
+    {
+      "file": "scripts/lib/live-provider-runner.cjs",
+      "sha256": "64b32f29731435e413ea56bd8faef1f03c7f0461d78a8b99affff086eca04cf5"
+    }
+  ],
+  "fullTests": {
+    "passed": 1380,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 83563.050417
+  },
+  "buildTypecheck": true,
+  "rtxReady": false,
+  "rtxNetworkCalls": 0
+}

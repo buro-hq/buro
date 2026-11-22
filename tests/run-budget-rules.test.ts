@@ -245,16 +245,16 @@ test('frozen policies and persisted ledgers reject partial, inconsistent and uns
     assert.throws(() => reserve(initial, id), { code: 'INVALID_RUN_BUDGET' });
 });
 
-test('public projection has no private receipts and marks legacy coverage explicitly', () => {
+test('public projection has no private receipts and reports current managed coverage', () => {
   let ledger = createManagedRunBudget({
     projectId: 'p',
-    ownerRunId: 'old-run',
-    coverage: 'legacy-managed-api',
+    ownerRunId: 'run',
+    coverage: 'managed-api',
   });
   assert.deepEqual(ledger.policy, DEFAULT_MANAGED_RUN_BUDGET_POLICY);
   ledger = reserve(ledger, 'private-operation-uuid').ledger;
   const summary = managedBudgetSummary(ledger);
-  assert.equal(summary.coverage, 'legacy-managed-api');
+  assert.equal(summary.coverage, 'managed-api');
   assert.equal(JSON.stringify(summary).includes('private-operation-uuid'), false);
   assert.equal(JSON.stringify(summary).includes('operations'), false);
   assert.equal(

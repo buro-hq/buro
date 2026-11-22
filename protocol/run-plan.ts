@@ -25,7 +25,7 @@ export type RunPlannerHandoff = {
 };
 /** Exact current planning inputs; no session history or mutable Run aggregate. */
 export type RunPlanningInput = {
-  contextSource: 'initial-admission' | 'legacy-continuation' | 'continuation-attempt';
+  contextSource: 'initial-admission' | 'continuation-attempt';
   title: string;
   goalText: string;
   contextMaterials: ContextMaterial[];

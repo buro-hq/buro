@@ -9,12 +9,12 @@ async function main() {
   // Validate explicit source-transfer authorization before reading source or credentials.
   validateProjectComparison({ arms });
   const { loadModelCredentials } = await import('../adapters/files/model-credentials.ts');
-  const { boundedWorkSegmentPolicy } = await import('../core/work-segments.ts');
+  const { contextWorkSegmentPolicy } = await import('../core/work-segments.ts');
   const reportPath = path.resolve('artifacts/project-model-comparison.json');
   const report = await runProjectModelComparison({
     arms,
     credentials: await loadModelCredentials(path.resolve('.buro/local')),
-    segmentPolicy: boundedWorkSegmentPolicy,
+    segmentPolicy: contextWorkSegmentPolicy,
     reportPath,
   });
   console.log(

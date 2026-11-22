@@ -16,17 +16,23 @@ async function main() {
         code: 'LIVE_OPT_IN_REQUIRED',
       },
     );
-  const { boundedWorkSegmentPolicy } = await import('../core/work-segments.ts');
+  const { contextWorkSegmentPolicy } = await import('../core/work-segments.ts');
   const { loadModelCredentials } = await import('../adapters/files/model-credentials.ts');
   const limits = {
-    ...boundedWorkSegmentPolicy.limits,
+    ...contextWorkSegmentPolicy.limits,
     revision: 'managed-work-segments-live-two-rounds-v1',
     maxToolRounds: 2,
   };
   const segmentPolicy = {
-    ...boundedWorkSegmentPolicy,
+    ...contextWorkSegmentPolicy,
     revision: limits.revision,
     limits,
+    // This explicit stress fixture forces rotations; production uses context pressure only.
+    decide(input) {
+      return input.toolRounds >= limits.maxToolRounds
+        ? 'close'
+        : contextWorkSegmentPolicy.decide(input);
+    },
   };
   const sourceCase = {
     id: 'synthetic-work-segments',

@@ -75,7 +75,6 @@ test('hard boundaries survive root-wide plans and both user-selected scope modes
     './.git/config',
     '.GIT/config',
     '.buro/control-state.json',
-    '.проект/control-state.json',
     'node_modules/pkg/index.js',
     'packages/p/node_modules/pkg/index.js',
     'src/.buro/control.json',

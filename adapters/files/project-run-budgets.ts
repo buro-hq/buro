@@ -4,7 +4,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { ProjectDocument, ProjectRegistry } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
 import {
-  createManagedRunBudget,
   managedBudgetSummary,
   observeManagedUsage,
   reserveManagedGeneration,
@@ -54,19 +53,12 @@ export class ProjectRunBudgets implements ManagedRunBudgetPort {
           draft.managedRunBudgets && Object.hasOwn(draft.managedRunBudgets, owner.ownerRunId)
             ? draft.managedRunBudgets[owner.ownerRunId]
             : undefined;
-        if (!saved && run.managedBudget)
+        if (!saved)
           throw new DomainError(
             'INVALID_RUN_BUDGET',
             'The private managed budget record is missing.',
           );
-        const ledger = saved
-          ? ManagedRunBudgetLedgerSchema.parse(saved)
-          : createManagedRunBudget({
-              projectId: owner.projectId,
-              ownerRunId: owner.ownerRunId,
-              policy: run.executionPolicySnapshot?.profile?.managedBudget,
-              coverage: 'legacy-managed-api',
-            });
+        const ledger = ManagedRunBudgetLedgerSchema.parse(saved);
         if (ledger.projectId !== owner.projectId || ledger.ownerRunId !== owner.ownerRunId)
           throw new DomainError('INVALID_RUN_BUDGET', 'The saved managed budget owner differs.');
         const next = apply(ledger);

@@ -1,4 +1,5 @@
 import { DomainError } from './ports.ts';
+import type { ModelMessage } from '../agent/contracts/model.ts';
 import type { ManagedSession } from './model-ports.ts';
 import type {
   ManagedPreparedRequest,
@@ -12,6 +13,7 @@ import {
   assertSegmentScope,
   decideWorkSegment,
   parseSegmentClosing,
+  resolveWorkSegmentPolicy,
   segmentActionReceipts,
   segmentClosingInstruction,
   segmentClosingSchema,
@@ -63,6 +65,48 @@ export async function initializeManagedCodingContext(
   // The owner commits this anchor with the new turn authority and task, never separately.
 }
 
+/** A detached request view; current response formatting never becomes historical task content. */
+export function projectManagedRequestContext(
+  state: Pick<
+    ManagedTurnState,
+    'session' | 'schema' | 'noTools' | 'separate' | 'finalizing' | 'closing'
+  >,
+  host: Pick<ManagedTurnHost, 'options' | 'toolDefinitions'>,
+) {
+  const { session } = state;
+  const phase = state.finalizing || state.closing ? ('final' as const) : ('work' as const);
+  const definitions = structuredClone(
+    state.noTools || state.finalizing || state.closing ? [] : host.toolDefinitions(session.scope),
+  );
+  const schema = structuredClone(
+    state.closing
+      ? segmentClosingSchema
+      : state.separate && !state.finalizing
+        ? undefined
+        : state.schema,
+  );
+  const messages = structuredClone(session.messages);
+  const instruction =
+    schema === undefined
+      ? 'Use the available tools when needed to complete the task. When the work is complete, give a brief completion note; the final response is requested separately.'
+      : (state.finalizing || state.closing
+          ? 'Match this schema: '
+          : 'Return your final answer as JSON matching this schema: ') + JSON.stringify(schema);
+  // Extend only this detached view. Never infer or remove instructions from historical text.
+  const task = [...messages].reverse().find((message) => message.role === 'user');
+  if (task) task.content += '\n' + instruction;
+  else messages.push({ role: 'user', content: instruction });
+  const projected: ModelMessage[] = host.options.provider.contextMessages
+    ? host.options.provider.contextMessages(messages, {
+        phase,
+        ...(session.intermediateNotes
+          ? { intermediateMessageIndexes: [...session.intermediateNotes] }
+          : {}),
+      })
+    : messages;
+  return { phase, messages: projected, definitions, schema };
+}
+
 /** Build the active canonical model view; transport and dispatch remain host effect operations. */
 export async function prepareManagedCodingRequest(
   state: ManagedTurnState,
@@ -70,6 +114,7 @@ export async function prepareManagedCodingRequest(
 ): Promise<ManagedPreparedRequest> {
   let session = state.session;
   const limits = session.limits;
+  let projected = projectManagedRequestContext(state, host);
   if (
     !state.noTools &&
     !state.finalizing &&
@@ -85,14 +130,14 @@ export async function prepareManagedCodingRequest(
         toolRounds: step.active.toolRounds,
         segmentCount: step.active.index,
         estimatedInput: estimateManagedRequest({
-          messages: session.messages,
-          tools: host.toolDefinitions(session.scope),
-          schema: state.separate ? undefined : state.schema,
+          messages: projected.messages,
+          tools: projected.definitions,
+          schema: projected.schema,
         }),
         contextTokens: limits.contextTokens,
         maxOutputTokens: limits.maxOutputTokens,
       },
-      host.options.segmentPolicy,
+      resolveWorkSegmentPolicy(step.limits, host.options.segmentPolicy),
     );
     if (decision === 'close') {
       host.assertReconciled(session);
@@ -101,26 +146,13 @@ export async function prepareManagedCodingRequest(
       await host.commit(next);
       session = state.session;
       state.closing = true;
+      projected = projectManagedRequestContext(state, host);
     }
   }
-  const definitions =
-    state.noTools || state.finalizing || state.closing ? [] : host.toolDefinitions(session.scope);
-  const messages = host.options.provider.contextMessages
-    ? host.options.provider.contextMessages(structuredClone(session.messages), {
-        phase: state.finalizing || state.closing ? 'final' : 'work',
-        ...(session.intermediateNotes
-          ? { intermediateMessageIndexes: [...session.intermediateNotes] }
-          : {}),
-      })
-    : session.messages;
-  const schema = state.closing
-    ? segmentClosingSchema
-    : state.separate && !state.finalizing
-      ? undefined
-      : state.schema;
+  const { phase, messages, definitions, schema } = projected;
   const budget = prepareManagedRequest(
     {
-      phase: state.finalizing || state.closing ? 'final' : 'work',
+      phase,
       messages,
       tools: definitions,
       schema,
@@ -271,8 +303,7 @@ export async function afterManagedResponse(
       role: 'user',
       content:
         'Return only the final JSON for the original assignment, reconstructed from the original task and recorded tool results. ' +
-        'A work-step closure is not acceptance. No tools are available. Match this schema: ' +
-        JSON.stringify(state.schema),
+        'A work-step closure is not acceptance. No tools are available.',
     });
     await host.commit(next);
     host.emit({
@@ -297,12 +328,11 @@ export async function afterManagedResponse(
         {
           role: 'user',
           content:
-            'Return only the final JSON for the preceding task. Reconstruct it from the original task and recorded tool results; do not serialize or rely on an intermediate completion note. No tools are available in this final response. Match this schema: ' +
-            JSON.stringify(state.schema),
+            'Return only the final JSON for the preceding task. Reconstruct it from the original task and recorded tool results; do not serialize or rely on an intermediate completion note. No tools are available in this final response.',
         },
       ],
     };
-    // The provenance tag and final instruction become usable together only after durable save.
+    // The provenance tag and bare final instruction become usable together after durable save.
     await host.commit(next);
     return { kind: 'continue' };
   }

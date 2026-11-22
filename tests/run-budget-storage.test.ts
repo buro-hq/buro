@@ -33,7 +33,7 @@ const generation = (operationId: string, phase: 'work' | 'review' = 'work') => (
   minimumOutputTokens: 128,
 });
 
-async function fixture(t: any, options: { legacy?: boolean } = {}) {
+async function fixture(t: any, options: { missingLedger?: boolean } = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-budget-storage-'));
   const project = { id: 'p', name: 'Budget fixture', root: directory };
   let store = await FileProjectStore.open({ directory, project });
@@ -61,7 +61,7 @@ async function fixture(t: any, options: { legacy?: boolean } = {}) {
   await store.transact('initial', 'initial', (draft) => {
     draft.runs.push(run);
     draft.goals.push(goal);
-    if (!options.legacy) {
+    if (!options.missingLedger) {
       const ledger = createManagedRunBudget({ ...owner, policy, coverage: 'managed-api' });
       draft.managedRunBudgets = { [run.id]: ledger };
       run.managedBudget = managedBudgetSummary(ledger);
@@ -330,7 +330,7 @@ test('project transactions cannot expand frozen policy or rewrite earlier reserv
       ledger.policy.maxRequests++;
     },
     (ledger) => {
-      ledger.coverage = 'legacy-managed-api';
+      Reflect.set(ledger, 'coverage', 'unsupported-coverage');
     },
     (ledger) => {
       delete ledger.operations.permanent;
@@ -377,8 +377,8 @@ test('project transactions cannot expand frozen policy or rewrite earlier reserv
   assert.deepEqual(f.store.snapshot(), before);
 });
 
-test('missing owners fail closed and legacy activation explicitly leaves prior usage unknown', async (t) => {
-  const f = await fixture(t, { legacy: true });
+test('missing owners and absent admission accounting fail closed without creating a replacement ledger', async (t) => {
+  const f = await fixture(t, { missingLedger: true });
   await assert.rejects(
     f.budgets.reserveGeneration({ ...generation('missing-run'), ownerRunId: 'R-absent' }),
     { code: 'RUN_BUDGET_OWNER_UNKNOWN' },
@@ -392,9 +392,13 @@ test('missing owners fail closed and legacy activation explicitly leaves prior u
     { code: 'RUN_BUDGET_OWNER_UNKNOWN' },
   );
   assert.equal(f.store.snapshot().runs[0].managedBudget, undefined);
-  await f.budgets.reserveGeneration(generation('legacy-start'));
-  assert.equal(f.store.snapshot().runs[0].managedBudget?.coverage, 'legacy-managed-api');
-  assert.equal(f.store.snapshot().runs[0].managedBudget?.used.requests, 1);
+  const before = f.store.snapshot();
+  await assert.rejects(f.budgets.reserveGeneration(generation('missing-ledger')), {
+    code: 'INVALID_RUN_BUDGET',
+  });
+  assert.deepEqual(f.store.snapshot(), before);
+  await f.reopen();
+  assert.deepEqual(f.store.snapshot(), before);
 });
 
 test('malformed or unpaired private budget data cannot replace state or reopen as a reset budget', async (t) => {

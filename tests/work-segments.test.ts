@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertSegmentScope,
-  boundedWorkSegmentPolicy,
+  contextWorkSegmentPolicy,
   decideWorkSegment,
+  resolveWorkSegmentPolicy,
   parseSegmentClosing,
   segmentMessages,
   segmentActionReceipts,
@@ -37,38 +38,86 @@ const evidence = (files: SegmentEvidence['files'] = []): SegmentEvidence => ({
   files,
 });
 
-test('segment policy requests a closing handshake before context or repeated tool rounds accumulate', () => {
+test('configured policies cannot change revisions, return invalid decisions or mutate their inputs', () => {
   const input = {
-    limits: { ...boundedWorkSegmentPolicy.limits },
+    limits: { ...contextWorkSegmentPolicy.limits },
     toolRounds: 2,
     segmentCount: 1,
     estimatedInput: 2000,
     contextTokens: 16000,
     maxOutputTokens: 1024,
   };
-  assert.equal(decideWorkSegment(input, boundedWorkSegmentPolicy), 'continue');
-  assert.equal(decideWorkSegment({ ...input, toolRounds: 3 }, boundedWorkSegmentPolicy), 'close');
-  assert.equal(
-    decideWorkSegment({ ...input, estimatedInput: 9000 }, boundedWorkSegmentPolicy),
-    'close',
-  );
   assert.throws(
-    () => decideWorkSegment(input, { ...boundedWorkSegmentPolicy, revision: 'changed' }),
+    () => decideWorkSegment(input, { ...contextWorkSegmentPolicy, revision: 'changed' }),
     { code: 'SEGMENT_POLICY_CHANGED' },
   );
   assert.throws(
-    () => decideWorkSegment(input, { ...boundedWorkSegmentPolicy, decide: () => 'reset' as any }),
+    () => decideWorkSegment(input, { ...contextWorkSegmentPolicy, decide: () => 'reset' as any }),
     { code: 'INVALID_SEGMENT_POLICY' },
   );
   const snapshot = structuredClone(input);
   decideWorkSegment(input, {
-    ...boundedWorkSegmentPolicy,
+    ...contextWorkSegmentPolicy,
     decide(proposal) {
       proposal.limits.maxSegments = 999;
       return 'close';
     },
   });
   assert.deepEqual(input, snapshot, 'A plugin cannot mutate the frozen limits');
+});
+
+test('context policy rotates only when the projected request and full output allowance exceed context', () => {
+  const input = {
+    limits: { ...contextWorkSegmentPolicy.limits },
+    toolRounds: 200,
+    segmentCount: 1,
+    estimatedInput: 10000,
+    contextTokens: 16000,
+    maxOutputTokens: 1024,
+  };
+  assert.deepEqual(input.limits, { revision: 'managed-context-segments-v2', maxSegments: 4 });
+  assert.equal(decideWorkSegment(input, contextWorkSegmentPolicy), 'continue');
+  assert.equal(
+    decideWorkSegment({ ...input, estimatedInput: 14976 }, contextWorkSegmentPolicy),
+    'continue',
+  );
+  assert.equal(
+    decideWorkSegment({ ...input, estimatedInput: 14977 }, contextWorkSegmentPolicy),
+    'close',
+  );
+  assert.equal(
+    decideWorkSegment({ ...input, maxOutputTokens: 6001 }, contextWorkSegmentPolicy),
+    'close',
+  );
+});
+
+test('policy resolution requires exact configured limits for built-in and custom policies', () => {
+  const saved = structuredClone(contextWorkSegmentPolicy.limits);
+  const before = structuredClone(saved);
+  assert.equal(resolveWorkSegmentPolicy(saved, contextWorkSegmentPolicy), contextWorkSegmentPolicy);
+  assert.deepEqual(saved, before);
+  const custom = {
+    ...contextWorkSegmentPolicy,
+    revision: 'custom-v1',
+    limits: { ...saved, revision: 'custom-v1', maxSegments: 5 },
+  };
+  assert.equal(resolveWorkSegmentPolicy(custom.limits, custom), custom);
+  for (const [limits, configured] of [
+    [{ ...saved, maxToolRounds: 4 }, contextWorkSegmentPolicy],
+    [custom.limits, contextWorkSegmentPolicy],
+    [
+      saved,
+      {
+        ...contextWorkSegmentPolicy,
+        limits: { ...contextWorkSegmentPolicy.limits, maxSegments: 5 },
+      },
+    ],
+    [saved, undefined],
+    [custom.limits, { ...custom, limits: { ...custom.limits, maxSegments: 6 } }],
+  ] as const)
+    assert.throws(() => resolveWorkSegmentPolicy(limits, configured), {
+      code: 'SEGMENT_POLICY_CHANGED',
+    });
 });
 
 test('invalid segment configuration and incomplete evidence fail closed', () => {
@@ -79,7 +128,7 @@ test('invalid segment configuration and incomplete evidence fail closed', () => 
     { contextThresholdPercent: 99 },
     { revision: '' },
   ])
-    assert.throws(() => validateSegmentLimits({ ...boundedWorkSegmentPolicy.limits, ...patch }), {
+    assert.throws(() => validateSegmentLimits({ ...contextWorkSegmentPolicy.limits, ...patch }), {
       code: 'INVALID_SEGMENT_POLICY',
     });
   for (const candidate of [

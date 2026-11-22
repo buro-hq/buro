@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DomainError } from '../../core/ports.ts';
 
-/** Exclusive project writer lease, shared with offline metadata migration. */
+/** Exclusive project writer lease. */
 export async function acquireWriterLock(directory: string) {
   const lock = path.join(directory, 'writer.lock'),
     nonce = randomUUID();

@@ -9,7 +9,8 @@ import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { RepositoryTools } from '../adapters/tools/repository-tools.ts';
 import { EnvironmentExecutors } from '../adapters/environments/executors.ts';
-import { boundedWorkSegmentPolicy, type SegmentEvidence } from '../core/work-segments.ts';
+import type { SegmentEvidence } from '../core/work-segments.ts';
+import { testBoundedWorkSegmentPolicy as boundedWorkSegmentPolicy } from './fixtures/work-segment-policy.ts';
 import type { ModelMessage, ModelProvider, ModelToolCall } from '../agent/contracts/model.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 

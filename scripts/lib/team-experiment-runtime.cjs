@@ -204,7 +204,7 @@ async function runTeamExperimentTrial(options = {}) {
       { EnvironmentExecutors },
       { GitWorkspaces },
       { RepositorySegmentEvidence },
-      { boundedWorkSegmentPolicy },
+      { contextWorkSegmentPolicy },
       { OllamaProvider },
       { PrivateJSONFiles },
       { writeAllowed, planPathAllowed },
@@ -352,7 +352,7 @@ async function runTeamExperimentTrial(options = {}) {
         maxToolCallsPerTurn: checked.limits.maxToolCallsPerTurn,
         maxSessionRequests: checked.limits.maxGenerationRequests,
       },
-      segmentPolicy: boundedWorkSegmentPolicy,
+      segmentPolicy: contextWorkSegmentPolicy,
       segmentEvidence: evidence,
       idGenerator: randomUUID,
     });

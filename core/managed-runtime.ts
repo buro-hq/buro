@@ -7,7 +7,7 @@ import {
 import type { BackendCapabilities } from '../agent/contracts/capabilities.ts';
 import { isAgentLoopFailure } from '../agent/contracts/loop-errors.ts';
 import type { ManagedSession } from './model-ports.ts';
-import { validateSegmentLimits } from './work-segments.ts';
+import { resolveWorkSegmentPolicy, validateSegmentLimits } from './work-segments.ts';
 import type { ManagedTurnState, ManagedTurnHost } from './managed-turn-state.ts';
 import { failManagedTurn } from './managed-host-effects.ts';
 import { initializeManagedCodingContext } from './managed-coding-context.ts';
@@ -233,13 +233,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
     };
     try {
       host.check();
-      const task =
-        text +
-        (state.separate
-          ? '\nUse the available tools when needed to complete the task. When the work is complete, give a brief completion note; the final response is requested separately.'
-          : '\nReturn your final answer as JSON matching this schema: ' +
-            JSON.stringify(options.schema));
-      await initializeManagedCodingContext(state, host, task);
+      await initializeManagedCodingContext(state, host, text);
       state.session.status = 'running';
       state.session.turnAuthorities ||= [];
       state.session.turnAuthorities.push({
@@ -248,7 +242,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
         startedAtRequest: state.session.requests,
         scopeRevision: state.session.scopeRevisions?.at(-1)?.revision || 1,
       });
-      state.session.messages.push({ role: 'user', content: task });
+      state.session.messages.push({ role: 'user', content: text });
       await host.commit(state.session);
       host.emit({ type: 'turn.started', turnId });
       if (state.session.workSegments)
@@ -327,17 +321,14 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
           'SESSION_MISMATCH',
           'The checkpoint uses another provider configuration or model.',
         );
-      if (
-        session.workSegments &&
-        (!this.options.segmentPolicy ||
-          !this.options.segmentEvidence ||
-          JSON.stringify(session.workSegments.limits) !==
-            JSON.stringify(this.options.segmentPolicy.limits))
-      )
-        throw new DomainError(
-          'SEGMENT_POLICY_CHANGED',
-          'The saved work segment policy is unavailable or changed.',
-        );
+      if (session.workSegments) {
+        if (!this.options.segmentEvidence)
+          throw new DomainError(
+            'SEGMENT_POLICY_CHANGED',
+            'The saved work segment evidence service is unavailable.',
+          );
+        resolveWorkSegmentPolicy(session.workSegments.limits, this.options.segmentPolicy);
+      }
       if (session.workerStepChecks && !this.options.workerStepChecks)
         throw new DomainError(
           'WORKER_CHECK_CHANGED',

@@ -9,7 +9,7 @@ import { nativeVerificationPolicy } from '../adapters/codex/verification-policy.
 import type { ProjectRegistry } from '../core/ports.ts';
 import type { VerificationView } from '../protocol/verification.ts';
 
-async function fixture(t: any, acknowledge = true) {
+async function fixture(t: any, acknowledge: boolean | string = true) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'buro-native-view-')));
   const source = path.join(root, 'writer');
   const input = path.join(root, 'frozen');
@@ -25,7 +25,7 @@ for await(const line of readline.createInterface({input:process.stdin})){
  const m=JSON.parse(line);fs.appendFileSync(log,JSON.stringify(m)+'\\n');
  const send=v=>process.stdout.write(JSON.stringify(v)+'\\n');
  if(m.method==='initialize')send({id:m.id,result:{serverInfo:'fixture'}});
- else if(m.method==='thread/start'||m.method==='thread/resume')send({id:m.id,result:{thread:{id:'review'},${acknowledge ? 'activePermissionProfile:{id:m.params.permissions}' : ''}}});
+ else if(m.method==='thread/start'||m.method==='thread/resume')send({id:m.id,result:{thread:{id:'review'},${acknowledge ? 'activePermissionProfile:{id:' + (typeof acknowledge === 'string' ? JSON.stringify(acknowledge) : 'm.params.permissions') + '}' : ''}}});
  else if(m.method==='turn/start'){
    const id='turn-'+m.id;send({id:m.id,result:{turn:{id}}});
    send({method:'item/completed',params:{threadId:'review',turnId:id,item:{type:'agentMessage',text:'reviewed'}}});
@@ -105,6 +105,10 @@ test('native immutable review uses its acknowledged named profile at start, turn
   assert.ok(!profile?.includes('="write"'));
   const start = wire.find((item) => item.method === 'thread/start');
   assert.equal(start.params.permissions, 'buro_verification_verification-fixture');
+  assert.deepEqual(
+    argv.filter((value) => value.startsWith('default_permissions=')),
+    [`default_permissions=${JSON.stringify(start.params.permissions)}`],
+  );
   assert.equal(start.params.sandbox, undefined);
   const turns = wire.filter((item) => item.method === 'turn/start');
   assert.equal(turns.length, 2);
@@ -115,6 +119,60 @@ test('native immutable review uses its acknowledged named profile at start, turn
   assert.throws(() => f.runtime.get(session.threadId).sandboxPolicy(), {
     code: 'ENVIRONMENT_UNAVAILABLE',
   });
+});
+
+test('native immutable resume selects the same issued default and explicit permission profile', async (t) => {
+  const f = await fixture(t);
+  const session = await f.runtime.resume({
+    projectId: 'p',
+    runId: 'R',
+    threadId: 'saved-review',
+    workspace: f.view.readRoot,
+    readOnly: true,
+    instructions: 'resume frozen review',
+  });
+  await f.runtime.turn(session.threadId, 'review', {
+    schema: {},
+    signal: new AbortController().signal,
+    timeoutMs: 1000,
+  });
+  const wire = await f.read();
+  const argv = wire.find((item) => item.argv).argv as string[];
+  const resume = wire.find((item) => item.method === 'thread/resume');
+  assert.equal(resume.params.threadId, 'saved-review');
+  assert.equal(resume.params.permissions, 'buro_verification_verification-fixture');
+  assert.equal(resume.params.sandbox, undefined);
+  assert.deepEqual(
+    argv.filter((value) => value.startsWith('default_permissions=')),
+    [`default_permissions=${JSON.stringify(resume.params.permissions)}`],
+  );
+  const turn = wire.find((item) => item.method === 'turn/start');
+  assert.equal(turn.params.permissions, resume.params.permissions);
+  assert.equal(turn.params.sandboxPolicy, undefined);
+});
+
+test('ordinary native writer does not receive an immutable review default permission override', async (t) => {
+  const f = await fixture(t);
+  await f.runtime.start({
+    projectId: 'p',
+    runId: 'R',
+    workspace: f.source,
+    readOnly: false,
+    instructions: 'write in the isolated workspace',
+  });
+  const wire = await f.read();
+  const argv = wire.find((item) => item.argv).argv as string[];
+  assert.equal(
+    argv.some((value) => value.startsWith('default_permissions=')),
+    false,
+  );
+  assert.equal(
+    argv.some((value) => value.startsWith('permissions.buro_verification_')),
+    false,
+  );
+  const start = wire.find((item) => item.method === 'thread/start');
+  assert.equal(start.params.permissions, undefined);
+  assert.equal(start.params.sandbox, 'workspace-write');
 });
 
 test('an ignored permission profile is rejected before any native model turn', async (t) => {
@@ -130,6 +188,26 @@ test('an ignored permission profile is rejected before any native model turn', a
     { code: 'ENVIRONMENT_UNAVAILABLE' },
   );
   assert.equal((await f.read()).filter((item) => item.method === 'turn/start').length, 0);
+});
+
+test('a different acknowledged profile cannot substitute for the issued native review default', async (t) => {
+  const f = await fixture(t, 'another-profile');
+  await assert.rejects(
+    f.runtime.start({
+      projectId: 'p',
+      runId: 'R',
+      workspace: f.view.readRoot,
+      readOnly: true,
+      instructions: 'review',
+    }),
+    { code: 'ENVIRONMENT_UNAVAILABLE' },
+  );
+  const wire = await f.read();
+  const argv = wire.find((item) => item.argv).argv as string[];
+  const start = wire.find((item) => item.method === 'thread/start');
+  assert.ok(argv.includes(`default_permissions=${JSON.stringify(start.params.permissions)}`));
+  assert.notEqual(start.params.permissions, 'another-profile');
+  assert.equal(wire.filter((item) => item.method === 'turn/start').length, 0);
 });
 
 test('revoked or rebound verification ownership dispatches no native turn', async (t) => {

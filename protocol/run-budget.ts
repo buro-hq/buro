@@ -51,7 +51,7 @@ export const DEFAULT_MANAGED_RUN_BUDGET_POLICY: Readonly<ManagedRunBudgetPolicy>
 export const ManagedRunBudgetSummarySchema = z
   .strictObject({
     version: z.literal(1),
-    coverage: z.enum(['managed-api', 'legacy-managed-api']),
+    coverage: z.literal('managed-api'),
     policy: ManagedRunBudgetPolicySchema,
     status: z.enum(['open', 'exceeded']),
     used: counters,

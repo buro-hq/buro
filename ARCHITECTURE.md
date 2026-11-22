@@ -2,6 +2,8 @@
 
 Status: agreed implementation direction, 20 November 2026. [VISION.md](VISION.md) owns the product model. This document describes the target; [GOAL-EXECUTION-POC.md](GOAL-EXECUTION-POC.md) describes current execution.
 
+The [22 November adaptive orchestration decision](docs/ADAPTIVE-ORCHESTRATION-2026-11-22.md) refines the implementation order: one evidence-driven orchestration loop, existing contribution catalogs and optional delegation, without a model-size workflow router. It preserves planning, independent acceptance and the default-none target, and distinguishes the target from the currently fixed execution sequence.
+
 ## Architecture decision
 
 Keep a TypeScript modular monolith with an independent core and Cordis composition. Buro owns a persistent scheduler, the coordinator's decision protocol, verification and acceptance. Existing agent clients connect through runtime adapters. Direct model APIs connect through a shared Buro-managed runtime and provider-specific transports.
@@ -40,16 +42,16 @@ Cordis owns registration, dependency readiness and resource disposal. Its proces
 
 ## Domain ownership
 
-| Entity | Meaning |
-| --- | --- |
-| Goal | Versioned user intent, acceptance criteria and input selection. |
-| Run | One independent attempt to satisfy a goal, with its own base and worktree. |
-| Task | Bounded objective, dependencies, allowed writes, required outputs and checks. |
-| Attempt | A particular execution of a task, including retries or reassignment. |
-| AgentSession | Concrete role, runtime configuration, context and lifecycle for an assignment. |
-| RoleVersion | Reusable instructions and skill requirements with provenance. |
-| Evidence | An observed result tied to input revision, workspace commit, command and environment. |
-| OperatorRequest | A durable question or action request and the work it blocks. |
+| Entity          | Meaning                                                                               |
+| --------------- | ------------------------------------------------------------------------------------- |
+| Goal            | Versioned user intent, acceptance criteria and input selection.                       |
+| Run             | One independent attempt to satisfy a goal, with its own base and worktree.            |
+| Task            | Bounded objective, dependencies, allowed writes, required outputs and checks.         |
+| Attempt         | A particular execution of a task, including retries or reassignment.                  |
+| AgentSession    | Concrete role, runtime configuration, context and lifecycle for an assignment.        |
+| RoleVersion     | Reusable instructions and skill requirements with provenance.                         |
+| Evidence        | An observed result tied to input revision, workspace commit, command and environment. |
+| OperatorRequest | A durable question or action request and the work it blocks.                          |
 
 Buro IDs identify these entities. Native thread IDs are external references scoped to a runtime and client configuration. Role names and logical agent paths are display/navigation data rather than proof of identity or filesystem isolation.
 
@@ -67,16 +69,16 @@ Start with a small versioned decision schema and bounded graph edits. Reject cyc
 
 ## Runtime and provider contracts
 
-| Port | Responsibility |
-| --- | --- |
-| RuntimeRegistry | Available clients, configuration revisions and probed capabilities. |
-| AgentRuntime | Create a session, execute a turn, cancel, observe state and recover when supported. |
-| ModelProvider | Model discovery, provider capabilities and streamed normalized responses. |
-| ToolBroker | Validate and execute a scoped tool request with a durable action ID. |
-| ContextAssembler | Build a bounded session input from permitted, versioned sources. |
-| ResourceScheduler | Host, endpoint/model, project and run capacity. |
-| VerificationPort | Execute trusted checks and return independently observed evidence. |
-| StateStore | Transactional state, events, command receipts and dispatch intents. |
+| Port              | Responsibility                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| RuntimeRegistry   | Available clients, configuration revisions and probed capabilities.                 |
+| AgentRuntime      | Create a session, execute a turn, cancel, observe state and recover when supported. |
+| ModelProvider     | Model discovery, provider capabilities and streamed normalized responses.           |
+| ToolBroker        | Validate and execute a scoped tool request with a durable action ID.                |
+| ContextAssembler  | Build a bounded session input from permitted, versioned sources.                    |
+| ResourceScheduler | Host, endpoint/model, project and run capacity.                                     |
+| VerificationPort  | Execute trusted checks and return independently observed evidence.                  |
+| StateStore        | Transactional state, events, command receipts and dispatch intents.                 |
 
 The managed runtime implements AgentRuntime once. Ollama and DeepSeek implement ModelProvider separately. They share task execution and tool semantics, while preserving provider-specific request formats, streaming behavior and continuation state. [Provider integration](docs/PROVIDERS.md) owns these details.
 

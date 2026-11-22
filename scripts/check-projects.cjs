@@ -437,10 +437,12 @@ async function expectRoleSources(page) {
     await page
       .getByRole('textbox', { name: 'Project context', exact: true })
       .fill('Updated context');
+    await page.getByLabel('Maximum team size', { exact: true }).fill('3');
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await page.getByRole('status').filter({ hasText: 'Settings saved' }).waitFor();
     assert.equal(host.ctx.projects.registry.get(project.id).snapshot().profile.revision, 2);
-    passed.push('profile revisions update through the UI');
+    assert.equal(host.ctx.projects.registry.get(project.id).snapshot().profile.maxWorkers, 3);
+    passed.push('profile revisions and a chosen team allowance update through the UI');
     await page.getByRole('button', { name: 'Check environment', exact: true }).click();
     await page.getByRole('heading', { name: 'Checks: 1/1', exact: true }).waitFor();
     await page.screenshot({ path: 'artifacts/project-profile.png', fullPage: true });
@@ -496,6 +498,7 @@ async function expectRoleSources(page) {
         checks: restoredChecks,
       });
       assert.equal(fresh.ctx.projects.registry.get(project.id).snapshot().profile.revision, 2);
+      assert.equal(fresh.ctx.projects.registry.get(project.id).snapshot().profile.maxWorkers, 3);
       assert.equal(
         fresh.ctx.projects.registry.get(project.id).snapshot().runs[0].appliedBranch,
         'master',
