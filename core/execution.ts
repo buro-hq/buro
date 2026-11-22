@@ -1,3 +1,5 @@
+import { validateProjectRole } from './project-entities.ts';
+import type { RunPlanningInput } from '../protocol/run-plan.ts';
 import { executionPolicy as savedExecutionPolicy } from './project-settings.ts';
 import type { ExecutionPhase } from './project-runs.ts';
 import { runWorkerAssignments } from './worker-assignments.ts';
@@ -945,6 +947,25 @@ ${installation.output || installation.error || ''}`,
       (tx) => tx.beginExecution({ runId, now: this.env.now() }),
     );
   }
+  async acceptPlan(
+    projectId: string,
+    runId: string,
+    plan: TeamPlan,
+    expectedRoleVersions: Record<string, number | null>,
+    expectedInput?: RunPlanningInput,
+  ) {
+    const runs = this.runCommands(projectId);
+    const captured = structuredClone({
+      plan,
+      expectedRoleVersions,
+      expectedInput: expectedInput ?? (await runs.planningInput(runId)),
+    });
+    return runs.transaction(
+      { id: 'internal-' + this.env.id(), fingerprint: 'run.accept-plan' },
+      (tx) =>
+        tx.acceptPlan({ runId, planId: 'plan-' + this.env.id(), now: this.env.now(), ...captured }),
+    );
+  }
   async bindPreparedWorkspace(
     projectId: string,
     runId: string,
@@ -1325,6 +1346,7 @@ ${installation.output || installation.error || ''}`,
         correction: correction.replace(/^Correct the previous plan: /, ''),
         sessionInstructions: input.instructions,
       });
+      const planningAuthority = await this.runCommands(projectId).planningInput(runId);
       let answer: unknown;
       let formatError: DomainError | undefined;
       try {
@@ -1345,113 +1367,56 @@ ${installation.output || installation.error || ''}`,
       }
       try {
         if (formatError) throw formatError;
-        const candidatePlan = TeamPlanSchema.parse(answer);
-        const workerTasks = Object.fromEntries(
-          candidatePlan.team
-            .filter((worker) => worker.assignment != null)
-            .map((worker) => [worker.roleId, validateWorkerTask(worker.assignment)]),
-        );
-        if (!run.workflow)
+        const parsedPlan = TeamPlanSchema.safeParse(answer);
+        if (!parsedPlan.success)
           throw new DomainError(
-            'WORKFLOW_REQUIRED',
-            'The saved run has no explicit workflow identity. Start a new run.',
+            'INVALID_PLAN',
+            parsedPlan.error.issues
+              .slice(0, 8)
+              .map((issue) => `${issue.path.join('.')}: ${issue.message}`.slice(0, 500))
+              .join('; '),
           );
-        const candidateTeam = resolveTeam(
-          candidatePlan,
-          planningRoles,
-          policy,
-          this.env.now(),
-          run.workflow,
-        );
-        let assignments: Record<string, AssignmentResource> | undefined;
-        if (run.resources)
-          assignments = Object.fromEntries(
-            candidateTeam.roles.map((role) => [
-              role.id,
-              resolveWorkerResource(
-                run.resources!,
-                role,
-                candidatePlan.team.find((worker) => worker.roleId === role.id),
-                policy.scope.mode === 'strict' ? { strictPlannedWrites: true } : {},
-              ),
-            ]),
-          );
-        else if (
-          candidatePlan.team.some((worker) => worker.runtimeId != null) ||
-          candidateTeam.roles.some(
-            (role) => role.runtimePreference && role.runtimePreference.mode !== 'auto',
-          )
-        )
-          throw new DomainError(
-            'RESOURCE_PROFILE_REQUIRED',
-            'Model selection requires a saved execution resource profile.',
-          );
-        const createdPlanRoles = candidateTeam.roles.filter(
-          (role) => candidateTeam.origins[role.id] === 'created',
-        );
-        await this.update(
+        const candidatePlan = parsedPlan.data;
+        const saved = await this.acceptPlan(
           projectId,
           runId,
-          (r, _goal, doc) => {
-            // A user changing a pin while the model plans must get a fresh decision, not stale dispatch.
-            for (const role of candidateTeam.roles) {
-              const current = doc.roleVersions.filter((item) => item.id === role.id).at(-1);
-              if (
-                (candidateTeam.origins[role.id] === 'reused' &&
-                  current?.version !== role.version) ||
-                (candidateTeam.origins[role.id] === 'created' && current)
-              )
-                throw new DomainError(
-                  'ROLE_CHANGED',
-                  `Role ${role.id} changed during planning. Choose from the updated catalog.`,
-                );
-            }
-            for (const role of createdPlanRoles) doc.roleVersions.push(structuredClone(role));
-            r.plan = candidatePlan.steps;
-            r.planSavedAt = this.env.now();
-            if (inspectionPlanning) {
-              r.planningSession = r.coordinatorSession;
-              r.coordinatorSession = undefined;
-              // A saved read-only planner must never be resumed as a writer after a crash.
-              r.threadId = '';
-            }
-            r.summary = candidatePlan.summary;
-            r.roleSnapshots = [
-              ...(r.roleSnapshots || []).filter((role) =>
-                ['coordinator', 'reviewer'].includes(role.id),
-              ),
-              ...candidateTeam.roles,
-            ];
-            r.roleOrigins = candidateTeam.origins;
-            r.roleAssignments = Object.fromEntries(
-              candidatePlan.team.map((worker) => [worker.roleId, worker.paths]),
-            );
-            r.workerTasks = workerTasks;
-            if (assignments) r.assignmentResources = assignments;
-            for (const role of candidateTeam.roles) {
-              r.events.push({
-                at: this.env.now(),
-                type:
-                  candidateTeam.origins[role.id] === 'created' ? 'role.proposed' : 'role.reused',
-                text: `${role.id}: ${role.title}`,
-              });
-              const selected = assignments?.[role.id];
-              if (selected)
-                r.events.push({
-                  at: this.env.now(),
-                  type: 'agent.resource-selected',
-                  text: `${role.id}: ${selected.resource.model || selected.resource.id}. ${selected.reason}`,
-                });
-            }
-            r.events.push({ at: this.env.now(), type: 'plan.saved', text: candidatePlan.summary });
-          },
-          createdPlanRoles,
+          candidatePlan,
+          Object.fromEntries(
+            candidatePlan.team.map((worker) => [
+              worker.roleId,
+              planningRoles.find((role) => role.id === worker.roleId)?.version ?? null,
+            ]),
+          ),
+          planningAuthority,
         );
+        signal.throwIfAborted();
+        const afterPlan = this.get(projectId, runId);
+        assertRunReconciled(afterPlan);
+        if (afterPlan.cancelRequested) throw new DOMException('Interrupted', 'AbortError');
+        const candidateTeam = {
+          roles: saved.assignments.map((assignment) => assignment.role),
+          origins: Object.fromEntries(
+            saved.assignments.map((assignment) => [assignment.role.id, assignment.origin]),
+          ),
+        };
         plan = candidatePlan;
         team = candidateTeam;
         break;
       } catch (e) {
-        if (e instanceof DomainError && e.code === 'FIXED_RUNTIME_UNAVAILABLE') throw e;
+        if (
+          !(e instanceof DomainError) ||
+          ![
+            'INVALID_PLAN',
+            'INVALID_AGENT_OUTPUT',
+            'INVALID_ASSIGNMENT',
+            'INVALID_RUNTIME_REASON',
+            'RUNTIME_NOT_ALLOWED',
+            'ROLE_RUNTIME_FIXED',
+            'RUNTIME_REASON_REQUIRED',
+            'ROLE_CHANGED',
+          ].includes(e.code)
+        )
+          throw e;
         if (e instanceof DomainError && e.code === 'ROLE_CHANGED') {
           planningRoles = this.env.projects.get(projectId).snapshot().roles;
           roleCatalogChanged = true;
@@ -1479,6 +1444,10 @@ ${installation.output || installation.error || ''}`,
           parentId: r.planningSession?.id,
         };
       });
+      signal.throwIfAborted();
+      const writerGrant = this.get(projectId, runId);
+      assertRunReconciled(writerGrant);
+      if (writerGrant.cancelRequested) throw new DOMException('Interrupted', 'AbortError');
       const writer = await this.startRuntime({ ...input, readOnly: false });
       threads.push(writer.threadId);
       root = writer;
@@ -1546,6 +1515,7 @@ Use relevant user materials at their staged paths. Return the formal execution r
       return runWorkerAssignments({
         projectId,
         run: this.get(projectId, runId),
+        readAssignment: (roleId) => this.runCommands(projectId).assignment(runId, roleId),
         roles: selected,
         workspace,
         policy,
@@ -1903,8 +1873,8 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
         current &&
         (current.version < role.version ||
           (current.version === role.version &&
-            JSON.stringify({ ...current, createdAt: '', updatedAt: '' }) !==
-              JSON.stringify({ ...role, createdAt: '', updatedAt: '' })))
+            JSON.stringify({ ...validateProjectRole(current), createdAt: '', updatedAt: '' }) !==
+              JSON.stringify({ ...validateProjectRole(role), createdAt: '', updatedAt: '' })))
       )
         throw Error('Role catalog conflict: ' + role.id);
       if (!current) acceptedRoles.push(role);

@@ -4,6 +4,7 @@ import {
   mergeRunCurrent,
   mergeRunLifecycle,
   mergeRunWorkspace,
+  mergeRunPlan,
 } from '../../protocol/run-view.ts';
 type Update<T> = { upsert: T[]; remove: string[] };
 type RunDelta = {
@@ -73,6 +74,22 @@ export function expandEvent(event: StoredEvent, runs: Map<string, Run>): DomainE
   const change = event.change;
   if (change.type === 'run.admitted') {
     runs.set(change.current.id, initialRunView(change.current, change.admission, change.view));
+    return event as DomainEvent;
+  }
+  if (change.type === 'run.plan-accepted') {
+    const previous = runs.get(change.current.id);
+    if (!previous) throw Error('Missing run checkpoint in event log: ' + change.current.id);
+    runs.set(
+      change.current.id,
+      mergeRunPlan(
+        previous,
+        change.current,
+        change.plan,
+        change.assignments,
+        change.entries,
+        change.view,
+      ),
+    );
     return event as DomainEvent;
   }
   if (change.type === 'run.workspace-bound') {

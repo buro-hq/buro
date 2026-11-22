@@ -15,6 +15,7 @@ import type { MaterialTransactionStorage } from '../../core/project-materials.ts
 import { validateProjectMaterial } from '../../core/project-materials.ts';
 import type { SettingsTransactionStorage } from '../../core/project-settings.ts';
 import type { RunCurrent } from '../../protocol/run-state.ts';
+import { createSqliteRunPlanRows, projectRunPlanSchema } from './project-run-plan-rows.ts';
 
 export const projectRunSchema = `
   CREATE TABLE IF NOT EXISTS run_current (
@@ -84,6 +85,7 @@ export const projectRunSchema = `
     BEFORE DELETE ON run_workspaces BEGIN SELECT RAISE(ABORT,'Run workspace bindings are immutable'); END;
   CREATE INDEX IF NOT EXISTS project_runs_unresolved ON project_run_index(goal_id,run_id) WHERE unresolved=1;
   CREATE INDEX IF NOT EXISTS active_project_material_grants ON project_materials(material_id) WHERE scope='project' AND active=1;
+  ${projectRunPlanSchema}
 `;
 
 type Row = Record<string, unknown>;
@@ -127,6 +129,7 @@ function fromRow(row: Row): RunCurrent {
 /** Semantic queue/cancel/lifecycle storage; no full Run replacement or accepted-result method. */
 export function createSqliteRunRows(database: RunDatabase): RunTransactionStorage {
   return {
+    ...createSqliteRunPlanRows(database),
     current: (id) => {
       const row = database.get(
         'run.current',

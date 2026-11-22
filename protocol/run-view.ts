@@ -1,3 +1,4 @@
+import type { RunPlan, RunWorkerAssignment } from './run-plan.ts';
 import type { Run } from './domain.ts';
 import type {
   RunAdmission,
@@ -116,5 +117,77 @@ export function mergeRunWorkspace(
     ...mergeRunLifecycle(run, current, entry, view),
     workspace: binding.path,
     baseCommit: binding.baseCommit,
+  };
+}
+
+/** Temporary complete UI projection; current tasks may subsequently be refined by their existing owner. */
+export function mergeRunPlan(
+  run: Run,
+  current: RunCurrent,
+  plan: RunPlan,
+  assignments: RunWorkerAssignment[],
+  entries: Omit<RunTimelineEntry, 'sequence'>[],
+  view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>,
+): Run {
+  if (
+    plan.runId !== run.id ||
+    assignments.some((assignment) => assignment.runId !== run.id || assignment.planId !== plan.id)
+  )
+    throw Error('Run plan identity mismatch.');
+  const next = mergeRunCurrent(run, current);
+  if (plan.readOnlyPlanner) {
+    const session = run.coordinatorSession;
+    const grant = session
+      ? JSON.parse(
+          JSON.stringify({
+            id: session.id,
+            roleId: session.roleId,
+            roleVersion: session.roleVersion,
+            runtimeId: session.runtimeId,
+            providerId: session.providerId,
+            model: session.model,
+            configurationRevision: session.configurationRevision,
+            selection: session.selection,
+            parentId: session.parentId,
+          }),
+        )
+      : undefined;
+    if (
+      run.threadId !== plan.readOnlyPlanner.threadId ||
+      run.coordinatorSession?.id !== plan.readOnlyPlanner.sessionId ||
+      JSON.stringify(grant) !== JSON.stringify(plan.readOnlyPlanner.sessionGrant)
+    )
+      throw Error('Read-only planner handoff mismatch.');
+    next.planningSession = run.coordinatorSession;
+    next.coordinatorSession = undefined;
+    next.threadId = '';
+  }
+  return {
+    ...next,
+    ...view,
+    plan: structuredClone(plan.steps),
+    planSavedAt: plan.createdAt,
+    roleSnapshots: [
+      ...(run.roleSnapshots || []).filter((role) => ['coordinator', 'reviewer'].includes(role.id)),
+      ...assignments.map((assignment) => structuredClone(assignment.role)),
+    ],
+    roleOrigins: Object.fromEntries(
+      assignments.map((assignment) => [assignment.role.id, assignment.origin]),
+    ),
+    roleAssignments: Object.fromEntries(
+      assignments.map((assignment) => [assignment.role.id, [...assignment.paths]]),
+    ),
+    workerTasks: Object.fromEntries(
+      assignments
+        .filter((assignment) => assignment.task !== undefined)
+        .map((assignment) => [assignment.role.id, structuredClone(assignment.task!)]),
+    ),
+    assignmentResources: Object.fromEntries(
+      assignments.map((assignment) => [assignment.role.id, structuredClone(assignment.resource)]),
+    ),
+    events: [
+      ...next.events,
+      ...entries.map(({ runId: _runId, ...entry }) => structuredClone(entry)),
+    ],
   };
 }

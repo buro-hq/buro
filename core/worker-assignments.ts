@@ -1,3 +1,5 @@
+import { validateProjectRole } from './project-entities.ts';
+import type { RunWorkerAssignment } from '../protocol/run-plan.ts';
 import { operationIds } from './operation-catalog.ts';
 import type { AgentSession, FileChange, Role, Run } from '../protocol/domain.ts';
 import { EnvelopeSchema, envelopeOutputSchema } from '../protocol/execution.ts';
@@ -53,6 +55,7 @@ export async function runWorkerAssignments(options: {
   projectId: string;
   run: Run;
   roles: Role[];
+  readAssignment: (roleId: string) => Promise<RunWorkerAssignment | undefined>;
   workspace: { path: string; base: string };
   policy: ExecutionPolicy;
   runtime: AgentRuntime;
@@ -73,20 +76,27 @@ export async function runWorkerAssignments(options: {
   };
   for (const role of roles) {
     abort();
-    const paths =
-      run.roleAssignments && Object.hasOwn(run.roleAssignments, role.id)
-        ? run.roleAssignments[role.id]
-        : undefined;
-    if (!paths || (policy.scope.mode === 'strict' && !paths.length))
-      throw new DomainError('INVALID_ASSIGNMENT', `No saved paths for ${role.id}.`);
-    if (paths.some((path) => !planPathAllowed(path, policy.scope)))
+    const grant = await options.readAssignment(role.id);
+    abort();
+    if (
+      !grant ||
+      grant.runId !== run.id ||
+      grant.role.id !== role.id ||
+      JSON.stringify(validateProjectRole(grant.role)) !== JSON.stringify(validateProjectRole(role))
+    )
+      throw new DomainError('INVALID_ASSIGNMENT', `No accepted assignment grant for ${role.id}.`);
+    const paths = grant.paths;
+    if (
+      (policy.scope.mode === 'strict' && !paths.length) ||
+      paths.some((path) => !planPathAllowed(path, policy.scope))
+    )
       throw new DomainError('INVALID_ASSIGNMENT', `Assignment exceeds current scope: ${role.id}.`);
     const scope: WorkScope = {
       ...policy.scope,
       plannedPaths: [...paths],
       protectedPaths: [...policy.scope.protectedPaths],
     };
-    const savedDecision = run.assignmentResources?.[role.id];
+    const savedDecision = grant.resource;
     if (run.resources?.workerPool && !savedDecision)
       throw new DomainError('INVALID_ASSIGNMENT', `No saved resource decision for ${role.id}.`);
     if (savedDecision && !run.resources)
@@ -96,7 +106,14 @@ export async function runWorkerAssignments(options: {
           ...(policy.scope.mode === 'strict' ? { strictPlannedWrites: true } : {}),
         })
       : undefined;
-    const envelope = buildWorkerEnvelope({ run, role, paths, policy, workspace: workspace.path });
+    const envelope = buildWorkerEnvelope({
+      run,
+      role,
+      paths,
+      policy,
+      workspace: workspace.path,
+      assignment: grant,
+    });
     const session: AgentSession = {
       id: 'S-' + options.id(),
       roleId: role.id,

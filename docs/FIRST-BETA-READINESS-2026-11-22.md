@@ -2,7 +2,7 @@
 
 Date: 2026-11-22. Release-scope proposal following the user's question about a first release. This does not cancel the saved full vision, remove its default-none requirement, or authorize publication.
 
-The existing product already connects a repository, configures Codex/Ollama/DeepSeek routes, creates goals and roles, dispatches workers, checks an immutable workspace, obtains fresh review and exposes an accepted result. Stage 5A4b2 validation passes 1271 deterministic tests, build/typecheck, 23 browser scenarios and desktop/mobile production smoke. Semantic activation/phase commands, immutable prepared-workspace binding/restore and mixed event replay are verified; full executor/session/effect migration remains pending. These results are not current live-model quality or clean-machine installation evidence.
+The existing product already connects a repository, configures Codex/Ollama/DeepSeek routes, creates goals and roles, dispatches workers, checks an immutable workspace, obtains fresh review and exposes an accepted result. Stage 5A4b3a validation passes 1311 deterministic tests, build/typecheck, 23 browser scenarios and desktop/mobile production smoke. Semantic activation/phase commands, immutable workspace binding/restore, accepted plan/original assignment authority, selected coordinator pins and mixed event replay are verified. Actual continuation attempts, current task refinements and full session/effect migration remain pending. These results are not current live-model quality or clean-machine installation evidence.
 
 ## Minimum beta gates still to verify or finish
 

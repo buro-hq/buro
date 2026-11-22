@@ -3,6 +3,7 @@ import {
   mergeRunCurrent,
   mergeRunLifecycle,
   mergeRunWorkspace,
+  mergeRunPlan,
 } from '../protocol/run-view.ts';
 import type {
   CreateGoal,
@@ -108,6 +109,22 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
         ? mergeRunWorkspace(previous, c.current, c.binding, c.entry, c.view)
         : previous,
     );
+  }
+  if (c.type === 'run.plan-accepted') {
+    if (!snapshot.runs.some((previous) => previous.id === c.current.id))
+      throw Error('Run plan needs a current run projection.');
+    next.runs = snapshot.runs.map((previous) =>
+      previous.id === c.current.id
+        ? mergeRunPlan(previous, c.current, c.plan, c.assignments, c.entries, c.view)
+        : previous,
+    );
+    const created = c.assignments
+      .filter((assignment) => assignment.origin === 'created')
+      .map((assignment) => assignment.role);
+    next.roles = [
+      ...snapshot.roles.filter((role) => !created.some((candidate) => candidate.id === role.id)),
+      ...created,
+    ];
   }
   if (c.type === 'run.changed') {
     next.runs = [c.run, ...snapshot.runs.filter((r) => r.id !== c.run.id)];
@@ -281,6 +298,8 @@ export class SocketProjectClient implements ProjectClient {
             this.notify();
             if (
               event.change.type === 'role.saved' ||
+              (event.change.type === 'run.plan-accepted' &&
+                event.change.assignments.some((assignment) => assignment.origin === 'created')) ||
               event.change.type === 'project.configured' ||
               event.change.type === 'goal.deleted' ||
               ((event.change.type === 'project.research.changed' ||
@@ -293,6 +312,7 @@ export class SocketProjectClient implements ProjectClient {
                 'run.cancel-requested',
                 'run.lifecycle-changed',
                 'run.workspace-bound',
+                'run.plan-accepted',
               ].includes(event.change.type) &&
                 busyBefore !== hasActiveRun(this.state))
             )

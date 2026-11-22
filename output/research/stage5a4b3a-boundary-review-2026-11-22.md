@@ -1,0 +1,33 @@
+# Stage 5A4b3a independent boundary and client review
+
+Date: 2026-11-22. Review of the working initial-plan/assignment slice after `33c3c96`. Scope: public events and private authority validation, actual plan writer and named assignment consumer, File immutability/replay, normalized SQL storage and transaction boundaries. Full executor/session/effect migration and first-release readiness remain separate gates.
+
+## Findings
+
+The reviewer reproduced a plan-event evidence gap: validation checked the number/time/Run ownership of history entries and the final `plan.saved`, but did not bind per-assignment entries to the accepted role/resource. Replacing the first role entry with `goal.completed`, or the resource-selection text with another worker/resource, passed the public and private authority validators and would append invented rendered history. The added independent regression failed before correction. The parent replaced this loose check with a shared pure `runPlanTimeline(plan, assignments)` packet used by the writer and exact schema comparison. The reviewer independently reran the rejection matrix and confirmed both malformed packets now reject.
+
+The parent separately raised saved initial-context ancestry. The reviewer reproduced it by changing only the saved accepted plan's `context.goalText` while its `initial-admission` label, immutable admission and live task remained unchanged. File OPEN accepted the inconsistent record. The parent added a shared canonical `initialPlanningInput(admission)` comparison to captured input and COMMIT/OPEN validation; a legacy-continuation label additionally requires a real legacy continuation row. The reviewer inspected the correction and independently confirmed rejection for both unchanged initial labels and relabelling the substituted context as legacy continuation.
+
+No unresolved blocking finding remains in the reviewed slice. Production corrections belong to the parent and implementation agent; the independent regression file belongs to this reviewer.
+
+The parent subsequently found that planning-policy validation used the profile's default coordinator descriptor rather than the actual selected role pin. I independently inspected the final amendment: planning context now captures the exact coordinator role and selected resource decision; Core validates the role decision and its selected resource's planning capabilities, File admission ancestry includes that pair, and SQL persists explicit coordinator role/resource columns. The read-only session grant additionally matches that selected role/version/runtime/provider/model/configuration/selection. The actual File/SQL nondefault fixed-pin and File read-only pin cases pass in the final focused set. My read-only fixture now derives its grant with the real `sessionResource` helper; a brief reviewer-only wrong-module import during this fixture adjustment was corrected before the final run.
+
+The parent/architecture corrections to exact planner authority were independently exercised: the accepted-plan schema requires a read-only strategy exactly when a complete matching handoff is present; deleting both handoff copies rejects in wire and authority validation. The client compares original session ID, role/version, runtime/provider/model/configuration/selection/parent grant before clearing the read-only planner from its writer slot. Same-ID grant changes reject; observed `reportedModel` is separate evidence and remains permitted.
+
+## Boundary assessment
+
+Actual initial planning input is checked against the immutable admission. Explicit legacy continuation retains its existing owner and is labelled accordingly. Core resolves selected role versions, task/scope and resource decisions before writing; newly created roles, original plan/assignments, current pointer/revision, timeline/event and receipt share the transaction. No generic Run replacement or accepted-result writer is introduced.
+
+SQL v7 separates plan headers, ordered steps, material/check references, original assignments, assignment paths and the current pointer, with immutable record triggers and indexed named lookups. No whole growing Run/session/history column, SQL executor snapshot or production authority switch is added. SQL read-only handoff rejects until a real session owner exists. Named reads still load the bounded current plan context to validate identity; point/returned-row evidence is not a throughput or VM-scan claim.
+
+File remains the sole active authority and keeps the immutable original decisions separate from existing current-task refinements. Commit/open validation checks original decisions against their projection and rejects missing ownership maps. File replay merges accepted plans before later legacy Run deltas. The client updates the role catalog for actually created roles and requests the existing catalog/policy refresh; it preserves worker/check/command evidence and cannot turn plan acceptance into result acceptance.
+
+## Independent evidence
+
+Added `tests/stage5a4b3a-boundary-review.test.ts` using genuine File admission, workspace binding and the actual semantic plan command. Its four cases cover created-role catalog projection and mixed legacy replay, public/authority packet rejection including exact rendered timeline, missing read-only handoff and complete same-ID planner-grant verification, and saved context ancestry on OPEN. Test effects throw before any external dispatch.
+
+After the final coordinator amendment, executed `node --test tests/stage5a4b3a-boundary-review.test.ts tests/run-plan-contract.test.ts tests/stage5a4b3a-architecture-review.test.ts tests/worker-envelope.test.ts`: **56/56 passed**, no skips. This includes four boundary cases, 22 plan contracts, 13 Node-reported architecture tests including nested grant regressions, and 17 envelope/recovery cases. These counts overlap parent validation; do not add them to the full-suite count. Fresh typecheck, `git diff --check` and reviewer-test formatting passed. Full-suite/browser results remain the parent's separate evidence.
+
+## Limits retained
+
+One immutable initial plan per Run is migrated. Later compact-task refinements, recovery, continuation attempts, actual session lifecycle, runtime-event durable dedup, full effect/accounting journals, private artifacts, result acceptance/apply, public history pagination and default-none limits remain later work. File whole-document persistence and the existing legacy dispatch/context consumers remain explicit. No model endpoint, native client process, RTX machine, original user repository or `output/ux/` was used or changed.

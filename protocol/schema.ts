@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { runPlanTimeline } from './run-plan.ts';
 import { RoleSchema as role, WorkflowIdentitySchema } from './workflow-roles.ts';
 import { VerificationViewSchema, VerificationEvidenceSchema } from './verification.ts';
 import { ManagedRunBudgetSummarySchema, ManagedBudgetErrorCodeSchema } from './run-budget.ts';
@@ -359,6 +360,80 @@ export const RunAdmissionSchema = z.strictObject({
   }),
   outcome: GoalOutcomeSchema,
   parentRunId: z.string().optional(),
+});
+export const RunPlannerSessionGrantSchema = z.strictObject({
+  id: z.string().min(1),
+  roleId: z.string().min(1),
+  roleVersion: z.number().int().nonnegative(),
+  runtimeId: z.string().min(1),
+  providerId: z.string().optional(),
+  model: z.string().optional(),
+  configurationRevision: z.string().optional(),
+  selection: AssignmentSelectionSchema.optional(),
+  parentId: z.string().optional(),
+});
+export const RunPlannerHandoffSchema = z.strictObject({
+  threadId: z.string().min(1),
+  sessionId: z.string().min(1),
+  sessionGrant: RunPlannerSessionGrantSchema,
+});
+export const RunPlanningInputSchema = z.strictObject({
+  contextSource: z.enum(['initial-admission', 'legacy-continuation']),
+  title: z.string(),
+  goalText: z.string(),
+  contextMaterials: z.array(ContextMaterialSchema.strict()),
+  checkIds: z.array(z.string().min(1)),
+  policy: RunAdmissionSchema.shape.policy,
+  resources: ResourceSnapshotSchema,
+  coordinator: z.strictObject({ role: role.strict(), resource: AssignmentResourceSchema }),
+  workflow: WorkflowIdentitySchema,
+  planningPolicy: PlanningPolicySchema,
+  repairEnvironment: z.boolean(),
+  readOnlyPlanner: RunPlannerHandoffSchema.optional(),
+});
+export const RunPlanSchema = z
+  .strictObject({
+    version: z.literal(1),
+    id: z.string().min(1),
+    runId: z.string().min(1),
+    admissionId: z.string().min(1),
+    attemptId: z.string().min(1),
+    createdAt: z.string().min(1),
+    summary: z.string(),
+    steps: z
+      .array(z.strictObject({ step: z.string().min(1), owner: z.string().min(1) }))
+      .min(2)
+      .max(12),
+    context: RunPlanningInputSchema,
+    readOnlyPlanner: RunPlannerHandoffSchema.optional(),
+  })
+  .superRefine((plan, ctx) => {
+    const handoff = plan.readOnlyPlanner;
+    if (
+      (plan.context.planningPolicy.strategy === 'read-only-inspection') !== !!handoff ||
+      JSON.stringify(handoff) !== JSON.stringify(plan.context.readOnlyPlanner) ||
+      (handoff &&
+        (handoff.sessionId !== handoff.sessionGrant.id ||
+          handoff.sessionGrant.roleId !== 'coordinator'))
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['readOnlyPlanner'],
+        message: 'An accepted read-only plan must retain its original planner grant.',
+      });
+  });
+export const RunWorkerAssignmentSchema = z.strictObject({
+  version: z.literal(1),
+  id: z.string().min(1),
+  planId: z.string().min(1),
+  runId: z.string().min(1),
+  admissionId: z.string().min(1),
+  attemptId: z.string().min(1),
+  role: role.strict(),
+  origin: z.enum(['created', 'reused']),
+  paths: z.array(z.string()),
+  task: WorkerTaskSchema.optional(),
+  resource: AssignmentResourceSchema,
 });
 export const RunAttemptSchema = z.strictObject({
   version: z.literal(1),
@@ -757,10 +832,55 @@ export const DomainEventSchema = z
           .optional(),
         view: RunAdmissionViewSchema.optional(),
       }),
+      z.strictObject({
+        type: z.literal('run.plan-accepted'),
+        current: RunCurrentSchema,
+        plan: RunPlanSchema,
+        assignments: z.array(RunWorkerAssignmentSchema).max(2),
+        entries: z.array(RunTimelineEntrySchema.omit({ sequence: true })),
+        view: RunAdmissionViewSchema.optional(),
+      }),
       z.object({ type: z.literal('run.changed'), run, goal, roles: z.array(role).optional() }),
     ]),
   })
   .superRefine((event, ctx) => {
+    if (event.change.type === 'run.plan-accepted') {
+      const { current, plan, assignments, entries } = event.change;
+      if (
+        current.status !== 'running' ||
+        current.phase !== 'planning' ||
+        current.cancelRequested ||
+        current.completedAt !== undefined ||
+        plan.runId !== current.id ||
+        plan.admissionId !== current.admissionId ||
+        plan.attemptId !== current.attemptId ||
+        plan.createdAt !== current.updatedAt ||
+        plan.summary !== current.summary ||
+        JSON.stringify(plan.readOnlyPlanner) !== JSON.stringify(plan.context.readOnlyPlanner) ||
+        assignments.some(
+          (assignment) =>
+            assignment.planId !== plan.id ||
+            assignment.runId !== plan.runId ||
+            assignment.admissionId !== plan.admissionId ||
+            assignment.attemptId !== plan.attemptId,
+        ) ||
+        new Set(assignments.map((assignment) => assignment.role.id)).size !== assignments.length ||
+        plan.steps.some(
+          (step) =>
+            ![
+              'coordinator',
+              'reviewer',
+              ...assignments.map((assignment) => assignment.role.id),
+            ].includes(step.owner),
+        ) ||
+        JSON.stringify(entries) !== JSON.stringify(runPlanTimeline(plan, assignments))
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['change'],
+          message: 'An accepted plan must retain its exact current and assignment identities.',
+        });
+    }
     if (event.change.type === 'run.workspace-bound') {
       const { current, binding, entry } = event.change;
       if (

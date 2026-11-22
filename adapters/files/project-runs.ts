@@ -27,6 +27,7 @@ import { createManagedRunBudget, managedBudgetSummary } from '../../core/run-bud
 import { projectRunAutonomy } from '../../core/autonomy-policy.ts';
 import { commandCopy } from '../state/transaction-values.ts';
 import { createDocumentFacet, type DocumentFacetHost } from './document-facet.ts';
+import { createDocumentRunPlanRows, validateDocumentRunPlans } from './project-run-plans.ts';
 
 type RunDocument = ProjectDocument & {
   runAdmissions?: Record<string, RunAdmission>;
@@ -73,6 +74,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
       return next;
     };
     const rows: RunTransactionStorage = {
+      ...createDocumentRunPlanRows(doc, access),
       current,
       workspace: (id) => {
         const value = doc.runWorkspaces?.[id];
@@ -299,7 +301,8 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
         if (
           change.type !== 'run.admitted' &&
           change.type !== 'run.lifecycle-changed' &&
-          change.type !== 'run.workspace-bound'
+          change.type !== 'run.workspace-bound' &&
+          change.type !== 'run.plan-accepted'
         ) {
           access.appendChange(change);
           return;
@@ -320,6 +323,9 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
     projectId,
     transaction: facet.transaction,
     current: (id: string) => facet.query((tx) => tx.current(id)),
+    planningInput: (id: string) => facet.query((tx) => tx.planningInput(id)),
+    plan: (id: string) => facet.query((tx) => tx.plan(id)),
+    assignment: (id: string, roleId: string) => facet.query((tx) => tx.assignment(id, roleId)),
     workspace: (id: string) => facet.query((tx) => tx.workspace(id)),
     timeline: (query: RunTimelineQuery) => {
       const captured = structuredClone(query);
@@ -344,6 +350,7 @@ export function validateDocumentRunAdmissions(
   previous: ProjectDocument,
   next: ProjectDocument,
 ): void {
+  validateDocumentRunPlans(previous, next);
   const before = previous as RunDocument,
     after = next as RunDocument;
   const invalid = () =>

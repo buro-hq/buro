@@ -362,6 +362,14 @@ export type DomainEvent = {
         entry?: Omit<RunTimelineEntry, 'sequence'>;
         view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
       }
+    | {
+        type: 'run.plan-accepted';
+        current: RunCurrent;
+        plan: import('./run-plan.ts').RunPlan;
+        assignments: import('./run-plan.ts').RunWorkerAssignment[];
+        entries: Omit<RunTimelineEntry, 'sequence'>[];
+        view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
+      }
     | { type: 'run.changed'; run: Run; goal: Goal; roles?: Role[] };
 };
 export type ExecutionPolicyView = {

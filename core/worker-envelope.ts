@@ -1,3 +1,4 @@
+import type { RunWorkerAssignment } from '../protocol/run-plan.ts';
 import type { Role, Run } from '../protocol/domain.ts';
 import { ContextMaterialSchema } from '../protocol/context.ts';
 import {
@@ -111,10 +112,12 @@ export function buildWorkerEnvelope(options: {
   policy: ExecutionPolicy;
   workspace: string;
   maxBytes?: number;
+  assignment?: RunWorkerAssignment;
 }): WorkerEnvelopeV1 {
   const { run, role, paths, policy, workspace } = options;
-  const savedPaths =
-    run.roleAssignments && Object.hasOwn(run.roleAssignments, role.id)
+  const savedPaths = options.assignment
+    ? options.assignment.paths
+    : run.roleAssignments && Object.hasOwn(run.roleAssignments, role.id)
       ? run.roleAssignments[role.id]
       : undefined;
   if (
@@ -125,7 +128,16 @@ export function buildWorkerEnvelope(options: {
     paths.some((file) => !planPathAllowed(file, policy.scope))
   )
     throw new DomainError('INVALID_ASSIGNMENT', 'The worker envelope requires its saved scope.');
-  const savedRole = run.roleSnapshots?.find((candidate) => candidate.id === role.id);
+  const savedRole =
+    options.assignment?.role ?? run.roleSnapshots?.find((candidate) => candidate.id === role.id);
+  if (
+    options.assignment &&
+    (options.assignment.runId !== run.id || options.assignment.role.id !== role.id)
+  )
+    throw new DomainError(
+      'INVALID_ASSIGNMENT',
+      'The accepted assignment belongs to another worker.',
+    );
   if (
     savedRole &&
     (savedRole.version !== role.version ||

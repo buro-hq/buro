@@ -1,3 +1,20 @@
+import { withEnvironmentRepair } from './environment-repair.ts';
+import { runPlanTimeline } from '../protocol/run-plan.ts';
+import { planPathAllowed } from './execution-ports.ts';
+import { validateAssignmentResource } from './assignment-routing.ts';
+import {
+  acceptRunPlan,
+  validateRunPlan,
+  validateRunWorkerAssignment,
+  validateRunPlanningInput,
+  type AcceptRunPlan,
+} from './project-run-plans.ts';
+import type {
+  RunPlan,
+  RunWorkerAssignment,
+  RunPlanningInput,
+  RunPlannerHandoff,
+} from '../protocol/run-plan.ts';
 import type {
   ContextMaterial,
   DomainEvent,
@@ -17,6 +34,7 @@ import type {
   RunWorkspaceBinding,
 } from '../protocol/run-state.ts';
 import {
+  DomainEventSchema,
   RunAdmissionSchema,
   RunAdmissionViewSchema,
   RunAttemptSchema,
@@ -43,7 +61,12 @@ export type RunCommand = { id: string; fingerprint: string };
 export type ProjectRunChange = Extract<
   DomainEvent['change'],
   {
-    type: 'run.admitted' | 'run.cancel-requested' | 'run.lifecycle-changed' | 'run.workspace-bound';
+    type:
+      | 'run.admitted'
+      | 'run.cancel-requested'
+      | 'run.lifecycle-changed'
+      | 'run.workspace-bound'
+      | 'run.plan-accepted';
   }
 >;
 export type ExecutionPhase = Exclude<RunCurrent['phase'], 'queued' | 'done'>;
@@ -74,6 +97,10 @@ export interface RunTransaction {
     baseCommit: string;
     now: string;
   }): RunWorkspaceBinding;
+  acceptPlan(input: AcceptRunPlan): { plan: RunPlan; assignments: RunWorkerAssignment[] };
+  planningInput(runId: string): RunPlanningInput;
+  plan(runId: string): RunPlan | undefined;
+  assignment(runId: string, roleId: string): RunWorkerAssignment | undefined;
   workspace(runId: string): RunWorkspaceBinding | undefined;
   current(id: string): RunCurrent | undefined;
   timeline(query: RunTimelineQuery): RunTimelinePage;
@@ -82,6 +109,9 @@ export interface ProjectRuns {
   readonly projectId: string;
   transaction<T>(command: RunCommand, apply: (tx: RunTransaction) => T): Promise<T>;
   current(id: string): Promise<RunCurrent | undefined>;
+  planningInput(runId: string): Promise<RunPlanningInput>;
+  plan(runId: string): Promise<RunPlan | undefined>;
+  assignment(runId: string, roleId: string): Promise<RunWorkerAssignment | undefined>;
   workspace(runId: string): Promise<RunWorkspaceBinding | undefined>;
   timeline(query: RunTimelineQuery): Promise<RunTimelinePage>;
   receipt(command: RunCommand): Promise<{ result: unknown } | undefined>;
@@ -91,6 +121,11 @@ export interface RunTransactionStorage {
   current(id: string): RunCurrent | undefined;
   workspace(runId: string): RunWorkspaceBinding | undefined;
   insertWorkspace(binding: RunWorkspaceBinding): void;
+  planningInput(runId: string): RunPlanningInput | undefined;
+  plan(runId: string): RunPlan | undefined;
+  assignment(runId: string, roleId: string): RunWorkerAssignment | undefined;
+  insertPlan(plan: RunPlan, assignments: RunWorkerAssignment[]): void;
+  sealPlanningSession(runId: string, planner: RunPlannerHandoff): void;
   goal(id: string): Goal | undefined;
   profile(): ProjectProfile | undefined;
   role(id: string): Role | undefined;
@@ -204,6 +239,38 @@ export function validateProjectRunChange(value: unknown, projectId?: string): Pr
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
   const input = value as Record<string, unknown>,
     keys = Reflect.ownKeys(input);
+  if (input.type === 'run.plan-accepted') {
+    const parsed = DomainEventSchema.safeParse({
+      version: 1,
+      id: 'validation',
+      projectId: projectId || 'validation',
+      seq: 1,
+      at: 'validation',
+      change: input,
+    });
+    if (!parsed.success || parsed.data.change.type !== 'run.plan-accepted') throw invalid();
+    const value = parsed.data.change;
+    validateRunPlan(value.plan);
+    for (const assignment of value.assignments) {
+      validateRunWorkerAssignment(assignment);
+      const scope = withEnvironmentRepair(
+        value.plan.context.policy,
+        value.plan.context.repairEnvironment,
+      ).scope;
+      if (
+        assignment.paths.some((path) => !planPathAllowed(path, scope)) ||
+        (scope.mode === 'strict' && !assignment.paths.length)
+      )
+        throw invalid();
+      validateAssignmentResource(
+        value.plan.context.resources,
+        assignment.role,
+        assignment.resource,
+        scope.mode === 'strict' ? { strictPlannedWrites: true } : {},
+      );
+    }
+    return canonical(value);
+  }
   if (input.type === 'run.workspace-bound') {
     if (!closed(input, ['type', 'current', 'binding', 'entry'], ['view'])) throw invalid();
     const current = validateRunCurrent(input.current),
@@ -406,9 +473,67 @@ export function createRunTransaction(options: {
       throw invalid();
     return binding;
   };
+  const plan = (runId: string) => {
+    const run = current(runId);
+    if (!run) throw new DomainError('NOT_FOUND', 'Run not found.');
+    const saved = storage.plan(runId);
+    if (saved === undefined) return undefined;
+    const value = validateRunPlan(saved);
+    if (
+      value.runId !== runId ||
+      value.admissionId !== run.admissionId ||
+      value.attemptId !== run.attemptId
+    )
+      throw invalid();
+    return value;
+  };
   return Object.freeze({
     current,
     workspace,
+    planningInput(runId: string) {
+      if (!current(runId)) throw new DomainError('NOT_FOUND', 'Run not found.');
+      return validateRunPlanningInput(storage.planningInput(runId));
+    },
+    plan,
+    assignment(runId: string, roleId: string) {
+      const selected = plan(runId);
+      if (!selected) return undefined;
+      if (!identity(roleId)) throw invalid();
+      const saved = storage.assignment(runId, roleId);
+      if (saved === undefined) return undefined;
+      const value = validateRunWorkerAssignment(saved);
+      if (
+        value.planId !== selected.id ||
+        value.runId !== runId ||
+        value.admissionId !== selected.admissionId ||
+        value.attemptId !== selected.attemptId ||
+        value.role.id !== roleId
+      )
+        throw invalid();
+      return value;
+    },
+    acceptPlan(input: AcceptRunPlan) {
+      assertActive();
+      if (
+        !closed(input, ['runId', 'planId', 'now', 'plan', 'expectedRoleVersions', 'expectedInput'])
+      )
+        throw invalid();
+      const previous = current(input.runId);
+      if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      validateRunCurrent({ ...previous, revision: previous.revision + 1, updatedAt: input.now });
+      const accepted = acceptRunPlan(input, previous, storage);
+      const next = validateRunCurrent({
+        ...previous,
+        revision: previous.revision + 1,
+        summary: accepted.plan.summary,
+        updatedAt: input.now,
+      });
+      storage.replaceCurrent(previous, next);
+      const entries = runPlanTimeline(accepted.plan, accepted.assignments);
+      for (const entry of entries) storage.appendTimeline(entry);
+      storage.appendChange({ type: 'run.plan-accepted', current: next, ...accepted, entries });
+      return accepted;
+    },
     bindPreparedWorkspace(input: { runId: string; path: string; baseCommit: string; now: string }) {
       assertActive();
       if (

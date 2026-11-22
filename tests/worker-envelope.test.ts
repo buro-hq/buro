@@ -19,6 +19,11 @@ import {
 } from '../core/worker-assignments.ts';
 import { WorkerEnvelopeSchema } from '../protocol/worker-tasks.ts';
 import { workerFailureForReplan } from '../core/worker-recovery.ts';
+import {
+  fixtureExecutionCapabilities,
+  fixtureExecutionSelection,
+} from './fixtures/execution-resources.ts';
+import { resolveWorkerResource } from '../core/assignment-resources.ts';
 
 const role: Role = {
   provenance: { origin: 'user' },
@@ -338,6 +343,7 @@ async function dispatchFailure(
     outOfScope?: boolean;
     unverifiable?: boolean;
     abort?: boolean;
+    abortDuringGrant?: boolean;
     overflow?: boolean;
     rejectIntent?: boolean;
     startFailure?: boolean;
@@ -356,6 +362,10 @@ async function dispatchFailure(
       : {},
   );
   const controller = new AbortController();
+  run.resources = fixtureExecutionSelection(
+    'fake',
+    fixtureExecutionCapabilities({ strictPlannedWrites: true }),
+  ).forProject('p');
   run.executionPolicySnapshot = {
     ...policy,
     scope: { ...policy.scope, mode: options.mode || 'strict' },
@@ -418,6 +428,29 @@ async function dispatchFailure(
     projectId: 'p',
     run,
     roles: [role],
+    async readAssignment(roleId) {
+      assert.equal(roleId, role.id);
+      await Promise.resolve();
+      if (options.abortDuringGrant) controller.abort();
+      return {
+        version: 1,
+        id: 'P-fixture:builder',
+        planId: 'P-fixture',
+        runId: run.id,
+        admissionId: 'A-fixture',
+        attemptId: 'T-fixture',
+        role: structuredClone(role),
+        origin: 'reused',
+        paths: ['src/session.ts'],
+        ...(run.workerTasks?.builder ? { task: structuredClone(run.workerTasks.builder) } : {}),
+        resource: resolveWorkerResource(
+          run.resources!,
+          role,
+          {},
+          options.mode === 'advisory' ? {} : { strictPlannedWrites: true },
+        ),
+      };
+    },
     workspace: { path: '/temporary/workspace', base: 'base' },
     policy: { ...policy, scope: { ...policy.scope, mode: options.mode || 'strict' } },
     runtime,
@@ -464,6 +497,16 @@ test('known incomplete and context failures qualify only after actual diff scope
     assert.equal(result.asks, 1);
     assert.equal(result.releases, 1);
   }
+});
+
+test('cancellation while awaiting the named immutable grant prevents intent, workspace reads and runtime dispatch', async () => {
+  const result = await dispatchFailure({ abortDuringGrant: true });
+  assert.equal((result.error as Error).name, 'AbortError');
+  assert.equal(result.updates, 0);
+  assert.equal(result.diffs, 0);
+  assert.equal(result.starts, 0);
+  assert.equal(result.asks, 0);
+  assert.equal(result.run.agents.length, 0);
 });
 
 test('advisory adjacent edits complete or retain known-failure recovery with persisted review evidence', async () => {

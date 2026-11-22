@@ -1,0 +1,60 @@
+{
+  "stage": "5A4b3a",
+  "date": "2026-11-22",
+  "parentCommit": "33c3c96",
+  "tests": {
+    "total": 1311,
+    "passed": 1311,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 74108.446833,
+    "log": "/private/tmp/buro-5a4b3a-final-stable-tests.log"
+  },
+  "buildTypecheck": { "passed": true, "log": "/private/tmp/buro-5a4b3a-pinned-build.log" },
+  "format": {
+    "passed": true,
+    "logs": ["/private/tmp/buro-5a4b3a-format.log", "/private/tmp/buro-5a4b3a-server-format.log"]
+  },
+  "browser": {
+    "firstProfileScenarios": 6,
+    "firstProfileLog": "/private/tmp/buro-5a4b3a-first-profile.log",
+    "projectScenarios": 17,
+    "projectLog": "/private/tmp/buro-5a4b3a-projects.log",
+    "productionDesktopMobile": true,
+    "productionLog": "/private/tmp/buro-5a4b3a-production.log",
+    "syntheticRequests": 26,
+    "nativeStarts": [],
+    "realModelRequests": 0,
+    "errors": []
+  },
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "independentReviewEvidence": {
+    "architectureFocusedPassed": 52,
+    "architectureReport": "stage5a4b3a-architecture-review-2026-11-22.md",
+    "boundaryFocusedPassed": 56,
+    "boundaryReport": "stage5a4b3a-boundary-review-2026-11-22.md",
+    "contractFocusedPassed": 39,
+    "contractReport": "stage5a4b3a-tests-evidence-2026-11-22.md",
+    "newPlanContractCases": 22,
+    "fullPlannerGrantAndDeletedHandoffFixIndependentlyVerified": true,
+    "exactPublicTimelineAndInitialAncestryFixIndependentlyVerified": true,
+    "actualNondefaultCoordinatorPinIndependentlyVerified": true,
+    "countsOverlapFullSuite": true
+  },
+  "scopeLimits": [
+    "One initial accepted plan and original assignment grant per Run; current task refinements and continuation attempts remain later owners.",
+    "File remains the sole production authority and existing ledger; fresh SQL v7 does not run the complete executor.",
+    "SQL read-only planning handoff rejects until actual session ownership is implemented.",
+    "Post-await cancellation checks are not external dispatch leases or cross-process executor ownership.",
+    "Genuine stop/attempt continuation, runtime dedup, session/effect/accounting journals, full artifacts/history, result acceptance/apply and default-none remain pending.",
+    "Synthetic browser/model replies are not live-model quality or clean-machine installation evidence; reduced beta scope and publication remain unapproved."
+  ],
+  "originalUserProjectsModified": false,
+  "outputUxPreserved": true,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}
