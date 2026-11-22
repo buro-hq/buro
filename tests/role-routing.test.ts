@@ -18,7 +18,7 @@ const runtime = (
   mechanics: Parameters<typeof fixtureCapabilities>[0] = {},
 ): RuntimeResource => ({
   id,
-  client: 'codex',
+  backendId: 'codex',
   model: id + '-model',
   configurationRevision: id + '-v1',
   local: true,
@@ -189,7 +189,7 @@ test('coordinator and reviewer preferences route independently by actual operati
 
 test('eligibility reasons and decisions depend on mechanics instead of the client label', () => {
   const saved = snapshot();
-  saved.worker = { ...weak, client: 'managed' };
+  saved.worker = { ...weak, backendId: 'managed' };
   saved.coordinator = saved.worker;
   saved.workerPool = [saved.worker, strong];
   const choices = roleResourceEligibility(saved, { immutableReview: true, readOnlySessions: true });

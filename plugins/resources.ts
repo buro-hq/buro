@@ -32,20 +32,35 @@ export const resourcesPlugin: Plugin.Object<{
   segmentEvidence?: SegmentEvidencePort;
   checks?: CheckPort;
   workerStepChecks?: WorkerStepCheckPort;
+  builtins?: boolean;
 }> = {
   name: 'execution-resources',
-  inject: ['projects', 'commands'],
+  inject: ['projects', 'commands', 'resourceContributions'],
   async apply(ctx, options) {
-    const resources = await createRuntimeResources({ ...options, projects: ctx.projects.registry });
-    ctx.effect(() => () => resources.dispose());
+    const resources = await createRuntimeResources({
+      ...options,
+      projects: ctx.projects.registry,
+      contributions: ctx.resourceContributions.catalog,
+    });
+    let drainBackends: (() => Promise<void>) | undefined;
+    ctx.effect(() => async () => {
+      try {
+        await drainBackends?.();
+      } finally {
+        await resources.dispose();
+      }
+    });
     const config = resources.configuration.snapshot();
     const defaultRuntimeId = config.profiles.find(
       (profile) => profile.id === config.defaultProfile,
     )!.coordinator;
     await ctx.plugin(runtimePlugin, {
-      runtimes: resources.runtimes,
+      runtimes: resources.takeRuntimes(),
       defaultRuntimeId,
       selection: resources.selection,
+      onReady: ({ drain }) => {
+        drainBackends = drain;
+      },
       route: (registry) =>
         new RuntimeRouter({
           registry,

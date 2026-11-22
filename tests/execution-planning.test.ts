@@ -58,7 +58,7 @@ async function fixture(
       resumeSessions: options.resumeSupported ?? false,
     }),
     id: options.client === 'codex' ? 'codex' : 'local-qwen',
-    client: options.client || 'managed',
+    backendId: options.client || 'managed',
     configurationRevision: 'frozen-resource',
     local: true,
   };

@@ -88,7 +88,7 @@ export class RuntimeRouter implements AgentRuntime {
     const identity = (resource: RuntimeResource) =>
       JSON.stringify([
         resource.id,
-        resource.client,
+        resource.backendId,
         resource.providerId,
         resource.model,
         resource.configurationRevision,

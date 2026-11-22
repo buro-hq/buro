@@ -10,7 +10,7 @@ Managed model calls within a goal also share a durable budget, independent of pe
 
 ## Configure a connection
 
-In **Settings → Execution resources → Models and connections**, use **Add API connection** or **Edit**. The Mantine form supports Ollama and DeepSeek endpoints, connection capacity, provider thinking settings and an Ollama trust choice. DeepSeek takes an environment-variable reference, not the API key itself. Existing connection IDs and provider kinds are fixed in the form; add another connection to represent a different provider.
+In **Settings → Execution resources → Models and connections**, use **Add API connection** or **Edit**. Installed provider descriptors supply the available choices. Ollama and DeepSeek have dedicated editors; other installed providers use a bounded advanced JSON configuration editor. The service validates every provider configuration. DeepSeek takes an environment-variable reference, not the API key itself. Existing connection IDs and provider registrations are fixed in the form; add another connection to represent a different provider.
 
 API endpoints must use HTTP(S), with no embedded credentials, query or fragment. DeepSeek requires HTTPS except for exact `localhost`, `127.0.0.1` or `[::1]` development endpoints. Ollama trust is explicit:
 
@@ -26,17 +26,25 @@ Every saved connection has its own revision. Edits must submit that revision; cr
 
 ## Add a model and team through the interface
 
-For an active connection, choose **Available models → Use in team**. The form creates a new execution profile and, if needed, its managed model runtime without editing JSON. Review the profile name/ID, coordinator, primary worker, independent reviewer and allowed alternative workers. The primary worker is always included in its pool. Local-only rejects native/remote choices; Hybrid explicitly permits only the selected configured routes. The form starts from the actual current profile, never invents a cloud coordinator or changes the default by itself.
+For an active connection, choose **Available models → Use in team**. The form creates a new execution profile and, if needed, its managed model runtime without editing JSON. Review the profile name/ID, coordinator, primary worker, independent reviewer and allowed alternative workers. The primary worker is always included in its pool. Local-only rejects resources outside the trusted local boundary; Hybrid explicitly permits only the selected configured routes. The form starts from the actual current profile, never invents a cloud coordinator or changes the default by itself.
 
-Existing model configurations are reused. New Ollama configurations start at a conservative 16K context / 2K output cap unless a matching configured model supplies its saved limits; advanced limits are editable. No model is downloaded, generated or probed when opening/saving the form. Discovery is explicit, and its displayed model list is tied to the connection revision so results from an old endpoint do not reappear after reconnect.
+Existing model configurations are reused. New model configurations use the installed backend’s server-authored defaults unless an existing configured instance supplies its saved settings; advanced limits are editable. No model is downloaded, generated or probed when opening/saving the form. Discovery is explicit, and its displayed model list is tied to the connection revision so results from an old endpoint do not reappear after reconnect.
 
 Saving atomically adds new IDs only and shows the profile as pending. Restart Buro, explicitly choose the new default or project override, then optionally run the model diagnostic. Existing project overrides, role preferences, defaults and frozen sessions stay intact. After selecting the profile for a project, **Team → Specialist model** offers its authorized pool. A completely new endpoint currently needs a restart before discovery and another after creating its model/profile; there is no hidden hot replacement of an executing client.
 
-The same shared API is `resources.setup.save` with `{ expectedRevision, runtimes, profile }`. `expectedRevision` is `configurationRevision` from `resources list`; it covers semantic settings and excludes command receipts/private credentials. `runtimes` contains zero to eight new managed or native definitions; `profile` names existing/new runtime IDs. Existing IDs cannot be overwritten, and failures leave no partial model/profile. Active `profiles`/`runtimes` remain separate from `configured` pending definitions. Server guards reject selecting/probing pending definitions before cached receipts or provider lookup, including concurrent queued edits. CLI: `npm run cli -- resources setup-save /path/to/setup.json`.
+The same shared API is `resources.setup.save` with `{ expectedRevision, runtimes, profile }`. `expectedRevision` is `configurationRevision` from `resources list`; it covers semantic settings and excludes command receipts/private credentials. `runtimes` contains zero to eight new registered backend definitions; `profile` names existing/new runtime IDs. Existing IDs cannot be overwritten, and failures leave no partial model/profile. Active `profiles`/`runtimes` remain separate from `configured` pending definitions. Server guards reject selecting/probing pending definitions before cached receipts or provider lookup, including concurrent queued edits. CLI: `npm run cli -- resources setup-save /path/to/setup.json`.
+
+## Installed contributions
+
+Connections use `{id, provider, config}` and runtimes use `{id, backend, config}`. Provider and backend IDs name trusted installed service registrations, not executable code or an import path. The service validates configuration with the registered parser; the CLI only validates this generic envelope. A third installed contribution uses the same configuration path as the builtins. Unregistered IDs fail validation.
+
+The factory catalog is sealed at service startup. Installing, updating or removing a contribution requires a restart; running sessions retain their frozen backend/provider revisions and grants. Configuration and model output cannot register code or claim capabilities. Plugin disposal and partial-startup cleanup remain service-owned.
+
+Use **Add execution backend** for a registered backend without a model-discovery flow. Its advanced editor accepts only a JSON object, and saving creates a separate execution profile. Settings do not execute a model or diagnostic. Providers without model listing show that limitation instead of an unusable discovery button.
 
 ## Native instances and capabilities
 
-Runtime IDs identify configured instances. Several native definitions can use `client: "codex"` with different IDs, optional `model` and `reasoningEffort`; their sessions and external thread IDs remain separate. A managed runtime can also use the ID `codex`. Its `client` field still selects the managed adapter. Native instances share the host-configured executable/launcher and may override its model/reasoning defaults. Leaving the model unspecified records no guessed model identity.
+Runtime IDs identify configured instances. Several definitions can use `backend: "codex"` with different IDs and optional `config.model` and `config.reasoningEffort`; their sessions and external thread IDs remain separate. A managed runtime can also use the ID `codex`. Its `backend` registration still selects the managed adapter; instance names never choose execution mechanics. Native instances share the host-configured executable/launcher and may override its model/reasoning defaults. Leaving the model unspecified records no guessed model identity.
 
 The service publishes each registered backend's explicit, versioned capabilities with its resource metadata. Saved sessions must match that trusted descriptor and configuration before another operation. Metadata supplied by a model cannot enable tools-free turns, immutable review or cancellation. Native tools-free turns, host-owned tool hooks and strict planned-write prevention remain unavailable. The managed broker supports strict writes through its bounded source tools; strict sessions cannot execute agent commands or intermediate checks against mutable source. Final isolated acceptance checks and fresh review still run.
 
@@ -68,11 +76,13 @@ Omit the revision only for a new ID; editing uses that connection's `revision` f
 ```json
 {
   "id": "ollama-rtx",
-  "kind": "ollama",
-  "endpoint": "http://192.168.50.10:11434",
-  "trust": "private-network",
-  "capacity": 1,
-  "think": false
+  "provider": "ollama",
+  "config": {
+    "endpoint": "http://192.168.50.10:11434",
+    "trust": "private-network",
+    "capacity": 1,
+    "think": false
+  }
 }
 ```
 
@@ -85,33 +95,43 @@ For local execution, add a managed runtime and profile to the private configurat
   "connections": [
     {
       "id": "ollama",
-      "kind": "ollama",
-      "endpoint": "http://127.0.0.1:11434",
-      "trust": "auto",
-      "capacity": 1,
-      "think": false
+      "provider": "ollama",
+      "config": {
+        "endpoint": "http://127.0.0.1:11434",
+        "trust": "auto",
+        "capacity": 1,
+        "think": false
+      }
     },
     {
       "id": "deepseek",
-      "kind": "deepseek",
-      "endpoint": "https://api.deepseek.com",
-      "apiKeyEnv": "DEEPSEEK_API_KEY",
-      "capacity": 2
+      "provider": "deepseek",
+      "config": {
+        "endpoint": "https://api.deepseek.com",
+        "apiKeyEnv": "DEEPSEEK_API_KEY",
+        "capacity": 2
+      }
     }
   ],
   "runtimes": [
-    { "id": "codex", "client": "codex" },
+    {
+      "id": "codex",
+      "backend": "codex",
+      "config": {}
+    },
     {
       "id": "local-coder",
-      "client": "managed",
-      "connectionId": "ollama",
-      "model": "qwen3:4b-instruct-2507-q4_K_M",
-      "limits": {
-        "contextTokens": 16384,
-        "maxOutputTokens": 4096,
-        "maxRequestsPerTurn": 12,
-        "maxToolCallsPerTurn": 24,
-        "maxSessionRequests": 100
+      "backend": "managed",
+      "config": {
+        "connectionId": "ollama",
+        "model": "qwen3:4b-instruct-2507-q4_K_M",
+        "limits": {
+          "contextTokens": 16384,
+          "maxOutputTokens": 4096,
+          "maxRequestsPerTurn": 12,
+          "maxToolCallsPerTurn": 24,
+          "maxSessionRequests": 100
+        }
       }
     }
   ],
@@ -157,7 +177,7 @@ Provide the key through the daemon process environment named by `apiKeyEnv`, or 
 npm run cli -- resources models deepseek
 ```
 
-Add a managed runtime referencing `connectionId: "deepseek"` and a model ID returned by that command. Its `limits` use the same schema as the local runtime. A profile can then assign the DeepSeek runtime to coordinator/reviewer and `local-coder` to workers. For example, with a configured runtime ID `cloud-coder`:
+Add a `backend: "managed"` runtime whose config references `connectionId: "deepseek"` and a model ID returned by that command. Its `config.limits` use the same schema as the local runtime. A profile can then assign the DeepSeek runtime to coordinator/reviewer and `local-coder` to workers. For example, with a configured runtime ID `cloud-coder`:
 
 ```json
 {

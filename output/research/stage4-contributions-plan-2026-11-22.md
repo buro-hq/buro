@@ -1,6 +1,6 @@
 # Stage 4: trusted contributions
 
-Status: inspected after 3B2 (`a33f112`); 4A empty service and project application/store extraction are in progress. This document is a proposal, not a claim that these registries already exist. No live model or external endpoint was used.
+Status: 4A is committed (`60c3959`). Resource contribution registries and descriptor-based UI/CLI in 4B1 are implemented and undergoing final validation. Sections 4B2 and 4C remain the implementation plan. Historical barriers below describe the starting point before 4B1. No live model or external endpoint was used.
 
 ## Current extension barriers
 

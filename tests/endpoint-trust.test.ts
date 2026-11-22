@@ -184,7 +184,7 @@ test('local-only selection permits explicit LAN trust and frozen sessions reject
     return {
       capabilities: fixtureCapabilities(),
       id: 'rtx-model',
-      client: 'managed',
+      backendId: 'managed',
       providerId: 'rtx',
       model: 'qwen',
       local: provider.local,

@@ -11,7 +11,7 @@ import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 
 const resource = (id: string): RuntimeResource => ({
   id,
-  client: 'codex',
+  backendId: 'codex',
   local: true,
   configurationRevision: id + '-v1',
   capabilities: fixtureCapabilities({

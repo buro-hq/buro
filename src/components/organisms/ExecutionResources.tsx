@@ -4,6 +4,8 @@ import type {
   ResourceCatalog,
   ResourceConnection,
   ResourceSetupInput,
+  ResourceModel,
+  ModelRuntimeTemplate,
 } from '../../../protocol/resources.ts';
 import { useResourceCatalog } from '../../features/resources/useResourceCatalog';
 import { t } from '../../i18n/index.ts';
@@ -15,7 +17,9 @@ export function ExecutionResources() {
     useResourceCatalog();
   const [busy, setBusy] = useState('');
   const [actionError, setActionError] = useState('');
-  const [models, setModels] = useState<Record<string, { revision: string; models: string[] }>>({});
+  const [models, setModels] = useState<
+    Record<string, { revision: string; models: ResourceModel[] }>
+  >({});
   const [editing, setEditing] = useState<ResourceCatalog['connections'][number] | 'new' | null>(
     null,
   );
@@ -23,8 +27,9 @@ export function ExecutionResources() {
   const [catalogStale, setCatalogStale] = useState(false);
   const [setup, setSetup] = useState<{
     catalog: ResourceCatalog;
-    connectionId: string;
-    model: string;
+    connectionId?: string;
+    model?: string;
+    templates?: ModelRuntimeTemplate[];
   } | null>(null);
   const [setupSaved, setSetupSaved] = useState<string | null>(null);
   if (!supported) return null;
@@ -99,13 +104,13 @@ export function ExecutionResources() {
     setBusy(connectionId);
     setActionError('');
     try {
-      const result = await client!.command<{ id: string }[]>({
+      const result = await client!.command<ResourceModel[]>({
         method: 'resources.models',
         params: { connectionId },
       });
       setModels((current) => ({
         ...current,
-        [connectionId]: { revision, models: result.map((model) => model.id) },
+        [connectionId]: { revision, models: result },
       }));
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
@@ -164,7 +169,7 @@ export function ExecutionResources() {
                 {canConfigure && (
                   <Group justify="space-between" gap="sm">
                     <Text size="xs" c="dimmed" style={{ flex: '1 1 200px' }}>
-                      {t('Connect Ollama on your computer or a server, or use DeepSeek API.')}
+                      {t('Configure an installed model provider or execution backend.')}
                     </Text>
                     <Button
                       variant="light"
@@ -176,6 +181,17 @@ export function ExecutionResources() {
                       {t('Add API connection')}
                     </Button>
                   </Group>
+                )}
+                {canSetup && catalog && (
+                  <Button
+                    variant="default"
+                    size="xs"
+                    mih={44}
+                    disabled={!!busy || !catalog.backends.length}
+                    onClick={() => setSetup({ catalog: structuredClone(catalog) })}
+                  >
+                    {t('Add execution backend')}
+                  </Button>
                 )}
                 {saved && (
                   <Text role="status" size="sm" c="dimmed">
@@ -224,7 +240,9 @@ export function ExecutionResources() {
                     <Group justify="space-between" wrap="wrap">
                       <div style={{ minWidth: 0, flex: '1 1 180px' }}>
                         <Text size="sm" fw={600} style={{ overflowWrap: 'anywhere' }}>
-                          {connection.id} · {connection.kind === 'ollama' ? 'Ollama' : 'DeepSeek'}
+                          {connection.id} ·{' '}
+                          {catalog.providers.find((item) => item.id === connection.provider)
+                            ?.label || connection.provider}
                         </Text>
                         <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
                           {connection.endpoint}
@@ -241,7 +259,7 @@ export function ExecutionResources() {
                             {t('Restart required')}
                           </Badge>
                         )}
-                        {connection.kind === 'deepseek' && !connection.credentialConfigured && (
+                        {!connection.credentialConfigured && (
                           <Badge variant="light" color="orange">
                             {t('Key required')}
                           </Badge>
@@ -255,7 +273,8 @@ export function ExecutionResources() {
                             !!busy ||
                             catalogStale ||
                             !!connection.restartRequired ||
-                            (connection.kind === 'deepseek' && !connection.credentialConfigured)
+                            !connection.modelListing ||
+                            !connection.credentialConfigured
                           }
                           onClick={() => void discover(connection.id)}
                         >
@@ -275,6 +294,13 @@ export function ExecutionResources() {
                         )}
                       </Group>
                     </Group>
+                    {!connection.modelListing && (
+                      <Text size="xs" c="dimmed">
+                        {t(
+                          'Model listing is unavailable for this provider. Configure a backend directly.',
+                        )}
+                      </Text>
+                    )}
                     {models[connection.id]?.revision === connection.revision &&
                       !connection.restartRequired &&
                       !catalogStale && (
@@ -282,17 +308,18 @@ export function ExecutionResources() {
                           {models[connection.id].models.length ? (
                             models[connection.id].models.map((model) => (
                               <Group
-                                key={model}
+                                key={model.id}
                                 justify="space-between"
                                 wrap="wrap"
-                                data-model-id={model}
+                                data-model-id={model.id}
                               >
                                 <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
-                                  {model}
+                                  {model.id}
                                 </Text>
                                 {canSetup &&
                                   catalog.configurationRevision &&
-                                  catalog.configured && (
+                                  catalog.configured &&
+                                  !!model.templates?.length && (
                                     <Button
                                       variant="light"
                                       size="xs"
@@ -302,7 +329,8 @@ export function ExecutionResources() {
                                         setSetup({
                                           catalog: structuredClone(catalog),
                                           connectionId: connection.id,
-                                          model,
+                                          model: model.id,
+                                          templates: structuredClone(model.templates),
                                         })
                                       }
                                     >
@@ -312,9 +340,7 @@ export function ExecutionResources() {
                               </Group>
                             ))
                           ) : (
-                            <Text size="xs">
-                              {t('No installed models. Add a model in Ollama, then refresh.')}
-                            </Text>
+                            <Text size="xs">{t('No models were returned by this provider.')}</Text>
                           )}
                         </Stack>
                       )}
@@ -357,7 +383,7 @@ export function ExecutionResources() {
                             !!busy ||
                             catalogStale ||
                             !!connection?.restartRequired ||
-                            (connection?.kind === 'deepseek' && !connection.credentialConfigured)
+                            (!!connection && !connection.credentialConfigured)
                           }
                           onClick={() => void check(runtime.id)}
                         >
@@ -383,6 +409,7 @@ export function ExecutionResources() {
         <ApiConnectionForm
           key={editedConnection?.id || 'new'}
           opened
+          providers={catalog?.providers || []}
           connection={editedConnection}
           saving={busy === 'save-connection'}
           onClose={() => setEditing(null)}
@@ -391,7 +418,7 @@ export function ExecutionResources() {
       )}
       {setup && (
         <ModelTeamSetupForm
-          key={setup.connectionId + ':' + setup.model}
+          key={(setup.connectionId || 'backend') + ':' + (setup.model || '')}
           {...setup}
           saving={busy === 'setup'}
           onClose={() => setSetup(null)}

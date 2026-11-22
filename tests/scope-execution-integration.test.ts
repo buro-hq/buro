@@ -179,7 +179,7 @@ for (const mode of ['advisory', 'strict'] as const)
     });
     const resource: RuntimeResource = {
       id: managed.id,
-      client: 'managed',
+      backendId: 'managed',
       model: 'fixture',
       providerId: provider.id,
       local: true,

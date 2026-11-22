@@ -237,24 +237,24 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
           connections: [
             {
               id: 'ollama',
-              kind: 'ollama',
-              endpoint: 'http://127.0.0.1:11434',
-              capacity: 1,
-              think: false,
+              provider: 'ollama',
+              config: { endpoint: 'http://127.0.0.1:11434', capacity: 1, think: false },
             },
           ],
           runtimes: [
             {
               id: 'qwen-local',
-              client: 'managed',
-              connectionId: 'ollama',
-              model,
-              limits: {
-                contextTokens: 16384,
-                maxOutputTokens: 4096,
-                maxRequestsPerTurn: 12,
-                maxToolCallsPerTurn: 24,
-                maxSessionRequests: 64,
+              backend: 'managed',
+              config: {
+                connectionId: 'ollama',
+                model,
+                limits: {
+                  contextTokens: 16384,
+                  maxOutputTokens: 4096,
+                  maxRequestsPerTurn: 12,
+                  maxToolCallsPerTurn: 24,
+                  maxSessionRequests: 64,
+                },
               },
             },
           ],

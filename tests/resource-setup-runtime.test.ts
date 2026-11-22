@@ -24,7 +24,11 @@ const initialConfiguration = () =>
     ...defaultResources(),
     runtimes: [
       ...defaultResources().runtimes,
-      { id: 'local', client: 'managed', connectionId: 'ollama', model: 'fixture-small' },
+      {
+        id: 'local',
+        backend: 'managed',
+        config: { connectionId: 'ollama', model: 'fixture-small' },
+      },
     ],
     profiles: [
       ...defaultResources().profiles,
@@ -144,7 +148,11 @@ async function setup(
   return ResourceSetupInputSchema.parse({
     expectedRevision: catalog.configurationRevision,
     runtimes: [
-      { id: 'new-model', client: 'managed', connectionId: 'ollama', model: 'fixture-new' },
+      {
+        id: 'new-model',
+        backend: 'managed',
+        config: { connectionId: 'ollama', model: 'fixture-new' },
+      },
     ],
     profile: {
       id,
@@ -168,11 +176,14 @@ async function editConnection(
     credentialConfigured: _credential,
     activeEndpoint: _active,
     restartRequired: _pending,
+    local: _local,
+    endpoint: _endpoint,
+    modelListing: _modelListing,
     ...definition
   } = connection;
-  assert.equal(definition.kind, 'ollama');
+  assert.equal(definition.provider, 'ollama');
   return resources.saveConnection(
-    { ...definition, kind: 'ollama', endpoint, trust },
+    { ...definition, provider: 'ollama', config: { ...definition.config, endpoint, trust } },
     revision,
     meta('endpoint-' + endpoint + '-' + trust),
   );
@@ -337,10 +348,16 @@ test('adding a setup leaves existing owned routes and their model identity usabl
 test('local-only setup requires explicit LAN trust and never treats a remote model as local by saving a profile', async (t) => {
   const f = await fixture(t),
     active = await f.create();
-  await editConnection(active, 'http://10.12.0.3:11434');
-  await assert.rejects(active.saveSetup(await setup(active), meta('untrusted-lan')), {
+  const originalConnection = structuredClone(
+    active.configuration.snapshot().connections.find((connection) => connection.id === 'ollama'),
+  );
+  await assert.rejects(editConnection(active, 'http://10.12.0.3:11434'), {
     code: 'DATA_POLICY_BLOCKED',
   });
+  assert.deepEqual(
+    active.configuration.snapshot().connections.find((connection) => connection.id === 'ollama'),
+    originalConnection,
+  );
   assert.equal(
     active.configuration.snapshot().profiles.some((profile) => profile.id === 'new-team'),
     false,
@@ -417,10 +434,8 @@ test('queued profile selection cannot replay a receipt before an earlier connect
   const edit = active.saveConnection(
     {
       id: 'ollama',
-      kind: 'ollama',
-      endpoint: 'http://10.12.0.4:11434',
-      trust: 'private-network',
-      capacity: 1,
+      provider: 'ollama',
+      config: { endpoint: 'http://10.12.0.4:11434', trust: 'private-network', capacity: 1 },
     },
     connection.revision,
     meta('edit'),
@@ -482,10 +497,8 @@ test('metadata and cached probe admission wait for a preceding queued connection
   const edit = active.saveConnection(
     {
       id: 'ollama',
-      kind: 'ollama',
-      endpoint: 'http://10.12.0.5:11434',
-      trust: 'private-network',
-      capacity: 1,
+      provider: 'ollama',
+      config: { endpoint: 'http://10.12.0.5:11434', trust: 'private-network', capacity: 1 },
     },
     connection.revision,
     meta('edit-before-admission'),

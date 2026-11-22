@@ -1,3 +1,4 @@
+import { testResourceContributions } from './fixtures/resource-contributions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -28,7 +29,11 @@ async function fixture(t: any) {
       },
     ],
   });
-  const configuration = new FileResourceConfiguration(directory, initial);
+  const configuration = new FileResourceConfiguration(
+    directory,
+    initial,
+    testResourceContributions(),
+  );
   await configuration.init();
   return { directory, configuration };
 }
@@ -39,7 +44,7 @@ test('resource default changes are serialized and replaying an old receipt never
   await configuration.use('second', 'choose-codex', 'codex');
   assert.deepEqual(await configuration.use('first', 'choose-alternate', 'alternate'), first);
   assert.equal(configuration.snapshot().defaultProfile, 'codex');
-  const restored = await FileResourceConfiguration.open(directory);
+  const restored = await FileResourceConfiguration.open(directory, testResourceContributions());
   assert.deepEqual(await restored.use('first', 'choose-alternate', 'alternate'), first);
   assert.equal(restored.snapshot().defaultProfile, 'codex');
   await assert.rejects(restored.use('first', 'changed-payload', 'codex'), {
@@ -58,7 +63,7 @@ test('simultaneous default changes retain both receipts and the last queued sele
     results.map((result) => result.profileId),
     ['alternate', 'codex', 'alternate'],
   );
-  const restored = await FileResourceConfiguration.open(directory);
+  const restored = await FileResourceConfiguration.open(directory, testResourceContributions());
   assert.equal(restored.snapshot().defaultProfile, 'codex');
   assert.deepEqual(Object.keys(restored.snapshot().receipts).sort(), ['one', 'two']);
 });
@@ -105,28 +110,35 @@ test('configuration validation rejects duplicate IDs, dangling runtime reference
     }).success,
     false,
   );
-  assert.equal(
-    ResourceConfigurationSchema.safeParse({
-      ...original,
-      runtimes: [{ id: 'local', client: 'managed', connectionId: 'missing', model: 'small' }],
-    }).success,
-    false,
+  assert.throws(
+    () =>
+      testResourceContributions().validateConfiguration({
+        ...original,
+        runtimes: [
+          ...original.runtimes,
+          { id: 'local', backend: 'managed', config: { connectionId: 'missing', model: 'small' } },
+        ],
+      }),
+    { code: 'RESOURCE_DEPENDENCY_UNAVAILABLE' },
   );
-  assert.equal(
-    ResourceConfigurationSchema.safeParse({
-      ...original,
-      runtimes: [
-        ...original.runtimes,
-        {
-          id: 'local',
-          client: 'managed',
-          connectionId: 'ollama',
-          model: 'small',
-          limits: { contextTokens: 2048, maxOutputTokens: 2048 },
-        },
-      ],
-    }).success,
-    false,
+  assert.throws(
+    () =>
+      testResourceContributions().validateConfiguration({
+        ...original,
+        runtimes: [
+          ...original.runtimes,
+          {
+            id: 'local',
+            backend: 'managed',
+            config: {
+              connectionId: 'ollama',
+              model: 'small',
+              limits: { contextTokens: 2048, maxOutputTokens: 2048 },
+            },
+          },
+        ],
+      }),
+    { code: 'INVALID_RESOURCE_CONFIGURATION' },
   );
 });
 
@@ -138,9 +150,12 @@ test('private configuration refuses symlink storage before creating files outsid
   const outside = path.join(root, 'outside');
   await fs.mkdir(outside);
   await fs.symlink(outside, path.join(root, 'link'));
-  await assert.rejects(FileResourceConfiguration.open(path.join(root, 'link', 'nested')), {
-    code: 'UNSAFE_CHECKPOINT',
-  });
+  await assert.rejects(
+    FileResourceConfiguration.open(path.join(root, 'link', 'nested'), testResourceContributions()),
+    {
+      code: 'UNSAFE_CHECKPOINT',
+    },
+  );
   assert.deepEqual(await fs.readdir(outside), []);
 });
 
@@ -148,14 +163,16 @@ test('managed-only configurations may use any ID including codex, without a nati
   const original = defaultResources();
   const parsed = ResourceConfigurationSchema.parse({
     ...original,
-    runtimes: [{ id: 'codex', client: 'managed', connectionId: 'ollama', model: 'small' }],
+    runtimes: [
+      { id: 'codex', backend: 'managed', config: { connectionId: 'ollama', model: 'small' } },
+    ],
   });
   assert.equal(parsed.runtimes.length, 1);
-  assert.equal(parsed.runtimes[0].client, 'managed');
+  assert.equal(parsed.runtimes[0].backend, 'managed');
   assert.equal(
     ResourceConfigurationSchema.safeParse({
       ...parsed,
-      runtimes: [parsed.runtimes[0], { id: 'codex', client: 'codex' }],
+      runtimes: [parsed.runtimes[0], { id: 'codex', backend: 'codex', config: {} }],
     }).success,
     false,
   );

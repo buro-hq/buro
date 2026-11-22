@@ -59,16 +59,16 @@ function fixture(
   t: { after: (fn: () => Promise<void>) => void },
   definitions: {
     id: string;
-    client: RuntimeResource['client'];
+    backendId: RuntimeResource['backendId'];
     capabilities: BackendCapabilities;
   }[],
 ) {
   const backends = definitions.map(({ id, capabilities }) => fakeBackend(id, capabilities));
   const registry = new RuntimeCatalog();
   for (const backend of backends) registry.register(backend.runtime);
-  const resources: RuntimeResource[] = definitions.map(({ id, client, capabilities }) => ({
+  const resources: RuntimeResource[] = definitions.map(({ id, backendId, capabilities }) => ({
     id,
-    client,
+    backendId,
     configurationRevision: id + '-configuration-v1',
     local: true,
     capabilities: structuredClone(capabilities),
@@ -164,8 +164,8 @@ function knownRejection(error: unknown, code: string) {
 test('the same declared mechanics admit tools-free turns under arbitrary backend IDs and client labels', async (t) => {
   const capabilities = fixtureCapabilities({ structuredTurns: true, toolsFreeTurns: true });
   const f = fixture(t, [
-    { id: 'orchid-engine', client: 'codex', capabilities },
-    { id: 'quartz-engine', client: 'managed', capabilities },
+    { id: 'orchid-engine', backendId: 'codex', capabilities },
+    { id: 'quartz-engine', backendId: 'managed', capabilities },
   ]);
   const router = f.create();
   const handles: string[] = [];
@@ -184,7 +184,7 @@ test('a managed label and a turn method do not bypass tools-free admission', asy
   const f = fixture(t, [
     {
       id: 'managed-looking-client',
-      client: 'managed',
+      backendId: 'managed',
       capabilities: fixtureCapabilities({ structuredTurns: true }),
     },
   ]);
@@ -210,7 +210,7 @@ test('post-dispatch backend failures remain unknown rather than becoming preflig
     const f = fixture(t, [
       {
         id: 'independent-client',
-        client: 'managed',
+        backendId: 'managed',
         capabilities: fixtureCapabilities({ structuredTurns: true, toolsFreeTurns: true }),
       },
     ]);
@@ -228,7 +228,7 @@ test('post-dispatch backend failures remain unknown rather than becoming preflig
 
 test('unsupported read-only sessions reject before durable starting intent or backend effects', async (t) => {
   const f = fixture(t, [
-    { id: 'review-client', client: 'managed', capabilities: fixtureCapabilities() },
+    { id: 'review-client', backendId: 'managed', capabilities: fixtureCapabilities() },
   ]);
   knownRejection(
     await rejectionOf(f.create().start({ ...startInput(), readOnly: true, purpose: 'review' })),
@@ -243,7 +243,7 @@ test('a forged saved capability descriptor cannot dispatch or resume even when m
   const f = fixture(t, [
     {
       id: 'custom-session-client',
-      client: 'codex',
+      backendId: 'codex',
       capabilities: fixtureCapabilities({ structuredTurns: true, resumeSessions: true }),
     },
   ]);
@@ -271,7 +271,7 @@ test('configuration revision changes block an existing route before turn or resu
   const f = fixture(t, [
     {
       id: 'revisioned-client',
-      client: 'managed',
+      backendId: 'managed',
       capabilities: fixtureCapabilities({
         structuredTurns: true,
         toolsFreeTurns: true,
@@ -297,7 +297,7 @@ test('a historical Codex thread without a durable route cannot acquire a fallbac
   const f = fixture(t, [
     {
       id: 'codex',
-      client: 'codex',
+      backendId: 'codex',
       capabilities: fixtureCapabilities({ resumeSessions: true }),
     },
   ]);
@@ -337,7 +337,7 @@ test('an explicit change to strict policy cannot resume an existing unsupported 
   const f = fixture(t, [
     {
       id: 'opaque-client',
-      client: 'codex',
+      backendId: 'codex',
       capabilities: fixtureCapabilities({ resumeSessions: true }),
     },
   ]);
@@ -364,7 +364,7 @@ test('strict project scope still permits an eligible read-only inspection sessio
   const f = fixture(t, [
     {
       id: 'inspector',
-      client: 'codex',
+      backendId: 'codex',
       capabilities: fixtureCapabilities({ readOnlySessions: true }),
     },
   ]);

@@ -28,9 +28,8 @@ const initialResources = () =>
       ...defaultResources().runtimes,
       {
         id: 'existing-worker',
-        client: 'managed',
-        connectionId: 'ollama',
-        model: 'fixture-existing',
+        backend: 'managed',
+        config: { connectionId: 'ollama', model: 'fixture-existing' },
       },
     ],
     profiles: [
@@ -134,7 +133,11 @@ function setup(revision: string, suffix = 'new') {
   return ResourceSetupInputSchema.parse({
     expectedRevision: revision,
     runtimes: [
-      { id: runtimeId, client: 'managed', connectionId: 'ollama', model: 'fixture-' + suffix },
+      {
+        id: runtimeId,
+        backend: 'managed',
+        config: { connectionId: 'ollama', model: 'fixture-' + suffix },
+      },
     ],
     profile: {
       id: suffix + '-team',
@@ -193,8 +196,8 @@ test('two real clients receive the setup capability and identical active/configu
   );
   assert.equal(
     first.connections.find(
-      (connection) => connection.id === 'deepseek' && connection.kind === 'deepseek',
-    )?.apiKeyEnv,
+      (connection) => connection.id === 'deepseek' && connection.provider === 'deepseek',
+    )?.config.apiKeyEnv,
     'DEEPSEEK_API_KEY',
   );
   assert.ok(!JSON.stringify([first, second, a.snapshot(), b.snapshot()]).includes(SECRET));
@@ -310,15 +313,32 @@ test('invalid references, duplicate IDs and plaintext secret fields are rejected
       code: 'BAD_REQUEST',
     },
     {
-      params: { ...input, runtimes: [{ ...input.runtimes[0], connectionId: 'missing' }] },
-      code: 'RESOURCE_SETUP_REFERENCE',
+      params: {
+        ...input,
+        runtimes: [
+          { ...input.runtimes[0], config: { ...input.runtimes[0].config, apiKey: SECRET } },
+        ],
+      },
+      code: 'INVALID_RESOURCE_CONFIGURATION',
+    },
+    {
+      params: {
+        ...input,
+        runtimes: [
+          {
+            ...input.runtimes[0],
+            config: { ...input.runtimes[0].config, connectionId: 'missing' },
+          },
+        ],
+      },
+      code: 'RESOURCE_DEPENDENCY_UNAVAILABLE',
     },
     {
       params: { ...input, profile: { ...input.profile, coordinator: 'missing' } },
-      code: 'RESOURCE_SETUP_REFERENCE',
+      code: 'BAD_REQUEST',
     },
     {
-      params: { ...input, runtimes: [{ id: 'codex', client: 'codex' }] },
+      params: { ...input, runtimes: [{ id: 'codex', backend: 'codex', config: {} }] },
       code: 'RESOURCE_SETUP_ID_EXISTS',
     },
   ];
@@ -380,8 +400,8 @@ test('machine setup preserves role preferences, project override, native binding
   );
   assert.equal(afterCatalog.defaultProfile, beforeCatalog.defaultProfile);
   assert.deepEqual(
-    afterCatalog.runtimes.find((item) => item.client === 'codex'),
-    beforeCatalog.runtimes.find((item) => item.client === 'codex'),
+    afterCatalog.runtimes.find((item) => item.backendId === 'codex'),
+    beforeCatalog.runtimes.find((item) => item.backendId === 'codex'),
   );
   assert.deepEqual(afterCatalog.selected, beforeCatalog.selected);
   assert.ok(!JSON.stringify([afterCatalog, afterSnapshot]).includes(SECRET));

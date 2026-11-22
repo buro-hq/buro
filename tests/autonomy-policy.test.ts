@@ -15,7 +15,7 @@ import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 
 const managed: RuntimeResource = {
   id: 'local-model',
-  client: 'managed',
+  backendId: 'managed',
   providerId: 'ollama',
   model: 'fixture',
   local: true,
@@ -24,7 +24,7 @@ const managed: RuntimeResource = {
 };
 const native: RuntimeResource = {
   id: 'native-instance',
-  client: 'codex',
+  backendId: 'codex',
   local: false,
   configurationRevision: 'native-v1',
   capabilities: fixtureCapabilities(),
@@ -130,7 +130,7 @@ test('actual common role decisions win over defaults and historical sessions wit
       .runtimeId,
     native.id,
   );
-  const nativeNamedManaged = { ...native, id: 'managed', client: 'managed' as const };
+  const nativeNamedManaged = { ...native, id: 'managed', backendId: 'managed' as const };
   const resources = {
     profileId: 'native',
     policy: 'hybrid' as const,

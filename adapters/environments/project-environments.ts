@@ -52,7 +52,7 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
         resources.worker,
         resources.reviewer,
         ...(resources.workerPool || []),
-      ].some((resource) => resource.client === 'managed');
+      ].some((resource) => resource.capabilities.hostToolLifecycle);
     let world;
     try {
       world = await this.executors.register(input.workspace, root, config, input.signal, {

@@ -18,7 +18,7 @@ const instructions =
   'You coordinate a scoped repository change. Preserve the complete user goal, acceptance criteria, fixed model preferences and path restrictions. Planning produces a formal proposal; implementation begins only after service validation. A passing public check alone never substitutes for independent review. Keep uncertainty explicit and do not invent file contents, repository findings or completed checks.';
 const planningPolicy = selectPlanningPolicy({
   id: 'fixture-planner',
-  client: 'managed',
+  backendId: 'managed',
   local: true,
   configurationRevision: 'fixture-v1',
   capabilities: fixtureCapabilities({ structuredTurns: true, toolsFreeTurns: true }),
@@ -60,7 +60,7 @@ const source = () => ({
     {
       capabilities: fixtureCapabilities(),
       id: 'local-qwen',
-      client: 'managed' as const,
+      backendId: 'managed' as const,
       providerId: 'ollama',
       model: 'qwen3:4b',
       local: true,

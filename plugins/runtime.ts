@@ -39,21 +39,46 @@ export const runtimePlugin: Plugin.Object<{
   defaultRuntimeId: string;
   selection?: RuntimeSelection;
   route?: (registry: RuntimeCatalog) => AgentRuntime;
+  onReady?: (lifecycle: { drain: () => Promise<void> }) => void;
 }> = {
   name: 'agent-runtimes',
   async apply(ctx, options) {
     const registry = new RuntimeCatalog();
     let routed: AgentRuntime | undefined;
-    ctx.effect(() => async () => {
-      try {
-        await routed?.dispose();
-      } finally {
-        await registry.dispose();
+    const pending = new Set(options.runtimes);
+    let disposal: Promise<void> | undefined;
+    const dispose = () =>
+      (disposal ??= (async () => {
+        const errors: unknown[] = [];
+        try {
+          await routed?.dispose();
+        } catch (error) {
+          errors.push(error);
+        }
+        const results = await Promise.allSettled([
+          registry.dispose(),
+          ...[...pending].map((runtime) => Promise.resolve().then(() => runtime.dispose())),
+        ]);
+        errors.push(
+          ...results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])),
+        );
+        if (errors.length) throw new AggregateError(errors, 'Runtime cleanup failed.');
+      })());
+    ctx.effect(() => dispose);
+    try {
+      if (pending.size !== options.runtimes.length)
+        throw Error('A runtime instance cannot be owned twice.');
+      for (const adapter of options.runtimes) {
+        registry.register(adapter);
+        pending.delete(adapter);
       }
-    });
-    for (const adapter of options.runtimes) registry.register(adapter);
-    registry.get(options.defaultRuntimeId);
-    routed = options.route?.(registry);
-    new RuntimeService(ctx, registry, options.defaultRuntimeId, options.selection, routed);
+      registry.get(options.defaultRuntimeId);
+      routed = options.route?.(registry);
+      new RuntimeService(ctx, registry, options.defaultRuntimeId, options.selection, routed);
+      options.onReady?.({ drain: dispose });
+    } catch (error) {
+      await dispose().catch(() => {});
+      throw error;
+    }
   },
 };

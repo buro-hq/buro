@@ -309,7 +309,10 @@ async function fixture(
   const originalHead = (await git(['rev-parse', 'HEAD'])).stdout.trim();
   const host = await createHost({
     projects: [
-      { storageAddress: directory, project: { id: 'p', name: 'HTTP fixture project', root, managed: true } },
+      {
+        storageAddress: directory,
+        project: { id: 'p', name: 'HTTP fixture project', root, managed: true },
+      },
     ],
   });
   const profile = ProjectProfileSchema.parse({
@@ -356,36 +359,32 @@ async function fixture(
     version: 1,
     defaultProfile: mode,
     connections: [
-      { id: 'ollama', kind: 'ollama', endpoint: 'http://127.0.0.1:11434' },
+      { id: 'ollama', provider: 'ollama', config: { endpoint: 'http://127.0.0.1:11434' } },
       {
         id: 'deepseek',
-        kind: 'deepseek',
-        endpoint: 'https://api.deepseek.fixture',
-        apiKeyEnv: 'RESOURCE_WORKFLOW_API_KEY',
-        thinking: 'enabled',
+        provider: 'deepseek',
+        config: {
+          endpoint: 'https://api.deepseek.fixture',
+          apiKeyEnv: 'RESOURCE_WORKFLOW_API_KEY',
+          thinking: 'enabled',
+        },
       },
     ],
     runtimes: [
       {
         id: 'local-worker',
-        client: 'managed',
-        connectionId: 'ollama',
-        model: 'local-code',
-        limits,
+        backend: 'managed',
+        config: { connectionId: 'ollama', model: 'local-code', limits },
       },
       {
         id: 'local-reviewer',
-        client: 'managed',
-        connectionId: 'ollama',
-        model: 'local-review',
-        limits,
+        backend: 'managed',
+        config: { connectionId: 'ollama', model: 'local-review', limits },
       },
       {
         id: 'cloud-coordinator',
-        client: 'managed',
-        connectionId: 'deepseek',
-        model: 'cloud-code',
-        limits,
+        backend: 'managed',
+        config: { connectionId: 'deepseek', model: 'cloud-code', limits },
       },
     ],
     profiles: [
@@ -1001,9 +1000,9 @@ for (const mode of ['ollama', 'deepseek', 'mixed'] as const)
       const calls = f.generations.filter((generation) => generation.phase === phase);
       assert.ok(calls.length > 0, phase);
       const runtime = expected(runtimeId);
-      assert.equal(runtime.client, 'managed');
-      if (runtime.client === 'managed')
-        assert.ok(calls.every((generation) => generation.model === runtime.model));
+      assert.equal(runtime.backend, 'managed');
+      if (runtime.backend === 'managed')
+        assert.ok(calls.every((generation) => generation.model === runtime.config.model));
     }
     if (mode === 'ollama')
       assert.ok(

@@ -48,7 +48,7 @@ function fixture(t: any) {
   const resources: RuntimeResource[] = [
     {
       id: 'local-a',
-      client: 'managed',
+      backendId: 'managed',
       providerId: 'ollama',
       model: 'small-a',
       configurationRevision: 'a1',
@@ -57,7 +57,7 @@ function fixture(t: any) {
     },
     {
       id: 'local-b',
-      client: 'managed',
+      backendId: 'managed',
       providerId: 'ollama',
       model: 'small-b',
       configurationRevision: 'b1',
@@ -66,7 +66,7 @@ function fixture(t: any) {
     },
     {
       id: 'cloud',
-      client: 'managed',
+      backendId: 'managed',
       providerId: 'deepseek',
       model: 'remote',
       configurationRevision: 'c1',

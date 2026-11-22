@@ -16,7 +16,7 @@ import {
 
 const coordinator = {
   id: 'custom-coordinator',
-  client: 'codex' as const,
+  backendId: 'codex' as const,
   local: false,
   configurationRevision: 'configured-v1',
   capabilities: fixtureCapabilities({ structuredTurns: true, toolsFreeTurns: true }),
@@ -50,7 +50,7 @@ const input = () => ({
     {
       capabilities: fixtureCapabilities(),
       id: 'local-qwen',
-      client: 'managed' as const,
+      backendId: 'managed' as const,
       providerId: 'ollama',
       model: 'qwen3:4b',
       local: true,

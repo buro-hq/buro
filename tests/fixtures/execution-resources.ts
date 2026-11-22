@@ -22,7 +22,7 @@ export function fixtureExecutionSelection(
 ): RuntimeSelection {
   const resource = {
     id: runtimeId,
-    client: 'managed' as const,
+    backendId: 'managed' as const,
     configurationRevision: 'fixture-runtime-v1',
     local: true,
     capabilities: structuredClone(capabilities),

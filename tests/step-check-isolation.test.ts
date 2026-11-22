@@ -41,7 +41,7 @@ async function fixture(t: any) {
   const resource = {
     capabilities: fixtureCapabilities({ hostToolLifecycle: true }),
     id: 'local',
-    client: 'managed',
+    backendId: 'managed',
     providerId: 'ollama',
     model: 'small',
     configurationRevision: 'frozen',

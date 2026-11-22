@@ -22,14 +22,14 @@ const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
 const native: RuntimeResource = {
   capabilities: fixtureCapabilities(),
   id: 'codex',
-  client: 'codex',
+  backendId: 'codex',
   local: false,
   configurationRevision: 'native-frozen',
 };
 const managed: RuntimeResource = {
-  capabilities: fixtureCapabilities(),
+  capabilities: fixtureCapabilities({ hostToolLifecycle: true }),
   id: 'small',
-  client: 'managed',
+  backendId: 'managed',
   providerId: 'ollama',
   model: 'small',
   local: true,

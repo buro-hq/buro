@@ -310,19 +310,19 @@ test('resource composition injects the policy without inference and freezes its 
       connections: [
         {
           id: 'ollama',
-          kind: 'ollama',
-          endpoint: 'http://127.0.0.1:11434',
-          capacity: 1,
-          think: false,
+          provider: 'ollama',
+          config: { endpoint: 'http://127.0.0.1:11434', capacity: 1, think: false },
         },
       ],
       runtimes: [
         {
           id: 'coder',
-          client: 'managed',
-          connectionId: 'ollama',
-          model: 'fixture-model',
-          limits: { contextTokens: 8192, maxOutputTokens: 4096 },
+          backend: 'managed',
+          config: {
+            connectionId: 'ollama',
+            model: 'fixture-model',
+            limits: { contextTokens: 8192, maxOutputTokens: 4096 },
+          },
         },
       ],
       profiles: [

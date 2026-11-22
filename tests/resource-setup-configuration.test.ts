@@ -1,3 +1,4 @@
+import { testResourceContributions } from './fixtures/resource-contributions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -9,26 +10,23 @@ import {
   resourceConfigurationRevision,
   connectionConfigurationRevision,
   defaultResources,
-  ManagedLimitsSchema as LegacyManagedLimitsSchema,
   type ResourceConfiguration,
 } from '../adapters/files/resource-configuration.ts';
 import { PrivateJSONFiles } from '../adapters/files/private-json.ts';
 import {
-  ManagedLimitsSchema,
-  ManagedRuntimeDefinitionSchema,
   ResourceConnectionSchema,
   ResourceSetupInputSchema,
   RuntimeDefinitionSchema,
   type ResourceSetupInput,
 } from '../protocol/resources.ts';
+import { ManagedLimitsSchema } from '../protocol/resource-builtins.ts';
 import { CommandSchema } from '../protocol/schema.ts';
 
 const runtime = (id = 'small-worker', connectionId = 'ollama') =>
-  ManagedRuntimeDefinitionSchema.parse({
+  testResourceContributions().parseRuntime({
     id,
-    client: 'managed',
-    connectionId,
-    model: 'fixture-small',
+    backend: 'managed',
+    config: { connectionId, model: 'fixture-small' },
   });
 function setup(configuration: ResourceConfiguration, suffix = ''): ResourceSetupInput {
   const worker = runtime('small-worker' + suffix);
@@ -51,7 +49,11 @@ async function fixture(t: any, initial = defaultResources()) {
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-resource-setup-')),
   );
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
-  const configuration = new FileResourceConfiguration(directory, initial);
+  const configuration = new FileResourceConfiguration(
+    directory,
+    initial,
+    testResourceContributions(),
+  );
   await configuration.init();
   return { directory, configuration };
 }
@@ -59,11 +61,11 @@ const rejects = (action: () => unknown, code?: string) =>
   assert.rejects(async () => action(), code ? { code } : undefined);
 
 test('shared runtime and setup contracts retain defaults and reject malformed limits, invalid references and secret fields', () => {
-  assert.equal(LegacyManagedLimitsSchema, ManagedLimitsSchema);
-  assert.deepEqual(runtime().limits, ManagedLimitsSchema.parse({}));
-  assert.deepEqual(RuntimeDefinitionSchema.parse({ id: 'codex', client: 'codex' }), {
+  assert.deepEqual(runtime().config.limits, ManagedLimitsSchema.parse({}));
+  assert.deepEqual(RuntimeDefinitionSchema.parse({ id: 'codex', backend: 'codex', config: {} }), {
     id: 'codex',
-    client: 'codex',
+    backend: 'codex',
+    config: {},
   });
   const value = setup(defaultResources());
   assert.equal(
@@ -78,7 +80,10 @@ test('shared runtime and setup contracts retain defaults and reject malformed li
       runtimes: [
         {
           ...runtime(),
-          limits: { ...runtime().limits, maxOutputTokens: runtime().limits.contextTokens },
+          limits: {
+            ...runtime().config.limits,
+            maxOutputTokens: runtime().config.limits.contextTokens,
+          },
         },
       ],
     },
@@ -98,19 +103,21 @@ test('configuration revisions cover semantic settings and normalize defaults whi
   assert.equal(resourceConfigurationRevision(receiptOnly), revision);
   assert.equal(
     resourceConfigurationRevision(
-      ResourceConfigurationSchema.parse({
-        ...original,
-        connections: [
-          { id: 'ollama', kind: 'ollama' },
-          { id: 'deepseek', kind: 'deepseek' },
-        ],
-      }),
+      testResourceContributions().validateConfiguration(
+        ResourceConfigurationSchema.parse({
+          ...original,
+          connections: [
+            { id: 'ollama', provider: 'ollama', config: {} },
+            { id: 'deepseek', provider: 'deepseek', config: {} },
+          ],
+        }),
+      ),
     ),
     revision,
   );
   for (const modify of [
     (value: ResourceConfiguration) => {
-      value.connections[0].capacity++;
+      value.connections[0].config.capacity++;
     },
     (value: ResourceConfiguration) => {
       value.runtimes.push(runtime());
@@ -146,7 +153,10 @@ test('one setup atomically adds its models and authorized profile while preservi
   assert.deepEqual(saved.profiles.slice(0, original.profiles.length), original.profiles);
   assert.deepEqual(saved.profiles.at(-1), input.profile);
   assert.deepEqual(saved.runtimes.at(-1), input.runtimes[0]);
-  assert.deepEqual((await FileResourceConfiguration.open(f.directory)).snapshot(), saved);
+  assert.deepEqual(
+    (await FileResourceConfiguration.open(f.directory, testResourceContributions())).snapshot(),
+    saved,
+  );
   result.runtimeIds.push('return-value-mutation');
   assert.deepEqual(f.configuration.snapshot().receipts.setup, {
     fingerprint: 'setup-fingerprint',
@@ -190,11 +200,10 @@ test('local-only setup respects explicit endpoint trust across all roles and wor
     ['http://127.0.0.1:11434', 'external', false],
   ] as const) {
     const initial = defaultResources();
-    initial.connections[0] = ResourceConnectionSchema.parse({
+    initial.connections[0] = testResourceContributions().parseConnection({
       id: 'ollama',
-      kind: 'ollama',
-      endpoint,
-      trust,
+      provider: 'ollama',
+      config: { endpoint, trust },
     });
     const f = await fixture(t, initial),
       input = setup(f.configuration.snapshot());
@@ -212,8 +221,8 @@ test('local-only setup respects explicit endpoint trust across all roles and wor
       before = f.configuration.snapshot(),
       input = setup(before);
     if (slot === 'workerPool') input.profile.workerPool!.push('codex');
-    else if (slot === 'deepseek' && input.runtimes[0].client === 'managed')
-      input.runtimes[0].connectionId = 'deepseek';
+    else if (slot === 'deepseek' && input.runtimes[0].backend === 'managed')
+      input.runtimes[0].config.connectionId = 'deepseek';
     else input.profile[slot] = 'codex';
     await rejects(
       () => f.configuration.saveSetup('blocked', 'blocked', input),
@@ -223,22 +232,23 @@ test('local-only setup respects explicit endpoint trust across all roles and wor
   }
 });
 
-test('new setup rejects known cloud-backed Ollama IDs without retroactively invalidating legacy profiles at startup', async (t) => {
-  const legacy = defaultResources();
-  legacy.profiles.push({
+test('startup rejects invalid local-only profiles and setup rejects known cloud-backed Ollama IDs', async (t) => {
+  const invalid = defaultResources();
+  invalid.profiles.push({
     id: 'old-local',
-    name: 'Legacy incompatible profile',
+    name: 'Invalid local-only profile',
     policy: 'local-only',
     coordinator: 'codex',
     worker: 'codex',
     reviewer: 'codex',
   });
-  const f = await fixture(t, legacy),
+  await assert.rejects(fixture(t, invalid), { code: 'DATA_POLICY_BLOCKED' });
+  const f = await fixture(t),
     original = f.configuration.snapshot();
   for (const policy of ['hybrid', 'local-only'] as const) {
     const input = setup(original);
     input.profile.policy = policy;
-    if (input.runtimes[0].client === 'managed') input.runtimes[0].model = 'fixture:cloud';
+    if (input.runtimes[0].backend === 'managed') input.runtimes[0].config.model = 'fixture:cloud';
     await rejects(
       () => f.configuration.saveSetup('cloud-' + policy, 'cloud-' + policy, input),
       'MODEL_REMOTE_ROUTE',
@@ -246,10 +256,12 @@ test('new setup rejects known cloud-backed Ollama IDs without retroactively inva
     assert.deepEqual(f.configuration.snapshot(), original);
   }
   await f.configuration.saveSetup('valid', 'valid', setup(original));
-  const reopened = (await FileResourceConfiguration.open(f.directory)).snapshot();
-  assert.deepEqual(
-    reopened.profiles.find((profile) => profile.id === 'old-local'),
-    legacy.profiles[1],
+  const reopened = (
+    await FileResourceConfiguration.open(f.directory, testResourceContributions())
+  ).snapshot();
+  assert.equal(
+    reopened.profiles.some((profile) => profile.id === 'old-local'),
+    false,
   );
 });
 
@@ -264,7 +276,8 @@ test('setup never overwrites IDs or leaves a partial runtime behind for invalid 
       input.runtimes.push(structuredClone(input.runtimes[0]));
     },
     (input: ResourceSetupInput) => {
-      if (input.runtimes[0].client === 'managed') input.runtimes[0].connectionId = 'missing';
+      if (input.runtimes[0].backend === 'managed')
+        input.runtimes[0].config.connectionId = 'missing';
     },
     (input: ResourceSetupInput) => {
       input.profile.reviewer = 'missing';
@@ -316,7 +329,7 @@ test('optimistic setup revisions serialize writers and conflict after connection
   await f.configuration.save(
     'edit',
     'edit',
-    { ...connection, capacity: 2 },
+    { ...connection, config: { ...connection.config, capacity: 2 } },
     connectionConfigurationRevision(connection),
   );
   await rejects(
@@ -339,12 +352,12 @@ test('setup receipts survive restart without rolling back newer settings or coll
   await f.configuration.save(
     'connection',
     'connection-fingerprint',
-    { ...old, capacity: 2 },
+    { ...old, config: { ...old.config, capacity: 2 } },
     connectionConfigurationRevision(old),
   );
   await f.configuration.use('new-default', 'new-default', input.profile.id);
   const latest = f.configuration.snapshot(),
-    reopened = await FileResourceConfiguration.open(f.directory);
+    reopened = await FileResourceConfiguration.open(f.directory, testResourceContributions());
   assert.deepEqual(await reopened.saveSetup('setup', 'setup-fingerprint', input), result);
   assert.deepEqual(reopened.snapshot(), latest);
   for (const [id, fingerprint] of [
@@ -381,7 +394,9 @@ test('failed setup persistence changes neither definitions nor receipt and an ex
   mock.mock.restore();
   await f.configuration.saveSetup('setup', 'setup', input);
   assert.equal(
-    (await FileResourceConfiguration.open(f.directory)).snapshot().profiles.at(-1)!.id,
+    (await FileResourceConfiguration.open(f.directory, testResourceContributions()))
+      .snapshot()
+      .profiles.at(-1)!.id,
     input.profile.id,
   );
 });
@@ -392,7 +407,7 @@ test('externally edited, malformed or deleted configuration cannot be overwritte
       before = f.configuration.snapshot(),
       input = setup(before);
     const changed = structuredClone(before);
-    changed.connections[0].capacity = 3;
+    changed.connections[0].config.capacity = 3;
     if (mutation === 'valid-edit')
       await fs.writeFile(f.configuration.filename, JSON.stringify(changed));
     else if (mutation === 'malformed')

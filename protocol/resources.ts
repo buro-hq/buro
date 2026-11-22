@@ -1,117 +1,59 @@
 import { z } from 'zod';
-import { endpointIsPrivate, modelEndpointURL } from './endpoint-trust.ts';
 import { BackendCapabilitiesSchema } from './backend-capabilities.ts';
 import type { BackendRequirements } from '../agent/contracts/capabilities.ts';
 export const ResourceIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
-const modelEndpoint = z
-  .string()
-  .min(1)
-  .max(1000)
-  .refine((value) => {
-    try {
-      modelEndpointURL(value);
-      return true;
-    } catch {
-      return false;
-    }
-  }, 'Use an HTTP(S) endpoint without credentials, query or fragment.');
-export const ResourceConnectionSchema = z
-  .discriminatedUnion('kind', [
-    z.strictObject({
-      id: ResourceIdSchema,
-      kind: z.literal('ollama'),
-      endpoint: modelEndpoint.default('http://127.0.0.1:11434'),
-      capacity: z.number().int().min(1).max(8).default(1),
-      trust: z.enum(['auto', 'private-network', 'external']).default('auto'),
-      think: z.union([z.boolean(), z.string().max(40)]).optional(),
-    }),
-    z.strictObject({
-      id: ResourceIdSchema,
-      kind: z.literal('deepseek'),
-      endpoint: modelEndpoint.default('https://api.deepseek.com'),
-      capacity: z.number().int().min(1).max(8).default(2),
-      apiKeyEnv: z
-        .string()
-        .regex(/^[A-Z][A-Z0-9_]{0,99}$/)
-        .default('DEEPSEEK_API_KEY'),
-      thinking: z.enum(['enabled', 'disabled']).default('disabled'),
-    }),
-  ])
-  .superRefine((connection, ctx) => {
-    if (connection.kind === 'deepseek') {
-      try {
-        const endpoint = modelEndpointURL(connection.endpoint);
-        if (
-          endpoint.protocol !== 'https:' &&
-          !['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname)
-        )
-          ctx.addIssue({
-            code: 'custom',
-            path: ['endpoint'],
-            message: 'Remote DeepSeek endpoints require HTTPS.',
-          });
-      } catch {
-        // The endpoint field reports malformed URLs.
-      }
-      return;
-    }
-    if (connection.kind !== 'ollama' || connection.trust !== 'private-network') return;
-    try {
-      if (endpointIsPrivate(modelEndpointURL(connection.endpoint))) return;
-    } catch {
-      return; // The endpoint field already reports malformed URLs.
-    }
-    ctx.addIssue({
-      code: 'custom',
-      path: ['trust'],
-      message: 'Private network trust requires a literal private or loopback IP address.',
-    });
-  });
+function canonicalJSON<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(canonicalJSON) as T;
+  if (value !== null && typeof value === 'object')
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalJSON((value as Record<string, unknown>)[key])]),
+    ) as T;
+  return value;
+}
+export const ResourceConfigSchema = z.record(z.string(), z.json()).transform(canonicalJSON);
+export type ResourceConfig = z.infer<typeof ResourceConfigSchema>;
+/** Open contribution envelopes: configuration semantics belong to trusted registrations. */
+export const ResourceConnectionSchema = z.strictObject({
+  id: ResourceIdSchema,
+  provider: ResourceIdSchema,
+  config: ResourceConfigSchema,
+});
 export type ResourceConnection = z.infer<typeof ResourceConnectionSchema>;
 export type ResourceConnectionCatalogEntry = ResourceConnection & {
   revision: string;
+  local: boolean;
+  endpoint?: string;
   credentialConfigured: boolean;
+  modelListing: boolean;
   activeEndpoint?: string;
   restartRequired?: boolean;
 };
-export const ManagedLimitsSchema = z
-  .strictObject({
-    contextTokens: z.number().int().min(1024).max(262144).default(32768),
-    maxOutputTokens: z.number().int().min(128).max(32768).default(4096),
-    maxRequestsPerTurn: z.number().int().min(1).max(64).default(24),
-    maxToolCallsPerTurn: z.number().int().min(1).max(128).default(64),
-    maxSessionRequests: z.number().int().min(1).max(1024).default(256),
-  })
-  .refine((limits) => limits.maxOutputTokens < limits.contextTokens, 'Reserve input context.');
-export const ManagedRuntimeDefinitionSchema = z.strictObject({
+export const RuntimeDefinitionSchema = z.strictObject({
   id: ResourceIdSchema,
-  client: z.literal('managed'),
-  connectionId: ResourceIdSchema,
-  model: z.string().min(1).max(200),
-  limits: ManagedLimitsSchema.default(() => ManagedLimitsSchema.parse({})),
+  backend: ResourceIdSchema,
+  config: ResourceConfigSchema,
 });
-export const NativeRuntimeDefinitionSchema = z.strictObject({
-  id: ResourceIdSchema,
-  client: z.literal('codex'),
-  model: z
-    .string()
-    .trim()
-    .min(1)
-    .max(200)
-    .refine((value) => !/[\0\r\n]/.test(value), 'Use a single model identifier.')
-    .optional(),
-  reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
-});
-export const RuntimeDefinitionSchema = z.discriminatedUnion('client', [
-  NativeRuntimeDefinitionSchema,
-  ManagedRuntimeDefinitionSchema,
-]);
-export type ManagedRuntimeDefinition = z.infer<typeof ManagedRuntimeDefinitionSchema>;
-export type NativeRuntimeDefinition = z.infer<typeof NativeRuntimeDefinitionSchema>;
 export type RuntimeDefinition = z.infer<typeof RuntimeDefinitionSchema>;
+export type ResourceContributionDescriptor = {
+  id: string;
+  label: string;
+  revision: string;
+  editor?: string;
+  defaultConfig: ResourceConfig;
+  configSchema?: ResourceConfig;
+};
+export type ModelRuntimeTemplate = {
+  backend: string;
+  config: ResourceConfig;
+  local: boolean;
+  label: string;
+};
+export type ResourceModel = { id: string; digest?: string; templates?: ModelRuntimeTemplate[] };
 export const RuntimeResourceSchema = z.object({
   id: ResourceIdSchema,
-  client: z.enum(['codex', 'managed']),
+  backendId: ResourceIdSchema,
   providerId: z.string().optional(),
   model: z.string().optional(),
   configurationRevision: z.string(),
@@ -162,7 +104,7 @@ export const ResourceSnapshotSchema = z
       new Set(snapshot.workerPool.map((resource) => resource.id)).size !==
         snapshot.workerPool.length ||
       !worker ||
-      (['client', 'providerId', 'model', 'configurationRevision', 'local'] as const).some(
+      (['backendId', 'providerId', 'model', 'configurationRevision', 'local'] as const).some(
         (key) => worker[key] !== snapshot.worker[key],
       ) ||
       JSON.stringify(worker?.capabilities) !== JSON.stringify(snapshot.worker.capabilities)
@@ -209,6 +151,8 @@ export type RoleResourceChoices = {
   choices: { resource: RuntimeResource; eligible: boolean; reason: string }[];
 };
 export type ResourceCatalog = {
+  providers: ResourceContributionDescriptor[];
+  backends: ResourceContributionDescriptor[];
   roleChoices?: RoleResourceChoices[];
   /** Active provider-bound runtimes supporting the separate raw model diagnostic. */
   probeRuntimeIds?: string[];

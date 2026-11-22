@@ -27,10 +27,10 @@ test('native and absent routes cannot reach managed checkpoint storage', async (
   const routes = new Map([
     [
       'native',
-      { resource: { client: 'codex' }, externalThreadId: 'native-thread-not-a-managed-id' },
+      { resource: { backendId: 'codex' }, externalThreadId: 'native-thread-not-a-managed-id' },
     ],
-    ['managed', { resource: { client: 'managed' }, externalThreadId: 'M-private' }],
-    ['starting', { resource: { client: 'managed' } }],
+    ['managed', { resource: { backendId: 'managed' }, externalThreadId: 'M-private' }],
+    ['starting', { resource: { backendId: 'managed' } }],
   ]);
   const checkpoints = await loadManagedCheckpoints(
     ['native', 'missing', 'starting', 'managed'],

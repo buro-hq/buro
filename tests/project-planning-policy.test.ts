@@ -22,7 +22,7 @@ import { resolveRoleResource, roleResourceContext } from '../core/role-routing.t
 
 const configured = {
   id: 'local-qwen',
-  client: 'managed' as const,
+  backendId: 'managed' as const,
   local: true,
   configurationRevision: 'planning-fixture-v1',
   capabilities: fixtureCapabilities({ structuredTurns: true, toolsFreeTurns: true }),
@@ -47,7 +47,7 @@ function savedRun(policy: Run['planningPolicy'], client: 'managed' | 'codex' = '
       readOnlySessions: policy?.strategy === 'read-only-inspection',
     }),
     id: policy?.runtimeId || configured.id,
-    client,
+    backendId: client,
     local: client === 'managed',
     configurationRevision: policy?.configurationRevision || configured.configurationRevision,
   };

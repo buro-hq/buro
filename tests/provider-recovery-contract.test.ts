@@ -288,7 +288,7 @@ async function fixture(t: any, kind: Provider) {
     const resource: RuntimeResource = {
       capabilities: structuredClone(managed.capabilities),
       id: 'managed',
-      client: 'managed',
+      backendId: 'managed',
       providerId: kind,
       model: 'fixture-model',
       local: provider.local,

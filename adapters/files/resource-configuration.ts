@@ -11,9 +11,13 @@ import {
   type ResourceConnection,
   type ResourceSetupInput,
 } from '../../protocol/resources.ts';
-import { endpointIsLocal, modelEndpointURL } from '../../protocol/endpoint-trust.ts';
+import { ResourceContributionCatalog } from '../../core/resource-contributions.ts';
+import {
+  OllamaConnectionConfigSchema,
+  DeepSeekConnectionConfigSchema,
+  NativeRuntimeConfigSchema,
+} from '../../protocol/resource-builtins.ts';
 import { PrivateJSONFiles } from './private-json.ts';
-export { ManagedLimitsSchema } from '../../protocol/resources.ts';
 export const connectionConfigurationRevision = (connection: ResourceConnection) =>
   createHash('sha256')
     .update(JSON.stringify(ResourceConnectionSchema.parse(connection)))
@@ -48,12 +52,6 @@ export const ResourceConfigurationSchema = z
       ctx.addIssue({ code: 'custom', message: 'Resource IDs must be unique.' });
     if (!profiles.has(value.defaultProfile))
       ctx.addIssue({ code: 'custom', message: 'Default resource profile is missing.' });
-    for (const runtime of value.runtimes)
-      if (runtime.client === 'managed' && !connections.has(runtime.connectionId))
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Managed runtime needs an existing connection.',
-        });
     for (const profile of value.profiles)
       if (
         ![
@@ -79,10 +77,10 @@ export const defaultResources = () =>
     version: 1,
     defaultProfile: 'codex',
     connections: [
-      { id: 'ollama', kind: 'ollama' },
-      { id: 'deepseek', kind: 'deepseek' },
+      { id: 'ollama', provider: 'ollama', config: OllamaConnectionConfigSchema.parse({}) },
+      { id: 'deepseek', provider: 'deepseek', config: DeepSeekConnectionConfigSchema.parse({}) },
     ],
-    runtimes: [{ id: 'codex', client: 'codex' }],
+    runtimes: [{ id: 'codex', backend: 'codex', config: NativeRuntimeConfigSchema.parse({}) }],
     profiles: [
       {
         id: 'codex',
@@ -100,17 +98,26 @@ export class FileResourceConfiguration {
   private state: ResourceConfiguration;
   private hasPersisted = false;
   readonly filename: string;
-  constructor(directory: string, state: ResourceConfiguration) {
+  private catalog: ResourceContributionCatalog;
+  constructor(
+    directory: string,
+    state: ResourceConfiguration,
+    catalog: ResourceContributionCatalog,
+  ) {
+    catalog.assertSealed();
+    this.catalog = catalog;
     this.files = new PrivateJSONFiles(directory);
     this.filename = path.join(directory, 'resources.json');
-    this.state = ResourceConfigurationSchema.parse(state);
+    this.state = this.validate(state);
   }
-  static async open(directory: string) {
+  static async open(directory: string, catalog: ResourceContributionCatalog) {
+    catalog.assertSealed();
     const files = new PrivateJSONFiles(directory),
       value = await files.load('resources');
     const configuration = new FileResourceConfiguration(
       directory,
       value === undefined ? defaultResources() : ResourceConfigurationSchema.parse(value),
+      catalog,
     );
     configuration.hasPersisted = value !== undefined;
     return configuration;
@@ -121,6 +128,7 @@ export class FileResourceConfiguration {
   init() {
     const action = this.queue.then(async () => {
       if ((await this.files.load('resources')) !== undefined) {
+        await this.assertUnchanged();
         this.hasPersisted = true;
         return { created: false, path: this.filename };
       }
@@ -154,8 +162,9 @@ export class FileResourceConfiguration {
         writable: true,
         configurable: true,
       });
-      await this.files.save('resources', next);
-      this.state = next;
+      const validated = this.validate(next);
+      await this.files.save('resources', validated);
+      this.state = validated;
       this.hasPersisted = true;
       return { profileId, appliesTo: 'new-runs' };
     });
@@ -169,7 +178,7 @@ export class FileResourceConfiguration {
     expectedRevision: string | null,
   ) {
     // Parse and copy before queuing so a caller cannot mutate a pending write.
-    const connection = ResourceConnectionSchema.parse(input);
+    const connection = this.catalog.parseConnection(input);
     const action = this.queue.then(async () => {
       const receipt = Object.hasOwn(this.state.receipts, id) ? this.state.receipts[id] : undefined;
       if (receipt) {
@@ -188,9 +197,9 @@ export class FileResourceConfiguration {
         );
       if (
         current &&
-        current.kind !== connection.kind &&
-        this.state.runtimes.some(
-          (runtime) => runtime.client === 'managed' && runtime.connectionId === current.id,
+        current.provider !== connection.provider &&
+        this.state.runtimes.some((runtime) =>
+          this.catalog.backend(runtime.backend).dependencies(runtime.config).includes(current.id),
         )
       )
         throw new DomainError(
@@ -214,7 +223,7 @@ export class FileResourceConfiguration {
         writable: true,
         configurable: true,
       });
-      const validated = ResourceConfigurationSchema.parse(next);
+      const validated = this.validate(next);
       await this.files.save('resources', validated);
       this.state = validated;
       this.hasPersisted = true;
@@ -225,6 +234,7 @@ export class FileResourceConfiguration {
   }
   saveSetup(id: string, fingerprint: string, input: ResourceSetupInput) {
     const setup = ResourceSetupInputSchema.parse(structuredClone(input));
+    setup.runtimes = setup.runtimes.map((runtime) => this.catalog.parseRuntime(runtime));
     const action = this.queue.then(async () => {
       const receipt = Object.hasOwn(this.state.receipts, id) ? this.state.receipts[id] : undefined;
       if (receipt) {
@@ -264,54 +274,6 @@ export class FileResourceConfiguration {
           'RESOURCE_SETUP_LIMIT',
           'At most 32 model runtimes and 32 execution profiles can be configured.',
         );
-      const connections = new Map(
-        this.state.connections.map((connection) => [connection.id, connection]),
-      );
-      const runtimes = new Map(
-        [...this.state.runtimes, ...setup.runtimes].map((runtime) => [runtime.id, runtime]),
-      );
-      const referenced = new Set([
-        setup.profile.coordinator,
-        setup.profile.worker,
-        setup.profile.reviewer,
-        ...(setup.profile.workerPool || []),
-      ]);
-      if (
-        setup.runtimes.some(
-          (runtime) => runtime.client === 'managed' && !connections.has(runtime.connectionId),
-        ) ||
-        [...referenced].some((runtimeId) => !runtimes.has(runtimeId))
-      )
-        throw new DomainError(
-          'RESOURCE_SETUP_REFERENCE',
-          'The execution profile needs existing connections and configured model runtimes.',
-        );
-      const checked = new Set([...ids, ...referenced]);
-      for (const runtimeId of checked) {
-        const runtime = runtimes.get(runtimeId)!;
-        const connection =
-          runtime.client === 'managed' ? connections.get(runtime.connectionId)! : undefined;
-        if (
-          runtime.client === 'managed' &&
-          connection?.kind === 'ollama' &&
-          /(?:[:_-]cloud)(?:$|:)/i.test(runtime.model)
-        )
-          throw new DomainError(
-            'MODEL_REMOTE_ROUTE',
-            'Cloud-backed Ollama models are not enabled by this local-model adapter.',
-          );
-        if (
-          setup.profile.policy === 'local-only' &&
-          referenced.has(runtimeId) &&
-          (runtime.client !== 'managed' ||
-            connection?.kind !== 'ollama' ||
-            !endpointIsLocal(modelEndpointURL(connection.endpoint), connection.trust))
-        )
-          throw new DomainError(
-            'DATA_POLICY_BLOCKED',
-            'A local-only execution profile cannot include remote model runtimes.',
-          );
-      }
       await this.assertUnchanged();
       const next = structuredClone(this.state);
       next.runtimes.push(...setup.runtimes);
@@ -323,7 +285,7 @@ export class FileResourceConfiguration {
         writable: true,
         configurable: true,
       });
-      const validated = ResourceConfigurationSchema.parse(next);
+      const validated = this.validate(next);
       await this.files.save('resources', validated);
       this.state = validated;
       this.hasPersisted = true;
@@ -331,6 +293,9 @@ export class FileResourceConfiguration {
     });
     this.queue = action.catch(() => {});
     return action;
+  }
+  private validate(value: unknown): ResourceConfiguration {
+    return this.catalog.validateConfiguration(ResourceConfigurationSchema.parse(value));
   }
   private configurationChanged(): never {
     throw new DomainError(
@@ -344,8 +309,12 @@ export class FileResourceConfiguration {
       if (this.hasPersisted) this.configurationChanged();
       return;
     }
-    const parsed = ResourceConfigurationSchema.safeParse(persisted);
-    if (!parsed.success || JSON.stringify(parsed.data) !== JSON.stringify(this.state))
+    let parsed: ResourceConfiguration;
+    try {
+      parsed = this.validate(persisted);
+    } catch {
       this.configurationChanged();
+    }
+    if (JSON.stringify(parsed) !== JSON.stringify(this.state)) this.configurationChanged();
   }
 }

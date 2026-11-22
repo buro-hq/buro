@@ -1,3 +1,4 @@
+import { testResourceContributions } from './fixtures/resource-contributions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -11,6 +12,13 @@ import {
 } from '../adapters/files/resource-configuration.ts';
 import { PrivateJSONFiles } from '../adapters/files/private-json.ts';
 import { ResourceConnectionSchema } from '../protocol/resources.ts';
+function semanticConnection(input: unknown) {
+  try {
+    return { success: true, data: testResourceContributions().parseConnection(input) };
+  } catch {
+    return { success: false };
+  }
+}
 import { CommandSchema } from '../protocol/schema.ts';
 
 async function fixture(t: any) {
@@ -18,16 +26,19 @@ async function fixture(t: any) {
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-connections-')),
   );
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
-  const configuration = new FileResourceConfiguration(directory, defaultResources());
+  const configuration = new FileResourceConfiguration(
+    directory,
+    defaultResources(),
+    testResourceContributions(),
+  );
   await configuration.init();
   return { directory, configuration };
 }
 const rtx = () =>
-  ResourceConnectionSchema.parse({
+  testResourceContributions().parseConnection({
     id: 'rtx',
-    kind: 'ollama',
-    endpoint: 'http://192.168.50.10:11434',
-    trust: 'private-network',
+    provider: 'ollama',
+    config: { endpoint: 'http://192.168.50.10:11434', trust: 'private-network' },
   });
 
 test('connection contract accepts API endpoints and rejects credentials, query, fragment and plaintext secrets', () => {
@@ -37,7 +48,7 @@ test('connection contract accepts API endpoints and rejects credentials, query, 
     'http://[fd12::1]:11434',
   ])
     assert.equal(
-      ResourceConnectionSchema.safeParse({ id: 'model', kind: 'ollama', endpoint }).success,
+      semanticConnection({ id: 'model', provider: 'ollama', config: { endpoint } }).success,
       true,
     );
   for (const endpoint of [
@@ -48,21 +59,21 @@ test('connection contract accepts API endpoints and rejects credentials, query, 
     'https://example.org#token',
   ])
     assert.equal(
-      ResourceConnectionSchema.safeParse({ id: 'model', kind: 'ollama', endpoint }).success,
+      semanticConnection({ id: 'model', provider: 'ollama', config: { endpoint } }).success,
       false,
       endpoint,
     );
   assert.equal(
-    ResourceConnectionSchema.safeParse({ id: 'ds', kind: 'deepseek', apiKey: 'secret' }).success,
+    semanticConnection({ id: 'ds', provider: 'deepseek', config: { apiKey: 'secret' } }).success,
     false,
   );
   assert.equal(
-    ResourceConnectionSchema.safeParse({ id: 'ds', kind: 'deepseek', apiKeyEnv: 'secret value' })
+    semanticConnection({ id: 'ds', provider: 'deepseek', config: { apiKeyEnv: 'secret value' } })
       .success,
     false,
   );
   assert.equal(
-    ResourceConnectionSchema.safeParse({ id: 'ds', kind: 'deepseek', trust: 'private-network' })
+    semanticConnection({ id: 'ds', provider: 'deepseek', config: { trust: 'private-network' } })
       .success,
     false,
   );
@@ -75,8 +86,8 @@ test('DeepSeek URL validation matches its transport before a connection can bloc
     'http://api.example.org',
     'http://127.0.0.2:8000',
   ]) {
-    const candidate = { id: 'ds-test', kind: 'deepseek', endpoint };
-    assert.equal(ResourceConnectionSchema.safeParse(candidate).success, false);
+    const candidate = { id: 'ds-test', provider: 'deepseek', config: { endpoint } };
+    assert.equal(semanticConnection(candidate).success, false);
     assert.throws(() =>
       f.configuration.save('bad-' + endpoint, 'bad-' + endpoint, candidate as any, null),
     );
@@ -88,7 +99,7 @@ test('DeepSeek URL validation matches its transport before a connection can bloc
     'http://[::1]:8000',
   ])
     assert.equal(
-      ResourceConnectionSchema.safeParse({ id: 'ds-test', kind: 'deepseek', endpoint }).success,
+      semanticConnection({ id: 'ds-test', provider: 'deepseek', config: { endpoint } }).success,
       true,
     );
   assert.equal(
@@ -97,7 +108,7 @@ test('DeepSeek URL validation matches its transport before a connection can bloc
   );
 });
 
-test('private network trust requires literal private addresses while existing defaults remain compatible', () => {
+test('private network trust requires literal private addresses and installed providers apply semantic defaults', () => {
   for (const endpoint of [
     'http://10.0.0.1:11434',
     'http://172.16.1.2',
@@ -107,7 +118,7 @@ test('private network trust requires literal private addresses while existing de
     'http://[fd12::1]',
   ])
     assert.equal(
-      ResourceConnectionSchema.safeParse({ ...rtx(), endpoint }).success,
+      semanticConnection({ ...rtx(), config: { ...rtx().config, endpoint } }).success,
       true,
       endpoint,
     );
@@ -119,32 +130,47 @@ test('private network trust requires literal private addresses while existing de
     'http://[2001:4860:4860::8888]',
   ])
     assert.equal(
-      ResourceConnectionSchema.safeParse({ ...rtx(), endpoint }).success,
+      semanticConnection({ ...rtx(), config: { ...rtx().config, endpoint } }).success,
       false,
       endpoint,
     );
-  const legacy = ResourceConfigurationSchema.parse({
-    ...defaultResources(),
-    connections: [
-      { id: 'ollama', kind: 'ollama' },
-      { id: 'deepseek', kind: 'deepseek' },
-    ],
-    receipts: { old: { fingerprint: 'legacy', profileId: 'codex' } },
-  });
-  assert.equal(legacy.connections[0].kind === 'ollama' && legacy.connections[0].trust, 'auto');
-  assert.equal(
-    legacy.connections[1].kind === 'deepseek' && legacy.connections[1].apiKeyEnv,
-    'DEEPSEEK_API_KEY',
+  const normalized = testResourceContributions().validateConfiguration(
+    ResourceConfigurationSchema.parse({
+      ...defaultResources(),
+      connections: [
+        { id: 'ollama', provider: 'ollama', config: {} },
+        { id: 'deepseek', provider: 'deepseek', config: {} },
+      ],
+      receipts: { retained: { fingerprint: 'receipt', profileId: 'codex' } },
+    }),
   );
-  assert.deepEqual(legacy.receipts.old, { fingerprint: 'legacy', profileId: 'codex' });
+  assert.equal(normalized.connections[0].config.trust, 'auto');
+  assert.equal(normalized.connections[1].config.apiKeyEnv, 'DEEPSEEK_API_KEY');
+  assert.deepEqual(normalized.receipts.retained, { fingerprint: 'receipt', profileId: 'codex' });
 });
 
-test('save command requires a validated endpoint and an explicit nullable revision', () => {
+test('save command requires an open JSON envelope and an explicit nullable revision', () => {
   const command = {
     method: 'resources.connection.save',
     params: { connection: rtx(), expectedRevision: null },
   };
   assert.equal(CommandSchema.safeParse(command).success, true);
+  const extension = {
+    id: 'custom',
+    provider: 'thirdparty',
+    config: { arbitrary: { nested: [1, true, null] } },
+  };
+  assert.equal(ResourceConnectionSchema.safeParse(extension).success, true);
+  assert.equal(
+    CommandSchema.safeParse({
+      ...command,
+      params: { connection: extension, expectedRevision: null },
+    }).success,
+    true,
+  );
+  assert.throws(() => testResourceContributions().parseConnection(extension), {
+    code: 'RESOURCE_PROVIDER_UNAVAILABLE',
+  });
   assert.equal(
     CommandSchema.safeParse({ ...command, params: { connection: rtx() } }).success,
     false,
@@ -166,7 +192,7 @@ test('connections are added and edited with per-connection optimistic revisions 
     appliesTo: 'service-restart',
   });
   const revision = connectionConfigurationRevision(rtx());
-  const edited = { ...rtx(), endpoint: 'http://192.168.0.228:11434' };
+  const edited = { ...rtx(), config: { ...rtx().config, endpoint: 'http://192.168.0.228:11434' } };
   await assert.rejects(configuration.save('duplicate', 'duplicate', edited, null), {
     code: 'RESOURCE_CONNECTION_CONFLICT',
   });
@@ -178,10 +204,10 @@ test('connections are added and edited with per-connection optimistic revisions 
   await assert.rejects(configuration.save('stale', 'stale', rtx(), revision), {
     code: 'RESOURCE_CONNECTION_CONFLICT',
   });
-  const restored = await FileResourceConfiguration.open(directory);
+  const restored = await FileResourceConfiguration.open(directory, testResourceContributions());
   assert.equal(
-    restored.snapshot().connections.find((item) => item.id === 'rtx')?.endpoint,
-    edited.endpoint,
+    restored.snapshot().connections.find((item) => item.id === 'rtx')?.config.endpoint,
+    edited.config.endpoint,
   );
   assert.deepEqual(restored.snapshot().runtimes, original.runtimes);
   assert.deepEqual(restored.snapshot().profiles, original.profiles);
@@ -193,16 +219,19 @@ test('connection receipts survive restart and replay never rolls back newer sett
   const { directory, configuration } = await fixture(t);
   await configuration.use('profile', 'profile-fingerprint', 'codex');
   const result = await configuration.save('add', 'add-fingerprint', rtx(), null);
-  const edited = { ...rtx(), capacity: 2 };
+  const edited = { ...rtx(), config: { ...rtx().config, capacity: 2 } };
   await configuration.save(
     'edit',
     'edit-fingerprint',
     edited,
     connectionConfigurationRevision(rtx()),
   );
-  const restored = await FileResourceConfiguration.open(directory);
+  const restored = await FileResourceConfiguration.open(directory, testResourceContributions());
   assert.deepEqual(await restored.save('add', 'add-fingerprint', rtx(), null), result);
-  assert.equal(restored.snapshot().connections.find((item) => item.id === 'rtx')?.capacity, 2);
+  assert.equal(
+    restored.snapshot().connections.find((item) => item.id === 'rtx')?.config.capacity,
+    2,
+  );
   await assert.rejects(restored.save('add', 'another-fingerprint', rtx(), null), {
     code: 'IDEMPOTENCY_CONFLICT',
   });
@@ -222,7 +251,12 @@ test('queued edits serialize and only one writer can use the same revision', asy
   const { configuration } = await fixture(t);
   const [first, second] = await Promise.allSettled([
     configuration.save('first', 'first', rtx(), null),
-    configuration.save('second', 'second', { ...rtx(), capacity: 2 }, null),
+    configuration.save(
+      'second',
+      'second',
+      { ...rtx(), config: { ...rtx().config, capacity: 2 } },
+      null,
+    ),
   ]);
   assert.equal(first.status, 'fulfilled');
   assert.equal(second.status, 'rejected');
@@ -236,29 +270,39 @@ test('changing the provider kind is rejected for connections referenced by runti
   const initial = defaultResources();
   initial.runtimes.push({
     id: 'local',
-    client: 'managed',
-    connectionId: 'ollama',
-    model: 'qwen',
-    limits: {
-      contextTokens: 32768,
-      maxOutputTokens: 4096,
-      maxRequestsPerTurn: 24,
-      maxToolCallsPerTurn: 64,
-      maxSessionRequests: 256,
+    backend: 'managed',
+    config: {
+      connectionId: 'ollama',
+      model: 'qwen',
+      limits: {
+        contextTokens: 32768,
+        maxOutputTokens: 4096,
+        maxRequestsPerTurn: 24,
+        maxToolCallsPerTurn: 64,
+        maxSessionRequests: 256,
+      },
     },
   });
   await fs.writeFile(path.join(directory, 'resources.json'), JSON.stringify(initial));
-  const configuration = await FileResourceConfiguration.open(directory);
+  const configuration = await FileResourceConfiguration.open(
+    directory,
+    testResourceContributions(),
+  );
+  const before = configuration.snapshot();
   await assert.rejects(
     configuration.save(
       'switch',
       'switch',
-      ResourceConnectionSchema.parse({ id: 'ollama', kind: 'deepseek' }),
-      connectionConfigurationRevision(initial.connections[0]),
+      testResourceContributions().parseConnection({
+        id: 'ollama',
+        provider: 'deepseek',
+        config: {},
+      }),
+      connectionConfigurationRevision(before.connections[0]),
     ),
     { code: 'RESOURCE_CONNECTION_IN_USE' },
   );
-  assert.deepEqual(configuration.snapshot(), initial);
+  assert.deepEqual(configuration.snapshot(), before);
 });
 
 test('failed persistence leaves settings and receipts unchanged and a retry can succeed', async (t) => {
@@ -273,13 +317,17 @@ test('failed persistence leaves settings and receipts unchanged and a retry can 
   assert.equal(await fs.readFile(configuration.filename, 'utf8'), bytes);
   save.mock.restore();
   await configuration.save('save', 'save', rtx(), null);
-  assert.equal((await FileResourceConfiguration.open(directory)).snapshot().connections.length, 3);
+  assert.equal(
+    (await FileResourceConfiguration.open(directory, testResourceContributions())).snapshot()
+      .connections.length,
+    3,
+  );
 });
 
 test('external edits and deleted configuration are never overwritten by connection saves', async (t) => {
   const { configuration } = await fixture(t);
   const changed = configuration.snapshot();
-  changed.connections[0].capacity = 3;
+  changed.connections[0].config.capacity = 3;
   await fs.writeFile(configuration.filename, JSON.stringify(changed));
   await assert.rejects(configuration.save('edit', 'edit', rtx(), null), {
     code: 'RESOURCE_CONFIG_CHANGED',

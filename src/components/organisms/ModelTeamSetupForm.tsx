@@ -12,14 +12,15 @@ import {
   Stack,
   Text,
   TextInput,
+  Textarea,
 } from '@mantine/core';
 import {
-  ManagedLimitsSchema,
   ResourceSetupInputSchema,
   type ResourceCatalog,
   type ResourceSetupInput,
+  type ModelRuntimeTemplate,
 } from '../../../protocol/resources.ts';
-import { endpointIsLocal, modelEndpointURL } from '../../../protocol/endpoint-trust.ts';
+import { ManagedLimitsSchema } from '../../../protocol/resource-builtins.ts';
 import { t } from '../../i18n/index.ts';
 
 function uniqueId(seed: string, used: string[]) {
@@ -33,128 +34,137 @@ function uniqueId(seed: string, used: string[]) {
   for (let n = 2; used.includes(id); n++) id = prefix + '-' + n;
   return id;
 }
-
 type Props = {
   catalog: ResourceCatalog;
-  connectionId: string;
-  model: string;
+  connectionId?: string;
+  model?: string;
+  templates?: ModelRuntimeTemplate[];
   saving: boolean;
   onClose: () => void;
   onSave: (setup: ResourceSetupInput) => Promise<void>;
 };
+/** Model templates are server-authored; generic backends use their installed parser. */
 export function ModelTeamSetupForm({
   catalog,
   connectionId,
   model,
+  templates,
   saving,
   onClose,
   onSave,
 }: Props) {
-  const connection = catalog.connections.find((item) => item.id === connectionId)!;
-  const current = catalog.profiles.find((item) => item.id === catalog.defaultProfile)!;
+  const available = templates
+    ? catalog.backends.filter((backend) =>
+        templates.some((template) => template.backend === backend.id),
+      )
+    : catalog.backends;
+  const [backend, setBackend] = useState(available[0]?.id || '');
+  const descriptor = available.find((item) => item.id === backend);
+  const template = templates?.find((item) => item.backend === backend);
   const definitions = catalog.configured?.runtimes.map((item) => item.definition) || [];
-  const existing = catalog.runtimes.find(
-    (item) => item.client === 'managed' && item.providerId === connectionId && item.model === model,
-  );
-  const [runtimeId] = useState(
+  const existing =
+    model && connectionId
+      ? catalog.runtimes.find(
+          (item) =>
+            item.backendId === backend && item.providerId === connectionId && item.model === model,
+        )
+      : undefined;
+  const initialConfig =
+    definitions.find((item) => item.id === existing?.id)?.config ||
+    template?.config ||
+    descriptor?.defaultConfig ||
+    {};
+  const [raw, setRaw] = useState(JSON.stringify(initialConfig, null, 2));
+  const [runtimeId, setRuntimeId] = useState(
     existing?.id ||
       uniqueId(
-        connectionId + '-' + model,
+        connectionId && model ? connectionId + '-' + model : backend + '-instance',
         definitions.map((item) => item.id),
       ),
   );
-  const [profileId, setProfileId] = useState(() =>
+  const candidateId = existing?.id || runtimeId;
+  const current = catalog.profiles.find((item) => item.id === catalog.defaultProfile);
+  const [profileId, setProfileId] = useState(
     uniqueId(
       runtimeId + '-team',
       catalog.configured?.profiles.map((item) => item.profile.id) ||
         catalog.profiles.map((item) => item.id),
     ),
   );
-  const [name, setName] = useState(model + ' · ' + t('Team'));
-  const [coordinator, setCoordinator] = useState(current.coordinator);
-  const [worker, setWorker] = useState(runtimeId);
-  const [reviewer, setReviewer] = useState(current.reviewer);
-  const [workerPool, setWorkerPool] = useState([
-    ...new Set([...(current.workerPool || [current.worker]), runtimeId]),
-  ]);
-  const [policy, setPolicy] = useState(current.policy);
-  const matching = definitions.find(
-    (item) =>
-      item.client === 'managed' && item.connectionId === connectionId && item.model === model,
+  const [name, setName] = useState(
+    (model || descriptor?.label || t('Execution backend')) + ' · ' + t('Team'),
   );
-  const defaults =
-    matching?.client === 'managed'
-      ? matching.limits
-      : ManagedLimitsSchema.parse(
-          connection.kind === 'ollama' ? { contextTokens: 16384, maxOutputTokens: 2048 } : {},
-        );
+  const [coordinator, setCoordinator] = useState(current?.coordinator || candidateId);
+  const [worker, setWorker] = useState(candidateId);
+  const [reviewer, setReviewer] = useState(current?.reviewer || candidateId);
+  const [workerPool, setWorkerPool] = useState([
+    ...new Set([...(current?.workerPool || (current ? [current.worker] : [])), candidateId]),
+  ]);
+  const [policy, setPolicy] = useState<'local-only' | 'hybrid'>(current?.policy || 'hybrid');
+  const savedLimits =
+    typeof initialConfig.limits === 'object' &&
+    initialConfig.limits !== null &&
+    !Array.isArray(initialConfig.limits)
+      ? initialConfig.limits
+      : {};
+  const defaults = ManagedLimitsSchema.parse(descriptor?.editor === 'managed' ? savedLimits : {});
   const [contextTokens, setContextTokens] = useState<string | number>(defaults.contextTokens);
   const [maxOutputTokens, setMaxOutputTokens] = useState<string | number>(defaults.maxOutputTokens);
   const [error, setError] = useState('');
-  const local =
-    connection.kind === 'ollama' &&
-    endpointIsLocal(modelEndpointURL(connection.endpoint), connection.trust) &&
-    !/(?:[:_-]cloud)(?:$|:)/i.test(model);
+  const polished = descriptor?.editor === 'managed' && !!template;
   const choices = catalog.runtimes.map((item) => ({
     value: item.id,
-    label: item.client === 'codex' ? 'Codex' : `${item.model} · ${item.providerId} · ${item.id}`,
-    local: item.local,
+    label: [
+      item.model ||
+        catalog.backends.find((backend) => backend.id === item.backendId)?.label ||
+        item.backendId,
+      item.id,
+    ].join(' · '),
   }));
   if (!existing)
     choices.push({
-      value: runtimeId,
-      label: `${model} · ${connectionId} · ${t('New model')}`,
-      local,
+      value: candidateId,
+      label: `${model || descriptor?.label || backend} · ${t('New model')}`,
     });
-  const options = choices.map(({ value, label }) => ({ value, label }));
+  function changeCandidate(nextId: string) {
+    const previous = candidateId;
+    setRuntimeId(nextId);
+    setCoordinator((value) => (value === previous ? nextId : value));
+    setWorker((value) => (value === previous ? nextId : value));
+    setReviewer((value) => (value === previous ? nextId : value));
+    setWorkerPool((pool) => [...new Set(pool.map((id) => (id === previous ? nextId : id)))]);
+  }
   async function save() {
     setError('');
-    if ((catalog.configured?.profiles || []).some((item) => item.profile.id === profileId)) {
-      setError(t('This profile ID already exists. Choose another ID.'));
-      return;
-    }
-    const selected = [coordinator, worker, reviewer, ...workerPool];
-    if (
-      policy === 'local-only' &&
-      selected.some((id) => !choices.find((item) => item.value === id)?.local)
-    ) {
-      setError(
-        t(
-          'Local-only teams cannot include external or native runtimes. Choose local models or explicitly select Hybrid.',
-        ),
-      );
-      return;
-    }
-    const parsed = ResourceSetupInputSchema.safeParse({
-      expectedRevision: catalog.configurationRevision,
-      runtimes: existing
-        ? []
-        : [
-            {
-              id: runtimeId,
-              client: 'managed',
-              connectionId,
-              model,
-              limits: { ...defaults, contextTokens, maxOutputTokens },
-            },
-          ],
-      profile: { id: profileId, name, policy, coordinator, worker, reviewer, workerPool },
-    });
-    if (!parsed.success) {
-      setError(t('Check the profile ID, name, selected models and context/output limits.'));
-      return;
-    }
     try {
-      await onSave(parsed.data);
+      const config = JSON.parse(raw);
+      const parsed = ResourceSetupInputSchema.parse({
+        expectedRevision: catalog.configurationRevision,
+        runtimes: existing
+          ? []
+          : [
+              {
+                id: candidateId,
+                backend,
+                config: polished
+                  ? { ...config, limits: { ...defaults, contextTokens, maxOutputTokens } }
+                  : config,
+              },
+            ],
+        profile: { id: profileId, name, policy, coordinator, worker, reviewer, workerPool },
+      });
+      await onSave(parsed);
     } catch (error) {
       setError(
         error instanceof Error && 'code' in error && error.code === 'RESOURCE_SETUP_CONFLICT'
           ? t(
               'Resource settings changed elsewhere. Cancel, refresh, then create the profile again.',
             )
-          : error instanceof Error
-            ? error.message
-            : String(error),
+          : error instanceof SyntaxError
+            ? t('Enter a valid JSON object.')
+            : error instanceof Error
+              ? error.message
+              : String(error),
       );
     }
   }
@@ -162,7 +172,7 @@ export function ModelTeamSetupForm({
     <Modal
       opened
       onClose={onClose}
-      title={t('Use model in a team')}
+      title={model ? t('Use model in a team') : t('Add execution backend')}
       centered
       size="lg"
       closeOnClickOutside={!saving}
@@ -178,9 +188,9 @@ export function ModelTeamSetupForm({
         <Stack gap="sm">
           <Group justify="space-between">
             <div>
-              <Text fw={600}>{model}</Text>
+              <Text fw={600}>{model || t('Execution backend')}</Text>
               <Text size="xs" c="dimmed">
-                {connectionId} · {connection.endpoint}
+                {connectionId}
               </Text>
             </div>
             <Badge variant="light">
@@ -192,6 +202,44 @@ export function ModelTeamSetupForm({
               'Create a separate team profile. Your current default and existing runs stay unchanged.',
             )}
           </Text>
+          <Select
+            label={t('Backend implementation')}
+            value={backend}
+            data={available.map((item) => ({ value: item.id, label: item.label }))}
+            allowDeselect={false}
+            disabled={saving}
+            onChange={(value) => {
+              if (!value) return;
+              const nextTemplate = templates?.find((item) => item.backend === value);
+              const nextConfig =
+                nextTemplate?.config ||
+                available.find((item) => item.id === value)?.defaultConfig ||
+                {};
+              setBackend(value);
+              setRaw(JSON.stringify(nextConfig, null, 2));
+              if (available.find((item) => item.id === value)?.editor === 'managed') {
+                const limits = ManagedLimitsSchema.parse(nextConfig.limits || {});
+                setContextTokens(limits.contextTokens);
+                setMaxOutputTokens(limits.maxOutputTokens);
+              }
+              changeCandidate(
+                uniqueId(
+                  value + '-instance',
+                  definitions.map((item) => item.id),
+                ),
+              );
+            }}
+          />
+          {!existing && (
+            <TextInput
+              label={t('Runtime ID')}
+              value={runtimeId}
+              onChange={(event) => changeCandidate(event.currentTarget.value)}
+              required
+              maxLength={64}
+              disabled={saving}
+            />
+          )}
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <TextInput
               label={t('Profile ID')}
@@ -200,7 +248,6 @@ export function ModelTeamSetupForm({
               required
               maxLength={64}
               disabled={saving}
-              styles={{ input: { minHeight: 44 } }}
             />
             <TextInput
               label={t('Profile name')}
@@ -209,7 +256,6 @@ export function ModelTeamSetupForm({
               required
               maxLength={100}
               disabled={saving}
-              styles={{ input: { minHeight: 44 } }}
             />
           </SimpleGrid>
           <Select
@@ -222,14 +268,15 @@ export function ModelTeamSetupForm({
             onChange={(value) => setPolicy(value === 'local-only' ? 'local-only' : 'hybrid')}
             allowDeselect={false}
             disabled={saving}
-            styles={{ input: { minHeight: 44 } }}
           />
           <Text size="xs" c="dimmed">
-            {policy === 'hybrid'
-              ? t(
-                  'Hybrid can use the selected external providers for project context. Review every role and the worker pool before saving.',
-                )
-              : t('All roles and alternative workers must use trusted local model endpoints.')}
+            {t('The service validates configuration and data locality before saving.')}
+            {template
+              ? ' ' +
+                (template.local
+                  ? t('Trusted local model endpoint.')
+                  : t('Requests leave your trusted local environment.'))
+              : ''}
           </Text>
           <SimpleGrid cols={{ base: 1, sm: 3 }}>
             {[
@@ -247,7 +294,7 @@ export function ModelTeamSetupForm({
               <Select
                 key={label as string}
                 label={label as string}
-                data={options}
+                data={choices}
                 value={value as string}
                 onChange={(value) => {
                   if (value) (setter as (value: string) => void)(value);
@@ -255,7 +302,6 @@ export function ModelTeamSetupForm({
                 allowDeselect={false}
                 searchable
                 disabled={saving}
-                styles={{ input: { minHeight: 44 } }}
               />
             ))}
           </SimpleGrid>
@@ -264,23 +310,19 @@ export function ModelTeamSetupForm({
             description={t(
               'The coordinator may choose only these models. The primary worker is always included.',
             )}
-            data={options}
+            data={choices}
             value={workerPool}
             onChange={(values) => setWorkerPool([...new Set([worker, ...values])])}
             searchable
             disabled={saving}
             maxValues={16}
-            styles={{ input: { minHeight: 44 } }}
           />
-          {!existing && (
-            <Accordion variant="contained" transitionDuration={0}>
-              <Accordion.Item value="limits">
-                <Accordion.Control>{t('Advanced model limits')}</Accordion.Control>
-                <Accordion.Panel>
-                  <Stack gap="sm">
-                    <Text size="xs" c="dimmed">
-                      {t('Runtime ID')}: {runtimeId}
-                    </Text>
+          {!existing &&
+            (polished ? (
+              <Accordion variant="contained" transitionDuration={0}>
+                <Accordion.Item value="limits">
+                  <Accordion.Control>{t('Advanced model limits')}</Accordion.Control>
+                  <Accordion.Panel>
                     <SimpleGrid cols={2}>
                       <NumberInput
                         label={t('Context tokens')}
@@ -290,7 +332,6 @@ export function ModelTeamSetupForm({
                         max={262144}
                         allowDecimal={false}
                         disabled={saving}
-                        styles={{ input: { minHeight: 44 } }}
                       />
                       <NumberInput
                         label={t('Output tokens per request')}
@@ -300,14 +341,26 @@ export function ModelTeamSetupForm({
                         max={32768}
                         allowDecimal={false}
                         disabled={saving}
-                        styles={{ input: { minHeight: 44 } }}
                       />
                     </SimpleGrid>
-                  </Stack>
-                </Accordion.Panel>
-              </Accordion.Item>
-            </Accordion>
-          )}
+                  </Accordion.Panel>
+                </Accordion.Item>
+              </Accordion>
+            ) : (
+              <Textarea
+                label={t('Backend configuration (JSON)')}
+                description={t('Configuration is validated by the installed backend.')}
+                value={raw}
+                onChange={(event) => setRaw(event.currentTarget.value)}
+                minRows={6}
+                maxRows={15}
+                autosize
+                maxLength={64000}
+                disabled={saving}
+                spellCheck={false}
+                styles={{ input: { fontFamily: 'monospace' } }}
+              />
+            ))}
           <Text size="xs" c="dimmed">
             {t(
               'Save now, restart the Buro service, then explicitly select this profile. Saving does not run a model or diagnostic.',
@@ -322,7 +375,7 @@ export function ModelTeamSetupForm({
             <Button variant="default" onClick={onClose} disabled={saving} mih={44}>
               {t('Cancel')}
             </Button>
-            <Button type="submit" loading={saving} mih={44}>
+            <Button type="submit" loading={saving} disabled={!descriptor} mih={44}>
               {t('Save team profile')}
             </Button>
           </Group>

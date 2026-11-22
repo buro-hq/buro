@@ -12,6 +12,7 @@ import type {
   ProjectStoreOpenSpec,
 } from '../core/ports.ts';
 import { localFilesPlugin } from './local-files.ts';
+import { resourceContributionsPlugin } from './resource-contributions.ts';
 
 declare module 'cordis' {
   interface Events {
@@ -167,6 +168,7 @@ export async function createHost(
   const ctx = new Context();
   try {
     await ctx.plugin(Commands);
+    await ctx.plugin(resourceContributionsPlugin);
     await ctx.plugin(storagePlugin, {
       projects: options.projects || [],
       factory: options.storeFactory || new FileProjectStoreFactory(),

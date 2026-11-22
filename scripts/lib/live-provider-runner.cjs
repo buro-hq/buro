@@ -167,7 +167,7 @@ async function loadManagedCheckpoints(handles, routes, sessions) {
   const saved = [];
   for (const handle of handles) {
     const route = await routes.load(handle);
-    if (route?.resource?.client !== 'managed' || !route.externalThreadId) continue;
+    if (route?.resource?.backendId !== 'managed' || !route.externalThreadId) continue;
     const session = await sessions.load(route.externalThreadId);
     if (session) saved.push(session);
   }
@@ -896,10 +896,8 @@ async function runLiveProviderEvaluation(options = {}) {
           ? [
               {
                 id: 'ollama',
-                kind: 'ollama',
-                endpoint: checked.endpoints.ollama,
-                capacity: 1,
-                think: false,
+                provider: 'ollama',
+                config: { endpoint: checked.endpoints.ollama, capacity: 1, think: false },
               },
             ]
           : []),
@@ -907,25 +905,29 @@ async function runLiveProviderEvaluation(options = {}) {
           ? [
               {
                 id: 'deepseek',
-                kind: 'deepseek',
-                endpoint: checked.endpoints.deepseek,
-                apiKeyEnv: 'DEEPSEEK_API_KEY',
-                capacity: 1,
-                thinking: 'disabled',
+                provider: 'deepseek',
+                config: {
+                  endpoint: checked.endpoints.deepseek,
+                  apiKeyEnv: 'DEEPSEEK_API_KEY',
+                  capacity: 1,
+                  thinking: 'disabled',
+                },
               },
             ]
           : []),
       ],
       runtimes: [
-        ...(usesCodex ? [{ id: 'codex', client: 'codex' }] : []),
+        ...(usesCodex ? [{ id: 'codex', backend: 'codex', config: {} }] : []),
         ...(usesOllama
           ? [
               {
                 id: 'ollama-live',
-                client: 'managed',
-                connectionId: 'ollama',
-                model: checked.models.ollama,
-                limits: { ...runtimeLimits, contextTokens: checked.contexts.ollama },
+                backend: 'managed',
+                config: {
+                  connectionId: 'ollama',
+                  model: checked.models.ollama,
+                  limits: { ...runtimeLimits, contextTokens: checked.contexts.ollama },
+                },
               },
             ]
           : []),
@@ -933,10 +935,12 @@ async function runLiveProviderEvaluation(options = {}) {
           ? [
               {
                 id: 'deepseek-live',
-                client: 'managed',
-                connectionId: 'deepseek',
-                model: checked.models.deepseek,
-                limits: { ...runtimeLimits, contextTokens: checked.contexts.deepseek },
+                backend: 'managed',
+                config: {
+                  connectionId: 'deepseek',
+                  model: checked.models.deepseek,
+                  limits: { ...runtimeLimits, contextTokens: checked.contexts.deepseek },
+                },
               },
             ]
           : []),

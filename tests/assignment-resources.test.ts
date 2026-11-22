@@ -29,7 +29,7 @@ import type { ProjectRegistry } from '../core/ports.ts';
 const local: RuntimeResource = {
   capabilities: fixtureCapabilities({ structuredTurns: true }),
   id: 'small',
-  client: 'managed',
+  backendId: 'managed',
   providerId: 'ollama',
   model: 'small-model',
   configurationRevision: 'local-v1',
@@ -38,7 +38,7 @@ const local: RuntimeResource = {
 const cloud: RuntimeResource = {
   capabilities: fixtureCapabilities({ structuredTurns: true }),
   id: 'reasoner',
-  client: 'managed',
+  backendId: 'managed',
   providerId: 'deepseek',
   model: 'reasoner-model',
   configurationRevision: 'cloud-v1',

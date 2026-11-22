@@ -20,7 +20,7 @@ const { chromium, expect } = require('@playwright/test');
   try {
     const local = {
       id: 'local-fixture',
-      client: 'managed',
+      backendId: 'managed',
       providerId: 'fixture',
       model: 'Fixture model',
       configurationRevision: 'local-v1',
@@ -38,7 +38,7 @@ const { chromium, expect } = require('@playwright/test');
     };
     const unsupported = {
       id: 'unsupported-fixture',
-      client: 'codex',
+      backendId: 'codex',
       configurationRevision: 'native-v1',
       local: false,
       capabilities: fixtureCapabilities(),

@@ -1,0 +1,63 @@
+{
+  "stage": "4B1",
+  "date": "2026-11-22",
+  "parentCommit": "60c3959",
+  "tests": {
+    "total": 920,
+    "passed": 920,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 68536.748916,
+    "log": "/private/tmp/buro-stage4b1-final-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage4b1-final-build.log"
+  },
+  "format": {
+    "passed": true,
+    "logs": [
+      "/private/tmp/buro-stage4b1-final-format.log",
+      "/private/tmp/buro-stage4b1-server-format.log"
+    ]
+  },
+  "browser": {
+    "productionDesktopMobile": true,
+    "actualThirdPartyCordisUIAndCLI": true,
+    "firstPartySettingsLightAndDark": true,
+    "newProviderModelRequests": 0,
+    "firstPartyDiagnosticRequests": {
+      "count": 2,
+      "transport": "synthetic fixture only"
+    },
+    "externalNetworkRequests": 0,
+    "pageErrors": 0,
+    "artifacts": [
+      "artifacts/resources-ui-verification.json",
+      "artifacts/contribution-settings.png"
+    ],
+    "logs": [
+      "/private/tmp/buro-stage4b1-contribution-browser.log",
+      "/private/tmp/buro-stage4b1-final-production.log"
+    ]
+  },
+  "independentReviews": [
+    "stage4b1-architecture-review-2026-11-22.md",
+    "stage4b1-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementation": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Trusted in-process contributions are not hostile plugin sandboxing.",
+    "Existing configuration format is intentionally rejected; user state was not migrated.",
+    "Custom-only hosts currently provision their own saved configuration instead of using the first-party default template.",
+    "Cross-client invalidation and custom operation catalogs are subsequent 4B2.",
+    "Finite quotas, file persistence, operational preparation recovery and reusable backend packages remain subsequent work."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

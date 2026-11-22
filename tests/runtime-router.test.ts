@@ -96,7 +96,7 @@ function fixture(t: any, review = false) {
   const resources: RuntimeResource[] = [
     {
       id: 'local',
-      client: 'managed',
+      backendId: 'managed',
       providerId: 'ollama',
       model: 'local-model',
       capabilities: fixtureCapabilities({
@@ -110,7 +110,7 @@ function fixture(t: any, review = false) {
     },
     {
       id: 'cloud',
-      client: 'managed',
+      backendId: 'managed',
       providerId: 'deepseek',
       model: 'cloud-model',
       capabilities: fixtureCapabilities({
@@ -124,7 +124,7 @@ function fixture(t: any, review = false) {
     },
     {
       id: 'codex',
-      client: 'codex',
+      backendId: 'codex',
       configurationRevision: 'codex-v1',
       local: false,
       capabilities: fixtureCapabilities({
@@ -462,7 +462,7 @@ test('durable route files preserve external references privately and refuse iden
     externalThreadId: 'private-native-reference',
     resource: {
       id: 'local',
-      client: 'managed',
+      backendId: 'managed',
       local: true,
       configurationRevision: 'v1',
       capabilities: fixtureCapabilities(),

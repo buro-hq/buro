@@ -216,7 +216,7 @@ async function fixture(
   const resource = {
     capabilities: structuredClone(runtime.capabilities),
     id: 'managed',
-    client: 'managed' as const,
+    backendId: 'managed' as const,
     providerId: provider.id,
     model: 'fixture-model',
     configurationRevision: 'fixture-v1',
@@ -482,7 +482,7 @@ test('a backend without host tool lifecycle does not fabricate managed model acc
   const native = {
     ...f.selection.coordinator,
     id: 'codex',
-    client: 'codex' as const,
+    backendId: 'codex' as const,
     local: false,
     capabilities: {
       ...f.selection.coordinator.capabilities,

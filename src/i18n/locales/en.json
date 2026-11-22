@@ -1141,5 +1141,18 @@
   "Connect a Git repository. Buro keeps its goals, team and results together.": "Connect a Git repository. Buro keeps its goals, team and results together.",
   "Choose project": "Choose project",
   "Configure models": "Configure models",
-  "The selected project is unavailable. Choose an existing project.": "The selected project is unavailable. Choose an existing project."
+  "The selected project is unavailable. Choose an existing project.": "The selected project is unavailable. Choose an existing project.",
+  "Enter a valid JSON object.": "Enter a valid JSON object.",
+  "Provider configuration (JSON)": "Provider configuration (JSON)",
+  "Configuration is validated by the installed provider. Use credential references, never secret values.": "Configuration is validated by the installed provider. Use credential references, never secret values.",
+  "Backend configuration (JSON)": "Backend configuration (JSON)",
+  "Configuration is validated by the installed backend.": "Configuration is validated by the installed backend.",
+  "Execution backend": "Execution backend",
+  "Add execution backend": "Add execution backend",
+  "Backend implementation": "Backend implementation",
+  "Trusted local model endpoint.": "Trusted local model endpoint.",
+  "Configure an installed model provider or execution backend.": "Configure an installed model provider or execution backend.",
+  "Model listing is unavailable for this provider. Configure a backend directly.": "Model listing is unavailable for this provider. Configure a backend directly.",
+  "No models were returned by this provider.": "No models were returned by this provider.",
+  "The service validates configuration and data locality before saving.": "The service validates configuration and data locality before saving."
 }

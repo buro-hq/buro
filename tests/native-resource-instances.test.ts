@@ -1,3 +1,4 @@
+import { testResourceContributions } from './fixtures/resource-contributions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -34,8 +35,16 @@ const configuration = () =>
     defaultProfile: profile.id,
     profiles: [profile],
     runtimes: [
-      { id: 'planner-native', client: 'codex', model: 'fixture-plan', reasoningEffort: 'high' },
-      { id: 'worker-native', client: 'codex', model: 'fixture-work', reasoningEffort: 'low' },
+      {
+        id: 'planner-native',
+        backend: 'codex',
+        config: { model: 'fixture-plan', reasoningEffort: 'high' },
+      },
+      {
+        id: 'worker-native',
+        backend: 'codex',
+        config: { model: 'fixture-work', reasoningEffort: 'low' },
+      },
     ],
   });
 async function fixture(t: any, initial: ResourceConfiguration = configuration()) {
@@ -163,8 +172,8 @@ test('two configured native instances isolate identical wire handles and honor p
 test('native identity tracks effective model settings and leaves unspecified models explicitly unknown', async (t) => {
   const initial = configuration();
   initial.runtimes = [
-    { id: 'planner-native', client: 'codex' },
-    { id: 'worker-native', client: 'codex' },
+    { id: 'planner-native', backend: 'codex', config: {} },
+    { id: 'worker-native', backend: 'codex', config: {} },
   ];
   const f = await fixture(t, initial),
     unknown = await f.create(),
@@ -190,12 +199,19 @@ test('native identity tracks effective model settings and leaves unspecified mod
 
 test('resource setup persists arbitrary native instances through the same configuration contract', async (t) => {
   const f = await fixture(t),
-    stored = await FileResourceConfiguration.open(path.join(f.directory, 'local'));
+    stored = await FileResourceConfiguration.open(
+      path.join(f.directory, 'local'),
+      testResourceContributions(),
+    );
   const original = stored.snapshot();
   await stored.saveSetup('add-native', 'add-native', {
     expectedRevision: resourceConfigurationRevision(original),
     runtimes: [
-      { id: 'new-native', client: 'codex', model: 'fixture-new', reasoningEffort: 'medium' },
+      {
+        id: 'new-native',
+        backend: 'codex',
+        config: { model: 'fixture-new', reasoningEffort: 'medium' },
+      },
     ],
     profile: {
       ...profile,
@@ -206,12 +222,14 @@ test('resource setup persists arbitrary native instances through the same config
       workerPool: ['new-native'],
     },
   });
-  const reopened = await FileResourceConfiguration.open(path.join(f.directory, 'local'));
+  const reopened = await FileResourceConfiguration.open(
+    path.join(f.directory, 'local'),
+    testResourceContributions(),
+  );
   assert.deepEqual(reopened.snapshot().runtimes.at(-1), {
     id: 'new-native',
-    client: 'codex',
-    model: 'fixture-new',
-    reasoningEffort: 'medium',
+    backend: 'codex',
+    config: { model: 'fixture-new', reasoningEffort: 'medium' },
   });
   await assert.rejects(fs.readFile(f.log), { code: 'ENOENT' });
 });
@@ -219,14 +237,20 @@ test('resource setup persists arbitrary native instances through the same config
 test('managed-only factories accept codex as a normal configured ID without constructing a native adapter', async (t) => {
   const initial = ResourceConfigurationSchema.parse({
     ...defaultResources(),
-    runtimes: [{ id: 'codex', client: 'managed', connectionId: 'ollama', model: 'fixture-small' }],
+    runtimes: [
+      {
+        id: 'codex',
+        backend: 'managed',
+        config: { connectionId: 'ollama', model: 'fixture-small' },
+      },
+    ],
   });
   const f = await fixture(t, initial),
     factory = await f.create();
   assert.equal(factory.runtimes.length, 1);
   assert.equal(factory.runtimes[0].id, 'codex');
   assert.equal(factory.runtimes[0] instanceof CodexRuntime, false);
-  assert.equal(factory.resources[0].client, 'managed');
+  assert.equal(factory.resources[0].backendId, 'managed');
   assert.equal(factory.selection.forProject('p').coordinator.id, 'codex');
   assert.deepEqual(factory.resources[0].capabilities, factory.runtimes[0].capabilities);
   await assert.rejects(fs.readFile(f.log), { code: 'ENOENT' });

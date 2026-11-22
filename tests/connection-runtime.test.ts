@@ -28,7 +28,11 @@ const initialConfiguration = () =>
     ...defaultResources(),
     runtimes: [
       ...defaultResources().runtimes,
-      { id: 'local', client: 'managed', connectionId: 'ollama', model: 'fixture-small' },
+      {
+        id: 'local',
+        backend: 'managed',
+        config: { connectionId: 'ollama', model: 'fixture-small' },
+      },
     ],
     profiles: [
       ...defaultResources().profiles,
@@ -132,11 +136,13 @@ async function update(
 const direct = () =>
   ResourceConnectionSchema.parse({
     id: 'ollama',
-    kind: 'ollama',
-    endpoint: 'http://192.168.50.10:11434',
-    trust: 'private-network',
-    capacity: 2,
-    think: false,
+    provider: 'ollama',
+    config: {
+      endpoint: 'http://192.168.50.10:11434',
+      trust: 'private-network',
+      capacity: 2,
+      think: false,
+    },
   });
 
 test('connection saves expose saved settings and optimistic revisions without invoking a model or leaking credentials', async (t) => {
@@ -147,19 +153,23 @@ test('connection saves expose saved settings and optimistic revisions without in
   assert.deepEqual(saved, { connectionId: 'ollama', appliesTo: 'service-restart' });
   assert.deepEqual(await resources.saveConnection(direct(), before.revision, meta('save')), saved);
   await assert.rejects(
-    resources.saveConnection({ ...direct(), capacity: 3 }, before.revision, meta('stale')),
+    resources.saveConnection(
+      { ...direct(), config: { ...direct().config, capacity: 3 } },
+      before.revision,
+      meta('stale'),
+    ),
     { code: 'RESOURCE_CONNECTION_CONFLICT' },
   );
   const catalog = await resources.list('p');
   const after = catalog.connections.find((item) => item.id === 'ollama')!;
-  assert.equal(after.endpoint, direct().endpoint);
+  assert.equal(after.endpoint, new URL(String(direct().config.endpoint)).href);
   assert.equal(after.activeEndpoint, before.endpoint);
   assert.equal(after.restartRequired, true);
   assert.notEqual(after.revision, before.revision);
-  assert.equal(after.capacity, 2);
-  assert.equal(after.kind === 'ollama' && after.trust, 'private-network');
-  assert.equal(after.kind === 'ollama' && after.think, false);
-  assert.equal(catalog.selected?.coordinator.client, 'codex');
+  assert.equal(after.config.capacity, 2);
+  assert.equal(after.provider === 'ollama' && after.config.trust, 'private-network');
+  assert.equal(after.provider === 'ollama' && after.config.think, false);
+  assert.equal(catalog.selected?.coordinator.backendId, 'codex');
   assert.equal(
     catalog.connections.find((item) => item.id === 'deepseek')?.credentialConfigured,
     true,
@@ -213,7 +223,7 @@ test('default selection still supports native work, but pending selected resourc
   const f = await fixture(t),
     resources = await f.create();
   await update(resources, direct());
-  assert.equal(resources.selection.forProject('p').coordinator.client, 'codex');
+  assert.equal(resources.selection.forProject('p').coordinator.backendId, 'codex');
   await resources.configuration.use('local', 'local', 'local');
   assert.throws(() => resources.selection.forProject('p'), { code: 'CONNECTION_RESTART_REQUIRED' });
   assert.equal((await resources.list('p')).selected?.profileId, 'local');
@@ -234,7 +244,7 @@ test('service restart activates saved endpoint and trust while leaving model and
   const restarted = await f.create();
   const current = (await restarted.list()).connections.find((item) => item.id === 'ollama')!;
   assert.equal(current.restartRequired, false);
-  assert.equal(current.activeEndpoint, direct().endpoint);
+  assert.equal(current.activeEndpoint, new URL(String(direct().config.endpoint)).href);
   const newManaged = restarted.resources.find((item) => item.id === 'local')!;
   assert.equal(
     newManaged.local,

@@ -1141,5 +1141,18 @@
   "Connect a Git repository. Buro keeps its goals, team and results together.": "Подключи Git-репозиторий. Buro соберёт его цели, команду и результаты в одном месте.",
   "Choose project": "Выбрать проект",
   "Configure models": "Настроить модели",
-  "The selected project is unavailable. Choose an existing project.": "Выбранный проект недоступен. Выбери существующий проект."
+  "The selected project is unavailable. Choose an existing project.": "Выбранный проект недоступен. Выбери существующий проект.",
+  "Enter a valid JSON object.": "Введи корректный JSON-объект.",
+  "Provider configuration (JSON)": "Настройки провайдера (JSON)",
+  "Configuration is validated by the installed provider. Use credential references, never secret values.": "Настройки проверит установленный провайдер. Указывай ссылки на ключи, а не сами секреты.",
+  "Backend configuration (JSON)": "Настройки исполнителя (JSON)",
+  "Configuration is validated by the installed backend.": "Настройки проверит установленный исполнитель.",
+  "Execution backend": "Исполнитель",
+  "Add execution backend": "Добавить исполнителя",
+  "Backend implementation": "Тип исполнителя",
+  "Trusted local model endpoint.": "Доверенный локальный адрес модели.",
+  "Configure an installed model provider or execution backend.": "Настрой установленный провайдер моделей или исполнитель.",
+  "Model listing is unavailable for this provider. Configure a backend directly.": "Провайдер не поддерживает список моделей. Настрой исполнителя вручную.",
+  "No models were returned by this provider.": "Провайдер не вернул моделей.",
+  "The service validates configuration and data locality before saving.": "Перед сохранением сервис проверит настройки и расположение данных."
 }

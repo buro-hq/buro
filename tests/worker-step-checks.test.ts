@@ -9,7 +9,7 @@ function fixture() {
   const resource = {
     capabilities: fixtureCapabilities({ hostToolLifecycle: true }),
     id: 'local',
-    client: 'managed',
+    backendId: 'managed',
     providerId: 'ollama',
     model: 'small',
     configurationRevision: 'frozen-model',
@@ -193,7 +193,7 @@ test('checkpoint normalization of command display fields does not change the fro
 
 test('worker feedback requires host tool lifecycle, independently of the client label', () => {
   const capable = fixture();
-  capable.run.resources.worker.client = 'codex';
+  capable.run.resources.worker.backendId = 'codex';
   assert.ok(capable.adapter.plan(capable.scope));
   const incapable = fixture();
   incapable.run.resources.worker.capabilities.hostToolLifecycle = false;

@@ -31,22 +31,22 @@ const { chromium, expect } = require('@playwright/test');
       connections: [
         {
           id: 'ollama',
-          kind: 'ollama',
-          endpoint: 'http://127.0.0.1:11434',
-          think: 'high',
-          capacity: 2,
+          provider: 'ollama',
+          config: { endpoint: 'http://127.0.0.1:11434', think: 'high', capacity: 2 },
         },
         {
           id: 'deepseek',
-          kind: 'deepseek',
-          apiKeyEnv: 'BURO_UI_FAKE_MISSING_KEY',
-          thinking: 'enabled',
-          capacity: 3,
+          provider: 'deepseek',
+          config: { apiKeyEnv: 'BURO_UI_FAKE_MISSING_KEY', thinking: 'enabled', capacity: 3 },
         },
       ],
       runtimes: [
-        { id: 'codex', client: 'codex' },
-        { id: 'local-coder', client: 'managed', connectionId: 'ollama', model: 'fixture-coder' },
+        { id: 'codex', backend: 'codex', config: {} },
+        {
+          id: 'local-coder',
+          backend: 'managed',
+          config: { connectionId: 'ollama', model: 'fixture-coder' },
+        },
       ],
       profiles: [
         {
@@ -72,8 +72,7 @@ const { chromium, expect } = require('@playwright/test');
       version: 1,
       revision: 1,
       context: '',
-      allowedPaths: ['src/'],
-      protectedPaths: [],
+      scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
       checks: [],
       defaultCheckIds: [],
       setup: [],
@@ -428,11 +427,15 @@ const { chromium, expect } = require('@playwright/test');
           exact: true,
         });
         await select.click();
-        await page.getByRole('option', { name: 'fixture-coder · ollama', exact: true }).waitFor();
+        await page
+          .getByRole('option', { name: 'fixture-coder · local-coder', exact: true })
+          .waitFor();
         assert.deepEqual(await page.getByRole('option').allTextContents(), [
-          'fixture-coder · ollama',
+          'fixture-coder · local-coder',
         ]);
-        await page.getByRole('option', { name: 'fixture-coder · ollama', exact: true }).click();
+        await page
+          .getByRole('option', { name: 'fixture-coder · local-coder', exact: true })
+          .click();
       }
       await dialog
         .getByRole('button', { name: 'Save version ' + nextVersion, exact: true })
@@ -452,7 +455,7 @@ const { chromium, expect } = require('@playwright/test');
       if (mode !== 'auto')
         await expect(
           dialog.getByRole('textbox', { name: 'Model from project pool', exact: true }),
-        ).toHaveValue('fixture-coder · ollama');
+        ).toHaveValue('fixture-coder · local-coder');
       await dialog.locator('.mantine-Modal-close').click();
       roleModes.push(mode);
     }
@@ -465,8 +468,8 @@ const { chromium, expect } = require('@playwright/test');
     );
     await dialog.locator('.mantine-Modal-close').click();
     await page.getByRole('button', { name: 'Edit role coordinator', exact: true }).click();
-    await dialog.getByText('Configured in execution profile', { exact: true }).waitFor();
-    assert.equal(await dialog.getByRole('radio').count(), 0);
+    assert.equal(await dialog.getByRole('radio', { name: 'Auto', exact: true }).isChecked(), true);
+    assert.equal(await dialog.getByRole('radio').count(), 3);
     await dialog.locator('.mantine-Modal-close').click();
     await page.getByRole('button', { name: 'Edit role legacy_worker', exact: true }).click();
     await dialog.getByText('Prefer', { exact: true }).click();
@@ -494,9 +497,8 @@ const { chromium, expect } = require('@playwright/test');
           runtimes: [
             {
               id: 'ollama-fixture-helper',
-              client: 'managed',
-              connectionId: 'ollama',
-              model: 'other-helper',
+              backend: 'managed',
+              config: { connectionId: 'ollama', model: 'other-helper' },
             },
           ],
           profile: {
@@ -531,23 +533,18 @@ const { chromium, expect } = require('@playwright/test');
     await page.getByRole('option', { name: 'Local only', exact: true }).click();
     await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
     await dialog
-      .getByText(
-        'Local-only teams cannot include external or native runtimes. Choose local models or explicitly select Hybrid.',
-        { exact: true },
-      )
+      .getByText('A local-only execution profile cannot include remote model runtimes.', {
+        exact: true,
+      })
       .waitFor();
     for (const label of ['Coordinator model', 'Reviewer model']) {
       await dialog.getByRole('textbox', { name: label, exact: true }).click();
-      await page
-        .getByRole('option', { name: 'fixture-coder · ollama · local-coder', exact: true })
-        .click();
+      await page.getByRole('option', { name: 'fixture-coder · local-coder', exact: true }).click();
     }
     await dialog.getByRole('textbox', { name: 'Allowed worker models', exact: true }).click();
-    await page.getByRole('option', { name: 'Codex', exact: true }).click();
+    await page.getByRole('option', { name: 'Codex · codex', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Allowed worker models', exact: true }).click();
-    await page
-      .getByRole('option', { name: 'fixture-coder · ollama · local-coder', exact: true })
-      .click();
+    await page.getByRole('option', { name: 'fixture-coder · local-coder', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Profile name', exact: true }).click();
     failSetupSave = true;
     await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
@@ -565,20 +562,20 @@ const { chromium, expect } = require('@playwright/test');
       .waitFor();
     const configuredTeam = await privateFiles.load('resources');
     const helperRuntime = configuredTeam.runtimes.find(
-      (runtime) => runtime.model === 'fixture-helper',
+      (runtime) => runtime.config.model === 'fixture-helper',
     );
-    assert.equal(helperRuntime.connectionId, 'ollama');
+    assert.equal(helperRuntime.config.connectionId, 'ollama');
     assert.equal(
       helperRuntime.id,
       'ollama-fixture-helper-2',
       'Generated runtime ID avoids a saved pending collision',
     );
-    assert.equal(helperRuntime.limits.contextTokens, 16384);
-    assert.equal(helperRuntime.limits.maxOutputTokens, 2048);
+    assert.equal(helperRuntime.config.limits.contextTokens, 32768);
+    assert.equal(helperRuntime.config.limits.maxOutputTokens, 4096);
     assert.equal(configuredTeam.defaultProfile, 'codex');
     assert.ok(
       configuredTeam.runtimes.some(
-        (runtime) => runtime.id === 'codex' && runtime.client === 'codex',
+        (runtime) => runtime.id === 'codex' && runtime.backend === 'codex',
       ),
     );
     assert.deepEqual(
@@ -614,33 +611,37 @@ const { chromium, expect } = require('@playwright/test');
         .worker,
       'local-coder',
     );
-    // A cloud-backed Ollama tag cannot be declared local, even with local other roles.
-    await ollama
-      .locator('[data-model-id="fixture:cloud"]')
-      .getByRole('button', { name: 'Use in team', exact: true })
-      .click();
+    // Unsupported cloud tags offer no server template, and manual setup is rejected too.
+    await expect(
+      ollama
+        .locator('[data-model-id="fixture:cloud"]')
+        .getByRole('button', { name: 'Use in team', exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole('button', { name: 'Add execution backend', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Backend implementation', exact: true }).click();
+    await page.getByRole('option', { name: 'Buro agent', exact: true }).click();
+    await dialog
+      .getByRole('textbox', { name: 'Backend configuration (JSON)', exact: true })
+      .fill(JSON.stringify({ connectionId: 'ollama', model: 'fixture:cloud' }));
     await dialog.getByRole('textbox', { name: 'Data policy', exact: true }).click();
     await page.getByRole('option', { name: 'Local only', exact: true }).click();
     for (const label of ['Coordinator model', 'Reviewer model']) {
       await dialog.getByRole('textbox', { name: label, exact: true }).click();
-      await page
-        .getByRole('option', { name: 'fixture-coder · ollama · local-coder', exact: true })
-        .click();
+      await page.getByRole('option', { name: 'fixture-coder · local-coder', exact: true }).click();
     }
     await dialog.getByRole('textbox', { name: 'Allowed worker models', exact: true }).click();
-    await page.getByRole('option', { name: 'Codex', exact: true }).click();
+    await page.getByRole('option', { name: 'Codex · codex', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Profile name', exact: true }).click();
     await dialog.getByRole('button', { name: 'Save team profile', exact: true }).click();
     await dialog
-      .getByText(
-        'Local-only teams cannot include external or native runtimes. Choose local models or explicitly select Hybrid.',
-        { exact: true },
-      )
+      .getByText('Cloud-backed Ollama models are not supported by this provider.', {
+        exact: true,
+      })
       .waitFor();
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     assert.equal(
       (await privateFiles.load('resources')).runtimes.some(
-        (runtime) => runtime.model === 'fixture:cloud',
+        (runtime) => runtime.config.model === 'fixture:cloud',
       ),
       false,
     );
@@ -690,10 +691,10 @@ const { chromium, expect } = require('@playwright/test');
     const persistedNew = (await privateFiles.load('resources')).connections.find(
       (connection) => connection.id === 'rtx-fixture',
     );
-    assert.equal(persistedNew.endpoint, 'http://192.168.1.10:11434');
-    assert.equal(persistedNew.trust, 'private-network');
-    assert.equal(persistedNew.capacity, 2);
-    assert.equal(persistedNew.think, false);
+    assert.equal(persistedNew.config.endpoint, 'http://192.168.1.10:11434');
+    assert.equal(persistedNew.config.trust, 'private-network');
+    assert.equal(persistedNew.config.capacity, 2);
+    assert.equal(persistedNew.config.think, false);
     await expect(
       ollama.getByRole('button', { name: 'Available models', exact: true }),
     ).toBeEnabled();
@@ -714,7 +715,7 @@ const { chromium, expect } = require('@playwright/test');
       {
         method: 'resources.connection.save',
         params: {
-          connection: { ...originalOllama, capacity: 3 },
+          connection: { ...originalOllama, config: { ...originalOllama.config, capacity: 3 } },
           expectedRevision: catalogBeforeConcurrentEdit.connections.find(
             (connection) => connection.id === 'ollama',
           ).revision,
@@ -732,8 +733,8 @@ const { chromium, expect } = require('@playwright/test');
     assert.equal(
       (await privateFiles.load('resources')).connections.find(
         (connection) => connection.id === 'ollama',
-      ).endpoint,
-      originalOllama.endpoint,
+      ).config.endpoint,
+      originalOllama.config.endpoint,
     );
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
@@ -758,7 +759,7 @@ const { chromium, expect } = require('@playwright/test');
     await page.screenshot({ path: 'artifacts/api-connection-editor.png', fullPage: true });
     await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
     await dialog.waitFor({ state: 'hidden' });
-    await ollama.getByText('Active API: http://127.0.0.1:11434', { exact: true }).waitFor();
+    await ollama.getByText('Active API: http://127.0.0.1:11434/', { exact: true }).waitFor();
     await expect(
       ollama.getByRole('button', { name: 'Available models', exact: true }),
     ).toBeDisabled();
@@ -772,7 +773,7 @@ const { chromium, expect } = require('@playwright/test');
     assert.equal(
       (await privateFiles.load('resources')).connections.find(
         (connection) => connection.id === 'deepseek',
-      ).endpoint,
+      ).config.endpoint,
       'https://api.deepseek.com',
     );
     await dialog
@@ -795,16 +796,16 @@ const { chromium, expect } = require('@playwright/test');
     const savedOllama = afterConnections.connections.find(
       (connection) => connection.id === 'ollama',
     );
-    assert.equal(savedOllama.endpoint, 'http://192.168.1.20:11434');
-    assert.equal(savedOllama.trust, 'private-network');
-    assert.equal(savedOllama.capacity, 3);
-    assert.equal(savedOllama.think, 'high');
+    assert.equal(savedOllama.config.endpoint, 'http://192.168.1.20:11434');
+    assert.equal(savedOllama.config.trust, 'private-network');
+    assert.equal(savedOllama.config.capacity, 3);
+    assert.equal(savedOllama.config.think, 'high');
     const savedDeepSeek = afterConnections.connections.find(
       (connection) => connection.id === 'deepseek',
     );
-    assert.equal(savedDeepSeek.apiKeyEnv, 'BURO_UI_OTHER_KEY');
-    assert.equal(savedDeepSeek.capacity, 3);
-    assert.equal(savedDeepSeek.thinking, 'enabled');
+    assert.equal(savedDeepSeek.config.apiKeyEnv, 'BURO_UI_OTHER_KEY');
+    assert.equal(savedDeepSeek.config.capacity, 3);
+    assert.equal(savedDeepSeek.config.thinking, 'enabled');
     assert.deepEqual(afterConnections.runtimes, beforeConnections.runtimes);
     assert.deepEqual(afterConnections.profiles, beforeConnections.profiles);
     assert.equal(afterConnections.defaultProfile, beforeConnections.defaultProfile);
@@ -816,7 +817,7 @@ const { chromium, expect } = require('@playwright/test');
     await page.reload();
     await page.getByRole('button', { name: 'User settings', exact: true }).click();
     await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
-    await ollama.getByText('http://192.168.1.20:11434', { exact: true }).waitFor();
+    await ollama.getByText('http://192.168.1.20:11434/', { exact: true }).waitFor();
     await ollama.getByText('Restart required', { exact: true }).waitFor();
     await expect(
       ollama.getByRole('button', { name: 'Available models', exact: true }),
@@ -884,7 +885,9 @@ const { chromium, expect } = require('@playwright/test');
     await page.getByRole('button', { name: 'Edit role legacy_worker', exact: true }).click();
     await dialog.getByText('Prefer', { exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Model from project pool', exact: true }).click();
-    await page.getByRole('option', { name: 'fixture-helper · ollama', exact: true }).waitFor();
+    await page
+      .getByRole('option', { name: 'fixture-helper · ollama-fixture-helper-2', exact: true })
+      .waitFor();
     await page.keyboard.press('Escape');
     await dialog.locator('.mantine-Modal-close').click();
     assert.deepEqual(
@@ -927,7 +930,7 @@ const { chromium, expect } = require('@playwright/test');
       {
         method: 'resources.connection.save',
         params: {
-          connection: { ...configuredOllama, capacity: 4 },
+          connection: { ...configuredOllama, config: { ...configuredOllama.config, capacity: 4 } },
           expectedRevision: liveCatalog.connections.find((connection) => connection.id === 'ollama')
             .revision,
         },
@@ -1022,7 +1025,7 @@ const { chromium, expect } = require('@playwright/test');
           legacyModelPreserved: true,
           instructionsPreserved: true,
           unavailableRuntimeVisible: true,
-          reservedRoleUsesProfile: true,
+          coordinatorRolePreferencesAvailable: true,
           apiConnectionsPersisted: true,
           pendingConnectionsDisabled: true,
           invalidEndpointRejected: true,

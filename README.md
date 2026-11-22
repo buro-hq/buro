@@ -9,7 +9,7 @@ Buro is a local workspace for automating coding goals with a coordinator, focuse
 
 Work happens in a separate Git worktree. You can inspect the result, apply it to your branch, or have Buro open a draft PR. A coordinator plans the work and selects workers when needed; a separate reviewer checks the result.
 
-Buro is still in development. It supports your installed Codex CLI and opt-in **Ollama and DeepSeek model API** connections through a Buro-managed runtime. The default remains Codex; configure [execution resources](docs/RESOURCES.md) to use direct model connections or a mixed team.
+Buro is still in development. Its built-in adapters support your installed Codex CLI and opt-in **Ollama and DeepSeek model API** connections through a Buro-managed runtime. Trusted service plugins can register additional provider and backend factories. The default remains Codex; configure [execution resources](docs/RESOURCES.md) to use direct model connections or a mixed team.
 
 The [product vision](VISION.md), [target architecture](ARCHITECTURE.md) and [provider integration contract](docs/PROVIDERS.md) define the full direction. Buro owns worker dispatch, tools and verification; richer replanning and concurrent runs remain on the roadmap.
 
@@ -23,7 +23,7 @@ The [full project architecture review](docs/PROJECT-ARCHITECTURE-REVIEW-2026-11-
 
 ![Buro project office with the coordinator, developer, test author and reviewer](docs/images/office.png)
 
-*Screenshots show the actual interface with a fictional project and sample run data.*
+_Screenshots show the actual interface with a fictional project and sample run data._
 
 ## Run locally
 
@@ -71,8 +71,8 @@ The run view shows the plan, timeline, changed files, check output and reviewer 
 
 Acceptance checks and fresh review use a separate read-only snapshot of the exact source tree to be saved. Checks that generate reports or build artifacts need output directories declared under **Writable check outputs** in project settings. Those outputs remain separate from source. Unsupported verification isolation stops explicitly rather than running an unconstrained host check.
 
-| Read the diff | Inspect checks and review |
-| --- | --- |
+| Read the diff                                                                                           | Inspect checks and review                                                                                                    |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | [![The Changes tab showing the activity-search diff](docs/images/changes.png)](docs/images/changes.png) | [![The Checks tab showing test results and independent acceptance criteria](docs/images/checks.png)](docs/images/checks.png) |
 
 Applying a result is a separate action that checks the source branch and working tree. PR delivery and deployment follow the project settings. Deployment requires configured commands and verification; see [delivery setup](ONBOARDING-AND-DELIVERY.md).
