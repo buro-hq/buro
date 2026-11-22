@@ -2,7 +2,10 @@ import { SqliteProjectUsageAuthority } from '../../adapters/sqlite/project-usage
 
 const [directory, projectId, mode, commandId, fingerprint, operationId] = process.argv.slice(2);
 const owner = { kind: 'run', runId: 'run' };
-const authority = await SqliteProjectUsageAuthority.open({ directory, projectId });
+const authority = await SqliteProjectUsageAuthority.open({
+  directory,
+  project: { id: projectId, name: 'Synthetic project', root: directory },
+});
 let callbackCalls = 0;
 const send = (value) =>
   new Promise((resolve, reject) =>

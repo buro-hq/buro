@@ -1,0 +1,57 @@
+{
+  "stage": "5A3c",
+  "date": "2026-11-22",
+  "parentCommit": "b4fbf11",
+  "tests": {
+    "total": 1197,
+    "passed": 1197,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 70723.57025,
+    "log": "/private/tmp/buro-stage5a3c-final-reviewed-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a3c-reviewed-build.log"
+  },
+  "format": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a3c-reviewed-format.log"
+  },
+  "browser": {
+    "projectScenarios": 17,
+    "projectLog": "/private/tmp/buro-stage5a3c-reviewed-projects-browser.log",
+    "researchResultScenarios": 14,
+    "researchResultLog": "/private/tmp/buro-stage5a3c-reviewed-setup-browser.log",
+    "errors": []
+  },
+  "independentReviews": [
+    "stage5a3c-architecture-review-2026-11-22.md",
+    "stage5a3c-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "actualEvidence": [
+    "ProjectApplication settings/verification work with legacy snapshot/transact/receipt methods unavailable.",
+    "Saved metadata/profile survive equal/newer bootstrap proposals and caller mutation; registry lists metadata only.",
+    "Committed configuration replay precedes changed/busy research admission and exports the current profile while returning the old exact result.",
+    "Caught physical acknowledgement failure rolls back an earlier SQL profile update, event and receipt.",
+    "Replacing a same-ID proposal during awaited HEAD cannot apply the stale body.",
+    "Verification coalesces in-flight duplicates, preserves captured older revisions and cannot dispatch after late stop admission.",
+    "Connection input/result copies preserve catalog receipt identity.",
+    "Automatic missing-base initialization cannot mark ready research as user-reviewed."
+  ],
+  "scopeLimits": [
+    "Production remains the sole JSON authority, with standalone SQL v4 only; no dual write or factory cutover.",
+    "Accepted Git application retains its existing separate intent flow until actual Run migration.",
+    "Verification/export external dispatch is not durably journaled in this slice; no cross-process exactly-once claim.",
+    "Malformed/missing project export can still block repository discovery; valid differences never silently override authority.",
+    "Full Run/session/effect/history/artifact migration and default-none quotas remain later."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

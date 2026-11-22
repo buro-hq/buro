@@ -58,7 +58,15 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
       next.roles = [...next.roles.filter((previous) => previous.id !== role.id), role];
   }
   if (c.type === 'project.configured') {
-    if (c.research) next.research = c.research;
+    const acknowledgement = c.researchAcknowledgement;
+    if (acknowledgement && snapshot.research?.id === acknowledgement.id)
+      next.research = {
+        ...snapshot.research,
+        reviewedProfileRevision: acknowledgement.reviewedProfileRevision,
+        ...(acknowledgement.appliedProfileRevision !== undefined
+          ? { appliedProfileRevision: acknowledgement.appliedProfileRevision }
+          : {}),
+      };
     next.profile = c.profile;
     next.executionPolicy = c.executionPolicy;
   }

@@ -37,6 +37,8 @@ export type ProjectDocument = {
   research?: ProjectResearch;
 };
 export interface ProjectStore {
+  readonly project: Project;
+  readonly settings: import('./project-settings.ts').ProjectSettings;
   readonly materials: import('./project-materials.ts').ProjectMaterials;
   readonly entities: import('./project-entities.ts').ProjectEntities;
   snapshot(): Snapshot;

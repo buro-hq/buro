@@ -23,6 +23,9 @@ function memoryStore(id: string, close: () => Promise<void> = async () => {}) {
     capabilities: [],
   };
   const store: ProjectStore = {
+    get project() {
+      return structuredClone(snapshot.project);
+    },
     snapshot: () => snapshot,
     receipt: () => undefined,
     transact: async () => {

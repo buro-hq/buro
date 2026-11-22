@@ -3,7 +3,7 @@ import type { ProjectProfile, ProjectResearch } from './domain.ts';
 /** Add discovered configuration without replacing user-maintained commands or policies. */
 export function profileWithResearch(
   profile: ProjectProfile,
-  research: ProjectResearch,
+  research: Pick<ProjectResearch, 'components' | 'checks' | 'context'>,
 ): ProjectProfile {
   const components = [...(profile.components || [])];
   const folder = (p: string) => p.replace(/^\.\//, '').replace(/\/$/, '') || '.';

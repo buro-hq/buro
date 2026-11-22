@@ -2,6 +2,13 @@ import { acquireWriterLock } from './writer-lock.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import { createDocumentProjectSettings } from './project-settings.ts';
+import {
+  validateProjectIdentity,
+  validateProjectProfile,
+  type ProjectSettings,
+} from '../../core/project-settings.ts';
 import { DomainError, type ProjectDocument, type ProjectStore } from '../../core/ports.ts';
 import { capabilities } from '../../core/defaults.ts';
 import type { ProjectMaterials } from '../../core/project-materials.ts';
@@ -45,6 +52,11 @@ type Options = {
 /** One writer per project. State, events and idempotency receipts share one atomic commit. */
 export class FileProjectStore implements ProjectStore {
   readonly entities: ProjectEntities;
+  readonly settings: ProjectSettings;
+  #project: Project;
+  get project(): Project {
+    return structuredClone(this.#project);
+  }
   readonly materials: ProjectMaterials;
   directory: string;
   file: string;
@@ -60,6 +72,12 @@ export class FileProjectStore implements ProjectStore {
     this.file = path.join(options.directory, 'control-state.json');
     this.lock = path.join(options.directory, 'writer.lock');
     this.doc = doc;
+    this.#project = validateProjectIdentity(doc.project);
+    Object.defineProperty(this, 'project', {
+      enumerable: true,
+      configurable: false,
+      get: () => structuredClone(this.#project),
+    });
     this.nonce = nonce;
     this.replace = options.replace || fs.rename;
     const read = <T>(query: (doc: ProjectDocument) => T): Promise<T> => {
@@ -76,8 +94,16 @@ export class FileProjectStore implements ProjectStore {
     const host = { projectId: doc.project.id, read, transaction };
     this.entities = createDocumentProjectEntities(host);
     this.materials = createDocumentProjectMaterials(host);
+    this.settings = createDocumentProjectSettings(host);
   }
   static async open(options: Options) {
+    options = {
+      ...options,
+      project: validateProjectIdentity(options.project),
+      ...(options.profile ? { profile: validateProjectProfile(options.profile) } : {}),
+      ...(options.roles ? { roles: structuredClone(options.roles) } : {}),
+      ...(options.runs ? { runs: structuredClone(options.runs) } : {}),
+    };
     await fs.mkdir(options.directory, { recursive: true });
     const lock = path.join(options.directory, 'writer.lock'),
       nonce = await acquireWriterLock(options.directory);
@@ -90,13 +116,22 @@ export class FileProjectStore implements ProjectStore {
         );
         parseSnapshot({ ...doc, roles: doc.roleVersions, capabilities });
         if (
-          doc.project.id !== options.project.id ||
           !Array.isArray(doc.events) ||
           doc.sequence !== doc.events.length ||
           !doc.receipts ||
           doc.version !== 1
         )
           throw Error('Invalid project state.');
+        if (
+          doc.project.id !== options.project.id ||
+          doc.project.root !== options.project.root ||
+          doc.project.managed !== options.project.managed ||
+          doc.project.dataDirectory !== options.project.dataDirectory
+        )
+          throw new DomainError(
+            'PROJECT_STORAGE_MISMATCH',
+            'The opened store belongs to a different project.',
+          );
         const previousRuns = new Map<string, Run>();
         const packed: StoredEvent[] = [];
         for (const stored of doc.events) {
@@ -120,15 +155,13 @@ export class FileProjectStore implements ProjectStore {
           sequence: 0,
           project: options.project,
           roleVersions: structuredClone(options.roles || []),
+          ...(options.profile ? { profile: options.profile } : {}),
           goals: [],
           runs: options.runs || [],
           events: [],
           receipts: {},
         };
       }
-      doc.project = options.project;
-      if (options.profile && (!doc.profile || options.profile.revision >= doc.profile.revision))
-        doc.profile = options.profile;
       validateProjectRunBudgets(doc);
       validateProjectPlanningPolicies(doc);
       validateProjectOperationContexts(doc);
@@ -210,6 +243,11 @@ export class FileProjectStore implements ProjectStore {
       const { events: history, ...state } = this.doc;
       const draft = structuredClone(state),
         { result, changes } = apply(draft);
+      if (!isDeepStrictEqual(validateProjectIdentity(draft.project), this.#project))
+        throw new DomainError(
+          'PROJECT_STORAGE_MISMATCH',
+          'Project identity cannot be changed by a state transaction.',
+        );
       validateProjectRunBudgets(draft, this.doc);
       validateProjectPlanningPolicies(draft, this.doc);
       validateProjectOperationContexts(draft, this.doc);

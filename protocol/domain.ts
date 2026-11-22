@@ -183,6 +183,11 @@ export type ProjectVerification = {
   total: number;
   results: Check[];
 };
+export type ResearchAcknowledgement = {
+  id: string;
+  reviewedProfileRevision: number;
+  appliedProfileRevision?: number;
+};
 export type RunContinuation = {
   mode: 'repair' | 'recheck';
   instructions: string;
@@ -321,7 +326,7 @@ export type DomainEvent = {
         type: 'project.configured';
         profile: ProjectProfile;
         executionPolicy: ExecutionPolicyView;
-        research?: ProjectResearch;
+        researchAcknowledgement?: ResearchAcknowledgement;
       }
     | { type: 'project.verified'; verification: ProjectVerification }
     | { type: 'run.changed'; run: Run; goal: Goal; roles?: Role[] };

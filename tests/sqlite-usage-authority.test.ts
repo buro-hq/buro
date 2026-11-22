@@ -27,7 +27,7 @@ async function fixture(t: any) {
   const events: UsageAuthorityEvent[] = [];
   const authority = await SqliteProjectUsageAuthority.open({
     directory: path.join(root, 'state'),
-    projectId: 'p',
+    project: { id: 'p', name: 'Synthetic project', root: path.join(root, 'state') },
     onEvent: (event) => {
       events.push(event);
     },
@@ -47,7 +47,7 @@ test('SQLite authority creates private database companions and project-bound met
   await assert.rejects(
     SqliteProjectUsageAuthority.open({
       directory: f.authority.directory,
-      projectId: 'another-project',
+      project: { id: 'another-project', name: 'Synthetic project', root: f.authority.directory },
     }),
     { code: 'USAGE_PROJECT_MISMATCH' },
   );
@@ -66,7 +66,7 @@ test('symlink ancestors, database targets and preexisting SQLite companions are 
   await assert.rejects(
     SqliteProjectUsageAuthority.open({
       directory: path.join(root, 'alias', 'nested'),
-      projectId: 'p',
+      project: { id: 'p', name: 'Synthetic project', root: path.join(root, 'alias', 'nested') },
     }),
     { code: 'UNSAFE_USAGE_STORAGE' },
   );
@@ -76,9 +76,15 @@ test('symlink ancestors, database targets and preexisting SQLite companions are 
     const directory = path.join(root, 'state' + (suffix || '-db'));
     await fs.mkdir(directory);
     await fs.symlink(sentinel, path.join(directory, 'authority.sqlite' + suffix));
-    await assert.rejects(SqliteProjectUsageAuthority.open({ directory, projectId: 'p' }), {
-      code: 'UNSAFE_USAGE_STORAGE',
-    });
+    await assert.rejects(
+      SqliteProjectUsageAuthority.open({
+        directory,
+        project: { id: 'p', name: 'Synthetic project', root: directory },
+      }),
+      {
+        code: 'UNSAFE_USAGE_STORAGE',
+      },
+    );
   }
   assert.equal(await fs.readFile(sentinel, 'utf8'), 'Must stay unchanged');
 });
@@ -228,7 +234,7 @@ test('observer failures do not turn committed receipts into failed transactions'
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'buro-sql-observers-')));
   const authority = await SqliteProjectUsageAuthority.open({
     directory: root,
-    projectId: 'p',
+    project: { id: 'p', name: 'Synthetic project', root: root },
     onQuery() {
       throw Error('Query observer failed');
     },

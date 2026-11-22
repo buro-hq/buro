@@ -1,3 +1,4 @@
+import { createDocumentProjectSettings } from '../adapters/files/project-settings.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -48,7 +49,33 @@ function memoryStore(spec: ProjectStoreOpenSpec): ProjectStore {
       throw new DomainError('IDEMPOTENCY_CONFLICT', 'Different request.');
     return structuredClone(saved?.result);
   };
+  const settings = createDocumentProjectSettings({
+    projectId: doc.project.id,
+    read: async (query) => query(doc),
+    transaction: async (command, apply) => {
+      const saved = Object.hasOwn(doc.receipts, command.id) ? doc.receipts[command.id] : undefined;
+      if (saved) {
+        if (saved.fingerprint !== command.fingerprint)
+          throw new DomainError('IDEMPOTENCY_CONFLICT', 'Different request.');
+        return structuredClone(saved.result) as any;
+      }
+      const draft = structuredClone(doc);
+      const { result, changes } = apply(draft);
+      draft.receipts[command.id] = {
+        fingerprint: command.fingerprint,
+        result: structuredClone(result),
+      };
+      draft.revision += changes.length;
+      draft.sequence += changes.length;
+      doc = draft;
+      return result;
+    },
+  });
   return {
+    get project() {
+      return structuredClone(doc.project);
+    },
+    settings,
     snapshot: () => ({
       ...structuredClone(doc),
       roles: structuredClone(doc.roleVersions),

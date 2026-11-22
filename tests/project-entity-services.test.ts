@@ -76,7 +76,7 @@ async function fixture(t: any, kind: 'file' | 'sqlite') {
     else
       sql = await SqliteProjectUsageAuthority.open({
         directory,
-        projectId: project.id,
+        project,
         onQuery: (query) => queryRows.push(query),
       });
   };

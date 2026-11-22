@@ -39,7 +39,11 @@ async function fixture(t: any, extra = {}) {
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-sqlite-atomicity-')),
   );
   await fs.writeFile(path.join(directory, '.usage-fault-fixture'), 'synthetic-only');
-  const options = { directory, projectId: 'project', ...extra };
+  const options = {
+    directory,
+    project: { id: 'project', name: 'Synthetic project', root: directory },
+    ...extra,
+  };
   const opened: SqliteProjectUsageAuthority[] = [];
   const open = async () => {
     const authority = await SqliteProjectUsageAuthority.open(options);

@@ -24,7 +24,7 @@ export class ProjectStoreRegistry implements MutableProjectRegistry {
 
   add(store: ProjectStore): void {
     this.#assertOpen();
-    const id = store.snapshot().project.id;
+    const id = store.project.id;
     if (!id.trim()) throw new DomainError('INVALID_PROJECT', 'A project needs a nonempty ID.');
     if (this.#stores.has(id))
       throw new DomainError('PROJECT_EXISTS', 'A project with this ID is already open.');
@@ -33,7 +33,7 @@ export class ProjectStoreRegistry implements MutableProjectRegistry {
 
   list() {
     this.#assertOpen();
-    return [...this.#stores.values()].map((store) => structuredClone(store.snapshot().project));
+    return [...this.#stores.values()].map((store) => structuredClone(store.project));
   }
 
   close(): Promise<void> {

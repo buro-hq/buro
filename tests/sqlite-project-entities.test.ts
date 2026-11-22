@@ -21,7 +21,10 @@ async function fixture(t: any) {
   const directory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-sql-entities-')),
   );
-  const authority = await SqliteProjectUsageAuthority.open({ directory, projectId: 'p' });
+  const authority = await SqliteProjectUsageAuthority.open({
+    directory,
+    project: { id: 'p', name: 'Synthetic project', root: directory },
+  });
   t.after(async () => {
     await authority.close();
     await fs.rm(directory, { recursive: true, force: true });

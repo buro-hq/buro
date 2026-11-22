@@ -24,7 +24,10 @@ async function fixture(t: any, kind: 'file' | 'sqlite') {
     const authority =
       kind === 'file'
         ? await FileProjectStore.open({ directory, project: { id, name: id, root } })
-        : await SqliteProjectUsageAuthority.open({ directory, projectId: id });
+        : await SqliteProjectUsageAuthority.open({
+            directory,
+            project: { id: id, name: 'Synthetic project', root: directory },
+          });
     opened.push(authority);
     authorities.set(id, { entities: authority.entities, directory });
   }

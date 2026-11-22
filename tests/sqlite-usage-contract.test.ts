@@ -29,7 +29,10 @@ async function directory(t: any) {
 
 test('SQLite preserves partial usage with undefined optional fields across JSON storage and replay', async (t) => {
   const root = await directory(t);
-  let authority = await SqliteProjectUsageAuthority.open({ directory: root, projectId: 'p' });
+  let authority = await SqliteProjectUsageAuthority.open({
+    directory: root,
+    project: { id: 'p', name: 'Synthetic project', root: root },
+  });
   t.after(() => authority.close());
   await authority.transaction(command('account'), (tx) =>
     tx.usage.createAccount(owner, { id: 'account-json', policy }),
@@ -63,7 +66,10 @@ test('SQLite preserves partial usage with undefined optional fields across JSON 
   assert.equal(settled.account.observed.unknownUsageRequests, 1);
   assert.equal(settled.account.outstandingOutputTokens, 0);
   await authority.close();
-  authority = await SqliteProjectUsageAuthority.open({ directory: root, projectId: 'p' });
+  authority = await SqliteProjectUsageAuthority.open({
+    directory: root,
+    project: { id: 'p', name: 'Synthetic project', root: root },
+  });
   const saved = await authority.account(owner);
   assert.deepEqual(saved, settled.account);
   const operation = await authority.operation(owner, proposal.operationId);
@@ -84,9 +90,15 @@ test('a preexisting foreign SQLite database is rejected without installing autho
     "CREATE TABLE foreign_data (value TEXT); INSERT INTO foreign_data VALUES ('keep');",
   );
   database.close();
-  await assert.rejects(SqliteProjectUsageAuthority.open({ directory: root, projectId: 'p' }), {
-    code: 'USAGE_AUTHORITY_FORMAT',
-  });
+  await assert.rejects(
+    SqliteProjectUsageAuthority.open({
+      directory: root,
+      project: { id: 'p', name: 'Synthetic project', root: root },
+    }),
+    {
+      code: 'USAGE_AUTHORITY_FORMAT',
+    },
+  );
   database = new DatabaseSync(file);
   try {
     assert.deepEqual(database.prepare('SELECT value FROM foreign_data').get()?.value, 'keep');

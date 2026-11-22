@@ -10,6 +10,13 @@ import {
   type ProjectMaterials,
   type MaterialTransaction,
 } from './project-materials.ts';
+import {
+  validateProjectSettingsChange,
+  type ProjectSettingsChange,
+  type ProjectSettings,
+  type SettingsTransaction,
+} from './project-settings.ts';
+import type { Project } from '../protocol/domain.ts';
 import { DomainError } from './ports.ts';
 import {
   admitGeneration,
@@ -52,7 +59,7 @@ export type ProjectUsageChange = {
 };
 export type ProjectAuthorityChange =
   | ProjectUsageChange
-  | ((ProjectEntityChange | ProjectMaterialChange) & { projectId: string });
+  | ((ProjectEntityChange | ProjectMaterialChange | ProjectSettingsChange) & { projectId: string });
 export type UsageAuthorityEvent = ProjectAuthorityChange & { sequence: number };
 export type UsageEventPage = {
   events: UsageAuthorityEvent[];
@@ -75,11 +82,14 @@ export type UsageAuthorityTransaction = { readonly usage: UsageTransaction };
 export type ProjectAuthorityTransaction = UsageAuthorityTransaction & {
   readonly entities: EntityTransaction;
   readonly materials: MaterialTransaction;
+  readonly settings: SettingsTransaction;
 };
 export interface ProjectUsageAuthority {
+  readonly project: Project;
   readonly projectId: string;
   readonly entities: ProjectEntities;
   readonly materials: ProjectMaterials;
+  readonly settings: ProjectSettings;
   /** Callback is synchronous and its result must be JSON-safe; neither permits external effects. */
   transaction<T>(command: UsageCommand, apply: (tx: ProjectAuthorityTransaction) => T): Promise<T>;
   account(owner: ProjectUsageOwner): Promise<UsageAccount | undefined>;
@@ -392,6 +402,8 @@ export function validateProjectAuthorityChange(
   )
     throw new DomainError('INVALID_AUTHORITY_EVENT', 'The saved project event is invalid.');
   const { projectId, ...change } = input;
+  if (change.type === 'project.configured' || change.type === 'project.verified')
+    return { ...validateProjectSettingsChange(change), projectId };
   if (change.type === 'context.materials.added' || change.type === 'context.material.removed')
     return { ...validateProjectMaterialChange(change), projectId };
   return { ...validateProjectEntityChange(change, projectId), projectId };

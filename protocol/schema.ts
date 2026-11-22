@@ -10,7 +10,13 @@ import {
   type ResourceConfigurationChange,
 } from './domain.ts';
 import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
-import { DeliverySchema, PreviewSchema, ResearchSchema, GoalOutcomeSchema } from './operations.ts';
+import {
+  DeliverySchema,
+  PreviewSchema,
+  ResearchSchema,
+  ResearchResultSchema,
+  GoalOutcomeSchema,
+} from './operations.ts';
 import { ContextMaterialSchema } from './context.ts';
 import { PendingRunTurnSchema, RunReconciliationSchema } from './reconciliation.ts';
 import { ExecutionPolicySchema } from './execution-policy.ts';
@@ -39,6 +45,13 @@ const id = z
   .min(1)
   .max(100)
   .regex(/^[a-zA-Z0-9_-]+$/);
+export const ProjectSchema = z.strictObject({
+  id,
+  name: z.string().min(1),
+  root: z.string().min(1),
+  managed: z.boolean().optional(),
+  dataDirectory: z.string().optional(),
+});
 const project = z.strictObject({ projectId: id });
 const text = (max = 16000) => z.string().trim().min(1).max(max);
 export const RoleInputSchema = z.strictObject({
@@ -290,7 +303,7 @@ const checks = z.object({
   total: z.number().int().nonnegative(),
   results: z.array(check),
 });
-const verification = z.object({
+export const ProjectVerificationSchema = z.object({
   id: z.string(),
   profileRevision: z.number(),
   createdAt: z.string(),
@@ -300,6 +313,30 @@ const verification = z.object({
   total: z.number(),
   results: z.array(check),
 });
+const verification = ProjectVerificationSchema;
+export const ResearchAcknowledgementSchema = z.strictObject({
+  id: z.string().min(1),
+  reviewedProfileRevision: z.number().int().positive(),
+  appliedProfileRevision: z.number().int().positive().optional(),
+});
+/** Bounded settings input: the research body cannot carry history, grants or model resources. */
+export const ResearchProposalSchema = ResearchSchema.pick({
+  id: true,
+  status: true,
+  analysis: true,
+  sourceHead: true,
+  profileRevision: true,
+  context: true,
+  components: true,
+  checks: true,
+  reviewedProfileRevision: true,
+  appliedProfileRevision: true,
+})
+  .extend({
+    context: ResearchResultSchema.shape.context.optional(),
+    components: ResearchResultSchema.shape.components.optional(),
+  })
+  .strict();
 const agentSession = z.object({
   id: z.string(),
   roleId: z.string(),
@@ -583,9 +620,9 @@ export const DomainEventSchema = z
         roles: z.array(role).optional(),
       }),
       z.object({ type: z.literal('project.verified'), verification }),
-      z.object({
+      z.strictObject({
         type: z.literal('project.configured'),
-        research: ResearchSchema.optional(),
+        researchAcknowledgement: ResearchAcknowledgementSchema.optional(),
         profile: ProjectProfileSchema,
         executionPolicy: ExecutionPolicySchema,
       }),
@@ -607,13 +644,7 @@ export const SnapshotSchema = z
   .object({
     contextMaterials: z.array(ContextMaterialSchema).optional(),
     version: z.literal(1),
-    project: z.object({
-      id: z.string(),
-      name: z.string(),
-      root: z.string(),
-      managed: z.boolean().optional(),
-      dataDirectory: z.string().optional(),
-    }),
+    project: ProjectSchema,
     revision: z.number().int().nonnegative(),
     sequence: z.number().int().nonnegative(),
     roles: z.array(role),
@@ -643,15 +674,7 @@ export function parseSnapshot(input: unknown): Snapshot {
 export const ServiceInfoSchema = z
   .strictObject({
     version: z.literal(1),
-    projects: z.array(
-      z.strictObject({
-        id,
-        name: z.string().min(1),
-        root: z.string().min(1),
-        managed: z.boolean().optional(),
-        dataDirectory: z.string().optional(),
-      }),
-    ),
+    projects: z.array(ProjectSchema),
     capabilities: z.array(z.string()),
   })
   .superRefine((info, ctx) => {

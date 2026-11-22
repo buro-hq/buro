@@ -36,7 +36,7 @@ async function fixture(t: any, onEvent?: (event: UsageAuthorityEvent) => void) {
   const open = async () => {
     const authority = await SqliteProjectUsageAuthority.open({
       directory,
-      projectId: 'p',
+      project: { id: 'p', name: 'Synthetic project', root: directory },
       onEvent,
     });
     opened.push(authority);

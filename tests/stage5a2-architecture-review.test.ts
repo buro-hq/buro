@@ -19,7 +19,10 @@ test('private authority storage rejects hard-linked database files and companion
     try {
       await assert.rejects(
         async () => {
-          opened = await SqliteProjectUsageAuthority.open({ directory: state, projectId: 'p' });
+          opened = await SqliteProjectUsageAuthority.open({
+            directory: state,
+            project: { id: 'p', name: 'Synthetic project', root: state },
+          });
         },
         { code: 'UNSAFE_USAGE_STORAGE' },
       );

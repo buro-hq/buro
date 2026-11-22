@@ -33,7 +33,10 @@ async function fixture(t: any, kind: 'file' | 'sqlite', text: (input: string) =>
           directory: state,
           project: { id: 'p', name: 'Fixture', root: repository },
         })
-      : await SqliteProjectUsageAuthority.open({ directory: state, projectId: 'p' });
+      : await SqliteProjectUsageAuthority.open({
+          directory: state,
+          project: { id: 'p', name: 'Synthetic project', root: state },
+        });
   opened.push(authority);
   const materials = (): ProjectMaterials => authority.materials;
   const registry: ProjectRegistry = {
@@ -115,7 +118,10 @@ async function fixture(t: any, kind: 'file' | 'sqlite', text: (input: string) =>
               directory: state,
               project: { id: 'p', name: 'Fixture', root: repository },
             })
-          : await SqliteProjectUsageAuthority.open({ directory: state, projectId: 'p' });
+          : await SqliteProjectUsageAuthority.open({
+              directory: state,
+              project: { id: 'p', name: 'Synthetic project', root: state },
+            });
       opened.push(authority);
     },
   };

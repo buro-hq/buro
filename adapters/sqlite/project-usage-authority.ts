@@ -21,6 +21,15 @@ import {
   type UsageOperation,
 } from '../../core/usage-accounting.ts';
 import { DomainError } from '../../core/ports.ts';
+import type { Project, ProjectProfile } from '../../protocol/domain.ts';
+import {
+  createSettingsTransaction,
+  validateProjectIdentity,
+  validateProjectProfile,
+  type ProjectSettings,
+  type SettingsTransaction,
+} from '../../core/project-settings.ts';
+import { createSqliteSettingsRows, projectSettingsSchema } from './project-settings-rows.ts';
 import {
   createEntityTransaction,
   type EntityTransaction,
@@ -45,12 +54,13 @@ import { preparePrivateDatabase, assertPrivateDatabaseFiles } from './private-da
 export type UsageQueryObservation = { operation: string; rows: number };
 export type SqliteProjectUsageOptions = {
   directory: string;
-  projectId: string;
+  project: Project;
+  profile?: ProjectProfile;
   onEvent?: (event: UsageAuthorityEvent) => void;
   /** Counts returned/changed rows without exposing SQL parameters or private payloads. */
   onQuery?: (observation: UsageQueryObservation) => void;
 };
-const format = 'buro-project-authority-v3';
+const format = 'buro-project-authority-v4';
 const failure = (code: string, message: string) => new DomainError(code, message);
 const stateConflict = () =>
   failure('USAGE_STATE_CONFLICT', 'The stored usage state changed. Refresh before trying again.');
@@ -60,9 +70,11 @@ const validString = (value: unknown): value is string =>
 /** One SQL transaction kernel for usage and indexed entities; no live scheduler or dispatch grant is wired here. */
 export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
   #projectId: string;
+  #project: Project;
   #directory: string;
   #entities: ProjectEntities;
   #materials: ProjectMaterials;
+  #settings: ProjectSettings;
   #database: DatabaseSync;
   #statements = new Map<string, StatementSync>();
   #queue: Promise<unknown> = Promise.resolve();
@@ -73,7 +85,8 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
 
   private constructor(database: DatabaseSync, options: SqliteProjectUsageOptions) {
     this.#database = database;
-    this.#projectId = options.projectId;
+    this.#project = validateProjectIdentity(options.project);
+    this.#projectId = this.#project.id;
     this.#directory = options.directory;
     this.#entities = Object.freeze({
       projectId: this.#projectId,
@@ -89,11 +102,23 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       receipt: (command: UsageCommand) => this.#materialReceipt(command),
       material: (id: string) => this.#readMaterial((tx) => tx.material(id)),
     });
+    this.#settings = Object.freeze({
+      projectId: this.#projectId,
+      transaction: <T>(command: UsageCommand, apply: (tx: SettingsTransaction) => T) =>
+        this.transaction(command, (tx) => apply(tx.settings)),
+      receipt: (command: UsageCommand) => this.#materialReceipt(command),
+      profile: () => this.#readSettings((tx) => tx.profile()),
+      verification: () => this.#readSettings((tx) => tx.verification()),
+      researchProposal: () => this.#readSettings((tx) => tx.researchProposal()),
+      hasActiveRun: () => this.#readSettings((tx) => tx.hasActiveRun()),
+    });
     Object.defineProperties(this, {
       projectId: { enumerable: true, configurable: false, get: () => this.#projectId },
+      project: { enumerable: true, configurable: false, get: () => structuredClone(this.#project) },
       directory: { enumerable: true, configurable: false, get: () => this.#directory },
       entities: { enumerable: true, configurable: false, get: () => this.#entities },
       materials: { enumerable: true, configurable: false, get: () => this.#materials },
+      settings: { enumerable: true, configurable: false, get: () => this.#settings },
     });
     this.#onEvent = options.onEvent;
     this.#onQuery = options.onQuery;
@@ -114,17 +139,24 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
     return this.#materials;
   }
 
+  get project() {
+    return structuredClone(this.#project);
+  }
+  get settings() {
+    return this.#settings;
+  }
+
   static async open(options: SqliteProjectUsageOptions) {
     const captured = {
       directory: options.directory,
-      projectId: options.projectId,
+      project: validateProjectIdentity(options.project),
+      profile: options.profile === undefined ? undefined : structuredClone(options.profile),
       onEvent: options.onEvent,
       onQuery: options.onQuery,
     };
-    if (!validString(captured.projectId))
-      throw failure('INVALID_PROJECT_ID', 'The project identity is invalid.');
     const location = await preparePrivateDatabase(captured.directory, 'authority.sqlite');
     const database = new DatabaseSync(location.file);
+    let project = captured.project;
     try {
       database.exec('PRAGMA busy_timeout=1000; PRAGMA foreign_keys=ON;');
       const tables = database
@@ -145,6 +177,9 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         'project_run_index',
         'project_materials',
         'material_counts',
+        'project_profiles',
+        'project_verifications',
+        'project_research_proposals',
       ];
       if (
         tables.length &&
@@ -157,7 +192,8 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
           CREATE TABLE IF NOT EXISTS authority_metadata (
             singleton INTEGER PRIMARY KEY CHECK(singleton=1),
             format TEXT NOT NULL,
-            project_id TEXT NOT NULL
+            project_id TEXT NOT NULL,
+            project_json TEXT NOT NULL CHECK(json_valid(project_json))
           );
           CREATE TABLE IF NOT EXISTS usage_accounts (
             account_id TEXT PRIMARY KEY NOT NULL,
@@ -185,8 +221,11 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         `);
         database.exec(projectEntitySchema);
         database.exec(projectMaterialSchema);
+        database.exec(projectSettingsSchema);
         const metadata = database
-          .prepare('SELECT format,project_id FROM authority_metadata WHERE singleton=1')
+          .prepare(
+            'SELECT format,project_id,project_json FROM authority_metadata WHERE singleton=1',
+          )
           .get();
         if (metadata) {
           if (metadata.format !== format)
@@ -194,8 +233,18 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
               'USAGE_AUTHORITY_FORMAT',
               'This project authority format is unsupported.',
             );
-          if (metadata.project_id !== captured.projectId)
-            throw failure('USAGE_PROJECT_MISMATCH', 'The authority belongs to another project.');
+          const saved = validateProjectIdentity(JSON.parse(String(metadata.project_json)));
+          if (
+            metadata.project_id !== saved.id ||
+            ['id', 'root', 'managed', 'dataDirectory'].some(
+              (key) => saved[key as keyof Project] !== captured.project[key as keyof Project],
+            )
+          )
+            throw failure(
+              'USAGE_PROJECT_MISMATCH',
+              'The authority belongs to another project binding.',
+            );
+          project = saved;
         } else {
           if (tables.length)
             throw failure(
@@ -203,11 +252,21 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
               'The project authority metadata is incomplete.',
             );
           database
-            .prepare('INSERT INTO authority_metadata(singleton,format,project_id) VALUES (1,?,?)')
-            .run(format, captured.projectId);
+            .prepare(
+              'INSERT INTO authority_metadata(singleton,format,project_id,project_json) VALUES (1,?,?,?)',
+            )
+            .run(format, captured.project.id, json(captured.project));
           database.exec(
             'INSERT INTO material_counts(singleton,total_count,active_project_count) VALUES (1,0,0)',
           );
+          if (captured.profile !== undefined) {
+            const profile = validateProjectProfile(captured.profile);
+            database
+              .prepare(
+                'INSERT INTO project_profiles(singleton,revision,profile_json) VALUES (1,?,?)',
+              )
+              .run(profile.revision, json(profile));
+          }
         }
         if (!database.prepare('SELECT singleton FROM material_counts WHERE singleton=1').get())
           throw failure('USAGE_AUTHORITY_FORMAT', 'The project material summary is missing.');
@@ -223,6 +282,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       await assertPrivateDatabaseFiles(location.file);
       return new SqliteProjectUsageAuthority(database, {
         ...captured,
+        project,
         directory: location.directory,
       });
     } catch (error) {
@@ -445,7 +505,14 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
           ),
           assertActive,
         });
-        const tx = Object.freeze({ ...usage, entities, materials });
+        const settings = createSettingsTransaction({
+          projectId: this.#projectId,
+          storage: this.#settingsRows(mutate, (change) =>
+            appendChange({ ...change, projectId: this.#projectId }),
+          ),
+          assertActive,
+        });
+        const tx = Object.freeze({ ...usage, entities, materials, settings });
         const result = apply(tx);
         active = false;
         if (thenable(result)) {
@@ -511,6 +578,40 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
     }
     return this.#enqueue(() => this.#receiptRow(captured));
   }
+  #settingsRows(
+    mutate: <T>(action: () => T) => T,
+    appendChange: Parameters<typeof createSqliteSettingsRows>[0]['appendChange'],
+  ) {
+    return createSqliteSettingsRows({
+      get: (...args) => this.#get(...args),
+      run: (...args) => this.#run(...args),
+      json,
+      mutate,
+      appendChange,
+    });
+  }
+  #readSettings<T>(query: (tx: SettingsTransaction) => T): Promise<T> {
+    return this.#enqueue(() => {
+      let active = true;
+      const forbidden = (): never => {
+        throw failure('USAGE_TRANSACTION_CLOSED', 'This query does not grant a transaction.');
+      };
+      try {
+        return query(
+          createSettingsTransaction({
+            projectId: this.#projectId,
+            storage: this.#settingsRows(forbidden, forbidden),
+            assertActive: () => {
+              if (!active) forbidden();
+            },
+          }),
+        );
+      } finally {
+        active = false;
+      }
+    });
+  }
+
   #materialRows(
     mutate: <T>(action: () => T) => T,
     appendChange: Parameters<typeof createSqliteMaterialRows>[0]['appendChange'],

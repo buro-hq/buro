@@ -4,6 +4,7 @@ import {
   type ProjectDocument,
   type MutableProjectRegistry,
   type ProjectStoreFactory,
+  type ProjectStore,
 } from './ports.ts';
 import { resultApplyReceiptId, type ResultApplyIntent } from './result-apply.ts';
 import {
@@ -19,7 +20,16 @@ import type {
   RepositoryInfo,
   ProjectVerification,
 } from '../protocol/domain.ts';
-import { ProjectProfileSchema } from '../protocol/projects.ts';
+import {
+  executionPolicy,
+  policyView,
+  validateProjectIdentity,
+  validateProjectProfile,
+  validateProjectVerification,
+  type ProjectSettings,
+  type ResearchProposal,
+} from './project-settings.ts';
+export { executionPolicy, policyView } from './project-settings.ts';
 
 export type ProjectCatalog = {
   version: 1;
@@ -64,27 +74,6 @@ export type ProjectApplicationOptions = {
   report?: (message: string, error: unknown, root?: string) => void;
 };
 
-export function executionPolicy(profile: ProjectProfile): ExecutionPolicy {
-  return {
-    scope: structuredClone(profile.scope),
-    checks: profile.checks.map(({ id, title }) => ({ id, title })),
-    defaultCheckIds: profile.defaultCheckIds,
-    maxWorkers: profile.maxWorkers,
-    maxRepairs: profile.maxRepairs,
-    turnTimeoutMs: profile.turnTimeoutMs,
-    context: profile.context,
-    profile: structuredClone(profile),
-  };
-}
-export function policyView(profile: ProjectProfile) {
-  const {
-    profile: _profile,
-    context: _context,
-    turnTimeoutMs: _timeout,
-    ...view
-  } = executionPolicy(profile);
-  return view;
-}
 /** Project use cases own receipts and admission; injected ports own storage, Git and processes. */
 export class ProjectApplication {
   registry: MutableProjectRegistry;
@@ -134,9 +123,29 @@ export class ProjectApplication {
         this.report('Could not open project', error, item.root);
       }
   }
+  private settingsContext(projectId: string, opened?: ProjectStore) {
+    const store = opened ?? this.registry.get(projectId);
+    const project = validateProjectIdentity(store.project);
+    const settings = store.settings;
+    if (project.id !== projectId || !settings || settings.projectId !== projectId)
+      throw new DomainError(
+        'PROJECT_STORAGE_MISMATCH',
+        'The opened store belongs to a different project.',
+      );
+    return { store, project, settings };
+  }
+  private installPolicy(projectId: string, profile: ProjectProfile) {
+    Object.defineProperty(this.policies, projectId, {
+      value: executionPolicy(profile),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
   async open(root: string, id: string) {
     const existing = this.registry.list().find((project) => project.id === id);
     if (existing) {
+      this.settingsContext(id);
       if (existing.root !== root)
         throw new DomainError(
           'PROJECT_ID_CONFLICT',
@@ -144,7 +153,7 @@ export class ProjectApplication {
         );
       return existing;
     }
-    const loaded = await this.options.repository.load(root);
+    const loaded = structuredClone(await this.options.repository.load(root));
     if (loaded.project.id !== id)
       throw new DomainError(
         'PROJECT_ID_CONFLICT',
@@ -152,60 +161,65 @@ export class ProjectApplication {
       );
     if (this.registry.list().some((project) => project.root === loaded.project.root))
       throw new DomainError('PROJECT_EXISTS', 'This root is already registered.');
-    const project = structuredClone(loaded.project);
+    const requested = validateProjectIdentity(loaded.project);
     const store = await this.options.stores.open({
       storageAddress: loaded.storageAddress,
-      project,
+      project: requested,
       profile: loaded.profile,
     });
     let transferred = false;
     try {
-      const storedProject = store.snapshot().project;
+      const { project, settings } = this.settingsContext(id, store);
       if (
-        storedProject.id !== project.id ||
-        storedProject.root !== project.root ||
-        storedProject.managed !== project.managed ||
-        storedProject.dataDirectory !== project.dataDirectory
+        project.root !== requested.root ||
+        project.managed !== requested.managed ||
+        project.dataDirectory !== requested.dataDirectory
       )
         throw new DomainError(
           'PROJECT_STORAGE_MISMATCH',
           'The opened store belongs to a different project.',
         );
-      if (!store.snapshot().profile?.baseBranch) {
-        await store.transact('internal-base-' + this.id(), 'base', (doc) => {
-          doc.profile = {
-            ...doc.profile!,
-            baseBranch: loaded.profile.baseBranch || loaded.branch || 'main',
-            revision: doc.profile!.revision + 1,
-          };
-          return {
-            result: null,
-            change: {
-              type: 'project.configured',
-              profile: doc.profile,
-              executionPolicy: policyView(doc.profile),
-            },
-          };
-        });
+      let profile = await settings.profile();
+      if (!profile) throw new DomainError('PROFILE_REQUIRED', 'The project needs saved settings.');
+      if (!profile.baseBranch) {
+        profile = await settings.transaction(
+          { id: 'internal-base-' + this.id(), fingerprint: 'base' },
+          (tx) => {
+            const current = tx.profile();
+            if (!current)
+              throw new DomainError('PROFILE_REQUIRED', 'The project needs saved settings.');
+            if (current.baseBranch) return current;
+            return tx.initializeBaseBranch({
+              expectedRevision: current.revision,
+              baseBranch: loaded.branch || 'main',
+            });
+          },
+        );
       }
       await this.options.repository.ensureLocal(project);
       this.registry.add(store);
       transferred = true;
-      Object.defineProperty(this.policies, id, {
-        value: executionPolicy(store.snapshot().profile!),
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-      if (store.snapshot().profile!.revision > loaded.profile.revision)
-        await this.options.repository.exportProfile(project, store.snapshot().profile!);
+      const current = await settings.profile();
+      if (!current) throw new DomainError('PROFILE_REQUIRED', 'The project needs saved settings.');
+      this.installPolicy(id, current);
+      if (current.revision > loaded.profile.revision)
+        await this.options.repository.exportProfile(project, current);
+      else if (JSON.stringify(current) !== JSON.stringify(validateProjectProfile(loaded.profile)))
+        this.report(
+          'The project.json proposal differs from saved service settings; saved settings remain authoritative.',
+          new DomainError(
+            'PROFILE_PROPOSAL_DIFFERENT',
+            'Import the proposal explicitly to change service settings.',
+          ),
+          project.root,
+        );
       return project;
     } catch (error) {
       if (!transferred) {
         try {
           await store.close();
         } catch {
-          // Preserve the original admission failure; ownership was never transferred.
+          /* Preserve the original admission failure. */
         }
       }
       throw error;
@@ -216,6 +230,7 @@ export class ProjectApplication {
     fingerprint: string,
     input: { root: string; name: string; profile: ProjectProfile; ignoreLocal?: boolean },
   ) {
+    input = structuredClone(input);
     return this.serialize(async () => {
       const receipt = Object.hasOwn(this.catalog.receipts, requestId)
         ? this.catalog.receipts[requestId]
@@ -224,7 +239,7 @@ export class ProjectApplication {
         if (receipt.fingerprint !== fingerprint)
           throw new DomainError('IDEMPOTENCY_CONFLICT', 'This ID was used for another connection.');
         await this.open(receipt.project.root, receipt.project.id);
-        return receipt.project;
+        return structuredClone(receipt.project);
       }
       const info = await this.inspect(input.root),
         existing = this.registry.list().find((p) => p.root === info.root);
@@ -239,7 +254,7 @@ export class ProjectApplication {
         });
         await this.options.catalog.save(structuredClone(next));
         this.catalog = next;
-        return existing;
+        return structuredClone(existing);
       }
       const prepared = await this.options.repository.prepareConnection({
         ...input,
@@ -255,15 +270,76 @@ export class ProjectApplication {
       });
       await this.options.catalog.save(structuredClone(next));
       this.catalog = next;
-      return project;
+      return structuredClone(project);
     });
   }
   async info(projectId: string) {
-    const project = this.registry.get(projectId).snapshot().project;
+    const { project, settings } = this.settingsContext(projectId);
     if (!project.managed)
       throw new DomainError('LEGACY_PROJECT', 'The demo project has no user profile.');
     const info = await this.inspect(project.root);
-    return { ...info, profile: this.registry.get(projectId).snapshot().profile! };
+    const profile = await settings.profile();
+    if (!profile) throw new DomainError('PROFILE_REQUIRED', 'The project needs saved settings.');
+    return { ...info, profile };
+  }
+  private async exportCurrentProfile(context: { project: Project; settings: ProjectSettings }) {
+    const current = await context.settings.profile();
+    if (!current) throw new DomainError('PROFILE_REQUIRED', 'The project needs saved settings.');
+    this.installPolicy(context.project.id, current);
+    try {
+      await this.options.repository.exportProfile(context.project, current);
+    } catch (error) {
+      this.report('The profile was saved by the service, but project.json export failed:', error);
+      throw new DomainError(
+        'PROFILE_EXPORT_FAILED',
+        'Settings were saved by the service, but project.json could not be updated. Save again.',
+      );
+    }
+  }
+  private async configureSettings(
+    command: { id: string; fingerprint: string },
+    input: {
+      projectId: string;
+      profile: ProjectProfile;
+      expectedRevision: number;
+      researchId?: string;
+    },
+    context = this.settingsContext(input.projectId),
+    capturedProposal?: ResearchProposal,
+  ) {
+    const cached = await context.settings.receipt(command);
+    if (cached !== undefined) {
+      await this.exportCurrentProfile(context);
+      return validateProjectProfile(cached.result);
+    }
+    if (!context.project.managed)
+      throw new DomainError('LEGACY_PROJECT', 'Settings are available for connected repositories.');
+    const candidate = validateProjectProfile(input.profile);
+    let expectedResearch: ResearchProposal | undefined;
+    if (input.researchId) {
+      expectedResearch = capturedProposal ?? (await context.settings.researchProposal());
+      if (
+        !expectedResearch ||
+        expectedResearch.id !== input.researchId ||
+        expectedResearch.status !== 'ready'
+      )
+        throw new DomainError('RESEARCH_STALE', 'Research changed. Refresh the suggestions.');
+      const head = await this.options.repository.head(context.project.root);
+      if (head !== expectedResearch.sourceHead)
+        throw new DomainError(
+          'RESEARCH_STALE',
+          'The repository changed after research. Research again before applying suggestions.',
+        );
+    }
+    const result = await context.settings.transaction(command, (tx) =>
+      tx.configure({
+        expectedRevision: input.expectedRevision,
+        profile: candidate,
+        ...(expectedResearch ? { expectedResearch } : {}),
+      }),
+    );
+    await this.exportCurrentProfile(context);
+    return result;
   }
   configure(
     requestId: string,
@@ -275,96 +351,42 @@ export class ProjectApplication {
       researchId?: string;
     },
   ) {
-    return this.serialize(async () => {
-      const store = this.registry.get(input.projectId),
-        snapshot = store.snapshot();
-      if (!snapshot.project.managed)
-        throw new DomainError(
-          'LEGACY_PROJECT',
-          'Settings are available for connected repositories.',
-        );
-      const profile = {
-        ...ProjectProfileSchema.parse(input.profile),
-        revision: input.expectedRevision + 1,
-      };
-      if (input.researchId) {
-        const research = snapshot.research;
-        if (!research || research.id !== input.researchId || research.status !== 'ready')
-          throw new DomainError('RESEARCH_STALE', 'Research changed. Refresh the suggestions.');
-        const head = await this.options.repository.head(snapshot.project.root);
-        if (head !== research.sourceHead)
-          throw new DomainError(
-            'RESEARCH_STALE',
-            'The repository changed after research. Research again before applying suggestions.',
-          );
-      }
-      // Store receipts also cover a lost configuration response.
-      const result = await store.transact(requestId, fingerprint, (doc) => {
-        if (doc.runs.some((r) => !terminal(r)))
-          throw new DomainError('PROJECT_BUSY', 'Settings can be changed after the goal finishes.');
-        if (doc.profile?.revision !== input.expectedRevision)
-          throw new DomainError('CONFLICT', 'Settings changed. Reload the profile.');
-        if (input.researchId && doc.research?.id !== input.researchId)
-          throw new DomainError('RESEARCH_STALE', 'Research has already been replaced.');
-        doc.profile = profile;
-        if (doc.research?.status === 'ready')
-          doc.research.reviewedProfileRevision = profile.revision;
-        if (input.researchId && doc.research)
-          doc.research.appliedProfileRevision = profile.revision;
-        return {
-          result: profile,
-          change: {
-            type: 'project.configured',
-            profile,
-            executionPolicy: policyView(profile),
-            research: doc.research,
-          },
-        };
-      });
-      const current = store.snapshot().profile!;
-      Object.defineProperty(this.policies, input.projectId, {
-        value: executionPolicy(current),
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-      try {
-        await this.options.repository.exportProfile(snapshot.project, current);
-      } catch (e) {
-        this.report('The profile was saved in control-state, but project.json export failed:', e);
-        throw new DomainError(
-          'PROFILE_EXPORT_FAILED',
-          'Settings were saved by the service, but project.json could not be updated. Save again.',
-        );
-      }
-      return result;
-    });
+    const captured = structuredClone(input);
+    const command = { id: requestId, fingerprint };
+    return this.serialize(() => this.configureSettings(command, captured));
   }
   applyResearch(
     requestId: string,
     fingerprint: string,
     input: { projectId: string; researchId: string; expectedRevision: number },
   ) {
-    const store = this.registry.get(input.projectId),
-      snapshot = store.snapshot();
-    if (store.receipt(requestId, fingerprint) !== undefined)
-      return this.configure(requestId, fingerprint, {
-        projectId: input.projectId,
-        profile: snapshot.profile!,
-        expectedRevision: input.expectedRevision,
-      });
-    if (
-      !snapshot.profile ||
-      snapshot.research?.id !== input.researchId ||
-      snapshot.research.status !== 'ready'
-    )
-      throw new DomainError(
-        'RESEARCH_STALE',
-        'Ready suggestions were not found. Refresh research.',
+    const captured = structuredClone(input);
+    const command = { id: requestId, fingerprint };
+    return this.serialize(async () => {
+      const context = this.settingsContext(captured.projectId);
+      const cached = await context.settings.receipt(command);
+      if (cached !== undefined) {
+        await this.exportCurrentProfile(context);
+        return validateProjectProfile(cached.result);
+      }
+      const proposal = await context.settings.researchProposal();
+      const profile = await context.settings.profile();
+      if (
+        !profile ||
+        !proposal ||
+        proposal.id !== captured.researchId ||
+        proposal.status !== 'ready'
+      )
+        throw new DomainError(
+          'RESEARCH_STALE',
+          'Ready suggestions were not found. Refresh research.',
+        );
+      return this.configureSettings(
+        command,
+        { ...captured, profile: profileWithResearch(profile, proposal) },
+        context,
+        proposal,
       );
-    return this.configure(requestId, fingerprint, {
-      ...input,
-      profile: profileWithResearch(snapshot.profile, snapshot.research),
     });
   }
   async verify(
@@ -374,29 +396,25 @@ export class ProjectApplication {
     checks: CheckPort,
     meta = { id: 'verify-' + this.id(), fingerprint: JSON.stringify(checkIds) },
   ) {
-    const store = this.registry.get(projectId),
-      cached = store.receipt(meta.id, meta.fingerprint);
-    if (cached !== undefined) return cached as ProjectVerification;
-    const key = projectId + ':' + meta.id,
+    const selected = [...checkIds],
+      command = structuredClone(meta);
+    const { settings } = this.settingsContext(projectId);
+    const cached = await settings.receipt(command);
+    if (cached !== undefined) return validateProjectVerification(cached.result);
+    const key = projectId + ':' + command.id,
       active = this.verifications.get(key);
     if (active) {
-      if (active.fingerprint !== meta.fingerprint)
+      if (active.fingerprint !== command.fingerprint)
         throw new DomainError('IDEMPOTENCY_CONFLICT', 'This ID was used for another verification.');
       return active.promise;
     }
-    const task = this.verification(projectId, checkIds, workspaces, checks).then(async (result) => {
-      const verification: ProjectVerification = {
-        ...result,
-        id: meta.id,
-        createdAt: this.now(),
-      };
-      return store.transact(meta.id, meta.fingerprint, (doc) => {
-        doc.verification = verification;
-        return { result: verification, change: { type: 'project.verified', verification } };
-      });
-    });
+    const task = this.verification(projectId, selected, workspaces, checks).then((result) =>
+      settings.transaction(command, (tx) =>
+        tx.saveVerification({ ...result, id: command.id, createdAt: this.now() }),
+      ),
+    );
     this.tasks.add(task);
-    this.verifications.set(key, { fingerprint: meta.fingerprint, promise: task });
+    this.verifications.set(key, { fingerprint: command.fingerprint, promise: task });
     try {
       return await task;
     } finally {
@@ -410,17 +428,15 @@ export class ProjectApplication {
     workspaces: WorkspacePort,
     checks: CheckPort,
   ) {
+    const selected = [...checkIds];
+    const { settings } = this.settingsContext(projectId);
     if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
     const info = await this.info(projectId);
-    if (
-      this.registry
-        .get(projectId)
-        .snapshot()
-        .runs.some((r) => !terminal(r))
-    )
+    if (await settings.hasActiveRun())
       throw new DomainError('PROJECT_BUSY', 'Wait for the goal to finish first.');
-    if (checkIds.some((id) => !info.profile.checks.some((c) => c.id === id)))
+    if (selected.some((id) => !info.profile.checks.some((check) => check.id === id)))
       throw new DomainError('INVALID_CHECK', 'The check is not configured.');
+    if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
     const controller = new AbortController();
     this.controllers.add(controller);
     let environmentWorkspace: string | undefined;
@@ -455,7 +471,7 @@ export class ProjectApplication {
       const result = await checks.run(
         projectId,
         workspace.path,
-        checkIds,
+        selected,
         controller.signal,
         info.profile,
       );

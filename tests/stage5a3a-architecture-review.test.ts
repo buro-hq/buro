@@ -32,7 +32,10 @@ for (const kind of ['file', 'sqlite'] as const)
               directory,
               project: { id: 'p', name: 'Synthetic', root },
             })
-          : await SqliteProjectUsageAuthority.open({ directory, projectId: 'p' });
+          : await SqliteProjectUsageAuthority.open({
+              directory,
+              project: { id: 'p', name: 'Synthetic project', root: directory },
+            });
     };
     const close = () => store.close();
     const entities = (): ProjectEntities => store.entities;

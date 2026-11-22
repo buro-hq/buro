@@ -132,7 +132,10 @@ for (const kind of ['file', 'sqlite'] as const)
             directory,
             project: { id: 'q', name: 'Foreign project', root },
           })
-        : await SqliteProjectUsageAuthority.open({ directory, projectId: 'q' });
+        : await SqliteProjectUsageAuthority.open({
+            directory,
+            project: { id: 'q', name: 'Synthetic project', root: directory },
+          });
     const hash = 'a'.repeat(64);
     const saved: ContextMaterial = {
       id: 'M-a',

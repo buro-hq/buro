@@ -21,6 +21,9 @@ function memoryStore(spec: ProjectStoreOpenSpec, close: () => Promise<void>): Pr
     capabilities: [],
   };
   return {
+    get project() {
+      return structuredClone(snapshot.project);
+    },
     snapshot: () => structuredClone(snapshot),
     receipt: () => undefined,
     async transact() {

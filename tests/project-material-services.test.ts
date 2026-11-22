@@ -85,7 +85,7 @@ async function fixture(t: any, kind: 'file' | 'sqlite') {
   const importers: ContextMaterials[] = [];
   const open = async () => {
     if (kind === 'file') file = await FileProjectStore.open({ directory, project });
-    else sql = await SqliteProjectUsageAuthority.open({ directory, projectId: project.id });
+    else sql = await SqliteProjectUsageAuthority.open({ directory, project });
   };
   const close = () => (kind === 'file' ? file!.close() : sql!.close());
   const materials = (): ProjectMaterials => (kind === 'file' ? file!.materials : sql!.materials);
