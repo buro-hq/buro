@@ -1,0 +1,110 @@
+{
+  "stage": "current real model smoke and native verification harness correction",
+  "date": "2026-11-22",
+  "baseCommit": "5a09e30e52633ac9a419d3f7fc1659f48603169b",
+  "changes": {
+    "productionCoreAdaptersProtocolsChanged": false,
+    "harness": "scripts/lib/model-comparison.cjs",
+    "newRegression": "tests/model-comparison-verification.test.ts",
+    "fixtureTaskOracleLimitsChanged": false,
+    "serviceCheckPathChanged": true
+  },
+  "initialResults": "../evaluation-2026-11-22/current-synthetic.json",
+  "initialReportHashes": "../evaluation-2026-11-22/initial-report-hashes.json",
+  "initialTypedStops": "../evaluation-2026-11-22/initial-run-stops.json",
+  "initialOutcomes": {
+    "codex": {
+      "accepted": false,
+      "publicPassed": 3,
+      "holdoutPassed": 5,
+      "typedStop": "VERIFICATION_VIEW_CHANGED",
+      "reason": "Synthetic check adapter did not register the shared immutable view",
+      "elapsedMs": 102848
+    },
+    "deepseek": {
+      "accepted": true,
+      "publicPassed": 3,
+      "holdoutPassed": 5,
+      "totalManagedGenerations": 19,
+      "diagnosticGenerations": 2,
+      "elapsedMs": 37139
+    },
+    "ollama": {
+      "accepted": false,
+      "publicPassed": 0,
+      "holdoutPassed": 3,
+      "typedStop": "MODEL_INCOMPLETE",
+      "changedFiles": 0,
+      "totalManagedGenerations": 4,
+      "diagnosticGenerations": 2,
+      "elapsedMs": 57909
+    }
+  },
+  "freshFollowupAfterHarnessFix": {
+    "report": "../evaluation-2026-11-22/codex-verification-followup.json",
+    "manifest": "../evaluation-2026-11-22/codex-followup-manifest.json",
+    "typedStop": "../evaluation-2026-11-22/codex-followup-stop.json",
+    "accepted": false,
+    "publicPassed": 3,
+    "holdoutPassed": 5,
+    "typedStopCode": "ENVIRONMENT_UNAVAILABLE",
+    "reason": "Actual native client could not establish required immutable-review permission profile",
+    "elapsedMs": 120941,
+    "initialReportsOverwritten": false
+  },
+  "automaticRetries": 0,
+  "nativeTrials": 2,
+  "managedCodingTrials": 2,
+  "managedGenerationsIncludingDiagnostics": 23,
+  "nativeInternalRequests": "unknown",
+  "fullTests": {
+    "passed": 1369,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 80952.941084,
+    "log": "/private/tmp/buro-live-final-tests-2026-11-22.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-live-final-build-2026-11-22.log"
+  },
+  "format": {
+    "passed": true,
+    "codeLog": "/private/tmp/buro-live-code-format-2026-11-22.log"
+  },
+  "diffCheck": true,
+  "independentReviews": {
+    "architectureFocusedPassed": 14,
+    "boundaryFocusedPassed": 21,
+    "implementationFocusedPassed": 40,
+    "initialHarnessPassed": 13,
+    "initialBudgetPassed": 22,
+    "initialCasePassed": 19,
+    "countsOverlapFullSuite": true,
+    "agents": 5,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "One synthetic task per route; no general model ranking/reliability or cost-efficiency claim.",
+    "Native internal requests/context/output ceilings differ from managed enforced exposure.",
+    "Raw collector misclassifies native infrastructure failures as quality failures; supplemental typed stops are authoritative for interpretation.",
+    "No forced live reviewer rejection/repair or public-check-passing negative acceptance case.",
+    "No new crash/restart/apply/clean-OS/browser evidence; previous37browser scenarios not rerun.",
+    "Native end-to-end remains blocked after the harness correction; no skipped review or weakened permission fallback.",
+    "No default-none/storage cutover or reduced-beta/publication decision."
+  ],
+  "rtxRequests": 0,
+  "originalUserProjectsModified": false,
+  "outputUxPreserved": true,
+  "sourceTransfer": "Generated synthetic fixtures only; no original project source",
+  "cleanupsReportedFailed": false,
+  "offlineNativeDiagnosis": {
+    "installedCli": "codex-cli 0.171.0",
+    "startupError": "config defines [permissions] profiles but does not set default_permissions",
+    "networkDenied": true,
+    "modelTurns": 0,
+    "temporaryHomeAndConfigOnly": true,
+    "productionFixApplied": false,
+    "candidateFix": "default_permissions must select the same issued read-only profile; retain acknowledgement validation"
+  }
+}

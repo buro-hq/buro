@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-22",
+  "codeCommit": "5a09e30e52633ac9a419d3f7fc1659f48603169b",
+  "purpose": "Current real end-to-end smoke on one identical synthetic case per route; not a model ranking or full release-quality matrix.",
+  "arms": [
+    "codex-buro",
+    "deepseek-buro",
+    "ollama-buro"
+  ],
+  "automaticRetries": 0,
+  "models": {
+    "codex": "gpt-6.1-sol",
+    "codexReasoning": "high",
+    "deepseek": "deepseek-flash",
+    "ollama": "qwen3:4b-instruct-2507-q4_K_M"
+  },
+  "limits": {
+    "codingWallTimeMs": 300000,
+    "diagnosticWallTimeMs": 120000,
+    "managedGenerationsIncludingDiagnostics": 24,
+    "maxDiagnosticRequests": 2,
+    "managedReservedOutputTokens": 65536,
+    "managedOutputPerRequest": 2048,
+    "deepseekContext": 32768,
+    "ollamaContext": 16384,
+    "nativeManagedCeilings": "not enforced; actual coverage unknown"
+  },
+  "case": "synthetic-ready-queue-v1",
+  "publicCases": 3,
+  "holdoutCases": 5,
+  "requiresDistinctSuccessfulWorker": true,
+  "requiresFreshReviewerApproval": true,
+  "planning": "capability-selected",
+  "localOllamaOnly": true,
+  "deepseekEndpoint": "https://api.deepseek.com",
+  "rtxRequests": 0,
+  "originalUserProjectsUsed": false,
+  "sourceTransfer": "generated synthetic fixture only",
+  "coverageLimits": [
+    "One task/trial per route; no statistical reliability estimate.",
+    "No forced reviewer rejection/repair or public-check-passing negative acceptance case.",
+    "No current crash/stop/resume/apply/clean-machine proof in this live smoke."
+  ],
+  "offlineGates": {
+    "modelComparisonPassed": 13,
+    "budgetPassed": 22,
+    "agentCombinedPassed": 35,
+    "caseAndGeneratedOraclePassed": 19,
+    "countsOverlap": true
+  },
+  "preflight": {
+    "deepseekCredentialAvailable": true,
+    "localOllamaAvailable": true,
+    "selectedOllamaModelInstalled": true
+  },
+  "parentLog": "/private/tmp/buro-current-live-2026-11-22.log",
+  "results": "current-synthetic.json"
+}

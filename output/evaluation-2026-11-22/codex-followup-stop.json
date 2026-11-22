@@ -1,0 +1,22 @@
+{
+  "source": "Actual persisted temporary File control state after fresh harness-corrected trial",
+  "runId": "R-d924d7e8-90d2-40e7-ba8d-62aa38c550d9",
+  "status": "needs-attention",
+  "phase": "done",
+  "stopCode": "ENVIRONMENT_UNAVAILABLE",
+  "stopCategory": "configuration",
+  "staticReason": "The native client could not establish the required immutable-review permission profile.",
+  "attemptStops": [
+    {
+      "status": "needs-attention",
+      "errorCode": "ENVIRONMENT_UNAVAILABLE"
+    }
+  ],
+  "successfulWorkers": 1,
+  "repairPhaseCount": 1,
+  "independentReviewer": false,
+  "commitCreated": false,
+  "publicChecks": 3,
+  "holdoutChecks": 5,
+  "accepted": false
+}

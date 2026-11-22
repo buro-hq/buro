@@ -1,0 +1,50 @@
+# Synthetic live-model harness preflight
+
+Date: 2026-11-22. Baseline: `5a09e30`. Read-only production/test review before the user-authorized current Codex, DeepSeek and local Mac Ollama trials. No live requests, native processes, credentials inspection, original-project changes, RTX contact or `output/ux/` access were performed by this reviewer.
+
+## Concrete invocation issue
+
+The CLI still accepts optional `legacy`/`bounded` at `scripts/check-model-comparison.cjs:10–11` and passes it as `planningControls` at `:26`. The current runner intentionally rejects every defined planning override at `scripts/lib/model-comparison.cjs:626`; planning is now selected by actual saved backend capabilities. Consequently, historical documented commands ending in `bounded` stop before trials with `COMPARISON_INVALID_CONTROLS`.
+
+Use the current capability-selected invocation with an arm CSV and **no planning argument**:
+
+```sh
+BURO_MODEL_COMPARISON=1 BURO_LIVE_CODEX=1 BURO_LIVE_DEEPSEEK=1 BURO_LIVE_OLLAMA=1 BURO_COMPARISON_REPORT=artifacts/model-comparison-current.json node scripts/check-model-comparison.cjs codex-buro,deepseek-buro,ollama-buro
+```
+
+The reviewer made no production correction; this invocation avoids the stale CLI argument. Selecting those three arms avoids the optional direct and mixed trials. A direct Codex comparator can be selected explicitly if the parent includes it in the evaluation scope.
+
+## Authority and confinement review
+
+- `validateComparison` requires explicit comparison/native opt-ins and recognized arm/model IDs (`scripts/lib/model-comparison.cjs:388–426`). Ollama is pinned to HTTP loopback without credentials/query/path suffix, while DeepSeek must be exactly its canonical HTTPS endpoint (`:428–442`). The runner passes these endpoints explicitly, so ambient remote Ollama endpoint settings do not redirect this comparison to RTX. The live-provider wrapper allowlists exact metadata/generation URLs and rejects redirects (`scripts/lib/live-provider-runner.cjs:400–460`).
+- Every selected trial creates a new temporary synthetic repository from frozen source/task bytes (`scripts/lib/model-comparison.cjs:292–307`). It never reads original user-project source. The live runner verifies the fixture root belongs to its new temporary directory (`scripts/lib/live-provider-runner.cjs:842–860`) and compares original fixture source/Git state after disposal (`:1258–1278`). Buro changes occur in the actual isolated worktree. The direct arm, if separately selected, intentionally edits its own fresh synthetic root.
+- Actual production host resources, `goal.create` and `run.start` are used, with the real jobs promise awaited (`scripts/lib/live-provider-runner.cjs:1036–1089`). No fabricated terminal Run, continuation or accepted-result writer is used. Current semantic admission/attempt changes therefore remain on their actual execution path. The progress subscription recognizes legacy `run.changed` only; semantic phase-only changes may not immediately update that diagnostic field, but the final result reads the actual Run after the job finishes.
+- A forced real worker is part of the task, and final acceptance requires a distinct completed successful worker plus real service acceptance/fresh review (`scripts/lib/live-provider-runner.cjs:1207–1227`). The same protected public and hidden oracle executes after runtime disposal, including failed/stopped candidates (`scripts/lib/model-comparison.cjs:710–768`). Expected values remain in the parent; frozen inputs, nonce and scope/source hashes are checked. Candidate stdout or a correct diff alone cannot establish accepted status.
+- Native adapter configuration disables native agents, MCP, apps/plugins/hooks/memories and web search, and project-tool network is disabled by the comparison (`adapters/codex/runtime.ts:622–669`; `scripts/lib/model-comparison.cjs:680`). The runner honestly records a different native host-read boundary and unknown native request count; it does not claim equal hidden request/token caps or identical confinement with managed tools.
+- Public reports retain allowlisted telemetry/tool names, model identities, counts, hashes and typed error codes. Raw model text, tool arguments, credential headers and thinking are excluded (`scripts/lib/live-provider-runner.cjs:276–388`, `:473–515`). Credentials are loaded privately and supplied as callbacks. Report files use private permissions. Native/private state stays in temporary ignored fixture storage rather than shipped public evidence.
+
+No blocking safety issue was identified for the three-arm, no-planning-argument invocation. This is source review and deterministic harness evidence, not proof that the configured endpoints, credentials or models are currently available.
+
+## Limits and interpretation
+
+The outer managed pilot retains 24 total generation requests including at most two diagnostics, 65,536 reserved output tokens and a five-minute coding wall (`scripts/lib/live-provider-runner.cjs:11–18`). A cap failure must remain a measured cap failure; do not raise it silently to force acceptance. Native request/token totals remain unknown except emitted usage. Models default to `gpt-6.1-sol`/high, `deepseek-flash` and local `qwen3:4b-instruct-2507-q4_K_M`; a preflight availability check is still required before interpreting a blocked trial as coding quality.
+
+The existing synthetic queue case has one task, three public and five held-out checks. A single successful run is useful end-to-end evidence, not a reliability estimate, broad model ranking, clean-machine installation proof or complete release gate. This harness does not deliberately force reviewer rejection/repair or a public-check-passing negative acceptance candidate; those require separate controlled scenarios if claimed.
+
+## Validation
+
+Executed `node --test tests/model-comparison.test.ts`: **13/13 passed**, no failures/skips, 2342.036125 ms. Log: `/private/tmp/buro-live-harness-review-tests.log`. It covers explicit opt-ins and remote-Ollama rejection, frozen fixture identity, parent-owned confined oracle, candidate mutation/toJSON handling, report references, capability-selected planning, failed-workflow final oracle and hard oracle cleanup. No live trial was run by this reviewer. Counts overlap the repository suite and must not be added to the prior 1368 total.
+
+Also executed the actual budget suite, `node --test tests/live-evaluation-budget.test.ts`: **22/22 passed**, no failures/skips. Log: `/private/tmp/buro-live-budget-review-tests.log`. It covers cross-provider/stage reservation, diagnostic caps, no reservation refunds, foreign-route rejection, cancellation, allowlisted HTTP telemetry, output violation, source-transfer opt-in, mixed-worker/reviewer requirements and actual synthetic timeout handling. This is the relevant suite; a nonexistent `tests/live-provider-runner.test.ts` path is not additional evidence.
+
+## Independent follow-up: immutable verification-view harness correction
+
+The parent identified a live native-review fixture failure and changed only `scripts/lib/model-comparison.cjs`, with a new `tests/model-comparison-verification.test.ts`. This reviewer inspected that working delta independently before a separate fresh Codex follow-up. No blocking architecture or confinement finding remains in the inspected correction.
+
+The original custom fixture checks ran the canonical oracle using an unrelated EnvironmentExecutors instance and did not register the issued VerificationView in the actual shared executors used by the native reviewer. The corrected fixture delegates the configured protected public check to the actual `ProjectChecks(projects, ..., executors)` implementation. This implementation validates current Run ownership, source workspace/base, complete saved view identity, frozen environment configuration and output-path selection before registering the view. Fallback execution is explicitly forbidden. The fixture additionally requires exactly one passing configured service check and the parent-owned public oracle; a zero-check result cannot pass.
+
+For an issued immutable view, the canonical oracle now checks `readRoot === workspace` and uses `executors.launchVerification(view, argv, true)`. That method requires the exact registered signature, validates current mounts/dependencies, provides no writable output roots and disables network. It does not register an ordinary environment or create `.buro` metadata under immutable `readRoot`. The original independent final public/hidden oracle path without a view remains confined and unchanged. Forwarded `releaseVerificationView` revokes the shared grant; current native access rejects after revocation.
+
+The new actual temporary-Git regression proves baseline failure, corrected candidate pass, shared native review access only after service-check registration, denied live source/workspace roots, rejected substituted view/tree/source identity and revocation. The existing fixture/task/public/hidden hash identities remain unchanged. Nevertheless, the corrected service-check path now executes the protected public command as well as the parent-owned oracle. A new Codex result must therefore be labelled a separate harness-corrected follow-up rather than replacing the original matrix or claiming identical execution overhead.
+
+Independent command: `node --test tests/model-comparison-verification.test.ts tests/model-comparison.test.ts`. Initial execution under the workspace's nested sandbox returned 13 passes and one `0 !== 1` failure at the corrected candidate check. Repeating with the permissions required for real Darwin sandbox execution passed **14/14**, zero failures/skips, 2393.263375 ms; log `/private/tmp/buro-live-verification-independent-host-tests.log`. The nested-sandbox failure was not reproduced with those host permissions and is not reported as a diagnosed production defect. This reviewer made no source correction or live request. Existing checks validate the fixture integration, not current model quality; the parent owns the separate real Codex follow-up.

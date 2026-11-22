@@ -248,20 +248,29 @@ async function canonicalOracle(fixture, workspace, phase, options = {}) {
   const before = await inspectScope(workspace);
   if (!before.passed)
     return { passed: false, checks: cases.length, passedChecks: 0, scope: before };
-  const { EnvironmentExecutors } = await import('../../adapters/environments/executors.ts');
-  const executors = new EnvironmentExecutors();
-  await executors.register(
-    workspace,
-    fixture.root,
-    { provider: 'native' },
-    options.signal || new AbortController().signal,
-    { privateDataIsolation: true },
-  );
-  const launch = executors.launch(
-    workspace,
-    [process.execPath, '--input-type=module', '-e', ORACLE_CHILD, workspace],
-    { readOnly: true, privateDataIsolation: true, allowNetwork: false },
-  );
+  const argv = [process.execPath, '--input-type=module', '-e', ORACLE_CHILD, workspace];
+  let launch;
+  if (options.verificationView) {
+    assert.equal(options.verificationView.readRoot, workspace);
+    // An issued source tree is immutable: use its existing isolated grant, never create
+    // an ordinary workspace environment or metadata below its readRoot.
+    launch = options.executors.launchVerification(options.verificationView, argv, true);
+  } else {
+    const { EnvironmentExecutors } = await import('../../adapters/environments/executors.ts');
+    const executors = new EnvironmentExecutors();
+    await executors.register(
+      workspace,
+      fixture.root,
+      { provider: 'native' },
+      options.signal || new AbortController().signal,
+      { privateDataIsolation: true },
+    );
+    launch = executors.launch(workspace, argv, {
+      readOnly: true,
+      privateDataIsolation: true,
+      allowNetwork: false,
+    });
+  }
   const nonce = randomUUID();
   const inputs = cases.map(({ expected, name, ...input }) => input);
   let rows;
@@ -348,31 +357,49 @@ async function prepareComparisonFixture({ temporaryDirectory }) {
         },
       },
     },
-    async createChecks() {
+    async createChecks({ projects, executors }) {
+      const { ProjectChecks } = await import('../../adapters/checks/project-commands.ts');
+      const checks = new ProjectChecks(
+        projects,
+        {
+          async run() {
+            throw codeError('COMPARISON_CHECK_FALLBACK_FORBIDDEN');
+          },
+        },
+        executors,
+      );
       return {
-        async run(projectId, workspace, ids, signal, profile) {
+        async run(projectId, workspace, ids, signal, profile, options = {}) {
           assert.deepEqual(ids, ['test']);
           assert.equal(
             profile.checks.find((check) => check.id === 'test')?.command,
             'node checks/public.cjs',
           );
           const started = Date.now();
-          const result = await canonicalOracle(fixture, workspace, 'public', { signal });
+          const service = await checks.run(projectId, workspace, ids, signal, profile, options);
+          const result = await canonicalOracle(
+            fixture,
+            options.verificationView?.readRoot || workspace,
+            'public',
+            { signal, executors, verificationView: options.verificationView },
+          );
+          const passed = service.total === 1 && service.passed === 1 && result.passed;
           return {
-            passed: result.passed ? 1 : 0,
+            passed: passed ? 1 : 0,
             total: 1,
             results: [
               {
                 name: 'Independent public queue examples',
                 command: 'node checks/public.cjs',
-                passed: result.passed,
-                exitCode: result.passed ? 0 : 1,
+                passed,
+                exitCode: passed ? 0 : 1,
                 durationMs: Date.now() - started,
                 output: JSON.stringify(result.rows || []),
               },
             ],
           };
         },
+        releaseVerificationView: (view) => checks.releaseVerificationView(view),
       };
     },
     async verifyAccepted(run) {

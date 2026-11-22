@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-22T16:20:34.885Z",
+  "mode": "ollama",
+  "live": true,
+  "status": "resource-blocked",
+  "stage": "coding-goal",
+  "caseId": "synthetic-ready-queue-v1",
+  "forceWorker": true,
+  "segmentPolicy": {
+    "revision": "managed-work-segments-v1"
+  },
+  "models": {
+    "ollama": "qwen3:4b-instruct-2507-q4_K_M"
+  },
+  "contextTokensByProvider": {
+    "ollama": 16384
+  },
+  "fixtureDirectory": "/tmp/buro-provider-evaluation-vU1QKN",
+  "diagnostic": {
+    "status": "passed",
+    "runtimeId": "ollama-live",
+    "tools": true,
+    "structured": true
+  },
+  "runId": "R-f0c8620d-fa32-4e33-b290-9a5f582348bf",
+  "currentPhase": "planning",
+  "run": {
+    "planSaved": false,
+    "planStepsCount": 0,
+    "lastPhaseBeforeDone": "planning",
+    "planningPolicy": {
+      "version": 1,
+      "revision": "capability-planning-v1",
+      "strategy": "tools-free-structured",
+      "runtimeId": "ollama-live",
+      "configurationRevision": "3373076e5063d5443259da8b41c5554b7062304dbee2595d58faf1bb4c9c33be",
+      "capabilitiesRevision": "managed-host-tools-scope-v2"
+    },
+    "managedBudget": {
+      "version": 1,
+      "coverage": "managed-api",
+      "policy": {
+        "version": 1,
+        "maxRequests": 64,
+        "maxReservedOutputTokens": 131072,
+        "maxToolCalls": 256,
+        "reviewReserve": {
+          "requests": 8,
+          "outputTokens": 16384,
+          "toolCalls": 32
+        }
+      },
+      "status": "open",
+      "used": {
+        "requests": 2,
+        "reservedOutputTokens": 2837,
+        "toolCalls": 0
+      },
+      "workUsed": {
+        "requests": 2,
+        "reservedOutputTokens": 2837,
+        "toolCalls": 0
+      },
+      "reviewUsed": {
+        "requests": 0,
+        "reservedOutputTokens": 0,
+        "toolCalls": 0
+      },
+      "observed": {
+        "inputTokens": 4071,
+        "outputTokens": 1858,
+        "completeUsageRequests": 2,
+        "unknownUsageRequests": 0
+      }
+    },
+    "status": "failed",
+    "phase": "done",
+    "profile": "evaluation",
+    "policy": "local-only",
+    "baselinePassed": 0,
+    "baselineTotal": 1,
+    "acceptancePassed": 0,
+    "acceptanceTotal": 0,
+    "independentReviewer": false,
+    "acceptedCommit": false,
+    "changedFiles": [],
+    "sessions": [
+      {
+        "role": "coordinator",
+        "runtimeId": "ollama-live",
+        "requestedModelMatchesConfigured": true,
+        "reportedModelMatchesConfigured": true
+      }
+    ]
+  },
+  "originalSourcePreserved": true,
+  "checkpoints": [
+    {
+      "requests": 2,
+      "actions": [],
+      "usage": {
+        "requestsWithUsage": 2,
+        "inputTokens": 4071,
+        "outputTokens": 1858
+      }
+    }
+  ],
+  "failureClassification": {
+    "category": "outputIncomplete",
+    "status": "resource-blocked",
+    "code": "LIVE_OUTPUT_INCOMPLETE",
+    "evidence": "known-service-message",
+    "basis": "public-status-message heuristic"
+  },
+  "error": {
+    "code": "LIVE_OUTPUT_INCOMPLETE"
+  },
+  "http": {
+    "requests": [
+      {
+        "requestIndex": 1,
+        "provider": "ollama",
+        "maxOutputTokens": 1024,
+        "toolNames": [
+          "diagnostic_echo"
+        ]
+      },
+      {
+        "requestIndex": 2,
+        "provider": "ollama",
+        "maxOutputTokens": 1024,
+        "toolNames": []
+      },
+      {
+        "requestIndex": 3,
+        "provider": "ollama",
+        "maxOutputTokens": 2048,
+        "toolNames": []
+      },
+      {
+        "requestIndex": 4,
+        "provider": "ollama",
+        "maxOutputTokens": 789,
+        "toolNames": []
+      }
+    ],
+    "responses": [
+      {
+        "requestIndex": 1,
+        "provider": "ollama",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "diagnostic_echo"
+        ],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 185,
+          "outputTokens": 23
+        }
+      },
+      {
+        "requestIndex": 2,
+        "provider": "ollama",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 107,
+          "outputTokens": 6
+        }
+      },
+      {
+        "requestIndex": 3,
+        "provider": "ollama",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 1258,
+          "outputTokens": 1069
+        }
+      },
+      {
+        "requestIndex": 4,
+        "provider": "ollama",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "length",
+        "usage": {
+          "inputTokens": 2813,
+          "outputTokens": 789
+        }
+      }
+    ],
+    "metadata": {
+      "ollama": 5,
+      "deepseek": 0
+    }
+  },
+  "budget": {
+    "limits": {
+      "maxGenerationRequests": 24,
+      "maxReservedOutputTokens": 65536,
+      "maxDiagnosticRequests": 2,
+      "diagnosticWallTimeMs": 120000,
+      "codingWallTimeMs": 300000,
+      "contextTokens": 32768,
+      "maxOutputTokens": 2048
+    },
+    "generationRequests": 4,
+    "diagnosticRequests": 2,
+    "reservedOutputTokens": 4885,
+    "observedInputTokens": 4363,
+    "observedOutputTokens": 1887,
+    "requestsWithCompleteUsage": 4,
+    "requestsWithUnknownUsage": 0,
+    "reservationRefunds": 0,
+    "cost": "unknown"
+  },
+  "finishedAt": "2026-11-22T16:21:32.707Z"
+}

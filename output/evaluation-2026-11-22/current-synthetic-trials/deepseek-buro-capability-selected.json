@@ -1,0 +1,758 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-22T16:19:57.746Z",
+  "mode": "deepseek",
+  "live": true,
+  "status": "passed",
+  "stage": "complete",
+  "caseId": "synthetic-ready-queue-v1",
+  "forceWorker": true,
+  "segmentPolicy": {
+    "revision": "managed-work-segments-v1"
+  },
+  "models": {
+    "deepseek": "deepseek-flash"
+  },
+  "contextTokensByProvider": {
+    "deepseek": 32768
+  },
+  "fixtureDirectory": "/tmp/buro-provider-evaluation-JHEDLV",
+  "diagnostic": {
+    "status": "passed",
+    "runtimeId": "deepseek-live",
+    "tools": true,
+    "structured": true
+  },
+  "runId": "R-bf9198c5-b5ba-488b-a84d-63b9ed48c74f",
+  "currentPhase": "done",
+  "run": {
+    "planSaved": true,
+    "planStepsCount": 5,
+    "lastPhaseBeforeDone": "review",
+    "planningPolicy": {
+      "version": 1,
+      "revision": "capability-planning-v1",
+      "strategy": "tools-free-structured",
+      "runtimeId": "deepseek-live",
+      "configurationRevision": "267d4863c624f61cd995c6907720a7fad1a9847dcf991d43438ca7d509e374ce",
+      "capabilitiesRevision": "managed-host-tools-scope-v2"
+    },
+    "managedBudget": {
+      "version": 1,
+      "coverage": "managed-api",
+      "policy": {
+        "version": 1,
+        "maxRequests": 64,
+        "maxReservedOutputTokens": 131072,
+        "maxToolCalls": 256,
+        "reviewReserve": {
+          "requests": 8,
+          "outputTokens": 16384,
+          "toolCalls": 32
+        }
+      },
+      "status": "open",
+      "used": {
+        "requests": 17,
+        "reservedOutputTokens": 31744,
+        "toolCalls": 25
+      },
+      "workUsed": {
+        "requests": 13,
+        "reservedOutputTokens": 23552,
+        "toolCalls": 19
+      },
+      "reviewUsed": {
+        "requests": 4,
+        "reservedOutputTokens": 8192,
+        "toolCalls": 6
+      },
+      "observed": {
+        "inputTokens": 49868,
+        "outputTokens": 3005,
+        "completeUsageRequests": 17,
+        "unknownUsageRequests": 0
+      }
+    },
+    "status": "completed",
+    "phase": "done",
+    "profile": "evaluation",
+    "policy": "hybrid",
+    "baselinePassed": 0,
+    "baselineTotal": 1,
+    "acceptancePassed": 1,
+    "acceptanceTotal": 1,
+    "independentReviewer": true,
+    "reviewVerdict": "approved",
+    "blockingFindingsCount": 0,
+    "acceptedCommit": true,
+    "changedFiles": [
+      "src/priority.mjs",
+      "src/queue.mjs"
+    ],
+    "sessions": [
+      {
+        "role": "coordinator",
+        "runtimeId": "deepseek-live",
+        "requestedModelMatchesConfigured": true,
+        "reportedModelMatchesConfigured": true
+      },
+      {
+        "role": "worker",
+        "runtimeId": "deepseek-live",
+        "requestedModelMatchesConfigured": true,
+        "reportedModelMatchesConfigured": true
+      },
+      {
+        "role": "reviewer",
+        "runtimeId": "deepseek-live",
+        "requestedModelMatchesConfigured": true,
+        "reportedModelMatchesConfigured": true
+      }
+    ]
+  },
+  "originalSourcePreserved": true,
+  "checkpoints": [
+    {
+      "requests": 3,
+      "actions": [
+        {
+          "status": "completed",
+          "tool": "read_diff"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        }
+      ],
+      "usage": {
+        "requestsWithUsage": 3,
+        "inputTokens": 11014,
+        "outputTokens": 1066
+      }
+    },
+    {
+      "requests": 10,
+      "actions": [
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "edit_file"
+        },
+        {
+          "status": "completed",
+          "tool": "edit_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "run_command"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "edit_file"
+        },
+        {
+          "status": "completed",
+          "tool": "run_command"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "run_command"
+        }
+      ],
+      "usage": {
+        "requestsWithUsage": 10,
+        "inputTokens": 29731,
+        "outputTokens": 1510
+      },
+      "workSegments": {
+        "archiveCount": 2,
+        "activeIndex": 3,
+        "policyRevision": "managed-work-segments-v1"
+      },
+      "workerStepChecks": {
+        "revision": "worker-step-checks-v1",
+        "feedbackSteps": 0,
+        "entries": [
+          {
+            "status": "completed",
+            "outcome": "completed",
+            "passed": 1,
+            "total": 1
+          }
+        ]
+      }
+    },
+    {
+      "requests": 4,
+      "actions": [
+        {
+          "status": "completed",
+          "tool": "read_diff"
+        },
+        {
+          "status": "completed",
+          "tool": "list_files"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        },
+        {
+          "status": "completed",
+          "tool": "read_file"
+        }
+      ],
+      "usage": {
+        "requestsWithUsage": 4,
+        "inputTokens": 9123,
+        "outputTokens": 429
+      }
+    }
+  ],
+  "holdout": {
+    "passed": true,
+    "checks": 5,
+    "sourceHash": "e04854059ef54f7ef0acb2c0458c45d1d4ae51441944043adabfca1334533f63"
+  },
+  "http": {
+    "requests": [
+      {
+        "requestIndex": 1,
+        "provider": "deepseek",
+        "maxOutputTokens": 1024,
+        "toolNames": [
+          "diagnostic_echo"
+        ]
+      },
+      {
+        "requestIndex": 2,
+        "provider": "deepseek",
+        "maxOutputTokens": 1024,
+        "toolNames": []
+      },
+      {
+        "requestIndex": 3,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": []
+      },
+      {
+        "requestIndex": 4,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 5,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 6,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 7,
+        "provider": "deepseek",
+        "maxOutputTokens": 512,
+        "toolNames": []
+      },
+      {
+        "requestIndex": 8,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 9,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 10,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 11,
+        "provider": "deepseek",
+        "maxOutputTokens": 512,
+        "toolNames": []
+      },
+      {
+        "requestIndex": 12,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 13,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 14,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 15,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff",
+          "edit_file",
+          "run_command"
+        ]
+      },
+      {
+        "requestIndex": 16,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff"
+        ]
+      },
+      {
+        "requestIndex": 17,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff"
+        ]
+      },
+      {
+        "requestIndex": 18,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff"
+        ]
+      },
+      {
+        "requestIndex": 19,
+        "provider": "deepseek",
+        "maxOutputTokens": 2048,
+        "toolNames": [
+          "read_file",
+          "list_files",
+          "search_text",
+          "read_diff"
+        ]
+      }
+    ],
+    "responses": [
+      {
+        "requestIndex": 1,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "diagnostic_echo"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 310,
+          "outputTokens": 41
+        }
+      },
+      {
+        "requestIndex": 2,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 142,
+          "outputTokens": 5
+        }
+      },
+      {
+        "requestIndex": 3,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 1324,
+          "outputTokens": 704
+        }
+      },
+      {
+        "requestIndex": 4,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "read_file"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 1941,
+          "outputTokens": 133
+        }
+      },
+      {
+        "requestIndex": 5,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "edit_file"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 2537,
+          "outputTokens": 443
+        }
+      },
+      {
+        "requestIndex": 6,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "read_file",
+          "run_command"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 3012,
+          "outputTokens": 73
+        }
+      },
+      {
+        "requestIndex": 7,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 2521,
+          "outputTokens": 103
+        }
+      },
+      {
+        "requestIndex": 8,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "read_file"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 3134,
+          "outputTokens": 84
+        }
+      },
+      {
+        "requestIndex": 9,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "edit_file"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 3517,
+          "outputTokens": 106
+        }
+      },
+      {
+        "requestIndex": 10,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "run_command"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 3641,
+          "outputTokens": 41
+        }
+      },
+      {
+        "requestIndex": 11,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 2877,
+          "outputTokens": 74
+        }
+      },
+      {
+        "requestIndex": 12,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "read_file",
+          "run_command"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 3065,
+          "outputTokens": 105
+        }
+      },
+      {
+        "requestIndex": 13,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 3486,
+          "outputTokens": 348
+        }
+      },
+      {
+        "requestIndex": 14,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "read_diff",
+          "read_file"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 4444,
+          "outputTokens": 85
+        }
+      },
+      {
+        "requestIndex": 15,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 5246,
+          "outputTokens": 277
+        }
+      },
+      {
+        "requestIndex": 16,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "read_diff",
+          "list_files"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 1627,
+          "outputTokens": 43
+        }
+      },
+      {
+        "requestIndex": 17,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "read_file"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 2129,
+          "outputTokens": 69
+        }
+      },
+      {
+        "requestIndex": 18,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [
+          "read_file"
+        ],
+        "finish": "tool_calls",
+        "usage": {
+          "inputTokens": 2500,
+          "outputTokens": 73
+        }
+      },
+      {
+        "requestIndex": 19,
+        "provider": "deepseek",
+        "status": 200,
+        "terminal": true,
+        "toolNames": [],
+        "finish": "stop",
+        "usage": {
+          "inputTokens": 2867,
+          "outputTokens": 244
+        }
+      }
+    ],
+    "metadata": {
+      "ollama": 0,
+      "deepseek": 1
+    }
+  },
+  "budget": {
+    "limits": {
+      "maxGenerationRequests": 24,
+      "maxReservedOutputTokens": 65536,
+      "maxDiagnosticRequests": 2,
+      "diagnosticWallTimeMs": 120000,
+      "codingWallTimeMs": 300000,
+      "contextTokens": 32768,
+      "maxOutputTokens": 2048
+    },
+    "generationRequests": 19,
+    "diagnosticRequests": 2,
+    "reservedOutputTokens": 33792,
+    "observedInputTokens": 50320,
+    "observedOutputTokens": 3051,
+    "requestsWithCompleteUsage": 19,
+    "requestsWithUnknownUsage": 0,
+    "reservationRefunds": 0,
+    "cost": "unknown"
+  },
+  "finishedAt": "2026-11-22T16:20:34.797Z"
+}

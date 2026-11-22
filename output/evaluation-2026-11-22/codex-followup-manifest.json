@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-22",
+  "baseCommit": "5a09e30e52633ac9a419d3f7fc1659f48603169b",
+  "purpose": "Separate fresh Codex trial after correcting only the synthetic verification check adapter",
+  "initialReportsPreserved": true,
+  "automaticTrialRetry": false,
+  "configurationChanged": false,
+  "fixtureTaskOracleIdentityChanged": false,
+  "serviceCheckPathChanged": true,
+  "harnessSha256": "c3dd3f32e926e3a339c66970cd5232854c5776b700a0aadb9c37912b938f8dd0",
+  "regressionSha256": "4ef6587adf3c8c9b413b2c491313c07c62f706ad83279159d807882ab1043288",
+  "offlineFullTests": {
+    "passed": 1369,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 80952.941084,
+    "log": "/private/tmp/buro-live-final-tests-2026-11-22.log"
+  },
+  "buildTypecheck": true,
+  "reviews": {
+    "architecturePassed": 14,
+    "boundaryPassed": 21,
+    "focusedImplementationPassed": 40,
+    "countsOverlap": true
+  },
+  "report": "codex-verification-followup.json",
+  "log": "/private/tmp/buro-codex-followup-2026-11-22.log",
+  "liveSourceTransfer": "Synthetic generated fixture only",
+  "rtxRequests": 0
+}

@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-22T16:18:14.897Z",
+  "mode": "codex",
+  "live": true,
+  "status": "quality-failed",
+  "stage": "coding-goal",
+  "caseId": "synthetic-ready-queue-v1",
+  "forceWorker": true,
+  "segmentPolicy": {
+    "revision": "managed-work-segments-v1"
+  },
+  "models": {
+    "codex": "gpt-6.1-sol"
+  },
+  "contextTokensByProvider": {},
+  "fixtureDirectory": "/tmp/buro-provider-evaluation-0fe1RS",
+  "diagnostic": {
+    "status": "not-applicable",
+    "runtimeId": "codex"
+  },
+  "runId": "R-803a5623-56cd-4a49-bbf3-34809b2582b7",
+  "currentPhase": "done",
+  "run": {
+    "planSaved": true,
+    "planStepsCount": 4,
+    "lastPhaseBeforeDone": "review",
+    "planningPolicy": {
+      "version": 1,
+      "revision": "capability-planning-v1",
+      "strategy": "read-only-inspection",
+      "runtimeId": "codex",
+      "configurationRevision": "0bb6a3932497e375c6c1f53f3dafe2a2c50799619f0b14e4a7a5f0be2c6be173",
+      "capabilitiesRevision": "codex-app-server-permissions-v1"
+    },
+    "status": "needs-attention",
+    "phase": "done",
+    "profile": "evaluation",
+    "policy": "hybrid",
+    "baselinePassed": 0,
+    "baselineTotal": 1,
+    "acceptancePassed": 1,
+    "acceptanceTotal": 1,
+    "independentReviewer": false,
+    "acceptedCommit": false,
+    "changedFiles": [
+      "src/priority.mjs",
+      "src/queue.mjs"
+    ],
+    "sessions": [
+      {
+        "role": "coordinator",
+        "runtimeId": "codex",
+        "requestedModelMatchesConfigured": true,
+        "reportedModelMatchesConfigured": false
+      },
+      {
+        "role": "worker",
+        "runtimeId": "codex",
+        "requestedModelMatchesConfigured": true,
+        "reportedModelMatchesConfigured": false
+      },
+      {
+        "role": "reviewer",
+        "runtimeId": "codex",
+        "requestedModelMatchesConfigured": true,
+        "reportedModelMatchesConfigured": false
+      }
+    ]
+  },
+  "originalSourcePreserved": true,
+  "checkpoints": [],
+  "failureClassification": {
+    "category": "qualityFailure",
+    "status": "quality-failed",
+    "code": "LIVE_CODING_QUALITY_FAILED",
+    "evidence": "unknown",
+    "basis": "public-status-message heuristic"
+  },
+  "error": {
+    "code": "LIVE_CODING_QUALITY_FAILED"
+  },
+  "nativeAccounting": {
+    "coverage": "reported-usage-only",
+    "generationRequests": null,
+    "reservedOutputTokens": null,
+    "hardTokenCeilings": false
+  },
+  "nativeUsage": {
+    "inputTokens": 139162,
+    "outputTokens": 2999
+  },
+  "http": {
+    "requests": [],
+    "responses": [],
+    "metadata": {
+      "ollama": 0,
+      "deepseek": 0
+    }
+  },
+  "budget": {
+    "limits": {
+      "maxGenerationRequests": 24,
+      "maxReservedOutputTokens": 65536,
+      "maxDiagnosticRequests": 2,
+      "diagnosticWallTimeMs": 120000,
+      "codingWallTimeMs": 300000,
+      "contextTokens": 32768,
+      "maxOutputTokens": 2048
+    },
+    "generationRequests": 0,
+    "diagnosticRequests": 0,
+    "reservedOutputTokens": 0,
+    "observedInputTokens": 0,
+    "observedOutputTokens": 0,
+    "requestsWithCompleteUsage": 0,
+    "requestsWithUnknownUsage": 0,
+    "reservationRefunds": 0,
+    "cost": "unknown"
+  },
+  "finishedAt": "2026-11-22T16:19:57.657Z"
+}

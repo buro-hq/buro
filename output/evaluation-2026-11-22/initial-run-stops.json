@@ -1,0 +1,51 @@
+{
+  "source": "Actual persisted temporary File control state after each initial trial",
+  "results": [
+    {
+      "arm": "codex",
+      "runId": "R-803a5623-56cd-4a49-bbf3-34809b2582b7",
+      "status": "needs-attention",
+      "phase": "done",
+      "stopCode": "VERIFICATION_VIEW_CHANGED",
+      "stopCategory": "configuration",
+      "issueCode": "EXECUTION_FAILED",
+      "attemptStops": [
+        {
+          "status": "needs-attention",
+          "errorCode": "VERIFICATION_VIEW_CHANGED"
+        }
+      ],
+      "successfulWorkers": 1,
+      "independentReviewer": false,
+      "commitCreated": false
+    },
+    {
+      "arm": "deepseek",
+      "runId": "R-bf9198c5-b5ba-488b-a84d-63b9ed48c74f",
+      "status": "completed",
+      "phase": "done",
+      "attemptStops": [],
+      "successfulWorkers": 1,
+      "reviewVerdict": "approved",
+      "independentReviewer": true,
+      "commitCreated": true
+    },
+    {
+      "arm": "ollama",
+      "runId": "R-f0c8620d-fa32-4e33-b290-9a5f582348bf",
+      "status": "failed",
+      "phase": "done",
+      "stopCode": "MODEL_INCOMPLETE",
+      "stopCategory": "capacity",
+      "attemptStops": [
+        {
+          "status": "failed",
+          "errorCode": "MODEL_INCOMPLETE"
+        }
+      ],
+      "successfulWorkers": 0,
+      "independentReviewer": false,
+      "commitCreated": false
+    }
+  ]
+}

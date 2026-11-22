@@ -1,0 +1,21 @@
+{
+  "codeCommit": "5a09e30e52633ac9a419d3f7fc1659f48603169b",
+  "reports": [
+    {
+      "file": "current-synthetic.json",
+      "sha256": "ca9f600f89837d58f1bd4b70815ed04f484b462df3736e1addc9285e0cc48b76"
+    },
+    {
+      "file": "current-synthetic-trials/codex-buro-capability-selected.json",
+      "sha256": "7a5fc37fa5a7738ba0b81515a691b431d3e21df5be16eb34532cf8c75e4ac0ee"
+    },
+    {
+      "file": "current-synthetic-trials/deepseek-buro-capability-selected.json",
+      "sha256": "3df516f599dd09cbe1f8ac60b257cfb18da95b3cc597f0ac25c9ad984c7bc49f"
+    },
+    {
+      "file": "current-synthetic-trials/ollama-buro-capability-selected.json",
+      "sha256": "3d0c51d7ca07b34d7376cb405642807e9b39dbfce28d3ea8a64fff2846b6ce87"
+    }
+  ]
+}
