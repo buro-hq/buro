@@ -10,6 +10,8 @@ Following `1cc24d1`, 5A4b3b implements genuine nonaccepted stops and continuatio
 
 ## Decision: move the minimum 5B contracts forward
 
+Preflight against `233bcc8` is saved in the [consolidated architecture review](../../docs/PRE-RELEASE-ARCHITECTURE-REVIEW-2026-11-22.md). Next 5A4b3c includes current task revisions plus the actual minimal invocation/outcome/release-eligibility producer. Controlled Core/runtime/turn/workspace ports can prove that SQL boundary without fabricating failed rows or a complete Run; the actual RuntimeRouter/ManagedRuntime SQL path still requires later session authority. Subsequent observation ownership/dedup must be durable and source-bound, not an in-memory receipt or a table unused by the production consumer. This is reviewed next-stage scope, not a completed writer.
+
 Implement typed current state, separate append/settle history and cursor reads **before** moving the execution writer to SQLite. This is the necessary part of 5B to avoid storing/hydrating a growing `Run` as authority. Full UI pagination can follow in a separate consumer slice; do not block the initial genuine queue writer on a complete inspector redesign, and do not claim full 5B completion merely because SQL can page events.
 
 Do not create an `acceptedRun` test-write method to unblock Git application first. Acceptance depends on actual check/review/workspace evidence and pending-effect state. The next small writer should be the real queue/admission and cancellation use cases already called by `ExecutionService.start/cancel`. Accepted result reading and Git apply follow the real acceptance writer later.

@@ -1,0 +1,77 @@
+{
+  "stage": "pre-release architecture preflight",
+  "date": "2026-11-22",
+  "codeCommit": "233bcc8",
+  "scope": "Read-only production/test architecture, remaining release work and next5A4b3c contract; no implementation or reduced-beta approval.",
+  "agents": {
+    "count": 5,
+    "execution": "two waves",
+    "roles": [
+      "core/currenttasks",
+      "runtime/session/effects",
+      "storage/packages/defaultnone",
+      "release evidence",
+      "independent nextslice challenge"
+    ]
+  },
+  "freshParentTests": {
+    "passed": 100,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 40258.794125,
+    "command": "node --test tests/boundaries.test.ts tests/run-attempt-contract.test.ts tests/stage5a4b3b-architecture-review.test.ts tests/stage5a4b3b-boundary-review.test.ts tests/worker-envelope.test.ts tests/runtime-contracts.test.ts tests/result-apply-recovery.test.ts tests/recovery.test.ts tests/sdk-managed-recovery.test.ts",
+    "log": "/private/tmp/buro-preflight-2026-11-22-tests.log"
+  },
+  "agentFocusedGates": {
+    "corePassed": 47,
+    "boundariesPassed": 29,
+    "journalPassed": 41,
+    "sameInstanceObservationPassed": 1,
+    "nextSlicePassed": 21,
+    "countsOverlapEachOtherAndPriorFullSuite": true
+  },
+  "parentProbe": {
+    "command": "node output/research/preflight-runtime-observation-probe-2026-11-22.mjs",
+    "passed": true,
+    "sameInstanceCount": 1,
+    "recreatedInstanceCount": 2,
+    "distinctContinuationAttempt": true,
+    "lateSyntheticOldThreadPersistedAtCoreBoundary": true,
+    "externalEffects": 0,
+    "log": "/private/tmp/buro-preflight-parent-probe.log",
+    "limits": "Synthetic events supplied directly to observe with a held scheduler and simulated current acquired owner. No actual native/router transport replay, tool repetition, acceptance error or process-crash proof."
+  },
+  "priorStageEvidence": {
+    "commit": "233bcc8",
+    "fullTestsPassed": 1368,
+    "browserScenarios": 37,
+    "productionDesktopMobile": true,
+    "buildTypecheck": true,
+    "rerunForThisReadOnlyReview": false,
+    "receipt": "stage5a4b3b-validation-2026-11-22.json"
+  },
+  "checks": {
+    "newReportAndProbeFormatting": true,
+    "gitDiffCheck": true,
+    "consolidatedReportLocalLinks": true,
+    "productionOrTestFilesChanged": false
+  },
+  "reports": [
+    "../../docs/PRE-RELEASE-ARCHITECTURE-REVIEW-2026-11-22.md",
+    "preflight-core-2026-11-22.md",
+    "preflight-journal-2026-11-22.md",
+    "preflight-boundaries-2026-11-22.md",
+    "preflight-release-2026-11-22.md",
+    "preflight-next-slice-review-2026-11-22.md"
+  ],
+  "nextSlice": "5A4b3c: immutable current task revisions plus actual minimal worker invocation/outcome/release eligibility producer; controlled Core SQL proof, not full routed SQL runtime.",
+  "limits": [
+    "Default-none and clean SQL cutover remain gated on real remaining consumers/session/effect/accounting and artifacts/paged history.",
+    "Reduced-beta scope, publication, live-model/clean-OS evidence are not granted or established by this review.",
+    "Previously recorded browser timeout remains undiagnosed; no fix claimed."
+  ],
+  "rtxRequests": 0,
+  "liveModelRequests": 0,
+  "originalUserProjectsModified": false,
+  "outputUxPreserved": true
+}
