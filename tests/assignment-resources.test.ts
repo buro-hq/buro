@@ -1,3 +1,4 @@
+import { fixtureResources } from './fixtures/resource-configuration.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,10 +11,7 @@ import { ResourceSelection } from '../core/resource-selection.ts';
 import { RoleService } from '../core/services.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { ProjectStoreRegistry } from '../core/project-registry.ts';
-import {
-  ResourceConfigurationSchema,
-  defaultResources,
-} from '../adapters/files/resource-configuration.ts';
+import { ResourceConfigurationSchema } from '../adapters/files/resource-configuration.ts';
 import {
   ResourceProfileSchema,
   ResourceSnapshotSchema,
@@ -183,7 +181,7 @@ test('profiles validate pool bounds and references; selection freezes all candid
     Array.from({ length: 17 }, (_, i) => (i ? 'worker-' + i : local.id)),
   ])
     assert.equal(ResourceProfileSchema.safeParse({ ...profile, workerPool }).success, false);
-  const configuration = defaultResources();
+  const configuration = fixtureResources();
   assert.equal(
     ResourceConfigurationSchema.safeParse({
       ...configuration,

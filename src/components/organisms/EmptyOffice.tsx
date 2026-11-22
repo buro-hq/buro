@@ -1,9 +1,11 @@
 import { roleLabels } from '../../ui/role-labels';
 import { t } from '../../i18n/index.ts';
-import { Button } from '@mantine/core';
+import { Button, Group } from '@mantine/core';
 import { ArrowRight, Network, Plus, ShieldCheck, Users } from 'lucide-react';
 import { useProject } from '../../data/provider';
 import type { ProjectPage } from '../templates/ProjectLayout';
+import { useResourceCatalog } from '../../features/resources/useResourceCatalog';
+import { operationResourceReady } from '../../features/resources/readiness';
 export function EmptyOffice({
   onNewGoal: setForm,
   onNavigate: setPage,
@@ -12,7 +14,15 @@ export function EmptyOffice({
   onNavigate: (page: ProjectPage) => void;
 }) {
   const { snapshot } = useProject();
+  const resources = useResourceCatalog(snapshot?.project.id);
   if (!snapshot) return null;
+  const needsModels =
+    resources.supported &&
+    !!resources.catalog &&
+    !['goal.coordination', 'goal.implementation', 'goal.review'].every((operation) =>
+      operationResourceReady(resources.catalog, operation),
+    );
+  const needsChecks = !snapshot.executionPolicy?.defaultCheckIds.length;
   return (
     <>
       <div className="office-heading">
@@ -36,15 +46,32 @@ export function EmptyOffice({
           <span className="empty-office-icon">
             <Network size={34} />
           </span>
-          <h3>{t('The office is ready for its first goal')}</h3>
+          <h3>
+            {needsModels || needsChecks
+              ? t('Prepare your first goal')
+              : t('The office is ready for its first goal')}
+          </h3>
           <p>
-            {t(
-              'Describe what needs to be done. The coordinator will plan the work and select a team.',
-            )}
+            {needsModels
+              ? t(
+                  'Configure and select a model profile before starting work. You can already save goals and materials.',
+                )
+              : needsChecks
+                ? t('Add an acceptance check so the service can verify the team’s result.')
+                : t(
+                    'Describe what needs to be done. The coordinator will plan the work and select a team.',
+                  )}
           </p>
-          <Button variant="light" leftSection={<Plus size={14} />} onClick={() => setForm()}>
-            {t('Describe the first goal')}
-          </Button>
+          <Group justify="center">
+            {(needsModels || needsChecks) && (
+              <Button onClick={() => setPage(needsModels ? 'preferences' : 'settings')}>
+                {needsModels ? t('Configure models') : t('Configure checks')}
+              </Button>
+            )}
+            <Button variant="light" leftSection={<Plus size={14} />} onClick={() => setForm()}>
+              {t('Describe the first goal')}
+            </Button>
+          </Group>
         </div>
         <div className="office-room-footer">
           <Users size={13} />

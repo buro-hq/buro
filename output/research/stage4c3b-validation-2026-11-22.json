@@ -1,0 +1,63 @@
+{
+  "stage": "4C3b",
+  "date": "2026-11-22",
+  "parentCommit": "2d8c03b",
+  "tests": {
+    "total": 1027,
+    "passed": 1027,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 71360.925458,
+    "log": "/private/tmp/buro-stage4c3b-final-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage4c3b-build.log"
+  },
+  "format": {
+    "passed": true,
+    "logs": [
+      "/private/tmp/buro-stage4c3b-format-check.log",
+      "/private/tmp/buro-stage4c3b-server-format-check.log"
+    ]
+  },
+  "browser": {
+    "productionDesktopMobile": true,
+    "firstProfileScenarios": 6,
+    "firstGoalScenarios": 17,
+    "researchSettingsResultScenarios": 14,
+    "resourceSettings": true,
+    "thirdPartyContributionSettings": true,
+    "multiClientControls": true,
+    "firstProfileSyntheticTransportRequests": 26,
+    "firstProfileNativeCodexStarts": 0,
+    "pageErrors": 0,
+    "logs": [
+      "/private/tmp/buro-stage4c3b-production.log",
+      "/private/tmp/buro-stage4c3b-first-profile-browser.log",
+      "/private/tmp/buro-stage4c3b-projects-browser.log",
+      "/private/tmp/buro-stage4c3b-setup-browser.log",
+      "/private/tmp/buro-stage4c3b-resources-browser.log",
+      "/private/tmp/buro-stage4c3b-contributions-browser.log",
+      "/private/tmp/buro-stage4c3b-controls-browser.log"
+    ]
+  },
+  "independentReviews": [
+    "stage4c3b-architecture-review-2026-11-22.md",
+    "stage4c3b-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementation": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Readiness projects eligible pool options; an existing role fixed pin can still reject actual dispatch without fallback.",
+    "Connections and model/profile saves are separate writes; activation still requires service restart.",
+    "File persistence and finite quotas remain until the transactional/paging/default-none cutover.",
+    "Operational preparation receipts, reusable backend packages and concurrent goals remain later work."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

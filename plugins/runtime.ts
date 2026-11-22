@@ -1,5 +1,10 @@
 import { Service, type Context, type Plugin } from 'cordis';
-import type { AgentRuntime, RegisteredRuntime, RuntimeSelection } from '../core/ports.ts';
+import {
+  DomainError,
+  type AgentRuntime,
+  type RegisteredRuntime,
+  type RuntimeSelection,
+} from '../core/ports.ts';
 import { RuntimeCatalog } from '../core/runtimes.ts';
 
 declare module 'cordis' {
@@ -10,14 +15,14 @@ declare module 'cordis' {
 
 class RuntimeService extends Service {
   readonly registry: RuntimeCatalog;
-  readonly defaultRuntimeId: string;
+  readonly defaultRuntimeId?: string;
   readonly selection?: RuntimeSelection;
   private routed?: AgentRuntime;
 
   constructor(
     ctx: Context,
     registry: RuntimeCatalog,
-    defaultRuntimeId: string,
+    defaultRuntimeId: string | undefined,
     selection?: RuntimeSelection,
     routed?: AgentRuntime,
   ) {
@@ -30,17 +35,26 @@ class RuntimeService extends Service {
 
   /** Application session routing, or the explicitly configured backend when routing is absent. */
   get adapter() {
-    return this.routed || this.registry.get(this.defaultRuntimeId);
+    if (this.routed) return this.routed;
+    if (this.defaultRuntimeId === undefined)
+      throw new DomainError(
+        'RUNTIME_DEFAULT_REQUIRED',
+        'An unrouted runtime needs an explicit default.',
+      );
+    return this.registry.get(this.defaultRuntimeId);
   }
 }
 
-export const runtimePlugin: Plugin.Object<{
+export type RuntimePluginOptions = {
   runtimes: RegisteredRuntime[];
-  defaultRuntimeId: string;
   selection?: RuntimeSelection;
-  route?: (registry: RuntimeCatalog) => AgentRuntime;
   onReady?: (lifecycle: { drain: () => Promise<void> }) => void;
-}> = {
+} & (
+  | { route: (registry: RuntimeCatalog) => AgentRuntime; defaultRuntimeId?: string }
+  | { route?: undefined; defaultRuntimeId: string }
+);
+
+export const runtimePlugin: Plugin.Object<RuntimePluginOptions> = {
   name: 'agent-runtimes',
   async apply(ctx, options) {
     const registry = new RuntimeCatalog();
@@ -72,8 +86,15 @@ export const runtimePlugin: Plugin.Object<{
         registry.register(adapter);
         pending.delete(adapter);
       }
-      registry.get(options.defaultRuntimeId);
+      if (options.defaultRuntimeId !== undefined) registry.get(options.defaultRuntimeId);
+      else if (!options.route)
+        throw new DomainError(
+          'RUNTIME_DEFAULT_REQUIRED',
+          'An unrouted runtime needs an explicit default.',
+        );
       routed = options.route?.(registry);
+      if (options.route && !routed)
+        throw new DomainError('INVALID_RUNTIME_ROUTER', 'The runtime router is unavailable.');
       new RuntimeService(ctx, registry, options.defaultRuntimeId, options.selection, routed);
       options.onReady?.({ drain: dispose });
     } catch (error) {

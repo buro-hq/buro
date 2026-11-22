@@ -80,10 +80,12 @@ export function RunRail({
             }
           </b>
         </div>
-        <div className="metric-row">
-          <span>{t('Project tests')}</span>
-          <b className={color(evidence.project)}>{stateLabel(evidence.project)}</b>
-        </div>
+        {evidence.commands.length > 0 && (
+          <div className="metric-row">
+            <span>{t('Agent test commands')}</span>
+            <b className={color(evidence.project)}>{stateLabel(evidence.project)}</b>
+          </div>
+        )}
         <div className="metric-row">
           <span>{t('External acceptance')}</span>
           <b className={color(evidence.acceptance)}>

@@ -1,3 +1,4 @@
+import { fixtureResources } from './fixtures/resource-configuration.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -6,7 +7,6 @@ import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { createRuntimeResources } from '../adapters/resources/runtime-resources.ts';
 import {
-  defaultResources,
   resourceConfigurationRevision,
   connectionConfigurationRevision,
 } from '../adapters/files/resource-configuration.ts';
@@ -20,7 +20,7 @@ async function fixture(t: any, observe?: (change: ResourceConfigurationChange) =
   const directory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-resource-events-')),
   );
-  const config = defaultResources();
+  const config = fixtureResources();
   config.profiles.push({ ...config.profiles[0], id: 'other', name: 'Other profile' });
   await new PrivateJSONFiles(path.join(directory, 'local')).save('resources', config);
   const events: ResourceConfigurationChange[] = [];

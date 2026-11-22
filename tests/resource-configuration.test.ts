@@ -1,3 +1,4 @@
+import { fixtureResources } from './fixtures/resource-configuration.ts';
 import { testResourceContributions } from './fixtures/resource-contributions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,7 +8,6 @@ import path from 'node:path';
 import {
   FileResourceConfiguration,
   ResourceConfigurationSchema,
-  defaultResources,
 } from '../adapters/files/resource-configuration.ts';
 
 async function fixture(t: any) {
@@ -16,9 +16,9 @@ async function fixture(t: any) {
   );
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const initial = ResourceConfigurationSchema.parse({
-    ...defaultResources(),
+    ...fixtureResources(),
     profiles: [
-      ...defaultResources().profiles,
+      ...fixtureResources().profiles,
       {
         id: 'alternate',
         name: 'Alternate Codex profile',
@@ -95,7 +95,7 @@ test('resource initialization preserves an existing private file and returned sn
 });
 
 test('configuration validation rejects duplicate IDs, dangling runtime references and invalid token reservations', () => {
-  const original = defaultResources();
+  const original = fixtureResources();
   assert.equal(
     ResourceConfigurationSchema.safeParse({
       ...original,
@@ -160,7 +160,7 @@ test('private configuration refuses symlink storage before creating files outsid
 });
 
 test('managed-only configurations may use any ID including codex, without a native singleton', () => {
-  const original = defaultResources();
+  const original = fixtureResources();
   const parsed = ResourceConfigurationSchema.parse({
     ...original,
     runtimes: [

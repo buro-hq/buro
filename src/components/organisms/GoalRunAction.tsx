@@ -60,6 +60,11 @@ export function GoalRunAction({
         onChange={setIds}
         size="xs"
       />
+      {!policy.checks.length && (
+        <p className="source-notice">
+          {t('Add an acceptance check in Project settings before starting this goal.')}
+        </p>
+      )}
       {repository && (
         <small>
           {t('Source branch:')} {repository.branch || 'detached HEAD'} ·{' '}

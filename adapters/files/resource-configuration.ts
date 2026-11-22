@@ -12,11 +12,6 @@ import {
   type ResourceSetupInput,
 } from '../../protocol/resources.ts';
 import { ResourceContributionCatalog } from '../../core/resource-contributions.ts';
-import {
-  OllamaConnectionConfigSchema,
-  DeepSeekConnectionConfigSchema,
-  NativeRuntimeConfigSchema,
-} from '../../protocol/resource-builtins.ts';
 import { PrivateJSONFiles } from './private-json.ts';
 export const connectionConfigurationRevision = (connection: ResourceConnection) =>
   createHash('sha256')
@@ -34,10 +29,10 @@ const receiptSchema = z.union([
 export const ResourceConfigurationSchema = z
   .strictObject({
     version: z.literal(1),
-    defaultProfile: ResourceIdSchema,
+    defaultProfile: ResourceIdSchema.nullable(),
     connections: z.array(ResourceConnectionSchema).max(16),
-    runtimes: z.array(RuntimeDefinitionSchema).min(1).max(32),
-    profiles: z.array(ResourceProfileSchema).min(1).max(32),
+    runtimes: z.array(RuntimeDefinitionSchema).max(32),
+    profiles: z.array(ResourceProfileSchema).max(32),
     receipts: z.record(z.string(), receiptSchema).default({}),
   })
   .superRefine((value, ctx) => {
@@ -50,7 +45,7 @@ export const ResourceConfigurationSchema = z
       profiles.size !== value.profiles.length
     )
       ctx.addIssue({ code: 'custom', message: 'Resource IDs must be unique.' });
-    if (!profiles.has(value.defaultProfile))
+    if (value.defaultProfile !== null && !profiles.has(value.defaultProfile))
       ctx.addIssue({ code: 'custom', message: 'Default resource profile is missing.' });
     for (const profile of value.profiles)
       if (
@@ -75,22 +70,10 @@ export function resourceConfigurationRevision(configuration: ResourceConfigurati
 export const defaultResources = () =>
   ResourceConfigurationSchema.parse({
     version: 1,
-    defaultProfile: 'codex',
-    connections: [
-      { id: 'ollama', provider: 'ollama', config: OllamaConnectionConfigSchema.parse({}) },
-      { id: 'deepseek', provider: 'deepseek', config: DeepSeekConnectionConfigSchema.parse({}) },
-    ],
-    runtimes: [{ id: 'codex', backend: 'codex', config: NativeRuntimeConfigSchema.parse({}) }],
-    profiles: [
-      {
-        id: 'codex',
-        name: 'Codex',
-        policy: 'hybrid',
-        coordinator: 'codex',
-        worker: 'codex',
-        reviewer: 'codex',
-      },
-    ],
+    defaultProfile: null,
+    connections: [],
+    runtimes: [],
+    profiles: [],
   });
 export class FileResourceConfiguration {
   private files: PrivateJSONFiles;

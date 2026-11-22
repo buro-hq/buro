@@ -1,3 +1,4 @@
+import { fixtureResources } from './fixtures/resource-configuration.ts';
 import { testResourceContributions } from './fixtures/resource-contributions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,7 +9,6 @@ import { createRuntimeResources } from '../adapters/resources/runtime-resources.
 import {
   FileResourceConfiguration,
   ResourceConfigurationSchema,
-  defaultResources,
   resourceConfigurationRevision,
 } from '../adapters/files/resource-configuration.ts';
 import { EnvironmentExecutors } from '../adapters/environments/executors.ts';
@@ -31,7 +31,7 @@ const profile = {
 };
 const configuration = () =>
   ResourceConfigurationSchema.parse({
-    ...defaultResources(),
+    ...fixtureResources(),
     defaultProfile: profile.id,
     profiles: [profile],
     runtimes: [
@@ -236,7 +236,7 @@ test('resource setup persists arbitrary native instances through the same config
 
 test('managed-only factories accept codex as a normal configured ID without constructing a native adapter', async (t) => {
   const initial = ResourceConfigurationSchema.parse({
-    ...defaultResources(),
+    ...fixtureResources(),
     runtimes: [
       {
         id: 'codex',

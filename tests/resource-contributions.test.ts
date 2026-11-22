@@ -1,3 +1,4 @@
+import { fixtureResources } from './fixtures/resource-configuration.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -13,7 +14,6 @@ import {
   FileResourceConfiguration,
   connectionConfigurationRevision,
   resourceConfigurationRevision,
-  defaultResources,
 } from '../adapters/files/resource-configuration.ts';
 import { testResourceContributions } from './fixtures/resource-contributions.ts';
 
@@ -295,8 +295,14 @@ test('file configuration requires a sealed semantic catalog before opening or cr
   );
   await assert.rejects(fs.stat(unopened), { code: 'ENOENT' });
   const empty = new ResourceContributionCatalog().seal();
-  await assert.rejects(FileResourceConfiguration.open(root, empty), {
-    code: 'RESOURCE_PROVIDER_UNAVAILABLE',
+  const configuration = await FileResourceConfiguration.open(root, empty);
+  assert.deepEqual(configuration.snapshot(), {
+    version: 1,
+    defaultProfile: null,
+    connections: [],
+    runtimes: [],
+    profiles: [],
+    receipts: {},
   });
   await assert.rejects(fs.stat(path.join(root, 'resources.json')), { code: 'ENOENT' });
 });
@@ -365,7 +371,7 @@ test('semantic config capture precedes queued writes and nested key reordering i
 test('builtin limits remain semantic gates after the RPC envelope becomes open', async (t) => {
   const root = await directory(t);
   const catalog = testResourceContributions();
-  const file = new FileResourceConfiguration(root, defaultResources(), catalog);
+  const file = new FileResourceConfiguration(root, fixtureResources(), catalog);
   await file.init();
   const before = file.snapshot();
   const runtime = {

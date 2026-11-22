@@ -1,3 +1,7 @@
+async function showConnections(page) {
+  if (!(await page.getByRole('button', { name: 'Add API connection', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+}
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -83,6 +87,7 @@ const deferred = () => {
       },
     });
     const role = {
+      provenance: { origin: 'user' },
       id: 'flexible',
       version: 1,
       title: 'Flexible specialist',
@@ -212,7 +217,7 @@ const deferred = () => {
         port = value;
       },
     });
-    vite = await createServer({ server: { host: '127.0.0.1', port: 0 } });
+    vite = await createServer({ server: { host: '127.0.0.1', port: 0, strictPort: false } });
     await vite.listen();
     browser = await chromium.launch({ headless: true });
     const a = await browser.newPage({ viewport: { width: 1440, height: 1040 } }),
@@ -297,8 +302,7 @@ const deferred = () => {
       { mode: 'prefer', runtimeId: 'reader' },
     );
     await b.getByRole('button', { name: 'User settings', exact: true }).click();
-    for (const page of [a, b])
-      await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    for (const page of [a, b]) await showConnections(page);
     await a.getByRole('button', { name: 'Edit connection fixture', exact: true }).click();
     const editor = a.getByRole('dialog');
     await editor

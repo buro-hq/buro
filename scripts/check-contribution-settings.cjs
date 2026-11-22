@@ -1,3 +1,7 @@
+async function showConnections(page) {
+  if (!(await page.getByRole('button', { name: 'Add API connection', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+}
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -156,7 +160,7 @@ const execute = require('node:util').promisify(require('node:child_process').exe
         port = value;
       },
     });
-    vite = await createServer({ server: { host: '127.0.0.1', port: 0 } });
+    vite = await createServer({ server: { host: '127.0.0.1', port: 0, strictPort: false } });
     await vite.listen();
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1040 } });
@@ -170,7 +174,7 @@ const execute = require('node:util').promisify(require('node:child_process').exe
       `http://127.0.0.1:${address.port}/?daemon=${encodeURIComponent(`ws://127.0.0.1:${port}`)}`,
     );
     await page.getByRole('button', { name: 'Configure models', exact: true }).click();
-    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await showConnections(page);
     await expect(page.getByText('fixture · Fixture Provider', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add API connection', exact: true }).click();
     let dialog = page.getByRole('dialog');
@@ -226,6 +230,8 @@ const execute = require('node:util').promisify(require('node:child_process').exe
     const model = connection.locator('[data-model-id="fixture-model"]');
     await model.getByRole('button', { name: 'Use in team', exact: true }).click();
     dialog = page.getByRole('dialog');
+    await dialog.getByRole('textbox', { name: 'Backend implementation', exact: true }).click();
+    await page.getByRole('option', { name: 'Fixture Backend', exact: true }).click();
     await expect(
       dialog.getByRole('textbox', { name: 'Backend configuration (JSON)', exact: true }),
     ).toContainText('server-template');

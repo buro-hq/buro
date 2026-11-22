@@ -20,6 +20,7 @@ import type {
   ResourceSetupInput,
   RuntimeResource,
   RoleResourceChoices,
+  ResourceCatalog,
 } from '../../protocol/resources.ts';
 import type { ResourceConfigurationChange } from '../../protocol/domain.ts';
 import { RequestGate } from '../models/http.ts';
@@ -295,14 +296,10 @@ export async function createRuntimeResources(options: RuntimeResourcesOptions) {
         return selected;
       },
     };
-    const projectRoleChoices = (projectId: string): RoleResourceChoices[] => {
-      const snapshot = options.projects.get(projectId).snapshot();
-      return projectRoleResourceChoices({
-        profile: snapshot.profile,
-        roles: snapshot.roles || [],
-        resources: activeSelection.forProject(projectId),
-        strict: snapshot.profile?.scope?.mode === 'strict',
-      }).map((entry) => ({
+    const roleChoicesFor = (
+      input: Parameters<typeof projectRoleResourceChoices>[0],
+    ): RoleResourceChoices[] => {
+      return projectRoleResourceChoices(input).map((entry) => ({
         ...entry,
         choices: entry.choices.map((choice) =>
           pendingRuntime(choice.resource.id)
@@ -314,6 +311,41 @@ export async function createRuntimeResources(options: RuntimeResourcesOptions) {
             : choice,
         ),
       }));
+    };
+    const selectionMessages: Record<string, string> = {
+      RESOURCE_PROFILE_REQUIRED:
+        'Configure and select an execution profile before starting model work.',
+      RESOURCE_PROFILE_UNAVAILABLE:
+        'The selected execution profile is unavailable. Select an active profile.',
+      INVALID_RESOURCE_POOL: 'The selected execution profile needs a valid worker pool.',
+      RUNTIME_UNAVAILABLE: 'The selected execution profile uses an unavailable runtime.',
+      DATA_POLICY_BLOCKED: 'The selected execution profile conflicts with its data policy.',
+    };
+    const selectionView = (
+      projectId?: string,
+    ): Pick<ResourceCatalog, 'selected' | 'roleChoices' | 'selectionIssue'> => {
+      try {
+        const selected = projectId
+          ? activeSelection.forProject(projectId)
+          : activeSelection.forMachine();
+        const snapshot = projectId ? options.projects.get(projectId).snapshot() : undefined;
+        return {
+          selected,
+          roleChoices: roleChoicesFor({
+            profile: snapshot?.profile,
+            roles: snapshot?.roles || [],
+            resources: selected,
+            strict: snapshot?.profile?.scope?.mode === 'strict',
+          }),
+        };
+      } catch (error) {
+        if (!(error instanceof DomainError) || !Object.hasOwn(selectionMessages, error.code))
+          throw error;
+        return {
+          roleChoices: [],
+          selectionIssue: { code: error.code, message: selectionMessages[error.code] },
+        };
+      }
     };
     const list = async (projectId?: string) => ({
       defaultProfile: configuration.snapshot().defaultProfile,
@@ -354,12 +386,7 @@ export async function createRuntimeResources(options: RuntimeResourcesOptions) {
           restartRequired: pending(connection.id),
         };
       }),
-      ...(projectId
-        ? {
-            selected: activeSelection.forProject(projectId),
-            roleChoices: projectRoleChoices(projectId),
-          }
-        : {}),
+      ...selectionView(projectId),
       probes: (
         await Promise.all(
           resources.map(async (resource) => {

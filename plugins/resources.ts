@@ -52,13 +52,8 @@ export const resourcesPlugin: Plugin.Object<{
         await resources.dispose();
       }
     });
-    const config = resources.configuration.snapshot();
-    const defaultRuntimeId = config.profiles.find(
-      (profile) => profile.id === config.defaultProfile,
-    )!.coordinator;
     await ctx.plugin(runtimePlugin, {
       runtimes: resources.takeRuntimes(),
-      defaultRuntimeId,
       selection: resources.selection,
       onReady: ({ drain }) => {
         drainBackends = drain;

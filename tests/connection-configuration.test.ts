@@ -1,3 +1,4 @@
+import { fixtureResources } from './fixtures/resource-configuration.ts';
 import { testResourceContributions } from './fixtures/resource-contributions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,7 +9,6 @@ import {
   FileResourceConfiguration,
   ResourceConfigurationSchema,
   connectionConfigurationRevision,
-  defaultResources,
 } from '../adapters/files/resource-configuration.ts';
 import { PrivateJSONFiles } from '../adapters/files/private-json.ts';
 import { ResourceConnectionSchema } from '../protocol/resources.ts';
@@ -28,7 +28,7 @@ async function fixture(t: any) {
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const configuration = new FileResourceConfiguration(
     directory,
-    defaultResources(),
+    fixtureResources(),
     testResourceContributions(),
   );
   await configuration.init();
@@ -136,7 +136,7 @@ test('private network trust requires literal private addresses and installed pro
     );
   const normalized = testResourceContributions().validateConfiguration(
     ResourceConfigurationSchema.parse({
-      ...defaultResources(),
+      ...fixtureResources(),
       connections: [
         { id: 'ollama', provider: 'ollama', config: {} },
         { id: 'deepseek', provider: 'deepseek', config: {} },
@@ -267,7 +267,7 @@ test('queued edits serialize and only one writer can use the same revision', asy
 
 test('changing the provider kind is rejected for connections referenced by runtimes', async (t) => {
   const { directory } = await fixture(t);
-  const initial = defaultResources();
+  const initial = fixtureResources();
   initial.runtimes.push({
     id: 'local',
     backend: 'managed',

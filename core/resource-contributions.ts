@@ -81,7 +81,7 @@ export type BackendContribution = ResourceContributionDescriptor & {
     | undefined;
 };
 export type ResourceConfigurationInput = {
-  defaultProfile: string;
+  defaultProfile: string | null;
   connections: ResourceConnection[];
   runtimes: RuntimeDefinition[];
   profiles: ResourceProfile[];
@@ -379,7 +379,8 @@ export class ResourceContributionCatalog {
   validateConfiguration<T extends ResourceConfigurationInput>(input: T): T {
     this.assertSealed();
     const value = structuredClone(input);
-    value.defaultProfile = ResourceIdSchema.parse(value.defaultProfile);
+    value.defaultProfile =
+      value.defaultProfile === null ? null : ResourceIdSchema.parse(value.defaultProfile);
     value.connections = value.connections.map((connection) => this.parseConnection(connection));
     value.runtimes = value.runtimes.map((runtime) => this.parseRuntime(runtime));
     value.profiles = value.profiles.map((profile) => ResourceProfileSchema.parse(profile));
@@ -407,7 +408,10 @@ export class ResourceContributionCatalog {
         local: description.local && ids.every((id) => providers.get(id)!.local),
       });
     }
-    if (!value.profiles.some((profile) => profile.id === value.defaultProfile))
+    if (
+      value.defaultProfile !== null &&
+      !value.profiles.some((profile) => profile.id === value.defaultProfile)
+    )
       throw new DomainError(
         'RESOURCE_PROFILE_UNAVAILABLE',
         'The default resource profile is missing.',

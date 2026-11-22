@@ -13,6 +13,9 @@ import { PathInput } from '../molecules/PathInput';
 import { ProjectProfileForm } from './ProjectProfileForm';
 import { ProjectResearchPanel } from './ProjectResearchPanel';
 import { profileWithResearch } from '../../../protocol/research-profile';
+import type { ResourceCatalog } from '../../../protocol/resources.ts';
+import { useResourceCatalog } from '../../features/resources/useResourceCatalog';
+import { operationResourceReady } from '../../features/resources/readiness';
 
 export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   const { projects, snapshot, service, client, mode, refreshProjects, switchProject } =
@@ -31,6 +34,9 @@ export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: (
   const supportsResearch = !!(snapshot?.capabilities || service?.capabilities)?.includes(
     'project.research',
   );
+  const resources = useResourceCatalog(info?.projectId);
+  const canResearch =
+    supportsResearch && operationResourceReady(resources.catalog, 'project.research');
   useEffect(() => {
     if (opened) {
       void refreshProjects().catch((e) => setError(e.message));
@@ -50,7 +56,7 @@ export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: (
       setInfo(value);
       setRoot(value.root);
       setName(value.name);
-      if (!value.projectId && autoResearch && supportsResearch) {
+      if (!value.projectId && autoResearch && canResearch) {
         const project = await client!.command<Project>({
           method: 'project.connect',
           params: { root: value.root, name: value.name, profile: value.profile, ignoreLocal },
@@ -62,8 +68,14 @@ export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: (
           }),
         );
         setConnected(project);
-        setStudying(true);
-        await client!.command({ method: 'project.research', params: { projectId: project.id } });
+        const selected = await client!.command<ResourceCatalog>({
+          method: 'resources.list',
+          params: { projectId: project.id },
+        });
+        if (operationResourceReady(selected, 'project.research')) {
+          setStudying(true);
+          await client!.command({ method: 'project.research', params: { projectId: project.id } });
+        }
         await refreshProjects();
       }
     } catch (e) {
@@ -176,11 +188,17 @@ export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: (
                   <>
                     <Checkbox
                       label={t('Research project')}
-                      checked={autoResearch && supportsResearch}
-                      disabled={!supportsResearch}
-                      description={t(
-                        'After you choose a directory, an agent suggests components, commands and ways to verify the result.',
-                      )}
+                      checked={autoResearch && canResearch}
+                      disabled={!canResearch || resources.loading}
+                      description={
+                        canResearch
+                          ? t(
+                              'After you choose a directory, an agent suggests components, commands and ways to verify the result.',
+                            )
+                          : t(
+                              'Connect the repository now. Configure and select a model profile to research it later.',
+                            )
+                      }
                       onChange={(e) => setAutoResearch(e.currentTarget.checked)}
                     />
                     <Checkbox
@@ -194,7 +212,7 @@ export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: (
                       disabled={!root.trim()}
                       onClick={() => void inspect()}
                     >
-                      {autoResearch && supportsResearch
+                      {autoResearch && canResearch
                         ? t('Research directory')
                         : t('Inspect directory')}
                     </Button>

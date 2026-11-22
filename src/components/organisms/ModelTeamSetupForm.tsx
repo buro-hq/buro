@@ -58,7 +58,9 @@ export function ModelTeamSetupForm({
         templates.some((template) => template.backend === backend.id),
       )
     : catalog.backends;
-  const [backend, setBackend] = useState(available[0]?.id || '');
+  const [backend, setBackend] = useState(
+    templates && available.length === 1 ? available[0].id : '',
+  );
   const descriptor = available.find((item) => item.id === backend);
   const template = templates?.find((item) => item.backend === backend);
   const definitions = catalog.configured?.runtimes.map((item) => item.definition) || [];
@@ -75,10 +77,14 @@ export function ModelTeamSetupForm({
     descriptor?.defaultConfig ||
     {};
   const [raw, setRaw] = useState(JSON.stringify(initialConfig, null, 2));
+  const [managedConnection, setManagedConnection] = useState(
+    connectionId || String(initialConfig.connectionId || ''),
+  );
+  const [managedModel, setManagedModel] = useState(model || String(initialConfig.model || ''));
   const [runtimeId, setRuntimeId] = useState(
     existing?.id ||
       uniqueId(
-        connectionId && model ? connectionId + '-' + model : backend + '-instance',
+        connectionId && model ? connectionId + '-' + model : (backend || 'model') + '-instance',
         definitions.map((item) => item.id),
       ),
   );
@@ -100,7 +106,9 @@ export function ModelTeamSetupForm({
   const [workerPool, setWorkerPool] = useState([
     ...new Set([...(current?.workerPool || (current ? [current.worker] : [])), candidateId]),
   ]);
-  const [policy, setPolicy] = useState<'local-only' | 'hybrid'>(current?.policy || 'hybrid');
+  const [policy, setPolicy] = useState<'local-only' | 'hybrid'>(
+    current?.policy || (template?.local === false ? 'hybrid' : 'local-only'),
+  );
   const savedLimits =
     typeof initialConfig.limits === 'object' &&
     initialConfig.limits !== null &&
@@ -111,7 +119,12 @@ export function ModelTeamSetupForm({
   const [contextTokens, setContextTokens] = useState<string | number>(defaults.contextTokens);
   const [maxOutputTokens, setMaxOutputTokens] = useState<string | number>(defaults.maxOutputTokens);
   const [error, setError] = useState('');
-  const polished = descriptor?.editor === 'managed' && !!template;
+  const polished = descriptor?.editor === 'managed';
+  const candidateLocal =
+    template?.local ??
+    (polished
+      ? catalog.connections.find((connection) => connection.id === managedConnection)?.local
+      : undefined);
   const choices = catalog.runtimes.map((item) => ({
     value: item.id,
     label: [
@@ -124,7 +137,7 @@ export function ModelTeamSetupForm({
   if (!existing)
     choices.push({
       value: candidateId,
-      label: `${model || descriptor?.label || backend} · ${t('New model')}`,
+      label: `${managedModel || model || descriptor?.label || backend || t('Execution backend')} · ${t('New model')}`,
     });
   function changeCandidate(nextId: string) {
     const previous = candidateId;
@@ -147,7 +160,12 @@ export function ModelTeamSetupForm({
                 id: candidateId,
                 backend,
                 config: polished
-                  ? { ...config, limits: { ...defaults, contextTokens, maxOutputTokens } }
+                  ? {
+                      ...config,
+                      connectionId: managedConnection,
+                      model: managedModel,
+                      limits: { ...defaults, contextTokens, maxOutputTokens },
+                    }
                   : config,
               },
             ],
@@ -202,9 +220,17 @@ export function ModelTeamSetupForm({
               'Create a separate team profile. Your current default and existing runs stay unchanged.',
             )}
           </Text>
+          {!current && (
+            <Text size="sm" c="dimmed">
+              {t(
+                'One model can coordinate, implement and review in separate sessions. Service checks and an independent review still run.',
+              )}
+            </Text>
+          )}
           <Select
             label={t('Backend implementation')}
             value={backend}
+            placeholder={t('Choose an execution backend')}
             data={available.map((item) => ({ value: item.id, label: item.label }))}
             allowDeselect={false}
             disabled={saving}
@@ -230,6 +256,34 @@ export function ModelTeamSetupForm({
               );
             }}
           />
+          {polished && (
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              <Select
+                label={t('API connection')}
+                value={managedConnection || null}
+                placeholder={t('Choose a saved connection')}
+                data={catalog.connections.map((connection) => ({
+                  value: connection.id,
+                  label: connection.id,
+                }))}
+                onChange={(value) => setManagedConnection(value || '')}
+                allowDeselect={false}
+                disabled={saving || !!existing || !!connectionId}
+                required
+              />
+              <TextInput
+                label={t('Model name')}
+                description={t(
+                  'Exact model ID from your provider. No request is sent when saving.',
+                )}
+                value={managedModel}
+                onChange={(event) => setManagedModel(event.currentTarget.value)}
+                disabled={saving || !!existing || !!model}
+                maxLength={200}
+                required
+              />
+            </SimpleGrid>
+          )}
           {!existing && (
             <TextInput
               label={t('Runtime ID')}
@@ -271,9 +325,9 @@ export function ModelTeamSetupForm({
           />
           <Text size="xs" c="dimmed">
             {t('The service validates configuration and data locality before saving.')}
-            {template
+            {candidateLocal !== undefined
               ? ' ' +
-                (template.local
+                (candidateLocal
                   ? t('Trusted local model endpoint.')
                   : t('Requests leave your trusted local environment.'))
               : ''}
@@ -346,7 +400,7 @@ export function ModelTeamSetupForm({
                   </Accordion.Panel>
                 </Accordion.Item>
               </Accordion>
-            ) : (
+            ) : descriptor ? (
               <Textarea
                 label={t('Backend configuration (JSON)')}
                 description={t('Configuration is validated by the installed backend.')}
@@ -360,7 +414,7 @@ export function ModelTeamSetupForm({
                 spellCheck={false}
                 styles={{ input: { fontFamily: 'monospace' } }}
               />
-            ))}
+            ) : null)}
           <Text size="xs" c="dimmed">
             {t(
               'Save now, restart the Buro service, then explicitly select this profile. Saving does not run a model or diagnostic.',
@@ -375,7 +429,12 @@ export function ModelTeamSetupForm({
             <Button variant="default" onClick={onClose} disabled={saving} mih={44}>
               {t('Cancel')}
             </Button>
-            <Button type="submit" loading={saving} disabled={!descriptor} mih={44}>
+            <Button
+              type="submit"
+              loading={saving}
+              disabled={!descriptor || (polished && (!managedConnection || !managedModel.trim()))}
+              mih={44}
+            >
               {t('Save team profile')}
             </Button>
           </Group>

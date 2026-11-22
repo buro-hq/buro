@@ -1,3 +1,7 @@
+async function showConnections(page) {
+  if (!(await page.getByRole('button', { name: 'Add API connection', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+}
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -96,6 +100,7 @@ const { chromium, expect } = require('@playwright/test');
           profile,
           roles: [
             ...['legacy_worker', 'retired_worker', 'coordinator'].map((id) => ({
+              provenance: { origin: 'user' },
               id,
               version: 1,
               title: id,
@@ -221,7 +226,7 @@ const { chromium, expect } = require('@playwright/test');
     await page.getByText('Local only', { exact: true }).waitFor();
     assert.equal((await privateFiles.load('resources')).defaultProfile, 'local');
     assert.equal(generations, 0, 'Changing the default never starts model inference');
-    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await showConnections(page);
     const ollama = page.locator('[data-connection-id="ollama"]');
     await ollama.getByRole('button', { name: 'Available models', exact: true }).click();
     await ollama.locator('[data-model-id="fixture-helper"]').waitFor();
@@ -482,7 +487,7 @@ const { chromium, expect } = require('@playwright/test');
     assert.equal(generations, 2, 'Role editing, model selection and role.save never run inference');
     // Model discovery leads to an explicit new team profile, never a new default or inference.
     await page.getByRole('button', { name: 'User settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await showConnections(page);
     await ollama.getByRole('button', { name: 'Available models', exact: true }).click();
     const modelHelper = ollama.locator('[data-model-id="fixture-helper"]');
     await modelHelper.getByRole('button', { name: 'Use in team', exact: true }).click();
@@ -620,9 +625,9 @@ const { chromium, expect } = require('@playwright/test');
     await page.getByRole('button', { name: 'Add execution backend', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Backend implementation', exact: true }).click();
     await page.getByRole('option', { name: 'Buro agent', exact: true }).click();
-    await dialog
-      .getByRole('textbox', { name: 'Backend configuration (JSON)', exact: true })
-      .fill(JSON.stringify({ connectionId: 'ollama', model: 'fixture:cloud' }));
+    await dialog.getByRole('textbox', { name: 'API connection', exact: true }).click();
+    await page.getByRole('option', { name: 'ollama', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Model name', exact: true }).fill('fixture:cloud');
     await dialog.getByRole('textbox', { name: 'Data policy', exact: true }).click();
     await page.getByRole('option', { name: 'Local only', exact: true }).click();
     for (const label of ['Coordinator model', 'Reviewer model']) {
@@ -653,8 +658,10 @@ const { chromium, expect } = require('@playwright/test');
     );
     await page.getByRole('button', { name: 'User settings', exact: true }).click();
     if (!(await page.getByRole('button', { name: 'Add API connection', exact: true }).isVisible()))
-      await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+      await showConnections(page);
     await page.getByRole('button', { name: 'Add API connection', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'API provider', exact: true }).click();
+    await page.getByRole('option', { name: 'Ollama', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Connection ID', exact: true }).fill('rtx-fixture');
     await dialog
       .getByRole('textbox', { name: 'API base URL', exact: true })
@@ -816,7 +823,7 @@ const { chromium, expect } = require('@playwright/test');
     );
     await page.reload();
     await page.getByRole('button', { name: 'User settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await showConnections(page);
     await ollama.getByText('http://192.168.1.20:11434/', { exact: true }).waitFor();
     await ollama.getByText('Restart required', { exact: true }).waitFor();
     await expect(
@@ -902,7 +909,7 @@ const { chromium, expect } = require('@playwright/test');
 
     // Keep the same settings component mounted across a real service reconnect.
     await page.getByRole('button', { name: 'User settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+    await showConnections(page);
     await ollama.getByRole('button', { name: 'Available models', exact: true }).click();
     await ollama.locator('[data-model-id="fresh-before-edit"]').waitFor();
     await ollama
@@ -971,7 +978,7 @@ const { chromium, expect } = require('@playwright/test');
       page.getByRole('textbox', { name: 'Default execution profile', exact: true }),
     ).toHaveValue('Helper team', { timeout: 15000 });
     if (!(await ollama.getByRole('button', { name: 'Available models', exact: true }).isVisible()))
-      await page.getByRole('button', { name: 'Models and connections', exact: true }).click();
+      await showConnections(page);
     await expect(
       ollama.getByRole('button', { name: 'Available models', exact: true }),
     ).toBeEnabled();

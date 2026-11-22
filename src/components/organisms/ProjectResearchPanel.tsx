@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { ProjectResearch, RepositoryInfo } from '../../../protocol/domain';
 import { useProject } from '../../data/provider';
 import { Notice } from '../atoms/Notice';
+import { useResourceCatalog } from '../../features/resources/useResourceCatalog';
+import { operationResourceReady } from '../../features/resources/readiness';
 
 export function ProjectResearchPanel({
   projectId,
@@ -22,6 +24,8 @@ export function ProjectResearchPanel({
 }) {
   const { snapshot, client, connection } = useProject();
   const id = projectId || snapshot!.project.id;
+  const resources = useResourceCatalog(id);
+  const canResearch = operationResourceReady(resources.catalog, 'project.research');
   const [research, setResearch] = useState<ProjectResearch | null>(null),
     [error, setError] = useState(''),
     [starting, setStarting] = useState(false);
@@ -102,11 +106,11 @@ export function ProjectResearchPanel({
     };
   }, [client, id]);
   useEffect(() => {
-    if (autoStart && !started.current) {
+    if (autoStart && canResearch && !disabled && !started.current) {
       started.current = true;
       void start();
     }
-  }, [autoStart]);
+  }, [autoStart, canResearch, disabled]);
   return (
     <div className="content-panel project-research-panel">
       <div className="section-heading">
@@ -123,6 +127,13 @@ export function ProjectResearchPanel({
         )}
       </div>
       {error && <Notice tone="error">{t(error)}</Notice>}
+      {!canResearch && !resources.loading && (
+        <Notice>
+          {t(
+            'Configure and select an eligible model profile in User settings to start research. Saved research stays available.',
+          )}
+        </Notice>
+      )}
       {research && (
         <>
           <p>{research.summary}</p>
@@ -210,7 +221,7 @@ export function ProjectResearchPanel({
         ) : (
           <Button
             variant="light"
-            disabled={starting || connection !== 'connected'}
+            disabled={disabled || starting || connection !== 'connected' || !canResearch}
             onClick={() => void start()}
           >
             {research ? t('Research again') : t('Research project')}

@@ -43,6 +43,16 @@ test('actual production composition starts without opening any project or invoki
     assert.ok(info.capabilities.includes(method), method);
   assert.equal(storeOpens, 0);
   assert.equal(modelCalls, 0);
+  const resources = await app.ctx.commands.bus.execute(
+    { method: 'resources.list', params: {} },
+    meta,
+  );
+  assert.equal(resources.defaultProfile, null);
+  assert.deepEqual(resources.connections, []);
+  assert.deepEqual(resources.runtimes, []);
+  assert.deepEqual(resources.profiles, []);
+  assert.equal(resources.selected, undefined);
+  assert.deepEqual(app.ctx.agentRuntime.registry.list(), []);
   assert.deepEqual(
     (await fs.readdir(directory)).filter((name) => name !== 'local'),
     [],
@@ -102,6 +112,23 @@ test('production composition connects and restores a real first repository witho
   assert.equal(snapshot.project.root, repository);
   assert.deepEqual(snapshot.goals, []);
   assert.deepEqual(snapshot.runs, []);
+  assert.deepEqual(snapshot.roles, []);
+  const resources = await bus.execute(
+    { method: 'resources.list', params: { projectId: connected.id } },
+    meta,
+  );
+  assert.equal(resources.selected, undefined);
+  assert.equal(resources.selectionIssue?.code, 'RESOURCE_PROFILE_REQUIRED');
+  const sequence = app.ctx.projects.registry.get(connected.id).snapshot().sequence;
+  await assert.rejects(
+    bus.execute(
+      { method: 'project.research', params: { projectId: connected.id } },
+      { id: 'unconfigured-research', fingerprint: 'unconfigured-research' },
+    ),
+    { code: 'RESOURCE_PROFILE_REQUIRED' },
+  );
+  assert.equal(app.ctx.projects.registry.get(connected.id).snapshot().sequence, sequence);
+  assert.equal(app.ctx.projects.registry.get(connected.id).snapshot().research, undefined);
   assert.deepEqual(
     app.ctx.projects.registry.list().map((project) => project.id),
     [connected.id],

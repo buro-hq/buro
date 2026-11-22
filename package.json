@@ -21,6 +21,7 @@
     "check:setup": "node scripts/check-project-setup.cjs",
     "check:appearance": "node scripts/check-appearance.cjs",
     "check:resources": "node scripts/check-resources.cjs",
+    "check:first-profile": "node scripts/check-first-profile.cjs",
     "format": "prettier --write src clients protocol tsconfig.json tsconfig.server.json",
     "format:check": "prettier --check src clients protocol tsconfig.json tsconfig.server.json",
     "check:context": "node scripts/check-context-materials.cjs",

@@ -31,13 +31,13 @@ Open http://127.0.0.1:4327 and keep the daemon running. The build does not bundl
 
 ## Service configuration
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `PROJECT_DAEMON_PORT` | Listen port | `4341` |
-| `PROJECT_DATA_DIR` | Service data directory | checkout `.buro/` |
-| `PROJECT_DAEMON_URL` | CLI endpoint | `ws://127.0.0.1:4341` |
-| `PROJECT_ID` | CLI project | the sole connected project; required when there are zero or multiple projects |
-| `BURO_DEMO` | Explicit development fixtures | disabled; `1` opens isolated demo stores |
+| Variable              | Purpose                       | Default                                                                       |
+| --------------------- | ----------------------------- | ----------------------------------------------------------------------------- |
+| `PROJECT_DAEMON_PORT` | Listen port                   | `4341`                                                                        |
+| `PROJECT_DATA_DIR`    | Service data directory        | checkout `.buro/`                                                             |
+| `PROJECT_DAEMON_URL`  | CLI endpoint                  | `ws://127.0.0.1:4341`                                                         |
+| `PROJECT_ID`          | CLI project                   | the sole connected project; required when there are zero or multiple projects |
+| `BURO_DEMO`           | Explicit development fixtures | disabled; `1` opens isolated demo stores                                      |
 
 Normal startup has no built-in project or run. Connect a repository in the UI or CLI; saved connections are restored on restart. A service connection failure shows an error and a reconnect action. Browser-local drafts require explicit `?source=replay`.
 
@@ -128,7 +128,7 @@ checks/ tests/ scripts/
 
 Core has no React, Node, Cordis or transport imports. UI and clients do not import backend modules. Cordis composes trusted plugins; it does not sandbox them.
 
-Runtime activity is typed in `core/runtime-events.ts`. Adapters normalize notifications before publishing them; `core/runtime-projection.ts` applies public activity to saved runs. `core/runtimes.ts` holds adapters, `core/runtime-router.ts` binds durable Buro handles, and `core/resource-selection.ts` enforces profile/data policy. `plugins/runtime.ts` and `plugins/resources.ts` compose their ports and cleanup. Codex remains the default until configured otherwise. `core/worker-assignments.ts` dispatches independent workers; native activity cannot establish role identity. `core/capability-probe.ts` owns bounded diagnostics and durable receipts. See [implementation progress](IMPLEMENTATION.md).
+Runtime activity is typed in `core/runtime-events.ts`. Adapters normalize notifications before publishing them; `core/runtime-projection.ts` applies public activity to saved runs. `core/runtimes.ts` holds adapters, `core/runtime-router.ts` binds durable Buro handles, and `core/resource-selection.ts` enforces profile/data policy. `plugins/runtime.ts` and `plugins/resources.ts` compose their ports and cleanup. Fresh services have an empty runtime catalog and no default profile. The routed service remains available for configuration/history; execution requires an explicitly selected active profile. `core/worker-assignments.ts` dispatches independent workers; native activity cannot establish role identity. `core/capability-probe.ts` owns bounded diagnostics and durable receipts. See [implementation progress](IMPLEMENTATION.md).
 
 Managed commands use additional private-file/read/network restrictions. Managed Docker execution is currently unsupported and fails before credentials or containers are created; existing native Codex Docker execution is separate. `check:resources` starts an isolated service and Vite instance with HTTP fixtures; it does not call installed models or change the user's profiles. Opt-in live Ollama checks use `BURO_LIVE_OLLAMA=1 node scripts/check-live-ollama.cjs`; the default unit suite does not make live model requests.
 

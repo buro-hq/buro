@@ -1,3 +1,4 @@
+import { fixtureResources } from './fixtures/resource-configuration.ts';
 import { defaultRoles } from './fixtures/roles.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,10 +13,7 @@ import { SocketProjectClient } from '../clients/socket-client.ts';
 import { EnvironmentExecutors } from '../adapters/environments/executors.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { PrivateJSONFiles } from '../adapters/files/private-json.ts';
-import {
-  ResourceConfigurationSchema,
-  defaultResources,
-} from '../adapters/files/resource-configuration.ts';
+import { ResourceConfigurationSchema } from '../adapters/files/resource-configuration.ts';
 import { ProjectProfileSchema } from '../protocol/projects.ts';
 import { DEFAULT_MANAGED_RUN_BUDGET_POLICY } from '../protocol/run-budget.ts';
 import { ResourceSetupInputSchema, type ResourceCatalog } from '../protocol/resources.ts';
@@ -24,9 +22,9 @@ import type { ClientCommand } from '../protocol/schema.ts';
 const SECRET = 'fixture-private-model-credential-not-for-transport';
 const initialResources = () =>
   ResourceConfigurationSchema.parse({
-    ...defaultResources(),
+    ...fixtureResources(),
     runtimes: [
-      ...defaultResources().runtimes,
+      ...fixtureResources().runtimes,
       {
         id: 'existing-worker',
         backend: 'managed',
@@ -34,7 +32,7 @@ const initialResources = () =>
       },
     ],
     profiles: [
-      ...defaultResources().profiles,
+      ...fixtureResources().profiles,
       {
         id: 'existing-local',
         name: 'Existing local team',

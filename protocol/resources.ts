@@ -166,6 +166,8 @@ export type RoleResourceChoices = {
   requirements: BackendRequirements;
   choices: { resource: RuntimeResource; eligible: boolean; reason: string }[];
 };
+/** Safe, public selection failure; private diagnostics are never part of this DTO. */
+export type ResourceSelectionIssue = { code: string; message: string };
 export type ResourceCatalog = {
   providers: ResourceContributionDescriptor[];
   backends: ResourceContributionDescriptor[];
@@ -177,11 +179,12 @@ export type ResourceCatalog = {
     runtimes: { definition: RuntimeDefinition; restartRequired: boolean }[];
     profiles: { profile: ResourceProfile; restartRequired: boolean }[];
   };
-  defaultProfile: string;
+  defaultProfile: string | null;
   profiles: ResourceProfile[];
   runtimes: RuntimeResource[];
   connections: ResourceConnectionCatalogEntry[];
   selected?: ResourceSnapshot;
+  selectionIssue?: ResourceSelectionIssue;
   probes: {
     runtimeId: string;
     configurationRevision: string;

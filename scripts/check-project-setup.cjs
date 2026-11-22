@@ -11,6 +11,7 @@ const exec = promisify(execFile);
   const { fixtureExecutionSelection, fixtureExecutionCapabilities } = await import(
     '../tests/fixtures/execution-resources.ts'
   );
+  const { fixtureResourceCatalog } = await import('../tests/fixtures/resource-catalog.ts');
   const { createHost } = await import('../plugins/host.ts');
   const { projectManagementPlugin } = await import('../plugins/project-management.ts');
   const { projectOperationsPlugin } = await import('../plugins/project-operations.ts');
@@ -100,10 +101,21 @@ const exec = promisify(execFile);
       async dispose() {},
     };
     class Runtime extends Service {
+      static inject = ['commands', 'projects'];
       constructor(ctx) {
         super(ctx, 'agentRuntime');
         this.adapter = runtime;
         this.selection = fixtureExecutionSelection('fixture', fixtureExecutionCapabilities());
+        ctx.effect(() =>
+          ctx.commands.bus.register('resources.list', ({ projectId }) =>
+            fixtureResourceCatalog(
+              this.selection.forProject(projectId || 'fixture'),
+              projectId ? ctx.projects.registry.get(projectId).snapshot() : undefined,
+            ),
+          ),
+        );
+        ctx.on('service/info', (info) => info.capabilities.push('resources.list'));
+        ctx.on('project/snapshot', (snapshot) => snapshot.capabilities.push('resources.list'));
       }
     }
     await host.ctx.plugin(Runtime);

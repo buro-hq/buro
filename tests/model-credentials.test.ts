@@ -80,6 +80,15 @@ test('resource metadata exposes credential readiness without values or inference
     await resources.dispose();
     await Promise.all(resources.runtimes.map((runtime) => runtime.dispose()));
   });
+  assert.deepEqual(
+    (await resources.list()).connections,
+    [],
+    'A private key does not configure a provider.',
+  );
+  await resources.saveConnection({ id: 'deepseek', provider: 'deepseek', config: {} }, null, {
+    id: 'configure-provider',
+    fingerprint: 'configure-provider',
+  });
   const catalog = await resources.list();
   assert.equal(
     catalog.connections.find((connection) => connection.id === 'deepseek')?.credentialConfigured,

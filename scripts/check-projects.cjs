@@ -28,6 +28,7 @@ async function expectRoleSources(page) {
   const { fixtureExecutionSelection, fixtureExecutionCapabilities } = await import(
     '../tests/fixtures/execution-resources.ts'
   );
+  const { fixtureResourceCatalog } = await import('../tests/fixtures/resource-catalog.ts');
   const directory = await fs.realpath(
       await fs.mkdtemp(path.join(os.tmpdir(), 'project-onboarding-ui-')),
     ),
@@ -196,6 +197,7 @@ async function expectRoleSources(page) {
       },
     };
     class FixtureRuntime extends Service {
+      static inject = ['commands', 'projects'];
       constructor(ctx) {
         super(ctx, 'agentRuntime');
         this.adapter = runtime;
@@ -203,6 +205,16 @@ async function expectRoleSources(page) {
           'fixture',
           fixtureExecutionCapabilities({ resumeSessions: true }),
         );
+        ctx.effect(() =>
+          ctx.commands.bus.register('resources.list', ({ projectId }) =>
+            fixtureResourceCatalog(
+              this.selection.forProject(projectId || 'fixture'),
+              projectId ? ctx.projects.registry.get(projectId).snapshot() : undefined,
+            ),
+          ),
+        );
+        ctx.on('service/info', (info) => info.capabilities.push('resources.list'));
+        ctx.on('project/snapshot', (snapshot) => snapshot.capabilities.push('resources.list'));
       }
     }
     await host.ctx.plugin(FixtureRuntime);

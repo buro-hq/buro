@@ -43,7 +43,7 @@ export function ApiConnectionForm({
   onSave,
 }: Props) {
   const [id, setId] = useState(connection?.id || '');
-  const [provider, setProvider] = useState(connection?.provider || providers[0]?.id || '');
+  const [provider, setProvider] = useState(connection?.provider || '');
   const initial =
     connection?.config || providers.find((item) => item.id === provider)?.defaultConfig || {};
   const [config, setConfig] = useState(initial);
@@ -111,6 +111,7 @@ export function ApiConnectionForm({
             <Select
               label={t('API provider')}
               value={provider}
+              placeholder={t('Choose an API provider')}
               data={providers.map((item) => ({ value: item.id, label: item.label }))}
               allowDeselect={false}
               disabled={!!connection || saving}
@@ -239,7 +240,7 @@ export function ApiConnectionForm({
                 </Accordion.Item>
               </Accordion>
             </>
-          ) : (
+          ) : descriptor ? (
             <Textarea
               label={t('Provider configuration (JSON)')}
               description={t(
@@ -255,7 +256,7 @@ export function ApiConnectionForm({
               spellCheck={false}
               styles={{ input: { fontFamily: 'monospace' } }}
             />
-          )}
+          ) : null}
           <Text size="xs" c="dimmed">
             {t(
               'Connection changes apply after a Buro service restart. Active resources keep their current settings.',

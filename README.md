@@ -9,7 +9,7 @@ Buro is a local workspace for automating coding goals with a coordinator, focuse
 
 Work happens in a separate Git worktree. You can inspect the result, apply it to your branch, or have Buro open a draft PR. A coordinator plans the work and selects workers when needed; a separate reviewer checks the result.
 
-Buro is still in development. Its built-in adapters support your installed Codex CLI and opt-in **Ollama and DeepSeek model API** connections through a Buro-managed runtime. Trusted service plugins can register additional provider and backend factories. The default remains Codex; configure [execution resources](docs/RESOURCES.md) to use direct model connections or a mixed team.
+Buro is still in development. Its built-in adapters support your installed Codex CLI and opt-in **Ollama and DeepSeek model API** connections through a Buro-managed runtime. Trusted service plugins can register additional provider and backend factories. A new installation has no configured model or default backend. Configure [execution resources](docs/RESOURCES.md) and explicitly select a profile to use a local, remote or mixed team.
 
 The [product vision](VISION.md), [target architecture](ARCHITECTURE.md) and [provider integration contract](docs/PROVIDERS.md) define the full direction. Buro owns worker dispatch, tools and verification; richer replanning and concurrent runs remain on the roadmap.
 
@@ -27,7 +27,7 @@ _Screenshots show the actual interface with a fictional project and sample run d
 
 ## Run locally
 
-You need Node.js **24+**, npm, Git, and a configured execution route: authenticated Codex CLI, installed Ollama model, or DeepSeek API credentials. The default route requires Codex until changed. Connected repositories must have at least one commit. Native command execution uses macOS `sandbox-exec` or Linux `bubblewrap`; Docker is currently available for the native Codex route.
+You need Node.js **24+**, npm and Git to open the workspace. To run goals, configure an execution route: authenticated Codex CLI, an installed Ollama model, DeepSeek API credentials or another installed provider/backend. Connected repositories must have at least one commit. Native command execution uses macOS `sandbox-exec` or Linux `bubblewrap`; Docker is currently available for the native Codex route.
 
 ```sh
 git clone https://github.com/buro-hq/buro.git
@@ -38,17 +38,18 @@ npm start
 
 Open **http://127.0.0.1:4317**. `npm start` runs the local service and frontend together; Ctrl+C stops both. There is no packaged desktop app yet.
 
-The first startup opens an empty workspace. Connect your repository to begin; later startups restore saved connections. Development demo projects require the explicit `BURO_DEMO=1` setting.
+The first startup opens an empty workspace without configured models. You can connect a repository before choosing models; later startups restore saved connections. Development demo projects require the explicit `BURO_DEMO=1` setting.
 
 Draft PRs also need an authenticated GitHub CLI (`gh`) and a GitHub remote for the connected repository.
 
 ## Your first task
 
 1. Open **Projects → Connect project** and select a Git repository.
-2. Let Buro suggest the project setup, or enter it yourself. Review the base branch, allowed paths, protected files and check commands before saving.
-3. Create a goal. Describe the change and how you will know it works. Attach relevant files or images if needed.
-4. Choose the checks and start the run.
-5. Read the diff, check results and review. Apply the result to your branch, keep it in the worktree, or use the configured PR or delivery action.
+2. In **User settings → Execution resources**, add an API connection and model by name, or choose an installed execution backend. Save a team profile, restart the Buro service and explicitly select the profile. One model can serve all roles in separate sessions.
+3. Let Buro research the project setup, or enter it yourself. Review the base branch, planned paths, protected files and check commands before saving. Research becomes available when a suitable model profile is selected.
+4. Create a goal. Describe the change and how you will know it works. Attach relevant files or images if needed.
+5. Choose the checks and start the run. Required roles appear when work needs them; the coordinator reuses or creates specialists.
+6. Read the diff, check results and review. Apply the result to your branch, keep it in the worktree, or use the configured PR or delivery action.
 
 For example, a goal can ask for CSV export and specify which rows to include, how to escape values, and what to test:
 

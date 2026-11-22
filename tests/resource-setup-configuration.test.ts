@@ -1,3 +1,4 @@
+import { fixtureResources } from './fixtures/resource-configuration.ts';
 import { testResourceContributions } from './fixtures/resource-contributions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +10,6 @@ import {
   ResourceConfigurationSchema,
   resourceConfigurationRevision,
   connectionConfigurationRevision,
-  defaultResources,
   type ResourceConfiguration,
 } from '../adapters/files/resource-configuration.ts';
 import { PrivateJSONFiles } from '../adapters/files/private-json.ts';
@@ -44,7 +44,7 @@ function setup(configuration: ResourceConfiguration, suffix = ''): ResourceSetup
     },
   };
 }
-async function fixture(t: any, initial = defaultResources()) {
+async function fixture(t: any, initial = fixtureResources()) {
   const directory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-resource-setup-')),
   );
@@ -67,7 +67,7 @@ test('shared runtime and setup contracts retain defaults and reject malformed li
     backend: 'codex',
     config: {},
   });
-  const value = setup(defaultResources());
+  const value = setup(fixtureResources());
   assert.equal(
     CommandSchema.safeParse({ method: 'resources.setup.save', params: value }).success,
     true,
@@ -96,7 +96,7 @@ test('shared runtime and setup contracts retain defaults and reject malformed li
 });
 
 test('configuration revisions cover semantic settings and normalize defaults while excluding command receipts', () => {
-  const original = defaultResources(),
+  const original = fixtureResources(),
     revision = resourceConfigurationRevision(original);
   const receiptOnly = structuredClone(original);
   receiptOnly.receipts['use-old'] = { fingerprint: 'receipt-value', profileId: 'codex' };
@@ -199,7 +199,7 @@ test('local-only setup respects explicit endpoint trust across all roles and wor
     ['http://192.168.50.10:11434', 'private-network', true],
     ['http://127.0.0.1:11434', 'external', false],
   ] as const) {
-    const initial = defaultResources();
+    const initial = fixtureResources();
     initial.connections[0] = testResourceContributions().parseConnection({
       id: 'ollama',
       provider: 'ollama',
@@ -233,7 +233,7 @@ test('local-only setup respects explicit endpoint trust across all roles and wor
 });
 
 test('startup rejects invalid local-only profiles and setup rejects known cloud-backed Ollama IDs', async (t) => {
-  const invalid = defaultResources();
+  const invalid = fixtureResources();
   invalid.profiles.push({
     id: 'old-local',
     name: 'Invalid local-only profile',
@@ -288,7 +288,7 @@ test('setup never overwrites IDs or leaves a partial runtime behind for invalid 
     await rejects(() => f.configuration.saveSetup('invalid', 'invalid', input));
     assert.deepEqual(f.configuration.snapshot(), before);
   }
-  const manyRuntimes = defaultResources();
+  const manyRuntimes = fixtureResources();
   for (let i = 0; i < 31; i++) manyRuntimes.runtimes.push(runtime('existing-' + i));
   const r = await fixture(t, manyRuntimes);
   await rejects(
@@ -296,7 +296,7 @@ test('setup never overwrites IDs or leaves a partial runtime behind for invalid 
     'RESOURCE_SETUP_LIMIT',
   );
   assert.deepEqual(r.configuration.snapshot(), manyRuntimes);
-  const manyProfiles = defaultResources();
+  const manyProfiles = fixtureResources();
   for (let i = 0; i < 31; i++)
     manyProfiles.profiles.push({ ...manyProfiles.profiles[0], id: 'existing-' + i });
   const p = await fixture(t, manyProfiles);

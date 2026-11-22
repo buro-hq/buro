@@ -130,19 +130,44 @@ export function ExecutionResources() {
         </Button>
       </Group>
       <Stack gap="sm">
-        <Select
-          label={t('Default execution profile')}
-          value={catalog?.defaultProfile || null}
-          data={
-            catalog?.profiles.map((profile) => ({ value: profile.id, label: profile.name })) || []
-          }
-          allowDeselect={false}
-          disabled={!catalog || !!busy}
-          onChange={(value) => {
-            if (value && value !== catalog?.defaultProfile) void useProfile(value);
-          }}
-          description={t('New runs inherit this profile. Existing sessions keep their resources.')}
-        />
+        {catalog && !catalog.selected && (
+          <Paper withBorder p="sm" role="status">
+            <Text size="sm" fw={600}>
+              {t('Choose how your team will run')}
+            </Text>
+            <Text size="sm" c="dimmed">
+              {catalog.configured?.profiles.some((item) => item.restartRequired)
+                ? t('Your profile is saved. Restart the Buro service, then select it below.')
+                : catalog.profiles.length
+                  ? t('Select an execution profile below to enable new model work.')
+                  : catalog.connections.length
+                    ? t(
+                        'Add a model by name and create a team profile. You can save both before one service restart.',
+                      )
+                    : t(
+                        'Add a model API connection or choose an installed execution backend. Select a profile to enable goals and research.',
+                      )}
+            </Text>
+          </Paper>
+        )}
+        {!!catalog?.profiles.length && (
+          <Select
+            label={t('Default execution profile')}
+            value={catalog?.defaultProfile || null}
+            placeholder={t('Select an execution profile')}
+            data={
+              catalog?.profiles.map((profile) => ({ value: profile.id, label: profile.name })) || []
+            }
+            allowDeselect={false}
+            disabled={!catalog || !!busy}
+            onChange={(value) => {
+              if (value && value !== catalog?.defaultProfile) void useProfile(value);
+            }}
+            description={t(
+              'New runs inherit this profile. Existing sessions keep their resources.',
+            )}
+          />
+        )}
         {profile && (
           <Group gap="xs" align="center">
             <Badge variant="light">
@@ -164,7 +189,7 @@ export function ExecutionResources() {
             })}
           </Group>
         )}
-        <Accordion variant="contained" transitionDuration={0}>
+        <Accordion variant="contained" transitionDuration={0} defaultValue="connections">
           <Accordion.Item value="connections">
             <Accordion.Control>{t('Models and connections')}</Accordion.Control>
             <Accordion.Panel>
@@ -178,7 +203,7 @@ export function ExecutionResources() {
                       variant="light"
                       size="xs"
                       mih={44}
-                      disabled={!!busy || !catalog}
+                      disabled={!!busy || !catalog?.providers.length}
                       onClick={() => setEditing('new')}
                     >
                       {t('Add API connection')}
@@ -257,6 +282,22 @@ export function ExecutionResources() {
                         )}
                       </div>
                       <Group gap="xs">
+                        {canSetup && catalog.configurationRevision && catalog.configured && (
+                          <Button
+                            size="xs"
+                            mih={44}
+                            variant="light"
+                            disabled={!!busy}
+                            onClick={() =>
+                              setSetup({
+                                catalog: structuredClone(catalog),
+                                connectionId: connection.id,
+                              })
+                            }
+                          >
+                            {t('Add model by name')}
+                          </Button>
+                        )}
                         {(connection.restartRequired || catalogStale) && (
                           <Badge variant="light" color="orange">
                             {t('Restart required')}
@@ -297,6 +338,13 @@ export function ExecutionResources() {
                         )}
                       </Group>
                     </Group>
+                    {connection.restartRequired && (
+                      <Text size="xs" c="dimmed" mt="xs">
+                        {t(
+                          'Save a model by name now, or restart the service to discover available models.',
+                        )}
+                      </Text>
+                    )}
                     {!connection.modelListing && (
                       <Text size="xs" c="dimmed">
                         {t(

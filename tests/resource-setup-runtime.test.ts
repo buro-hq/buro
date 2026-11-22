@@ -1,3 +1,4 @@
+import { fixtureResources } from './fixtures/resource-configuration.ts';
 import { defaultRoles } from './fixtures/roles.ts';
 import { resolveRoleResource } from '../core/role-routing.ts';
 import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
@@ -7,10 +8,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createRuntimeResources } from '../adapters/resources/runtime-resources.ts';
-import {
-  ResourceConfigurationSchema,
-  defaultResources,
-} from '../adapters/files/resource-configuration.ts';
+import { ResourceConfigurationSchema } from '../adapters/files/resource-configuration.ts';
 import { PrivateJSONFiles } from '../adapters/files/private-json.ts';
 import { FileRuntimeRoutes } from '../adapters/files/runtime-routes.ts';
 import { EnvironmentExecutors } from '../adapters/environments/executors.ts';
@@ -24,9 +22,9 @@ import { resourcesPlugin } from '../plugins/resources.ts';
 const meta = (id: string) => ({ id, fingerprint: id });
 const initialConfiguration = () =>
   ResourceConfigurationSchema.parse({
-    ...defaultResources(),
+    ...fixtureResources(),
     runtimes: [
-      ...defaultResources().runtimes,
+      ...fixtureResources().runtimes,
       {
         id: 'local',
         backend: 'managed',
@@ -34,7 +32,7 @@ const initialConfiguration = () =>
       },
     ],
     profiles: [
-      ...defaultResources().profiles,
+      ...fixtureResources().profiles,
       {
         id: 'local',
         name: 'Existing local team',
