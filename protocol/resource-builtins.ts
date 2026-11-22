@@ -65,9 +65,10 @@ export const ManagedLimitsSchema = z
   .strictObject({
     contextTokens: z.number().int().min(1024).max(262144).default(32768),
     maxOutputTokens: z.number().int().min(128).max(32768).default(4096),
-    maxRequestsPerTurn: z.number().int().min(1).max(64).default(24),
-    maxToolCallsPerTurn: z.number().int().min(1).max(128).default(64),
-    maxSessionRequests: z.number().int().min(1).max(1024).default(256),
+    maxRequestsPerTurn: z.number().int().positive().optional(),
+    maxToolCallsPerTurn: z.number().int().positive().optional(),
+    maxSessionRequests: z.number().int().positive().optional(),
+    maxFeedbackSteps: z.number().int().positive().optional(),
   })
   .refine((limits) => limits.maxOutputTokens < limits.contextTokens, 'Reserve input context.');
 export const ManagedRuntimeConfigSchema = z.strictObject({

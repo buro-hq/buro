@@ -79,6 +79,7 @@ const { execFile } = require('node:child_process'),
     await store.transact('docs-run', 'docs-run', (doc) => {
       doc.runs.push(run);
       const goal = {
+        revision: 1,
         id: 'G-example',
         projectId: project.id,
         title: run.title,
@@ -104,7 +105,8 @@ const { execFile } = require('node:child_process'),
     let port;
     await host.ctx.plugin(websocketPlugin, { port: 0, onListen: (p) => (port = p) });
     const url =
-      'http://127.0.0.1:4317/?project=' +
+      (process.env.BURO_UI_BASE_URL || 'http://127.0.0.1:4317') +
+      '/?project=' +
       project.id +
       '&daemon=' +
       encodeURIComponent('ws://127.0.0.1:' + port);

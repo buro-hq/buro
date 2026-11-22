@@ -201,7 +201,6 @@ test(
       status: 'needs-attention' as const,
       workspace: path.join(directory, 'workspace'),
       baseCommit: 'a'.repeat(40),
-      planSavedAt: 'now',
     };
     const host = await createHost({
       projects: [
@@ -220,6 +219,7 @@ test(
     });
     const store = host.ctx.projects.registry.get('p');
     const goal = {
+      revision: 1,
       id: stopped.goalId!,
       projectId: 'p',
       title: 'Stopped goal',

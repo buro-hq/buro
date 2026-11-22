@@ -83,7 +83,7 @@ const { chromium, expect } = require('@playwright/test');
       phase: 'checking',
       workspace: path.join(root, 'workspace'),
       baseCommit: 'a'.repeat(40),
-      planSavedAt: 'now',
+
       executionPolicySnapshot: policy,
       resources,
       checkIds: ['unit'],
@@ -108,6 +108,16 @@ const { chromium, expect } = require('@playwright/test');
       ],
     });
     const store = host.ctx.projects.registry.get('autonomy');
+    // This fixture edits an existing role; production correctly starts with an empty catalog.
+    await host.ctx.roles.api.save('fixture-coordinator', 'fixture-coordinator', {
+      projectId: 'autonomy',
+      id: 'coordinator',
+      expectedVersion: 0,
+      title: 'Coordinator',
+      description: 'Coordinates the browser fixture.',
+      instructions: 'Use actual service observations.',
+      kind: 'coordination',
+    });
     await store.transact('fixture-goal', 'fixture-goal', (draft) => {
       draft.profile = profile;
       const goal = {
@@ -222,7 +232,9 @@ const { chromium, expect } = require('@playwright/test');
     await expect(card.locator('[data-policy-source="project"]')).toContainText(
       'Additional files allowed',
     );
-    await expect(card.locator('[data-policy-source="project"]')).toContainText('Up to 64 requests');
+    await expect(card.locator('[data-policy-source="project"]')).toContainText(
+      'No task usage limit',
+    );
     await card.getByRole('button', { name: 'Continue', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('textbox', { name: 'Clarification (optional)' })).toHaveValue('');

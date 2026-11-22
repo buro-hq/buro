@@ -51,7 +51,7 @@ export async function generateManagedBatch(
   });
   const advertised = new Set(packet.tools.map((definition) => definition.name));
   const plannedMaxOutputTokens = request.budget.maxOutputTokens;
-  if (session.requests >= limits.maxSessionRequests)
+  if (limits.maxSessionRequests !== undefined && session.requests >= limits.maxSessionRequests)
     throw new DomainError('MODEL_BUDGET_EXHAUSTED', 'The session request budget is exhausted.');
   const operationId = 'G-' + state.turnId + '-' + state.round;
   const reservation =
@@ -180,7 +180,10 @@ export async function generateManagedBatch(
       'TOOL_POLICY_VIOLATION',
       'The model requested a tool that this turn did not authorize.',
     );
-  if (state.calls + requested.length > limits.maxToolCallsPerTurn)
+  if (
+    limits.maxToolCallsPerTurn !== undefined &&
+    state.calls + requested.length > limits.maxToolCallsPerTurn
+  )
     throw new DomainError('TOOL_BUDGET_EXHAUSTED', 'The tool action budget is exhausted.');
   if (requested.length && budgetOwner && budgets) {
     await budgets.reserveTools({

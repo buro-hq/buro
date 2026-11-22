@@ -1,6 +1,10 @@
 const path = require('node:path');
 const { parseArgs } = require('node:util');
 const { validateComparison, runModelComparison } = require('./lib/model-comparison.cjs');
+const {
+  EVALUATION_LIMIT_OPTIONS,
+  evaluationLimitArguments,
+} = require('./lib/live-provider-runner.cjs');
 
 async function main() {
   if (process.env.BURO_MODEL_COMPARISON !== '1')
@@ -13,6 +17,7 @@ async function main() {
       options: {
         target: { type: 'string', default: 'local' },
         'ollama-context': { type: 'string' },
+        ...EVALUATION_LIMIT_OPTIONS,
       },
       allowPositionals: true,
     });
@@ -27,6 +32,7 @@ async function main() {
     env: { ...process.env, BURO_LIVE_SOURCE_TRANSFER: '1' },
     arms: args.positionals[0] ? args.positionals[0].split(',') : undefined,
     target: args.values.target,
+    budgets: evaluationLimitArguments(args.values),
     ...(args.values['ollama-context'] !== undefined
       ? { contextTokensByProvider: { ollama: Number(args.values['ollama-context']) } }
       : {}),

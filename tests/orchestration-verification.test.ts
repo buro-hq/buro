@@ -209,7 +209,6 @@ test('checks, review and acceptance run only when requested, including a rejecte
   const accepted = await f.service.acceptRun(f.ctx, rechecked, envelope);
   assert.equal(accepted.commit, 'd'.repeat(40));
   assert.equal(f.service.get('p', f.ctx.runId).status, 'completed');
-  assert.equal(f.service.get('p', f.ctx.runId).planSavedAt, undefined);
 });
 
 test('a changed source revision invalidates checks before reviewer dispatch and can be explicitly checked again', async (t) => {

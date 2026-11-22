@@ -1,3 +1,5 @@
+import { DomainError } from '../core/ports.ts';
+import { UnresolvedEffectError } from '../core/run-reconciliation.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -337,7 +339,10 @@ test('a provider output-schema rejection stops after one attempt without running
     async release() {},
     async turn() {
       calls++;
-      throw Error('{"code":"invalid_json_schema","message":"Invalid schema for response_format"}');
+      throw new DomainError(
+        'MODEL_REQUEST_REJECTED',
+        '{"code":"invalid_json_schema","message":"Invalid schema for response_format"}',
+      );
     },
   } as any;
   const manager = new ProjectEnvironments(f.projects, runtime, f.executors);
@@ -346,4 +351,76 @@ test('a provider output-schema rejection stops after one attempt without running
   assert.equal(calls, 1);
   assert.equal(f.reports.length, 0);
   await assert.rejects(fs.access(path.join(f.workspace, 'installs')));
+});
+
+test('environment correction has no default three-proposal ceiling', async (t) => {
+  const f = await fixture(t);
+  f.recipes.splice(
+    0,
+    f.recipes.length,
+    ...[1, 2, 3, 4].map((index) => ({
+      ...f.recipe,
+      summary: 'Inspect observed missing tool ' + index,
+      setup: [{ ...f.recipe.setup[0], command: 'echo missing-' + index + ' >&2; exit 3' }],
+    })),
+    f.recipe,
+  );
+  assert.equal((await f.manager.prepare(f.input)).passed, true);
+  assert.equal(f.prompts.length, 5);
+  assert.match(f.prompts[4], /missing-4/);
+});
+
+test('an unknown environment model outcome is preserved without another model or setup dispatch', async (t) => {
+  const f = await fixture(t);
+  let calls = 0;
+  const error = new UnresolvedEffectError('GENERATION_RECONCILIATION_REQUIRED', {
+    runtimeId: 'fixture',
+    threadId: 'unknown-environment',
+  });
+  const runtime = {
+    async start() {
+      return { threadId: 'unknown-environment' };
+    },
+    async release() {},
+    async turn() {
+      calls++;
+      throw error;
+    },
+  } as unknown as AgentRuntime;
+  const manager = new ProjectEnvironments(f.projects, runtime, f.executors);
+  await assert.rejects(manager.prepare(f.input), (actual) => actual === error);
+  assert.equal(calls, 1);
+  assert.equal(f.reports.length, 0);
+  await assert.rejects(fs.access(path.join(f.workspace, 'installs')));
+});
+
+test('repeated malformed proposals do not impose an implicit environment correction quota', async (t) => {
+  const f = await fixture(t);
+  let calls = 0;
+  const runtime = {
+    async start() {
+      return { threadId: 'recipe-' + calls };
+    },
+    async release() {},
+    async turn() {
+      calls++;
+      return {
+        turnId: 'turn-' + calls,
+        text: JSON.stringify(
+          calls <= 4
+            ? { summary: 'Missing required fields' }
+            : {
+                ...f.recipe,
+                variables: Object.entries(f.recipe.variables || {}).map(([name, value]) => ({
+                  name,
+                  value,
+                })),
+              },
+        ),
+      };
+    },
+  } as unknown as AgentRuntime;
+  const manager = new ProjectEnvironments(f.projects, runtime, f.executors);
+  assert.equal((await manager.prepare(f.input)).passed, true);
+  assert.equal(calls, 5);
 });

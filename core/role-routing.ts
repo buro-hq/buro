@@ -54,20 +54,10 @@ export function roleResourcePool(snapshot: ResourceSnapshot): RuntimeResource[] 
 export function roleResourceEligibility(
   snapshot: ResourceSnapshot,
   requirements: BackendRequirements = {},
-  purpose?: RuntimePurpose,
 ): RoleResourceEligibility[] {
   return roleResourcePool(snapshot).map((resource) => {
     try {
       requireBackendCapabilities(resource.capabilities, requirements);
-      if (
-        purpose === 'coordination' &&
-        !resource.capabilities.toolsFreeTurns &&
-        !resource.capabilities.readOnlySessions
-      )
-        throw new DomainError(
-          'BACKEND_CAPABILITY_UNAVAILABLE',
-          'Planning requires tools-free structured turns or read-only inspection.',
-        );
       return { resource, eligible: true, reason: 'Available for this operation.' };
     } catch (error) {
       if (!(error instanceof DomainError) || error.code !== 'BACKEND_CAPABILITY_UNAVAILABLE')
@@ -83,7 +73,7 @@ export function resolveRoleResource(
   role: Role,
   context: RoleResourceContext,
 ): AssignmentResource {
-  const choices = roleResourceEligibility(snapshot, context.requirements, context.purpose);
+  const choices = roleResourceEligibility(snapshot, context.requirements);
   const preference = RuntimePreferenceSchema.safeParse(role.runtimePreference || { mode: 'auto' });
   if (!preference.success)
     throw new DomainError('INVALID_RUNTIME_PREFERENCE', `Invalid model preference for ${role.id}.`);

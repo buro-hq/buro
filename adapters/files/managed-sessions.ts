@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { WorkScopeSchema } from '../../protocol/work-scope.ts';
 import { DomainError } from '../../core/ports.ts';
+import { assertManagedSessionProvenance } from '../../core/managed-session-authority.ts';
 import type { ManagedSession, ManagedSessionStore } from '../../core/model-ports.ts';
 import {
   parseSegmentClosing,
@@ -91,8 +92,8 @@ const workerStepCheckResult = z.strictObject({
 const workerStepChecks = z.strictObject({
   version: z.literal(1),
   revision: z.literal('worker-step-checks-v1'),
-  maxFeedbackSteps: z.literal(2),
-  feedbackSteps: z.number().int().nonnegative().max(2),
+  maxFeedbackSteps: z.number().int().positive().optional(),
+  feedbackSteps: z.number().int().nonnegative(),
   entries: z.array(
     z.strictObject({
       id: z.string().min(1),
@@ -166,9 +167,10 @@ const schema = z
     limits: z.object({
       contextTokens: z.number().int().positive(),
       maxOutputTokens: z.number().int().positive(),
-      maxRequestsPerTurn: z.number().int().positive(),
-      maxToolCallsPerTurn: z.number().int().positive(),
-      maxSessionRequests: z.number().int().positive(),
+      maxRequestsPerTurn: z.number().int().positive().optional(),
+      maxToolCallsPerTurn: z.number().int().positive().optional(),
+      maxSessionRequests: z.number().int().positive().optional(),
+      maxFeedbackSteps: z.number().int().positive().optional(),
     }),
     providerId: z.string(),
     providerRevision: z.string(),
@@ -187,7 +189,7 @@ const schema = z
       .optional(),
     scopeRevisions: z
       .array(z.object({ revision: z.number().int().positive(), scope, instructions: z.string() }))
-      .optional(),
+      .min(1),
     turnAuthorities: z
       .array(
         z.strictObject({
@@ -288,7 +290,12 @@ function validateWorkerCheckCheckpoint(session: ManagedSession) {
       invalidSegment('Check feedback requires its private service-check journal.');
     return;
   }
-  if (!session.workSegments || journal.feedbackSteps !== feedback.length)
+  if (
+    !session.workSegments ||
+    journal.maxFeedbackSteps !== session.limits.maxFeedbackSteps ||
+    (journal.maxFeedbackSteps !== undefined && journal.feedbackSteps > journal.maxFeedbackSteps) ||
+    journal.feedbackSteps !== feedback.length
+  )
     invalidSegment('The worker check feedback counter must match its archived steps.');
   const ids = new Set<string>();
   let requested = 0;
@@ -299,7 +306,7 @@ function validateWorkerCheckCheckpoint(session: ManagedSession) {
       ids.has(entry.id) ||
       entry.requestedAtRequest < requested ||
       entry.requestedAtRequest > session.requests ||
-      !session.scopeRevisions?.some((revision) => revision.revision === entry.scopeRevision) ||
+      !session.scopeRevisions.some((revision) => revision.revision === entry.scopeRevision) ||
       (entry.status === 'completed') !== !!entry.result ||
       (entry.status !== 'completed' && index !== journal.entries.length - 1)
     )
@@ -311,6 +318,7 @@ function validateWorkerCheckCheckpoint(session: ManagedSession) {
   }
 }
 function validateSegmentCheckpoint(session: ManagedSession) {
+  assertManagedSessionProvenance(session);
   if (
     session.scope.verificationViewId !== undefined ||
     session.scope.verificationTree !== undefined
@@ -339,7 +347,7 @@ function validateSegmentCheckpoint(session: ManagedSession) {
     state.active.toolRounds > session.requests - state.active.startedAtRequest
   )
     invalidSegment('The active work segment has invalid lifetime counters.');
-  const revisions = session.scopeRevisions || [];
+  const revisions = session.scopeRevisions;
   const validateAnchor = (value: typeof state.anchor) => {
     const revision = revisions.find((item) => item.revision === value.scopeRevision);
     if (!revision || revision.instructions !== value.instructions)
@@ -542,9 +550,7 @@ function validateTurnAuthorities(session: ManagedSession) {
       ids.has(authority.turnId) ||
       authority.startedAtRequest < started ||
       authority.startedAtRequest > session.requests ||
-      (session.scopeRevisions
-        ? !session.scopeRevisions.some((revision) => revision.revision === authority.scopeRevision)
-        : authority.scopeRevision !== 1) ||
+      !session.scopeRevisions.some((revision) => revision.revision === authority.scopeRevision) ||
       (authority.toolPolicy === 'none' &&
         session.actions.some((action) => action.turnId === authority.turnId))
     )
@@ -569,7 +575,7 @@ function validateTurnAuthorityTransition(previous: ManagedSession, next: Managed
     if (
       authority.startedAtRequest !== previous.requests ||
       next.requests !== previous.requests ||
-      authority.scopeRevision !== (next.scopeRevisions?.at(-1)?.revision || 1) ||
+      authority.scopeRevision !== next.scopeRevisions.at(-1)!.revision ||
       next.status !== 'running' ||
       next.actions.length !== previous.actions.length
     )
@@ -635,20 +641,17 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
   )
     invalidSegment('A segmented session cannot reset identity, limits or cumulative accounting.');
   if (
-    !same(
-      previous.scopeRevisions || [],
-      (next.scopeRevisions || []).slice(0, previous.scopeRevisions?.length || 0),
-    ) ||
-    (next.scopeRevisions?.length || 0) < (previous.scopeRevisions?.length || 0) ||
-    (next.scopeRevisions?.length || 0) > (previous.scopeRevisions?.length || 0) + 1
+    !same(previous.scopeRevisions, next.scopeRevisions.slice(0, previous.scopeRevisions.length)) ||
+    next.scopeRevisions.length < previous.scopeRevisions.length ||
+    next.scopeRevisions.length > previous.scopeRevisions.length + 1
   )
     invalidSegment('A segmented session cannot rewrite its instruction or scope history.');
   if (!same(previous.scope, next.scope)) {
-    const revision = next.scopeRevisions?.at(-1);
+    const revision = next.scopeRevisions.at(-1)!;
     if (
-      next.scopeRevisions?.length !== (previous.scopeRevisions?.length || 0) + 1 ||
-      revision?.revision !== (previous.scopeRevisions?.at(-1)?.revision || 0) + 1 ||
-      !same(revision?.scope, next.scope) ||
+      next.scopeRevisions.length !== previous.scopeRevisions.length + 1 ||
+      revision.revision !== previous.scopeRevisions.at(-1)!.revision + 1 ||
+      !same(revision.scope, next.scope) ||
       previous.scope.projectId !== next.scope.projectId ||
       previous.scope.runId !== next.scope.runId ||
       previous.scope.ownerRunId !== next.scope.ownerRunId ||
@@ -733,8 +736,8 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
         authority.turnId === before.anchor.turnId ||
         authority.toolPolicy !== 'normal' ||
         authority.scopeRevision !== after.anchor.scopeRevision ||
-        after.anchor.scopeRevision !== next.scopeRevisions?.at(-1)?.revision ||
-        after.anchor.instructions !== next.scopeRevisions?.at(-1)?.instructions)
+        after.anchor.scopeRevision !== next.scopeRevisions.at(-1)!.revision ||
+        after.anchor.instructions !== next.scopeRevisions.at(-1)!.instructions)
     )
       invalidSegment(
         'A coordinator rollover requires an exact settled turn and a new frozen context packet.',
@@ -760,7 +763,7 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
       before.anchor.turnId === after.anchor.turnId ||
       after.active.toolRounds !== 0 ||
       next.requests !== previous.requests ||
-      after.anchor.scopeRevision !== next.scopeRevisions?.at(-1)?.revision
+      after.anchor.scopeRevision !== next.scopeRevisions.at(-1)!.revision
     )
       invalidSegment('Only an explicit new turn can refresh the frozen work-step task.');
   }

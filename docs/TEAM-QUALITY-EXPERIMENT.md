@@ -1,5 +1,7 @@
 # Same-model team-quality experiment
 
+Retired on 23 November 2026. The unused fixed-workflow runner and its dedicated tests have been removed; the commands and implementation below describe the historical experiment. Current evaluation uses `scripts/check-model-comparison.cjs` and the production model-selected action loop. Historical reports remain unchanged.
+
 This is an opt-in research runner, not a production acceptance option. It compares three workflows on identical fresh copies of the synthetic ready-queue component:
 
 - `executor-checks`: one executor and service-owned public checks, with bounded corrective feedback. No independent model reviewer; control only.
@@ -28,11 +30,11 @@ These are experimental ceilings, not a proposed product default. The user reques
 
 Implementation commit `77a016e`; one trial per variant, same installed Mac Qwen4B and settings. [Full sanitized evidence](../output/evaluation-2026-11-21/team-quality-mac.json).
 
-| Variant | Generations | Successful edit actions | End-to-end | Outcome |
-| --- | --- | --- | --- | --- |
-| Executor/checks | 12 | 1 | 78s | Conservative context admission stopped the worker; final code failed |
-| Executor/review | 10 | 0 | 40s | Four-window worker ceiling; final code failed |
-| Coordinator/test-author/executor/review | 11 | 0 | 58s | Four-window worker ceiling; final code failed |
+| Variant                                 | Generations | Successful edit actions | End-to-end | Outcome                                                              |
+| --------------------------------------- | ----------- | ----------------------- | ---------- | -------------------------------------------------------------------- |
+| Executor/checks                         | 12          | 1                       | 78s        | Conservative context admission stopped the worker; final code failed |
+| Executor/review                         | 10          | 0                       | 40s        | Four-window worker ceiling; final code failed                        |
+| Coordinator/test-author/executor/review | 11          | 0                       | 58s        | Four-window worker ceiling; final code failed                        |
 
 No variant reached the independent-review stage. This cannot establish that review improves or harms quality: implementation did not complete. The first variant's edit did not establish common code correctness. Ceilings were unchanged. There was no manual candidate repair, no production acceptance and no RTX call.
 

@@ -7,11 +7,10 @@ export const isWorkerRoleId = (roleId: string) =>
   !['reviewer', 'coordinator', 'local_preview', 'delivery_pr', 'production_delivery'].includes(
     roleId,
   );
-import type { TeamPlan } from '../protocol/execution.ts';
+import type { WorkerProposal } from '../protocol/execution.ts';
 import type { WorkScope } from '../protocol/work-scope.ts';
 import type { WorkspaceRevision } from './workspace-revision.ts';
 import type { VerificationView, OpenVerificationViewOptions } from './verification-view.ts';
-export type { TeamPlan } from '../protocol/execution.ts';
 import type {
   Run,
   FileChange,
@@ -73,7 +72,6 @@ export type ExecutionPolicy = ExecutionPolicyView & {
   context?: string;
   profile?: ProjectProfile;
 };
-export type PlannedWorker = TeamPlan['team'][number];
 export const terminal = (run: Run) =>
   !run.status || ['completed', 'failed', 'interrupted', 'needs-attention'].includes(run.status);
 const normalizedPath = (value: string) =>
@@ -128,78 +126,63 @@ export function planPathAllowed(selector: string, parentScope: WorkScope) {
     return parent.endsWith('/') && (selected === boundary || selected.startsWith(boundary + '/'));
   });
 }
-export function resolveTeam(
-  plan: TeamPlan,
+/** Resolve one specialist independently of any working plan or future delegations. */
+export function resolveWorkerRole(
+  worker: WorkerProposal,
   catalog: Role[],
   policy: ExecutionPolicy,
   now: string,
   workflow: WorkflowIdentity,
-): { roles: Role[]; origins: Record<string, 'created' | 'reused'> } {
-  if (plan.team.length > policy.maxWorkers) throw Error('Invalid number of workers.');
-  const ids = new Set<string>(),
-    owned: string[] = [];
-  const origins: Record<string, 'created' | 'reused'> = {};
-  const roles = plan.team.map((worker) => {
-    if (!roleIdPattern.test(worker.roleId))
-      throw Error(
-        `Invalid roleId ${JSON.stringify(worker.roleId)}: provide a nonempty ID, for example react_developer or react-developer. Use lowercase Latin letters, digits, underscores and hyphens, up to 64 characters, starting with a letter.`,
-      );
-    if (!isWorkerRoleId(worker.roleId))
-      throw Error(`roleId ${worker.roleId} is reserved by the service. Choose a worker ID.`);
-    if (ids.has(worker.roleId))
-      throw Error(`Duplicate roleId ${worker.roleId}. Every worker needs a separate ID.`);
-    ids.add(worker.roleId);
-    if (
-      (policy.scope.mode === 'strict' && !worker.paths.length) ||
-      worker.paths.some((p) => !planPathAllowed(p, policy.scope))
-    )
-      throw Error('The plan contains an unauthorized path or exceeds the strict work scope.');
-    for (const p of worker.paths) {
-      const path = normalizedPath(p);
-      if (
-        owned.some(
-          (q) => !path || !q || path === q || path.startsWith(q + '/') || q.startsWith(path + '/'),
-        )
-      )
-        throw Error('Workers have overlapping file ownership.');
-      owned.push(path);
-    }
-    const existing = catalog.find((r) => r.id === worker.roleId);
-    if (worker.action === 'reuse') {
-      if (!existing)
-        throw Error(
-          `roleId ${JSON.stringify(worker.roleId)} not in the catalog; action="create" or reuse Brief.roles.`,
-        );
-      origins[worker.roleId] = 'reused';
-      return existing;
-    }
-    if (existing) throw Error('This role already exists; reuse it.');
-    if (
-      !worker.title.trim() ||
-      !worker.description.trim() ||
-      !worker.instructions.trim() ||
-      worker.instructions.length > 16000
-    )
-      throw Error('Invalid new role definition.');
-    origins[worker.roleId] = 'created';
-    return {
-      id: worker.roleId,
-      version: 1,
-      title: worker.title,
-      description: worker.description,
-      instructions: worker.instructions,
-      kind: worker.kind,
-      provenance: {
-        origin: 'coordinator' as const,
-        workflow: WorkflowIdentitySchema.parse(workflow),
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
-  });
-  if (plan.steps.some((s) => !ids.has(s.owner) && !['coordinator', 'reviewer'].includes(s.owner)))
+): Role {
+  if (policy.maxWorkers !== undefined && policy.maxWorkers < 1)
+    throw Error('Invalid number of workers.');
+  if (!roleIdPattern.test(worker.roleId))
     throw Error(
-      'steps.owner must exactly match a worker roleId or coordinator/reviewer; use the ID rather than the role title.',
+      `Invalid roleId ${JSON.stringify(worker.roleId)}: provide a nonempty ID, for example react_developer or react-developer. Use lowercase Latin letters, digits, underscores and hyphens, up to 64 characters, starting with a letter.`,
     );
-  return { roles, origins };
+  if (!isWorkerRoleId(worker.roleId))
+    throw Error(`roleId ${worker.roleId} is reserved by the service. Choose a worker ID.`);
+  if (
+    (policy.scope.mode === 'strict' && !worker.paths.length) ||
+    worker.paths.some((p) => !planPathAllowed(p, policy.scope))
+  )
+    throw Error('The worker contains an unauthorized path or exceeds the strict work scope.');
+  const owned: string[] = [];
+  for (const p of worker.paths) {
+    const path = normalizedPath(p);
+    if (
+      owned.some(
+        (q) => !path || !q || path === q || path.startsWith(q + '/') || q.startsWith(path + '/'),
+      )
+    )
+      throw Error('The worker has overlapping file ownership selectors.');
+    owned.push(path);
+  }
+  const existing = catalog.find((role) => role.id === worker.roleId);
+  if (worker.action === 'reuse') {
+    if (!existing)
+      throw Error(
+        `roleId ${JSON.stringify(worker.roleId)} not in the catalog; action="create" or reuse an existing specialist.`,
+      );
+    return existing;
+  }
+  if (existing) throw Error('This role already exists; reuse it.');
+  if (
+    !worker.title.trim() ||
+    !worker.description.trim() ||
+    !worker.instructions.trim() ||
+    worker.instructions.length > 16000
+  )
+    throw Error('Invalid new role definition.');
+  return {
+    id: worker.roleId,
+    version: 1,
+    title: worker.title,
+    description: worker.description,
+    instructions: worker.instructions,
+    kind: worker.kind,
+    provenance: { origin: 'coordinator', workflow: WorkflowIdentitySchema.parse(workflow) },
+    createdAt: now,
+    updatedAt: now,
+  };
 }

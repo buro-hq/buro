@@ -1,7 +1,6 @@
 import type { ContextMaterial, Goal, GoalOutcome, Role, Run } from './domain.ts';
 import type { AssignmentResource, ResourceSnapshot } from './resources.ts';
 import type { WorkflowIdentity } from './workflow-roles.ts';
-import type { PlanningPolicy } from './planning-policy.ts';
 
 /** Scalar lifecycle only. Growing history, grants and file contents live in separate records. */
 export type RunCurrent = {
@@ -33,7 +32,6 @@ export type RunAdmission = {
   policy: RunAdmissionPolicy;
   resources: ResourceSnapshot;
   workflow: WorkflowIdentity;
-  planningPolicy: PlanningPolicy;
   roleSnapshots: Role[];
   roleResources: Record<string, AssignmentResource>;
   contextMaterials: ContextMaterial[];

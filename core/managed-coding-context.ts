@@ -83,12 +83,9 @@ export async function initializeManagedCodingContext(
   if (coordinator) state.session = session = structuredClone(session);
   const anchor = {
     turnId: state.turnId,
-    instructions:
-      session.scopeRevisions?.at(-1)?.instructions ??
-      session.messages.find((message) => message.role === 'system')?.content ??
-      '',
+    instructions: session.scopeRevisions.at(-1)!.instructions,
     task,
-    scopeRevision: session.scopeRevisions?.at(-1)?.revision || 1,
+    scopeRevision: session.scopeRevisions.at(-1)!.revision,
   };
   if (!session.workSegments) {
     const baseline = await host.options.segmentEvidence.inspect(session.scope, host.signal);
@@ -362,7 +359,11 @@ export async function afterManagedResponse(
       evidence: host.options.segmentEvidence,
       budgets: host.options.budgets,
       budgetOwner: host.budgetOwner,
-      remainingToolCalls: session.limits.maxToolCallsPerTurn - state.calls,
+      remainingToolCalls:
+        session.limits.maxToolCallsPerTurn === undefined
+          ? undefined
+          : session.limits.maxToolCallsPerTurn - state.calls,
+      maxFeedbackSteps: session.limits.maxFeedbackSteps,
       signal: host.signal,
       id: host.options.idGenerator,
       availableTools: host.toolDefinitions(session.scope).map((tool) => tool.name),

@@ -18,7 +18,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ExecutionService } from '../core/execution.ts';
-import { resolveTeam, type ExecutionPolicy, type TeamPlan } from '../core/execution-ports.ts';
+import { resolveWorkerRole, type ExecutionPolicy } from '../core/execution-ports.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { GoalService } from '../core/services.ts';
@@ -45,14 +45,6 @@ const worker = {
   instructions: 'Implement the assigned change and check it.',
   kind: 'implementation' as const,
   paths: ['src/code.mjs'],
-};
-const plan: TeamPlan = {
-  summary: 'Plan',
-  steps: [
-    { step: 'Implement', owner: 'builder' },
-    { step: 'Review', owner: 'reviewer' },
-  ],
-  team: [worker],
 };
 async function fixture(
   t: any,
@@ -216,7 +208,7 @@ async function fixture(
               threadId: 'child-' + id,
               parentThreadId: id,
               completed: kind === 'completed',
-              legacyAssignment: { path: '/root/builder' },
+              activityHints: { path: '/root/builder' },
             });
       return {
         turnId: 't',
@@ -486,7 +478,7 @@ test('native child names and prompts cannot claim or complete Buro assignments',
       threadId: 'undeclared',
       parentThreadId: run.threadId,
       completed: true,
-      legacyAssignment: { path: '/root/builder', name: 'builder', prompt: 'builder' },
+      activityHints: { path: '/root/builder', name: 'builder', prompt: 'builder' },
     },
     'now',
   );
@@ -623,11 +615,11 @@ test('restart marks in-flight work interrupted without replaying side effects', 
   assert.equal(restarted.get('p', first.runId).status, 'interrupted');
   assert.equal(f.turns.length, calls);
 });
-test('team validation rejects overlapping ownership, missing reuse and escaping paths', () => {
+test('worker resolution rejects overlapping selectors, missing reuse and escaping paths', () => {
   assert.throws(
     () =>
-      resolveTeam(
-        { ...plan, team: [worker, { ...worker, roleId: 'tester', paths: ['src/'] }] },
+      resolveWorkerRole(
+        { ...worker, paths: ['src/code.mjs', 'src/'] },
         [],
         policy,
         '',
@@ -637,8 +629,8 @@ test('team validation rejects overlapping ownership, missing reuse and escaping 
   );
   assert.throws(
     () =>
-      resolveTeam(
-        { ...plan, team: [{ ...worker, action: 'reuse' }] },
+      resolveWorkerRole(
+        { ...worker, action: 'reuse' },
         [],
         policy,
         '',
@@ -648,8 +640,8 @@ test('team validation rejects overlapping ownership, missing reuse and escaping 
   );
   assert.throws(
     () =>
-      resolveTeam(
-        { ...plan, team: [{ ...worker, paths: ['src/../README.md'] }] },
+      resolveWorkerRole(
+        { ...worker, paths: ['src/../README.md'] },
         [],
         policy,
         '',
@@ -789,22 +781,15 @@ test('trusted Node checks run outside the editable area and reject filesystem wr
 });
 
 test('hyphenated worker ids validate, while missing ids receive actionable diagnostics', () => {
-  const plan = {
-    summary: 'Plan',
-    steps: [
-      { step: 'Build', owner: 'react-developer' },
-      { step: 'Review', owner: 'reviewer' },
-    ],
-    team: [{ ...worker, roleId: 'react-developer' }],
-  };
+  const selected = { ...worker, roleId: 'react-developer' };
   assert.equal(
-    resolveTeam(plan, [], policy, '', createBuiltinWorkflowRoles().workflow).roles[0].id,
+    resolveWorkerRole(selected, [], policy, '', createBuiltinWorkflowRoles().workflow).id,
     'react-developer',
   );
   assert.throws(
     () =>
-      resolveTeam(
-        { ...plan, team: [{ ...worker, roleId: '' }] },
+      resolveWorkerRole(
+        { ...worker, roleId: '' },
         [],
         policy,
         '',
@@ -901,7 +886,6 @@ test('run freezes selected context and passes staged paths to the coordinator, w
         !text.includes('/local/context/'),
     ),
   );
-  assert.equal(run.planSavedAt, undefined, 'Materials do not require an accepted planning stage');
 });
 
 test('a coherent task can finish directly while still requiring independent checks and a fresh reviewer', async (t) => {

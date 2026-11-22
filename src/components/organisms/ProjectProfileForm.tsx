@@ -276,8 +276,9 @@ export function ProjectProfileForm({
       />
       <NumberInput
         label={t('Maximum team size')}
-        value={profile.maxWorkers}
-        onChange={(v) => update({ maxWorkers: Number(v) })}
+        value={profile.maxWorkers ?? ''}
+        placeholder={t('No team size limit')}
+        onChange={(v) => update({ maxWorkers: v === '' ? undefined : Number(v) })}
         min={1}
         max={Number.MAX_SAFE_INTEGER}
         allowDecimal={false}

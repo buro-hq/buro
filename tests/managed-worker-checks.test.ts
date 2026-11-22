@@ -12,7 +12,11 @@ import type { ManagedSession } from '../core/model-ports.ts';
 import type { ModelProvider } from '../agent/contracts/model.ts';
 import type { ProjectRegistry, RuntimeEvent } from '../core/ports.ts';
 import type { ManagedRunBudgetPort } from '../core/run-budget.ts';
-import { type SegmentEvidence, type WorkSegmentPolicy } from '../core/work-segments.ts';
+import {
+  contextWorkSegmentPolicy,
+  type SegmentEvidence,
+  type WorkSegmentPolicy,
+} from '../core/work-segments.ts';
 import { testBoundedWorkSegmentPolicy as boundedWorkSegmentPolicy } from './fixtures/work-segment-policy.ts';
 import type {
   WorkerStepCheckPlan,
@@ -133,6 +137,7 @@ async function fixture(
     ) => void | Promise<void>;
     maxRequests?: number;
     maxToolCalls?: number;
+    maxFeedbackSteps?: number;
   } = {},
 ) {
   const directory = await fs.realpath(
@@ -191,6 +196,9 @@ async function fixture(
       maxRequestsPerTurn: options.maxRequests || 16,
       maxToolCallsPerTurn: options.maxToolCalls || 16,
       maxSessionRequests: 32,
+      ...(options.maxFeedbackSteps !== undefined
+        ? { maxFeedbackSteps: options.maxFeedbackSteps }
+        : {}),
     },
     segmentPolicy: options.policy || policy,
     segmentEvidence: {
@@ -298,6 +306,7 @@ async function fixture(
     await fs.rm(directory, { recursive: true, force: true });
   });
   return {
+    directory,
     make,
     start,
     files,
@@ -585,8 +594,29 @@ for (const [name, fabricate] of [
     assert.equal(f.requests.length, 1);
   });
 
-test('the original two-feedback allowance survives reopening and an explicit new turn', async (t) => {
+test('worker check feedback has no default two-step stop and keeps all five repairs through reopen', async (t) => {
   const f = await fixture(t, {
+    policy: contextWorkSegmentPolicy,
+    runCheck: (index, selected, fingerprint) =>
+      checkResult(selected, fingerprint, index <= 5 ? 'failed' : 'passed'),
+    script: sequence(...Array.from({ length: 6 }, () => response())),
+  });
+  const runtime = f.make();
+  const { threadId } = await f.start(runtime);
+  await runtime.turn(threadId, 'Original task', turnOptions());
+  const saved = (await f.files.load(threadId))!;
+  assert.equal(saved.workerStepChecks?.maxFeedbackSteps, undefined);
+  assert.equal(saved.workerStepChecks?.feedbackSteps, 5);
+  assert.equal(saved.workerStepChecks?.entries.length, 6);
+  assert.equal(saved.workSegments?.archives.length, 5);
+  assert.equal(saved.requests, 6);
+  assert.equal(f.checkRuns, 6);
+  assert.deepEqual(await new FileManagedSessions(f.directory).load(threadId), saved);
+});
+
+test('an explicitly configured two-feedback allowance survives reopening and an explicit new turn', async (t) => {
+  const f = await fixture(t, {
+    maxFeedbackSteps: 2,
     runCheck: (_index, selected, fingerprint) => checkResult(selected, fingerprint, 'failed'),
     script: sequence(response(), response(), response()),
   });
@@ -858,7 +888,7 @@ test('strict managed workers skip even an injected live check service without in
 });
 
 test('strict mode never clears an existing unknown worker-check receipt on restart or resume', async (t) => {
-  const f = await fixture(t);
+  const f = await fixture(t, { maxFeedbackSteps: 2 });
   f.snapshot.profile.scope.mode = 'strict';
   const runtime = f.make();
   const { threadId } = await f.start(runtime, {

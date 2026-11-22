@@ -1,5 +1,5 @@
 import { validateProjectRole } from './project-entities.ts';
-import type { RunWorkerAssignment } from '../protocol/run-plan.ts';
+import type { RunWorkerAssignment } from '../protocol/run-delegation.ts';
 import { operationIds } from './operation-catalog.ts';
 import type { AgentSession, FileChange, Role, Run } from '../protocol/domain.ts';
 import { EnvelopeSchema, envelopeOutputSchema } from '../protocol/execution.ts';

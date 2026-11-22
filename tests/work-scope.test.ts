@@ -5,13 +5,13 @@ import { WorkScopeSchema, ScopeObservationSchema, type WorkScope } from '../prot
 import { ExecutionPolicySchema } from '../protocol/execution-policy.ts';
 import { ProjectProfileSchema } from '../protocol/projects.ts';
 import { SnapshotSchema, DomainEventSchema } from '../protocol/schema.ts';
-import { TeamPlanSchema } from '../protocol/execution.ts';
+import { WorkerProposalSchema } from '../protocol/execution.ts';
 import {
   hardPathAllowed,
   matchesPlannedPath,
   writeAllowed,
   planPathAllowed,
-  resolveTeam,
+  resolveWorkerRole,
 } from '../core/execution-ports.ts';
 import { executionPolicy } from '../adapters/files/project-manager.ts';
 import type { ExecutionPolicy } from '../core/execution-ports.ts';
@@ -125,8 +125,8 @@ test('strict child selectors cannot promote an exact file grant into a directory
     assert.equal(planPathAllowed(selector, exact), false, selector);
     assert.throws(
       () =>
-        resolveTeam(
-          plan([selector]),
+        resolveWorkerRole(
+          workerProposal([selector]),
           [],
           { ...policy, scope: exact },
           'now',
@@ -233,38 +233,35 @@ test('all public policy locations use the same required scope contract', () => {
   );
 });
 
-function plan(paths: string[], extra?: string[]) {
-  const worker = (roleId: string, paths: string[]) => ({
-    roleId,
+function workerProposal(paths: string[]) {
+  return WorkerProposalSchema.parse({
+    roleId: 'builder',
     action: 'create',
-    title: roleId,
+    title: 'Builder',
     description: 'Implement selected work',
     instructions: 'Inspect and implement the goal',
     kind: 'implementation',
     paths,
   });
-  return TeamPlanSchema.parse({
-    summary: 'Discover and implement',
-    steps: [
-      { step: 'Implement', owner: 'builder' },
-      { step: 'Review', owner: 'reviewer' },
-    ],
-    team: [worker('builder', paths), ...(extra ? [worker('second_builder', extra)] : [])],
-  });
 }
 
-test('team allocation follows advisory mode without allowing protected or unsafe proposals', () => {
+test('worker allocation follows advisory mode without allowing protected or unsafe proposals', () => {
   for (const paths of [[], ['package.json'], ['src/index.ts']])
     assert.equal(
-      resolveTeam(plan(paths), [], policy, 'now', createBuiltinWorkflowRoles().workflow).roles
-        .length,
-      1,
+      resolveWorkerRole(
+        workerProposal(paths),
+        [],
+        policy,
+        'now',
+        createBuiltinWorkflowRoles().workflow,
+      ).id,
+      'builder',
     );
   for (const paths of [[], ['package.json']])
     assert.throws(
       () =>
-        resolveTeam(
-          plan(paths),
+        resolveWorkerRole(
+          workerProposal(paths),
           [],
           { ...policy, scope: strict },
           'now',
@@ -274,13 +271,20 @@ test('team allocation follows advisory mode without allowing protected or unsafe
     );
   for (const paths of [['AGENTS.md'], ['../outside'], ['.buro/'], ['secrets/key']])
     assert.throws(
-      () => resolveTeam(plan(paths), [], policy, 'now', createBuiltinWorkflowRoles().workflow),
+      () =>
+        resolveWorkerRole(
+          workerProposal(paths),
+          [],
+          policy,
+          'now',
+          createBuiltinWorkflowRoles().workflow,
+        ),
       /unauthorized/,
     );
   assert.throws(
     () =>
-      resolveTeam(
-        plan(['src/'], ['./src/nested/file.ts']),
+      resolveWorkerRole(
+        workerProposal(['src/', './src/nested/file.ts']),
         [],
         policy,
         'now',
@@ -290,8 +294,8 @@ test('team allocation follows advisory mode without allowing protected or unsafe
   );
   assert.throws(
     () =>
-      resolveTeam(
-        plan(['./src/'], ['src/file.ts']),
+      resolveWorkerRole(
+        workerProposal(['./src/', 'src/file.ts']),
         [],
         policy,
         'now',
@@ -301,8 +305,8 @@ test('team allocation follows advisory mode without allowing protected or unsafe
   );
   assert.throws(
     () =>
-      resolveTeam(
-        plan(['./'], ['src/file.ts']),
+      resolveWorkerRole(
+        workerProposal(['./', 'src/file.ts']),
         [],
         policy,
         'now',

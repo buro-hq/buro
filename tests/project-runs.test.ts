@@ -192,7 +192,7 @@ test('actual queue admission captures full task, current roles and grants before
     admission.goalText,
     'Full original task\n\nAcceptance criteria:\nFull original criteria',
   );
-  assert.equal(admission.planningPolicy.runtimeId, 'fixture');
+  assert.equal(admission.roleResources.coordinator.resource.id, 'fixture');
   assert.equal(f.goal().status, 'running');
   assert.equal(f.goal().runId, 'R-run');
   assert.equal(f.roles.size, 2);

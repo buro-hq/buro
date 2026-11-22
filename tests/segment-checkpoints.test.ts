@@ -64,6 +64,9 @@ function checkpoint(): ManagedSession {
     scopeRevisions: [
       { revision: 1, scope: structuredClone(scope), instructions: anchor.instructions },
     ],
+    turnAuthorities: [
+      { turnId: anchor.turnId, toolPolicy: 'normal', startedAtRequest: 0, scopeRevision: 1 },
+    ],
     messages: [
       { role: 'system', content: anchor.instructions },
       { role: 'user', content: anchor.task },
@@ -141,14 +144,14 @@ async function fixture(t: any) {
 }
 const rejects = (action: () => unknown) => assert.rejects(async () => action());
 
-test('legacy private checkpoints retain provider continuation without opting into segmentation', async (t) => {
+test('current nonsegmented checkpoints retain provider continuation without opting into segmentation', async (t) => {
   const f = await fixture(t),
-    legacy = checkpoint();
-  delete legacy.workSegments;
-  delete legacy.generation;
-  await f.sessions.save(legacy);
-  const restored = await new FileManagedSessions(f.directory).load(legacy.id);
-  assert.deepEqual(restored, legacy);
+    current = checkpoint();
+  delete current.workSegments;
+  delete current.generation;
+  await f.sessions.save(current);
+  const restored = await new FileManagedSessions(f.directory).load(current.id);
+  assert.deepEqual(restored, current);
   assert.equal(restored?.workSegments, undefined);
 });
 

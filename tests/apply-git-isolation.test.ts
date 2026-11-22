@@ -85,6 +85,7 @@ test('applying accepted model-written attributes cannot activate host smudge fil
   };
   await registry.get(project.id).transact('seed', 'seed', (doc) => {
     const goal = {
+      revision: 1,
       id: run.goalId,
       projectId: project.id,
       title: run.title,

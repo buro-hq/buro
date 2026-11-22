@@ -17,7 +17,7 @@ import { UnresolvedEffectError } from '../core/run-reconciliation.ts';
 import { EnvelopeSchema } from '../protocol/execution.ts';
 import type { ProjectProfile } from '../protocol/domain.ts';
 import type { WorkspaceRevision } from '../core/workspace-revision.ts';
-import type { WorkerProposal } from '../core/execution-actions.ts';
+import type { WorkerProposal } from '../protocol/execution.ts';
 import {
   fixtureExecutionCapabilities,
   fixtureExecutionSelection,
@@ -306,7 +306,6 @@ for (const nativeStyle of [false, true]) {
     const f = await fixture(t, { nativeStyle, steps: [implement, review, finish] });
     const run = await f.execute();
     assert.equal(run.status, 'completed', run.result);
-    assert.equal(run.planSavedAt, undefined);
     assert.deepEqual(run.plan, []);
     assert.deepEqual(await f.store().runs.assignments(f.runId), []);
     assert.deepEqual(f.counts(), {
@@ -350,7 +349,6 @@ test('the model updates a working plan and repairs after rejected review in the 
   });
   const run = await f.execute();
   assert.equal(run.status, 'completed', run.result);
-  assert.equal(run.planSavedAt, undefined);
   assert.deepEqual(run.plan, [{ step: 'Repair the edge case', owner: 'coordinator' }]);
   const coordinator = f.starts.find((start) => start.purpose === 'coordination')!;
   assert.match(
@@ -640,7 +638,6 @@ test('the coordinator adds a specialist after observed failure without an initia
   });
   const run = await f.execute();
   assert.equal(run.status, 'completed', run.result);
-  assert.equal(run.planSavedAt, undefined);
   const grants = await f.store().runs.assignments(f.runId);
   assert.deepEqual(grants.map((grant) => grant.role.id).sort(), ['builder', 'edge_author']);
   const first = structuredClone(grants.find((grant) => grant.role.id === 'builder'));

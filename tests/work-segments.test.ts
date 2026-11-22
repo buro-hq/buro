@@ -124,7 +124,7 @@ test('invalid segment configuration and incomplete evidence fail closed', () => 
   for (const patch of [
     { maxToolRounds: 0 },
     { maxToolRounds: 1.5 },
-    { maxSegments: 17 },
+    { maxSegments: 0 },
     { contextThresholdPercent: 99 },
     { revision: '' },
   ])
@@ -293,5 +293,11 @@ test('advisory context rotation accepts adjacent source changes and preserves ex
         advisory,
       ),
     { code: 'SEGMENT_SCOPE_CHANGED' },
+  );
+});
+
+test('explicit segment quotas may exceed the old sixteen-window ceiling', () => {
+  assert.doesNotThrow(() =>
+    validateSegmentLimits({ revision: 'explicit-policy', maxSegments: 100, maxToolRounds: 200 }),
   );
 });

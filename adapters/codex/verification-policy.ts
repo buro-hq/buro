@@ -17,7 +17,7 @@ function inlineToml(value: unknown): string {
   );
 }
 
-/** Per-process named profile. Legacy readOnly has unrestricted host reads and cannot substitute for this. */
+/** Per-process named profile. A readOnly flag has unrestricted host reads and cannot substitute for this. */
 export function nativeVerificationPolicy(
   view: VerificationView,
   access: {

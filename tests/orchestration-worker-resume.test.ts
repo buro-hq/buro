@@ -178,7 +178,7 @@ async function fixture(t: { after(action: () => Promise<void>): void }, loseSeco
   await service.beginExecution('p', runId);
   await service.phase('p', runId, 'preparing', 'Prepare real bound workspace');
   await service.bindPreparedWorkspace('p', runId, workspace);
-  const input = await store.runs.planningInput(runId);
+  const input = await store.runs.delegationContext(runId);
   const grant = await store.runs.transaction({ id: 'delegate', fingerprint: 'delegate' }, (tx) =>
     tx.delegateWorker({
       runId,

@@ -3,6 +3,7 @@ import {
   ManagedRunBudgetPolicySchema,
   ManagedRunBudgetSummarySchema,
   DEFAULT_MANAGED_RUN_BUDGET_POLICY,
+  managedBudgetRemaining,
   type ManagedRunBudgetPolicy,
   type ManagedRunBudgetSummary,
 } from '../protocol/run-budget.ts';
@@ -39,9 +40,9 @@ const operationId = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9_:.-]{0,179}$/)
   .refine((value) => !['constructor', 'prototype', '__proto__'].includes(value));
-const output = z.number().int().min(1).max(16777216);
-// Keep every bounded ledger aggregate a safe integer even for malformed provider accounting.
-const usageValue = z.number().int().nonnegative().max(1099511627776);
+const output = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+// Provider usage remains a per-response physical accounting field, not a run quota.
+const usageValue = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const usage = z.strictObject({
   inputTokens: usageValue.optional(),
   outputTokens: usageValue.optional(),
@@ -67,7 +68,7 @@ const generation = z
 const tools = z.strictObject({
   kind: z.literal('tools'),
   phase,
-  count: z.number().int().min(1).max(16384),
+  count: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
 });
 const baseLedger = z.strictObject({
   version: z.literal(1),
@@ -120,21 +121,18 @@ function counters(ledger: LedgerData) {
 }
 
 export const ManagedRunBudgetLedgerSchema = baseLedger.superRefine((ledger, ctx) => {
-  const { used, workUsed } = counters(ledger);
-  const policy = ledger.policy;
   const overObserved = Object.values(ledger.operations).some(
     (entry) =>
       entry.kind === 'generation' && (entry.usage?.outputTokens ?? 0) > entry.reservedOutputTokens,
   );
   if (
-    Object.keys(ledger.operations).length > 17408 ||
-    used.requests > policy.maxRequests ||
-    used.reservedOutputTokens > policy.maxReservedOutputTokens ||
-    used.toolCalls > policy.maxToolCalls ||
-    workUsed.requests > policy.maxRequests - policy.reviewReserve.requests ||
-    workUsed.reservedOutputTokens >
-      policy.maxReservedOutputTokens - policy.reviewReserve.outputTokens ||
-    workUsed.toolCalls > policy.maxToolCalls - policy.reviewReserve.toolCalls ||
+    !ManagedRunBudgetSummarySchema.safeParse({
+      version: 1,
+      coverage: ledger.coverage,
+      policy: ledger.policy,
+      status: ledger.violation ? 'exceeded' : 'open',
+      ...counters(ledger),
+    }).success ||
     (overObserved && !ledger.violation)
   )
     ctx.addIssue({
@@ -194,7 +192,7 @@ export function createManagedRunBudget(
   },
 ): ManagedRunBudgetLedger {
   const parsedPolicy = ManagedRunBudgetPolicySchema.safeParse(
-    input.policy || DEFAULT_MANAGED_RUN_BUDGET_POLICY,
+    input.policy === undefined ? DEFAULT_MANAGED_RUN_BUDGET_POLICY : input.policy,
   );
   if (!parsedPolicy.success)
     throw new DomainError('INVALID_RUN_BUDGET', 'The run budget policy is invalid.');
@@ -283,23 +281,13 @@ export function reserveManagedGeneration(
       grant: { operationId: input.operationId, maxOutputTokens: previous.reservedOutputTokens },
     };
   }
-  const { used, workUsed } = counters(ledger),
-    policy = ledger.policy;
-  if (
-    used.requests >= policy.maxRequests ||
-    (input.phase === 'work' &&
-      workUsed.requests >= policy.maxRequests - policy.reviewReserve.requests)
-  )
-    throw exhausted();
-  const remaining = Math.min(
-    policy.maxReservedOutputTokens - used.reservedOutputTokens,
-    input.phase === 'work'
-      ? policy.maxReservedOutputTokens -
-          policy.reviewReserve.outputTokens -
-          workUsed.reservedOutputTokens
-      : Infinity,
-  );
-  const amount = Math.min(input.requestedOutputTokens, remaining);
+  const { used, workUsed } = counters(ledger);
+  const remaining = managedBudgetRemaining(ledger.policy, used, workUsed, input.phase);
+  if (remaining.requests !== undefined && remaining.requests < 1) throw exhausted();
+  const amount =
+    remaining.reservedOutputTokens === undefined
+      ? input.requestedOutputTokens
+      : Math.min(input.requestedOutputTokens, remaining.reservedOutputTokens);
   if (amount < input.minimumOutputTokens) throw exhausted();
   ledger.operations[input.operationId] = {
     kind: 'generation',
@@ -318,7 +306,11 @@ export function reserveManagedGeneration(
 export function reserveManagedTools(value: ManagedRunBudgetLedger, input: ManagedToolBudgetInput) {
   const ledger = openLedger(value);
   const parsed = z
-    .strictObject({ operationId, phase, count: z.number().int().min(1).max(16384) })
+    .strictObject({
+      operationId,
+      phase,
+      count: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    })
     .safeParse(input);
   if (!parsed.success)
     throw new DomainError('INVALID_RUN_BUDGET', 'The tool reservation is invalid.');
@@ -332,14 +324,9 @@ export function reserveManagedTools(value: ManagedRunBudgetLedger, input: Manage
       throw conflict();
     return { ledger };
   }
-  const { used, workUsed } = counters(ledger),
-    policy = ledger.policy;
-  if (
-    used.toolCalls + input.count > policy.maxToolCalls ||
-    (input.phase === 'work' &&
-      workUsed.toolCalls + input.count > policy.maxToolCalls - policy.reviewReserve.toolCalls)
-  )
-    throw exhausted();
+  const { used, workUsed } = counters(ledger);
+  const remaining = managedBudgetRemaining(ledger.policy, used, workUsed, input.phase).toolCalls;
+  if (remaining !== undefined && input.count > remaining) throw exhausted();
   ledger.operations[input.operationId] = { kind: 'tools', phase: input.phase, count: input.count };
   return { ledger: validateManagedRunBudget(ledger) };
 }

@@ -78,25 +78,17 @@ test('SQLite material identity deduplicates and reactivates the original row wit
   );
 });
 
-test('material count summaries preserve the active-project limit through remove, insert and reactivation', async (t) => {
+test('material summaries preserve identities and events beyond the former active-project ceiling', async (t) => {
   const authority = await fixture(t);
   const originals = Array.from({ length: 64 }, (_, index) => material(index.toString(16)));
-  await authority.materials.transaction(command('full-active'), (tx) => tx.attach(originals));
-  await assert.rejects(
-    authority.materials.transaction(command('too-many'), (tx) => tx.attach([material('ff')])),
-    { code: 'CONTEXT_LIMIT' },
-  );
-  await authority.materials.transaction(command('free-slot'), (tx) => tx.remove(originals[0].id));
-  await authority.materials.transaction(command('replacement'), (tx) =>
-    tx.attach([material('ff')]),
-  );
-  await assert.rejects(
-    authority.materials.transaction(command('reactivate-full'), (tx) => tx.attach([originals[0]])),
-    { code: 'CONTEXT_LIMIT' },
-  );
-  assert.equal((await authority.materials.material(originals[0].id))?.active, false);
+  await authority.materials.transaction(command('originals'), (tx) => tx.attach(originals));
+  await authority.materials.transaction(command('additional'), (tx) => tx.attach([material('ff')]));
+  await authority.materials.transaction(command('deactivate'), (tx) => tx.remove(originals[0].id));
+  await authority.materials.transaction(command('existing'), (tx) => tx.attach([material('ff')]));
+  await authority.materials.transaction(command('reactivate'), (tx) => tx.attach([originals[0]]));
+  assert.equal((await authority.materials.material(originals[0].id))?.active, true);
   assert.equal((await authority.materials.material('M-ff'))?.active, true);
-  assert.equal((await authority.pagedEvents({ after: 0, limit: 10 })).events.length, 3);
+  assert.equal((await authority.pagedEvents({ after: 0, limit: 10 })).events.length, 4);
 });
 
 test('receipt lookup distinguishes absent from a saved void and uses the same command namespace', async (t) => {

@@ -35,10 +35,10 @@ const templates: RoleTemplate[] = [
   },
   {
     id: 'coordinator',
-    revision: 'coordinator-v1',
+    revision: 'coordinator-v2',
     kind: 'coordination',
     title: 'Coordinator',
-    description: 'Understands project context, plans and integrates team work.',
+    description: 'Coordinates goal work and chooses actions from actual evidence.',
     instructions:
       'Follow the actual service operation. During project research, inspect evidence and propose settings without changing files or executing setup. During goal work, choose the next useful action from actual evidence: investigate, plan, implement, delegate, verify, repair or ask the user. Update the plan and team when useful. Buro owns scoped execution and independent acceptance.',
   },

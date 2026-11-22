@@ -157,7 +157,8 @@ test('five real-project routes use the same contract, budget, final oracle and p
       await input.onRunFinished({
         run: {
           workspace: fixture.root,
-          planningPolicy: { strategy: 'tools-free-structured', revision: 'capability-planning-v1' },
+          workflow: { actionsRevision: 'captured-actions-v1' },
+          events: [{ type: 'action.requested' }],
         },
       });
       return {
@@ -177,15 +178,20 @@ test('five real-project routes use the same contract, budget, final oracle and p
   );
   assert.equal(report.fixture.sourceFiles, 9);
   assert.equal(report.results[0].budgetCoverage.generationRequests, null);
-  assert.equal(report.results[1].planning, 'capability-selected');
+  assert.equal(report.results[1].executionMode, 'model-selected-actions');
+  assert.deepEqual(report.results[1].orchestrationPolicy, {
+    strategy: 'model-selected-actions',
+    actionRequests: 1,
+  });
+  assert.equal(Object.hasOwn(report.results[1], 'planning'), false);
   assert.equal(report.results[1].budgetCoverage.observedInputTokens, 10);
   for (const input of inputs) {
     assert.equal(input.forceWorker, true);
-    assert.equal(input.budgets.codingWallTimeMs, 300000);
-    assert.equal(input.budgets.maxGenerationRequests, 24);
+    assert.equal(input.budgets.codingWallTimeMs, undefined);
+    assert.equal(input.budgets.maxGenerationRequests, undefined);
     assert.equal(input.budgets.maxOutputTokens, 2048);
     assert.equal(input.budgets.contextTokens, 32768);
-    assert.equal(input.contextTokensByProvider.ollama, 16384);
+    assert.equal(input.contextTokensByProvider.ollama, 32768);
     assert.equal(input.sourceCase.id, CASE_ID);
     assert.equal(input.codex.networkAccess, false);
     assert.equal(input.codex.model, 'gpt-6.1-sol');

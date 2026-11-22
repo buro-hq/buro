@@ -131,6 +131,7 @@ async function seed(f: Awaited<ReturnType<typeof fixture>>, id: string, record: 
   const store = f.registry.get(id);
   await store.transact('seed', 'seed', (doc) => {
     doc.goals.push({
+      revision: 1,
       id: 'G-fixture',
       projectId: id,
       title: 'Fixture',

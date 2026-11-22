@@ -2,7 +2,6 @@ import type { RunAttemptStop } from '../protocol/run-attempt.ts';
 import type { ExecutionActionCatalog } from './execution-actions.ts';
 import { runGoalOrchestration } from './goal-orchestration.ts';
 import { validateProjectRole } from './project-entities.ts';
-import type { RunPlanningInput } from '../protocol/run-plan.ts';
 import { executionPolicy as savedExecutionPolicy } from './project-settings.ts';
 import type { ExecutionPhase } from './project-runs.ts';
 import { runWorkerAssignments } from './worker-assignments.ts';
@@ -33,7 +32,6 @@ import {
   type ExecutionPolicy,
   type WorkspacePort,
   type CheckPort,
-  type TeamPlan,
 } from './execution-ports.ts';
 import { withEnvironmentRepair, dependencyManifestPreserved } from './environment-repair.ts';
 import { canAccept } from './services.ts';
@@ -600,7 +598,7 @@ ${installation.output || installation.error || ''}`,
       attemptId: 'initial-' + runId,
       goalId: goal.id,
       now: this.env.now(),
-      expectedGoalRevision: goal.revision ?? 1,
+      expectedGoalRevision: goal.revision,
       expectedProfileRevision: profile?.revision ?? null,
       policy,
       resources,
@@ -668,7 +666,7 @@ ${installation.output || installation.error || ''}`,
         runId: captured.runId,
         attemptId: 'attempt-' + this.env.id(),
         expectedAttemptId: owner.attempt.id,
-        expectedGoalRevision: goal.revision ?? 1,
+        expectedGoalRevision: goal.revision,
         expectedProfileRevision: profile?.revision ?? null,
         mode: captured.mode,
         instructions: captured.instructions,
@@ -880,39 +878,6 @@ ${installation.output || installation.error || ''}`,
     return runs.transaction(
       { id: 'internal-' + this.env.id(), fingerprint: 'run.begin-execution' },
       (tx) => tx.beginExecution({ runId, now: this.env.now(), expectedAttemptId }),
-    );
-  }
-  async acceptPlan(
-    projectId: string,
-    runId: string,
-    plan: TeamPlan,
-    expectedRoleVersions: Record<string, number | null>,
-    expectedInput?: RunPlanningInput,
-    expectedAttemptId?: string,
-  ) {
-    const runs = this.runCommands(projectId);
-    const owner =
-      expectedAttemptId ??
-      this.executionOwners.get(runId) ??
-      (await runs.current(runId))?.attemptId;
-    const captured = structuredClone({
-      plan,
-      expectedRoleVersions,
-      expectedInput: expectedInput ?? (await runs.planningInput(runId)),
-    });
-    return runs.transaction(
-      { id: 'internal-' + this.env.id(), fingerprint: 'run.accept-plan' },
-      (tx) => {
-        if (owner !== undefined && tx.current(runId)?.attemptId !== owner)
-          throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
-        return tx.acceptPlan({
-          runId,
-          planId: 'plan-' + this.env.id(),
-          now: this.env.now(),
-          ...captured,
-          expectedAttemptId: owner,
-        });
-      },
     );
   }
   async bindPreparedWorkspace(

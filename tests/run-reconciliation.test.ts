@@ -135,6 +135,7 @@ test('reconciliation marker and issue survive store restart and both public tran
       type: 'run.changed',
       run,
       goal: {
+        revision: 1,
         id: run.goalId,
         projectId: 'p',
         title: 'Goal',

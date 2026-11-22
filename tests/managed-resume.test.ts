@@ -337,7 +337,7 @@ test('private checkpoints reject changes to previously saved scope history', asy
   const { threadId } = await f.start(runtime);
   const checkpoint = (await f.sessions.load(threadId))!;
   checkpoint.scopeRevisions![0].scope.writeScope.mode = 'strict';
-  await assert.rejects(f.sessions.save(checkpoint), { code: 'INVALID_CHECKPOINT' });
+  await assert.rejects(async () => f.sessions.save(checkpoint), { code: 'INVALID_CHECKPOINT' });
   assert.equal(
     (await f.sessions.load(threadId))!.scopeRevisions![0].scope.writeScope.mode,
     'advisory',
@@ -379,6 +379,9 @@ test('unknown tool outcomes and identity changes cannot be repaired by replacing
   });
   await runtime.release(threadId);
   const saved = (await f.sessions.load(threadId))!;
+  saved.turnAuthorities = [
+    { turnId: 'T-old', toolPolicy: 'normal', startedAtRequest: 0, scopeRevision: 1 },
+  ];
   saved.actions.push({
     id: 'A-unknown',
     turnId: 'T-old',

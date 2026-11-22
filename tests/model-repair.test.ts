@@ -235,8 +235,8 @@ test('a correct accepted candidate that skipped initial review is explicitly rep
     reportPath,
     async runProvider(input: any) {
       assert.equal(input.forceWorker, false);
-      assert.equal(input.contextTokensByProvider.ollama, 16384);
-      assert.equal(input.budgets.maxGenerationRequests, 24);
+      assert.equal(input.contextTokensByProvider.ollama, 32768);
+      assert.equal(input.budgets.maxGenerationRequests, undefined);
       const fixture = await input.sourceCase.prepare({ temporaryDirectory: root });
       const file = path.join(root, 'src/queue.mjs');
       await fs.writeFile(

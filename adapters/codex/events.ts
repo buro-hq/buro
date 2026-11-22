@@ -82,7 +82,7 @@ export function normalizeCodexEvent(
         parentThreadId: threadId,
         completed: item.kind === 'completed' || state.status === 'completed',
         message: string(state.message)?.slice(0, 12000),
-        legacyAssignment: {
+        activityHints: {
           path: string(item.agentPath),
           prompt: string(item.prompt)?.slice(0, 4000),
           name: string(item.agentNickname),

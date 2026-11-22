@@ -136,11 +136,13 @@ async function runProjectModelComparison(options = {}) {
     results: [],
   };
   for (const arm of config.arms) {
-    let fixture, workspace, initial, actualPlanning;
+    let fixture, workspace, initial;
     const started = Date.now();
     const result = {
       arm,
-      planning: arm === 'codex-direct' ? 'not-applicable' : 'capability-selected',
+      executionMode: arm === 'codex-direct' ? 'not-applicable' : 'model-selected-actions',
+      orchestrationCoverage: arm === 'codex-direct' ? 'not-applicable' : 'service-action-catalog',
+      orchestrationPolicy: null,
       status: 'failed',
       accepted: false,
       canonical: {
@@ -153,7 +155,7 @@ async function runProjectModelComparison(options = {}) {
       },
       originalSourcePreserved: null,
     };
-    const trial = comparisonTrialReport(options.reportPath, arm, result.planning);
+    const trial = comparisonTrialReport(options.reportPath, arm, result.executionMode);
     if (trial) result.trialReport = trial.reference;
     const prepare = async (input) => {
       fixture = await sourceCase.prepare(input);
@@ -193,26 +195,24 @@ async function runProjectModelComparison(options = {}) {
             networkAccess: false,
           },
           budgets: config.limits,
-          contextTokensByProvider: { ollama: 16384 },
+          contextTokensByProvider: config.contexts,
           forceWorker: true,
           segmentPolicy: options.segmentPolicy,
           reportPath: trial?.file,
           sourceCase: { id: CASE_ID, prepare },
           async onRunFinished({ run }) {
             workspace = run?.workspace;
-            if (
-              ['tools-free-structured', 'read-only-inspection'].includes(
-                run?.planningPolicy?.strategy,
-              )
-            )
-              actualPlanning = run.planningPolicy.strategy;
-            if (/^[A-Za-z0-9._:-]{1,100}$/.test(run?.planningPolicy?.revision || ''))
-              result.planningRevision = run.planningPolicy.revision;
+            if (typeof run?.workflow?.actionsRevision === 'string')
+              result.orchestrationPolicy = {
+                strategy: 'model-selected-actions',
+                actionRequests: (run.events || []).filter(
+                  (event) => event.type === 'action.requested',
+                ).length,
+              };
           },
         });
       }
       Object.assign(result, summarizeProvider(provider, arm.startsWith('codex-')));
-      result.actualPlanning = actualPlanning || null;
       result.model = arm.startsWith('codex-')
         ? config.models.codex
         : arm === 'mixed-buro'

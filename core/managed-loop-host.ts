@@ -71,9 +71,12 @@ export class ManagedLoopHost implements AgentLoopHost {
     return this.#step('prepare', async () => {
       const state = this.#state,
         limits = state.session.limits;
-      if (state.round >= limits.maxRequestsPerTurn)
+      if (limits.maxRequestsPerTurn !== undefined && state.round >= limits.maxRequestsPerTurn)
         throw new DomainError('MODEL_BUDGET_EXHAUSTED', 'The turn request budget is exhausted.');
-      if (state.session.requests >= limits.maxSessionRequests)
+      if (
+        limits.maxSessionRequests !== undefined &&
+        state.session.requests >= limits.maxSessionRequests
+      )
         throw new DomainError('MODEL_BUDGET_EXHAUSTED', 'The session request budget is exhausted.');
       this.#host.assertReconciled(state.session);
       this.#prepared = structuredClone(await prepareManagedCodingRequest(state, this.#host));

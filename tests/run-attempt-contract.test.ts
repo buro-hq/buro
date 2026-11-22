@@ -11,7 +11,7 @@ import { executionPolicy } from '../core/project-settings.ts';
 import type { AgentRuntime, ProjectStore } from '../core/ports.ts';
 import type { CheckPort, WorkspacePort } from '../core/execution-ports.ts';
 import type { ContextMaterial, ProjectProfile } from '../protocol/domain.ts';
-import type { TeamPlan } from '../protocol/execution.ts';
+import type { WorkerProposal } from '../protocol/execution.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { SqliteProjectUsageAuthority } from '../adapters/sqlite/project-usage-authority.ts';
 import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
@@ -39,32 +39,24 @@ const profile: ProjectProfile = {
   turnTimeoutMs: 10000,
   baseBranch: 'original-source',
 };
-const plan: TeamPlan = {
-  summary: 'Original immutable worker plan',
-  steps: [
-    { step: 'Change scoped value', owner: 'builder' },
-    { step: 'Review', owner: 'reviewer' },
-  ],
-  team: [
-    {
-      roleId: 'builder',
-      action: 'create',
-      title: 'Builder',
-      description: 'Change one value',
-      instructions: 'Retain original public contract.',
-      kind: 'implementation',
-      paths: ['src/value.ts'],
-      runtimeId: null,
-      runtimeReason: '',
-      assignment: {
-        objective: 'Change the specified value.',
-        inputs: ['src/value.ts'],
-        expectedResult: 'Original value contract retained.',
-        criteria: ['Keep the public contract.'],
-      },
-    },
-  ],
+const worker: WorkerProposal = {
+  roleId: 'builder',
+  action: 'create',
+  title: 'Builder',
+  description: 'Change one value',
+  instructions: 'Retain original public contract.',
+  kind: 'implementation',
+  paths: ['src/value.ts'],
+  runtimeId: null,
+  runtimeReason: '',
+  assignment: {
+    objective: 'Change the specified value.',
+    inputs: ['src/value.ts'],
+    expectedResult: 'Original value contract retained.',
+    criteria: ['Keep the public contract.'],
+  },
 };
+
 const deferred = () => {
   let resolve!: () => void;
   const promise = new Promise<void>((r) => {
@@ -225,7 +217,17 @@ async function fixture(t: any, kind: 'file' | 'sqlite', ready = true) {
     await service.phase('p', runId, 'preparing', 'Prepare original workspace');
     await service.bindPreparedWorkspace('p', runId, workspace);
     await service.phase('p', runId, 'planning', 'Accept original plan');
-    await service.acceptPlan('p', runId, plan, { builder: null });
+    await authority.runs.transaction(command('delegate'), (tx) =>
+      tx.delegateWorker({
+        runId,
+        assignmentId: 'grant-builder',
+        now: 'delegated',
+        worker: worker,
+        expectedRoleVersion: null,
+        expectedInput: tx.delegationContext(runId),
+        expectedAttemptId: tx.current(runId)!.attemptId,
+      }),
+    );
   }
   const events = async () => {
     if (authority instanceof SqliteProjectUsageAuthority)
@@ -624,11 +626,10 @@ for (const kind of ['file', 'sqlite'] as const) {
     assert.equal(f.effects(), 0);
   });
 
-  test(`${kind}: genuine stop and repeated repair/recheck append distinct monotonic attempts with original workspace/plan lineage`, async (t) => {
+  test(`${kind}: genuine stop and repeated repair/recheck append distinct monotonic attempts with original workspace/grant lineage`, async (t) => {
     const f = await fixture(t, kind);
     const original = await f.runs().currentAttempt(f.runId),
       workspace = await f.runs().workspace(f.runId),
-      savedPlan = await f.runs().plan(f.runId),
       grant = await f.runs().assignment(f.runId, 'builder');
     assert.equal(original.attempt.ordinal, 1);
     await f.stop();
@@ -643,10 +644,7 @@ for (const kind of ['file', 'sqlite'] as const) {
       assert.equal(next.attempt.priorAttemptId, previous.attempt.id);
       assert.equal(next.context.continuation?.instructions, instructions);
       assert.equal(next.context.workspaceOriginAttemptId, original.attempt.id);
-      assert.equal(next.context.inheritedPlanId, savedPlan?.id);
-      assert.equal(next.context.planOriginAttemptId, original.attempt.id);
       assert.deepEqual(await f.runs().workspace(f.runId), workspace);
-      assert.deepEqual(await f.runs().plan(f.runId), savedPlan);
       assert.deepEqual(await f.runs().assignment(f.runId, 'builder'), grant);
       assert.deepEqual(await f.runs().attempt(original.attempt.id), original);
       assert.equal((await f.runs().current(f.runId))?.status, 'queued');
@@ -832,7 +830,7 @@ for (const kind of ['file', 'sqlite'] as const) {
         tx.continueAttempt({
           ...proposal,
           workspaceOriginAttemptId: 'foreign-attempt',
-          inheritedPlanId: 'foreign-plan',
+          inheritedAssignments: { builder: { id: 'foreign-grant', taskMode: 'original' } },
         } as typeof proposal),
       ),
     );
@@ -877,7 +875,7 @@ for (const kind of ['file', 'sqlite'] as const) {
       assert.equal(f.fileSnapshot().runs.find((run) => run.id === f.runId)?.workerTasks, undefined);
   });
 
-  test(`${kind}: a genuine first plan on the continued task authorizes its compact tasks for the next attempt`, async (t) => {
+  test(`${kind}: a genuine first delegation on the continued task authorizes its compact tasks for the next attempt`, async (t) => {
     const f = await fixture(t, kind, false);
     await f.service.beginExecution('p', f.runId);
     await f.service.phase('p', f.runId, 'preparing', 'Prepare');
@@ -895,18 +893,25 @@ for (const kind of ['file', 'sqlite'] as const) {
     assert.equal(firstRepair.context.taskMode, 'full-goal');
     await f.service.beginExecution('p', f.runId);
     await f.service.phase('p', f.runId, 'planning', 'Plan actual continued task');
-    const accepted = await f.service.acceptPlan('p', f.runId, plan, { builder: null });
-    assert.equal(accepted.plan.attemptId, firstRepair.attempt.id);
+    const accepted = await f.runs().transaction(command('continued-delegate'), (tx) =>
+      tx.delegateWorker({
+        runId: f.runId,
+        assignmentId: 'continued-grant-builder',
+        now: 'delegated',
+        worker: worker,
+        expectedRoleVersion: null,
+        expectedInput: tx.delegationContext(f.runId),
+        expectedAttemptId: firstRepair.attempt.id,
+      }),
+    );
+    assert.equal(accepted.attemptId, firstRepair.attempt.id);
     await f.stop();
     await f.resume('repair-after-real-plan');
     const next = await f.runs().currentAttempt(f.runId);
     assert.equal(next.context.taskMode, 'original');
-    assert.equal(next.context.planOriginAttemptId, firstRepair.attempt.id);
+    assert.equal(next.context.inheritedAssignments?.builder.id, accepted.id);
     assert.equal(next.context.workspaceOriginAttemptId, f.initial.attemptId);
-    assert.deepEqual(
-      (await f.runs().assignment(f.runId, 'builder'))?.task,
-      plan.team[0].assignment,
-    );
+    assert.deepEqual((await f.runs().assignment(f.runId, 'builder'))?.task, worker.assignment);
   });
 
   test(`${kind}: canonical continuation replay precedes newer state and conflicting command identity`, async (t) => {

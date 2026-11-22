@@ -68,7 +68,7 @@ export const ResourceProfileSchema = z
     coordinator: ResourceIdSchema,
     worker: ResourceIdSchema,
     reviewer: ResourceIdSchema,
-    workerPool: z.array(ResourceIdSchema).min(1).max(16).optional(),
+    workerPool: z.array(ResourceIdSchema).min(1).optional(),
   })
   .superRefine((profile, ctx) => {
     if (
@@ -82,11 +82,16 @@ export const ResourceProfileSchema = z
         message: 'The worker pool must contain unique runtime IDs and include the default worker.',
       });
   });
-export const ResourceSetupInputSchema = z.strictObject({
-  expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
-  runtimes: z.array(RuntimeDefinitionSchema).max(8),
-  profile: ResourceProfileSchema,
-});
+export const ResourceSetupInputSchema = z
+  .strictObject({
+    expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
+    runtimes: z.array(RuntimeDefinitionSchema),
+    profile: ResourceProfileSchema,
+  })
+  .superRefine((input, ctx) => {
+    if (new Set(input.runtimes.map((runtime) => runtime.id)).size !== input.runtimes.length)
+      ctx.addIssue({ code: 'custom', path: ['runtimes'], message: 'Runtime IDs must be unique.' });
+  });
 export type ResourceSetupInput = z.infer<typeof ResourceSetupInputSchema>;
 export const ResourceSnapshotSchema = z
   .object({
@@ -95,7 +100,7 @@ export const ResourceSnapshotSchema = z
     coordinator: RuntimeResourceSchema,
     worker: RuntimeResourceSchema,
     reviewer: RuntimeResourceSchema,
-    workerPool: z.array(RuntimeResourceSchema).min(1).max(16).optional(),
+    workerPool: z.array(RuntimeResourceSchema).min(1).optional(),
   })
   .superRefine((snapshot, ctx) => {
     if (!snapshot.workerPool) return;

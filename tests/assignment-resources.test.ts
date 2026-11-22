@@ -20,7 +20,8 @@ import {
   type RuntimeResource,
 } from '../protocol/resources.ts';
 import { RoleInputSchema } from '../protocol/schema.ts';
-import { TeamPlanSchema, teamOutputSchema } from '../protocol/execution.ts';
+import { WorkerProposalSchema } from '../protocol/execution.ts';
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import type { Role } from '../protocol/domain.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 
@@ -164,7 +165,7 @@ test('frozen pools reject duplicate, divergent and remote local-only entries', (
   assert.equal(resolveWorkerResource(saved, role()).resource.id, local.id);
 });
 
-test('profiles validate pool bounds and references; selection freezes all candidates and enforces local-only before dispatch', () => {
+test('profiles validate pool membership and references; selection freezes all candidates and enforces local-only before dispatch', () => {
   const profile = {
     id: 'team',
     name: 'Team',
@@ -174,13 +175,15 @@ test('profiles validate pool bounds and references; selection freezes all candid
     reviewer: local.id,
     workerPool: [local.id, cloud.id],
   };
-  for (const workerPool of [
-    [],
-    [local.id, local.id],
-    [cloud.id],
-    Array.from({ length: 17 }, (_, i) => (i ? 'worker-' + i : local.id)),
-  ])
+  for (const workerPool of [[], [local.id, local.id], [cloud.id]])
     assert.equal(ResourceProfileSchema.safeParse({ ...profile, workerPool }).success, false);
+  assert.equal(
+    ResourceProfileSchema.safeParse({
+      ...profile,
+      workerPool: Array.from({ length: 17 }, (_, i) => (i ? 'worker-' + i : local.id)),
+    }).success,
+    true,
+  );
   const configuration = fixtureResources();
   assert.equal(
     ResourceConfigurationSchema.safeParse({
@@ -208,7 +211,7 @@ test('profiles validate pool bounds and references; selection freezes all candid
   assert.equal(ResourceSnapshotSchema.parse(frozen).workerPool?.length, 2);
 });
 
-test('legacy plans remain valid while native model output requires explicit automatic selection and a reason field', () => {
+test('standalone worker proposals support automatic resources while native action output makes every field explicit', () => {
   const worker = {
     roleId: 'builder',
     action: 'reuse',
@@ -218,20 +221,18 @@ test('legacy plans remain valid while native model output requires explicit auto
     kind: 'implementation',
     paths: ['src/'],
   };
+  assert.equal(WorkerProposalSchema.parse(worker).runtimeId, undefined);
   assert.equal(
-    TeamPlanSchema.parse({
-      summary: 'Plan',
-      steps: [
-        { step: 'Implement', owner: 'builder' },
-        { step: 'Review', owner: 'reviewer' },
-      ],
-      team: [worker],
-    }).team[0].runtimeId,
-    undefined,
+    WorkerProposalSchema.safeParse({ ...worker, provenance: { origin: 'user' } }).success,
+    false,
   );
-  const item = (teamOutputSchema as any).properties.team.items;
+  const action = createBuiltinExecutionActions()
+    .definitions()
+    .find(({ id }) => id === 'delegate')!;
+  const item = (action.parameters as any).properties.worker;
   assert.ok(item.required.includes('runtimeId'));
   assert.ok(item.required.includes('runtimeReason'));
+  assert.ok(item.required.includes('assignment'));
   assert.ok(JSON.stringify(item.properties.runtimeId).includes('null'));
 });
 

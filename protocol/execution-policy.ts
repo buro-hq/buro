@@ -6,5 +6,5 @@ export const ExecutionPolicySchema = z.strictObject({
   scope: WorkScopeSchema,
   checks: z.array(z.object({ id: z.string(), title: z.string() })),
   defaultCheckIds: z.array(z.string()),
-  maxWorkers: z.number(),
+  maxWorkers: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
 });

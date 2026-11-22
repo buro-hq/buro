@@ -20,32 +20,77 @@ const counters = z.strictObject({
 export const ManagedRunBudgetPolicySchema = z
   .strictObject({
     version: z.literal(1),
-    maxRequests: z.number().int().min(1).max(1024),
-    maxReservedOutputTokens: z.number().int().min(1).max(16777216),
-    maxToolCalls: z.number().int().min(1).max(16384),
-    reviewReserve: z.strictObject({
-      requests: z.number().int().nonnegative().max(1024),
-      outputTokens: z.number().int().nonnegative().max(16777216),
-      toolCalls: z.number().int().nonnegative().max(16384),
-    }),
+    maxRequests: counter.min(1).optional(),
+    maxReservedOutputTokens: counter.min(1).optional(),
+    maxToolCalls: counter.min(1).optional(),
+    reviewReserve: z
+      .strictObject({ requests: counter, outputTokens: counter, toolCalls: counter })
+      .optional(),
   })
   .superRefine((policy, ctx) => {
-    if (
-      policy.reviewReserve.requests >= policy.maxRequests ||
-      policy.reviewReserve.outputTokens >= policy.maxReservedOutputTokens ||
-      policy.reviewReserve.toolCalls >= policy.maxToolCalls
-    )
-      ctx.addIssue({ code: 'custom', message: 'Review reserves must leave a work allowance.' });
+    for (const [maximum, reserve] of [
+      [policy.maxRequests, policy.reviewReserve?.requests ?? 0],
+      [policy.maxReservedOutputTokens, policy.reviewReserve?.outputTokens ?? 0],
+      [policy.maxToolCalls, policy.reviewReserve?.toolCalls ?? 0],
+    ] as const)
+      if (maximum === undefined ? reserve !== 0 : reserve >= maximum)
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Review reserves require a finite limit and must leave a work allowance.',
+        });
   });
 
 export type ManagedRunBudgetPolicy = z.infer<typeof ManagedRunBudgetPolicySchema>;
 export const DEFAULT_MANAGED_RUN_BUDGET_POLICY: Readonly<ManagedRunBudgetPolicy> = Object.freeze({
   version: 1,
-  maxRequests: 64,
-  maxReservedOutputTokens: 131072,
-  maxToolCalls: 256,
-  reviewReserve: Object.freeze({ requests: 8, outputTokens: 16384, toolCalls: 32 }),
 });
+
+type BudgetCounters = z.infer<typeof counters>;
+
+/** Omitted cumulative user quotas have no remaining-allowance value. */
+export function managedBudgetRemaining(
+  policy: ManagedRunBudgetPolicy,
+  used: BudgetCounters,
+  workUsed: BudgetCounters,
+  phase: 'work' | 'review',
+): { [K in keyof BudgetCounters]: number | undefined } {
+  const remaining = (maximum: number | undefined, total: number, work: number, reserve = 0) =>
+    maximum === undefined
+      ? undefined
+      : phase === 'work'
+        ? Math.min(maximum - total, maximum - reserve - work)
+        : maximum - total;
+  return {
+    requests: remaining(
+      policy.maxRequests,
+      used.requests,
+      workUsed.requests,
+      policy.reviewReserve?.requests,
+    ),
+    reservedOutputTokens: remaining(
+      policy.maxReservedOutputTokens,
+      used.reservedOutputTokens,
+      workUsed.reservedOutputTokens,
+      policy.reviewReserve?.outputTokens,
+    ),
+    toolCalls: remaining(
+      policy.maxToolCalls,
+      used.toolCalls,
+      workUsed.toolCalls,
+      policy.reviewReserve?.toolCalls,
+    ),
+  };
+}
+
+export function managedBudgetCountersWithinPolicy(
+  policy: ManagedRunBudgetPolicy,
+  used: BudgetCounters,
+  workUsed: BudgetCounters,
+) {
+  return Object.values(managedBudgetRemaining(policy, used, workUsed, 'work')).every(
+    (remaining) => remaining === undefined || remaining >= 0,
+  );
+}
 
 /** Bounded public projection: no request IDs, prompts, tool arguments or provider continuation. */
 export const ManagedRunBudgetSummarySchema = z
@@ -71,15 +116,7 @@ export const ManagedRunBudgetSummarySchema = z
       ) ||
       summary.observed.completeUsageRequests + summary.observed.unknownUsageRequests !==
         summary.used.requests ||
-      summary.used.requests > summary.policy.maxRequests ||
-      summary.used.reservedOutputTokens > summary.policy.maxReservedOutputTokens ||
-      summary.used.toolCalls > summary.policy.maxToolCalls ||
-      summary.workUsed.requests >
-        summary.policy.maxRequests - summary.policy.reviewReserve.requests ||
-      summary.workUsed.reservedOutputTokens >
-        summary.policy.maxReservedOutputTokens - summary.policy.reviewReserve.outputTokens ||
-      summary.workUsed.toolCalls >
-        summary.policy.maxToolCalls - summary.policy.reviewReserve.toolCalls ||
+      !managedBudgetCountersWithinPolicy(summary.policy, summary.used, summary.workUsed) ||
       (summary.status === 'open' &&
         summary.observed.outputTokens > summary.used.reservedOutputTokens)
     )

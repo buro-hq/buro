@@ -496,7 +496,7 @@ test('File authority rejects forged service-turn archives with dropped history, 
       await store.save(before);
       const forged = structuredClone(after);
       mutate(forged);
-      await assert.rejects(store.save(forged));
+      await assert.rejects(async () => store.save(forged));
       assert.deepEqual(await store.load(before.id), before);
     } finally {
       await fs.rm(directory, { recursive: true, force: true });

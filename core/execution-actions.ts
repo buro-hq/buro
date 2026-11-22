@@ -1,10 +1,9 @@
 import { z } from 'zod';
-import type { EnvelopeSchema, TeamPlan } from '../protocol/execution.ts';
+import type { EnvelopeSchema, WorkerProposal } from '../protocol/execution.ts';
 import type { ToolResult } from './model-ports.ts';
 import { DomainError } from './ports.ts';
 import { captureContributionArguments, parseContributionResult } from './tool-contributions.ts';
 
-export type WorkerProposal = TeamPlan['team'][number];
 export type ExecutionResult = z.infer<typeof EnvelopeSchema>;
 
 /** Each operation validates its current owner and records its own real effects and evidence. */

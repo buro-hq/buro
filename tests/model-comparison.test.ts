@@ -73,14 +73,14 @@ test('comparison needs explicit opt-in, pins native settings and forbids remote 
     () => validateComparison({ env, endpoints: { deepseek: 'https://elsewhere.invalid' } }),
     { code: 'COMPARISON_DEEPSEEK_ENDPOINT_REQUIRED' },
   );
-  assert.throws(() => validateComparison({ env, budgets: { codingWallTimeMs: 300001 } }), {
+  assert.throws(() => validateComparison({ env, budgets: { codingWallTimeMs: 1.1 } }), {
     code: 'LIVE_INVALID_LIMITS',
   });
   const config = validateComparison({ env });
   assert.deepEqual(config.arms, ARMS);
   assert.equal(config.models.codex, 'gpt-6.1-sol');
   assert.equal(config.reasoningEffort, 'high');
-  assert.equal(config.limits.codingWallTimeMs, 300000);
+  assert.equal(config.limits.codingWallTimeMs, undefined);
 });
 
 test('fresh comparison fixtures have identical frozen task, content and oracle identities', async (t) => {
@@ -109,7 +109,7 @@ test('comparison validates and records explicit provider context without changin
       { code: 'LIVE_INVALID_CONTEXT_BUDGET' },
     );
   }
-  assert.equal(validateComparison({ env }).contexts.ollama, 16384);
+  assert.equal(validateComparison({ env }).contexts.ollama, 32768);
   let dispatched = false;
   const report = await runModelComparison({
     env,
@@ -118,9 +118,9 @@ test('comparison validates and records explicit provider context without changin
     runProvider: async (input: any) => {
       dispatched = true;
       assert.equal(input.contextTokensByProvider.ollama, 32768);
-      assert.equal(input.budgets.maxGenerationRequests, 24);
+      assert.equal(input.budgets.maxGenerationRequests, undefined);
       assert.equal(input.budgets.maxOutputTokens, 2048);
-      assert.equal(input.budgets.codingWallTimeMs, 300000);
+      assert.equal(input.budgets.codingWallTimeMs, undefined);
       return { status: 'blocked' };
     },
   });
@@ -302,7 +302,7 @@ test('the complete matrix keeps task/oracle/wall constant without overriding mod
   assert.deepEqual(directModel, { model: 'gpt-6.1-sol', reasoningEffort: 'high' });
   for (const input of providerInputs) {
     assert.equal(input.forceWorker, true);
-    assert.equal(input.budgets.codingWallTimeMs, 300000);
+    assert.equal(input.budgets.codingWallTimeMs, undefined);
     assert.equal(input.sourceCase.id, IDENTITY.caseId);
     assert.equal(input.sourceCase.synthetic, true);
     assert.equal(input.codex.networkAccess, false);

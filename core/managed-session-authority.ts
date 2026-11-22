@@ -32,6 +32,64 @@ export function assertManagedToolRevision(options: ManagedRuntimeOptions, sessio
 }
 import { toolEffectAllowed } from './tool-contributions.ts';
 
+function scopeFacts(scope: ToolScope) {
+  return [
+    scope.projectId,
+    scope.runId,
+    scope.ownerRunId,
+    scope.sessionId,
+    scope.workspace,
+    scope.verificationViewId,
+    scope.verificationTree,
+    scope.readOnly,
+    scope.baseCommit,
+    WorkScopeSchema.parse(scope.writeScope),
+    scope.materials,
+    scope.commands.map(({ id, command, timeoutMs }) => [id, command, timeoutMs]),
+  ];
+}
+
+/** Current checkpoints retain the actual service-issued instruction/scope history. */
+export function assertManagedSessionProvenance(session: ManagedSession): void {
+  const revisions = session.scopeRevisions;
+  if (
+    !Array.isArray(revisions) ||
+    !revisions.length ||
+    revisions.some(
+      (revision, index) =>
+        !revision ||
+        revision.revision !== index + 1 ||
+        !revision.scope ||
+        typeof revision.instructions !== 'string',
+    )
+  )
+    throw new DomainError(
+      'INVALID_CHECKPOINT',
+      'The managed session requires its complete issued scope revisions.',
+    );
+  if (
+    JSON.stringify(scopeFacts(revisions.at(-1)!.scope)) !==
+    JSON.stringify(scopeFacts(session.scope))
+  )
+    throw new DomainError(
+      'INVALID_CHECKPOINT',
+      'The current scope must match its last issued revision.',
+    );
+  const used =
+    session.requests > 0 ||
+    session.actions.length > 0 ||
+    !!session.generation ||
+    session.messages.some((message) => message.role !== 'system') ||
+    Object.values(session.usage).some((value) => value > 0) ||
+    !!session.workerStepChecks?.entries.length ||
+    !!session.workSegments?.archives.length;
+  if (used && (!Array.isArray(session.turnAuthorities) || !session.turnAuthorities.length))
+    throw new DomainError(
+      'INVALID_CHECKPOINT',
+      'Used managed sessions require their issued turn authorities.',
+    );
+}
+
 /** Derive a detached initial grant; the owning runtime alone saves/adopts it. */
 export function prepareManagedSession(
   options: ManagedRuntimeOptions,
@@ -93,6 +151,7 @@ export function prepareManagedSession(
     providerRevision: options.provider.revision,
     toolRevision: managedToolRevision(options),
     requestedModel: options.model,
+    scopeRevisions: [],
     ...(input.purpose ? { purpose: input.purpose } : {}),
     scope: {
       projectId: input.projectId,
@@ -154,6 +213,7 @@ export function prepareManagedResume(
   session: ManagedSession,
   input: Parameters<NonNullable<AgentRuntime['resume']>>[0],
 ): ManagedSession {
+  assertManagedSessionProvenance(session);
   if (
     session.scope.projectId !== input.projectId ||
     session.scope.workspace !== input.workspace ||
@@ -220,13 +280,6 @@ export function prepareManagedResume(
       );
   scope.ownerRunId = run?.id || session.scope.ownerRunId;
   scope.baseCommit = run?.baseCommit || session.scope.baseCommit;
-  next.scopeRevisions ||= [
-    {
-      revision: 1,
-      scope: structuredClone(session.scope),
-      instructions: session.messages.find((message) => message.role === 'system')?.content || '',
-    },
-  ];
   next.scopeRevisions.push({
     revision: next.scopeRevisions.length + 1,
     scope: structuredClone(scope),

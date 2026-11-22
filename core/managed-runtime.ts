@@ -22,6 +22,7 @@ import {
   managedToolDefinitions,
   managedToolRevision,
   assertManagedToolRevision,
+  assertManagedSessionProvenance,
 } from './managed-session-authority.ts';
 
 /** Managed lifecycle; the injected runner schedules while Buro owns authority and receipts. */
@@ -56,7 +57,10 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
     managedToolRevision(options);
     const limits = options.limits;
     if (
-      Object.values(limits).some((n) => !Number.isSafeInteger(n) || n < 1) ||
+      ![limits.contextTokens, limits.maxOutputTokens].every(
+        (n) => Number.isSafeInteger(n) && n > 0,
+      ) ||
+      Object.values(limits).some((n) => n !== undefined && (!Number.isSafeInteger(n) || n < 1)) ||
       limits.maxOutputTokens >= limits.contextTokens
     )
       throw new DomainError(
@@ -240,7 +244,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
         turnId,
         toolPolicy: noTools ? 'none' : 'normal',
         startedAtRequest: state.session.requests,
-        scopeRevision: state.session.scopeRevisions?.at(-1)?.revision || 1,
+        scopeRevision: state.session.scopeRevisions.at(-1)!.revision,
       });
       state.session.messages.push({ role: 'user', content: text });
       await host.commit(state.session);
@@ -308,6 +312,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
       if (!session) throw new DomainError('THREAD_NOT_FOUND', 'Managed session not found.');
       const cached = this.loaded.get(id);
       if (cached) {
+        assertManagedSessionProvenance(cached);
         assertManagedToolRevision(this.options, cached);
         return cached;
       }
@@ -337,6 +342,7 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
       assertManagedToolRevision(this.options, session);
       this.loaded.set(id, session);
     }
+    assertManagedSessionProvenance(session);
     assertManagedToolRevision(this.options, session);
     return session;
   }

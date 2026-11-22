@@ -65,7 +65,7 @@ export type ProjectProfile = {
   checkConcurrency?: number;
   setup: ProjectCommand[];
   dependencies: 'none' | 'link-node-modules';
-  maxWorkers: number;
+  maxWorkers?: number;
   turnTimeoutMs: number;
   baseBranch?: string;
   components?: ProjectComponent[];
@@ -107,7 +107,7 @@ export type Goal = {
   criteria: string;
   status: 'draft' | 'running' | 'completed' | 'failed';
   createdAt: string;
-  revision?: number;
+  revision: number;
   repairEnvironment?: boolean;
   parentRunId?: string;
   outcome?: GoalOutcome;
@@ -217,7 +217,6 @@ export type Run = {
   verificationEvidence?: import('./verification.ts').VerificationEvidence;
   reconciliation?: import('./reconciliation.ts').RunReconciliation;
   pendingTurn?: import('./reconciliation.ts').PendingRunTurn;
-  planningPolicy?: import('./planning-policy.ts').PlanningPolicy;
   effectivePolicy?: import('./autonomy.ts').EffectivePolicy;
   stop?: import('./autonomy.ts').RunStop;
   managedBudget?: import('./run-budget.ts').ManagedRunBudgetSummary;
@@ -230,7 +229,6 @@ export type Run = {
   operationContexts?: Record<string, SavedOperationContext>;
   delegation?: 'buro';
   coordinatorSession?: AgentSession;
-  planningSession?: AgentSession;
   contextMaterials?: ContextMaterial[];
   id: string;
   key: string;
@@ -239,7 +237,6 @@ export type Run = {
   createdAt: string;
   completedAt?: string;
   updatedAt?: string;
-  planSavedAt?: string;
   threadId: string;
   status?:
     | 'queued'
@@ -285,7 +282,6 @@ export type Run = {
     status: string;
     result: string;
     policy?: Run['executionPolicySnapshot'];
-    planningPolicy?: Run['planningPolicy'];
     goalText: string;
     contextMaterials?: ContextMaterial[];
     repairEnvironment?: boolean;
@@ -367,16 +363,8 @@ export type DomainEvent = {
     | {
         type: 'run.worker-delegated';
         current: RunCurrent;
-        assignment: import('./run-plan.ts').RunWorkerAssignment;
-        context: import('./run-plan.ts').RunPlanningInput;
-        entries: Omit<RunTimelineEntry, 'sequence'>[];
-        view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
-      }
-    | {
-        type: 'run.plan-accepted';
-        current: RunCurrent;
-        plan: import('./run-plan.ts').RunPlan;
-        assignments: import('./run-plan.ts').RunWorkerAssignment[];
+        assignment: import('./run-delegation.ts').RunWorkerAssignment;
+        context: import('./run-delegation.ts').RunDelegationContext;
         entries: Omit<RunTimelineEntry, 'sequence'>[];
         view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
       }
@@ -403,7 +391,7 @@ export type ExecutionPolicyView = {
   scope: WorkScope;
   checks: { id: string; title: string }[];
   defaultCheckIds: string[];
-  maxWorkers: number;
+  maxWorkers?: number;
 };
 export type Snapshot = {
   contextMaterials?: ContextMaterial[];

@@ -25,19 +25,115 @@ const generation = (id = 'generation') => ({
 async function fixture(t: any) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'buro-sql-authority-')));
   const events: UsageAuthorityEvent[] = [];
-  const authority = await SqliteProjectUsageAuthority.open({
-    directory: path.join(root, 'state'),
-    project: { id: 'p', name: 'Synthetic project', root: path.join(root, 'state') },
-    onEvent: (event) => {
-      events.push(event);
-    },
-  });
+  const open = () =>
+    SqliteProjectUsageAuthority.open({
+      directory: path.join(root, 'state'),
+      project: { id: 'p', name: 'Synthetic project', root: path.join(root, 'state') },
+      onEvent: (event) => {
+        events.push(event);
+      },
+    });
+  let authority = await open();
   t.after(async () => {
     await authority.close();
     await fs.rm(root, { recursive: true, force: true });
   });
-  return { root, authority, events };
+  return {
+    root,
+    get authority() {
+      return authority;
+    },
+    events,
+    async reopen() {
+      await authority.close();
+      authority = await open();
+    },
+  };
 }
+
+test('SQLite default-none accounts retain absent quotas, charged unknown work and immutable receipts across reopen', async (t) => {
+  const f = await fixture(t);
+  await f.authority.transaction(command('none-account'), (tx) =>
+    tx.usage.createAccount(owner, { id: 'private-account', policy: { version: 1 } }),
+  );
+  let firstReceipt: unknown;
+  for (let index = 0; index < 80; index++) {
+    if (index === 40) await f.reopen();
+    const operationId = 'PRIVATE_NONE_OPERATION-' + index;
+    const receipt = await f.authority.transaction(command('none-request-' + index), (tx) => {
+      const admitted = tx.usage.admitGeneration(owner, {
+        ...generation(operationId),
+        requestedOutputTokens: 2048,
+      });
+      assert.equal(admitted.kind, 'applied');
+      return tx.usage.observeUsage(owner, {
+        accountId: 'private-account',
+        operationId,
+        outcome: 'unknown',
+      });
+    });
+    if (index === 0) firstReceipt = receipt;
+  }
+  await f.authority.transaction(command('none-tools'), (tx) => {
+    const result = tx.usage.admitTools(owner, {
+      accountId: 'private-account',
+      operationId: 'PRIVATE_NONE_TOOLS',
+      phase: 'work',
+      count: 1000,
+    });
+    assert.equal(result.kind, 'applied');
+    return result;
+  });
+  const before = (await f.authority.account(owner))!;
+  assert.deepEqual(before.policy, { version: 1 });
+  assert.deepEqual(before.admitted.work, {
+    requests: 80,
+    reservedOutputTokens: 163840,
+    toolCalls: 1000,
+  });
+  assert.equal(before.observed.unknownUsageRequests, 80);
+  assert.equal(before.outstandingOutputTokens, 163840);
+  assert.equal(before.status, 'open');
+  await f.reopen();
+  assert.deepEqual(await f.authority.account(owner), before);
+  assert.deepEqual(
+    await f.authority.transaction(command('none-request-0'), () => {
+      throw Error('A durable command receipt must replay after reopening.');
+    }),
+    firstReceipt,
+  );
+  for (const conflicting of [
+    { version: 1 as const, maxRequests: 1000 },
+    { version: 1 as const, reviewReserve: { requests: 0, outputTokens: 0, toolCalls: 0 } },
+  ]) {
+    await assert.rejects(
+      f.authority.transaction(command('none-policy-' + JSON.stringify(conflicting)), (tx) =>
+        tx.usage.createAccount(owner, { id: 'private-account', policy: conflicting }),
+      ),
+      { code: 'USAGE_ACCOUNT_CONFLICT' },
+    );
+  }
+  const replay = await f.authority.transaction(command('none-operation-replay'), (tx) =>
+    tx.usage.admitGeneration(owner, {
+      ...generation('PRIVATE_NONE_OPERATION-0'),
+      requestedOutputTokens: 2048,
+    }),
+  );
+  assert.equal(replay.kind, 'replayed');
+  const conflict = await f.authority.transaction(command('none-observation-conflict'), (tx) =>
+    tx.usage.observeUsage(owner, {
+      accountId: 'private-account',
+      operationId: 'PRIVATE_NONE_OPERATION-0',
+      outcome: 'observed',
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }),
+  );
+  assert.equal(conflict.kind, 'denied');
+  assert.deepEqual(await f.authority.account(owner), before);
+  const operation = await f.authority.operation(owner, 'PRIVATE_NONE_OPERATION-0');
+  assert.equal(operation?.kind === 'generation' && operation.status, 'unknown');
+  assert.doesNotMatch(JSON.stringify(f.events), /PRIVATE_NONE_|private-account|observationKey/);
+});
 
 test('SQLite authority creates private database companions and project-bound metadata', async (t) => {
   const f = await fixture(t);

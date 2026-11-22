@@ -140,7 +140,7 @@ export class ProjectChecks implements CheckPort {
         'Worker checks require their frozen profile and prepared isolation.',
       );
     if (!profile) {
-      // Legacy trusted scripts still leave the view registered for the fresh reviewer.
+      // Trusted script checks still leave the view registered for the fresh reviewer.
       if (view && this.executors) await this.executors.registerVerification(view, signal);
       return this.fallback.run(projectId, workspace, ids, signal, profile, options);
     }

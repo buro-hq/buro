@@ -30,7 +30,7 @@ export const ProjectProfileSchema = z
     environment: EnvironmentConfigSchema.optional(),
     checkConcurrency: z.number().int().min(1).max(4).optional(),
     dependencies: z.enum(['none', 'link-node-modules']),
-    maxWorkers: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    maxWorkers: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
     turnTimeoutMs: z.number().int().min(10000).max(900000),
     baseBranch: z
       .string()

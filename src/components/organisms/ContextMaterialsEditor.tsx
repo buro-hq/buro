@@ -76,8 +76,6 @@ export function ContextMaterialsEditor({
     ]);
     if (scope === 'goal') {
       const ids = [...new Set([...selection.current, ...imported.map((m) => m.id)])];
-      if (ids.length > 32)
-        throw Error(t('A goal can have up to 32 attachments. Select fewer files.'));
       selection.current = ids;
       onChange?.(ids);
     }

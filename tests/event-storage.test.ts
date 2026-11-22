@@ -26,6 +26,7 @@ async function fixture(t: any) {
     await fs.rm(directory, { recursive: true, force: true });
   });
   const goal: Goal = {
+    revision: 1,
     id: 'goal',
     projectId: 'p',
     title: 'Goal',

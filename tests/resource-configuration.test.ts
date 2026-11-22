@@ -177,3 +177,44 @@ test('managed-only configurations may use any ID including codex, without a nati
     false,
   );
 });
+
+test('resource catalogs grow beyond old connection and runtime ceilings without losing references or receipts', async (t) => {
+  const { directory, configuration } = await fixture(t);
+  for (let index = 0; index < 17; index++) {
+    const connection = {
+      id: 'extra-' + index,
+      provider: 'ollama',
+      config: { endpoint: 'http://127.0.0.1:11434' },
+    };
+    await configuration.save('connection-' + index, 'payload-' + index, connection, null);
+  }
+  const before = configuration.snapshot();
+  const { resourceConfigurationRevision } = await import(
+    '../adapters/files/resource-configuration.ts'
+  );
+  const runtimes = Array.from({ length: 33 }, (_, index) => ({
+    id: 'runtime-' + index,
+    backend: 'codex',
+    config: {},
+  }));
+  await configuration.saveSetup('many-runtimes', 'many-runtimes', {
+    expectedRevision: resourceConfigurationRevision(before),
+    runtimes,
+    profile: {
+      id: 'many',
+      name: 'Many independently configured runtimes',
+      policy: 'hybrid',
+      coordinator: runtimes[0].id,
+      worker: runtimes[0].id,
+      reviewer: runtimes[0].id,
+      workerPool: runtimes.map((runtime) => runtime.id),
+    },
+  });
+  const reopened = await FileResourceConfiguration.open(directory, testResourceContributions());
+  assert.equal(reopened.snapshot().connections.length, before.connections.length);
+  assert.equal(reopened.snapshot().runtimes.length, before.runtimes.length + 33);
+  assert.equal(
+    reopened.snapshot().profiles.find((profile) => profile.id === 'many')!.workerPool!.length,
+    33,
+  );
+});

@@ -191,13 +191,9 @@ export function validateSegmentLimits(limits: WorkSegmentLimits) {
     !limits ||
     !/^[A-Za-z0-9._:-]{1,100}$/.test(limits.revision) ||
     (limits.maxToolRounds !== undefined &&
-      (!Number.isSafeInteger(limits.maxToolRounds) ||
-        limits.maxToolRounds < 1 ||
-        limits.maxToolRounds > 16)) ||
+      (!Number.isSafeInteger(limits.maxToolRounds) || limits.maxToolRounds < 1)) ||
     (limits.maxSegments !== undefined &&
-      (!Number.isSafeInteger(limits.maxSegments) ||
-        limits.maxSegments < 1 ||
-        limits.maxSegments > 16)) ||
+      (!Number.isSafeInteger(limits.maxSegments) || limits.maxSegments < 1)) ||
     (limits.contextThresholdPercent !== undefined &&
       (!Number.isSafeInteger(limits.contextThresholdPercent) ||
         limits.contextThresholdPercent < 20 ||

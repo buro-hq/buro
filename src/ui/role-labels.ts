@@ -7,7 +7,7 @@ const seeds: Record<string, { title: string; description: string }> = {
   reviewer: { title: 'Reviewer', description: 'Checks result correctness.' },
   coordinator: {
     title: 'Coordinator',
-    description: 'Understands project context, plans and integrates team work.',
+    description: 'Coordinates goal work and chooses actions from actual evidence.',
   },
   local_preview: {
     title: 'Local result verification',
@@ -22,7 +22,7 @@ const seeds: Record<string, { title: string; description: string }> = {
     description: 'Coordinates delivery of an accepted commit to staging or production.',
   },
 };
-/** Localize unchanged seed labels, including legacy labels. User role edits remain content. */
+/** Localize unchanged seed labels, User role edits remain content. */
 export function roleLabels(role: Pick<Role, 'id' | 'title' | 'description'>) {
   const seed = seeds[role.id];
   const translate = (value: string, key: string) =>

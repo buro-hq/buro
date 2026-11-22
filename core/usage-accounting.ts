@@ -1,13 +1,12 @@
 import { DomainError } from './ports.ts';
+import {
+  managedBudgetCountersWithinPolicy,
+  managedBudgetRemaining,
+  type ManagedRunBudgetPolicy,
+} from '../protocol/run-budget.ts';
 
-/** Finite 5A policy: cumulative admissions, not outstanding exposure, enforce these caps. */
-export type UsagePolicy = {
-  version: 1;
-  maxRequests: number;
-  maxReservedOutputTokens: number;
-  maxToolCalls: number;
-  reviewReserve: { requests: number; outputTokens: number; toolCalls: number };
-};
+/** Optional user quotas bound cumulative admissions, not outstanding exposure. */
+export type UsagePolicy = ManagedRunBudgetPolicy;
 export type UsagePhase = 'work' | 'review';
 export type UsageCounters = { requests: number; reservedOutputTokens: number; toolCalls: number };
 export type UsageAccount = {
@@ -111,31 +110,35 @@ function closed(value: unknown, required: string[], optional: string[] = []): bo
   );
 }
 function validPolicy(value: UsagePolicy) {
+  if (
+    !closed(
+      value,
+      ['version'],
+      ['maxRequests', 'maxReservedOutputTokens', 'maxToolCalls', 'reviewReserve'],
+    ) ||
+    value.version !== 1 ||
+    ![value.maxRequests, value.maxReservedOutputTokens, value.maxToolCalls].every(
+      (maximum) => maximum === undefined || safe(maximum),
+    ) ||
+    (value.reviewReserve !== undefined &&
+      (!closed(value.reviewReserve, ['requests', 'outputTokens', 'toolCalls']) ||
+        !Object.values(value.reviewReserve).every(safe)))
+  )
+    return false;
   return (
-    closed(value, [
-      'version',
-      'maxRequests',
-      'maxReservedOutputTokens',
-      'maxToolCalls',
-      'reviewReserve',
-    ]) &&
-    value.version === 1 &&
-    [value.maxRequests, value.maxReservedOutputTokens, value.maxToolCalls].every(safe) &&
-    closed(value.reviewReserve, ['requests', 'outputTokens', 'toolCalls']) &&
-    safe(value.reviewReserve.requests) &&
-    safe(value.reviewReserve.outputTokens) &&
-    safe(value.reviewReserve.toolCalls) &&
-    value.reviewReserve.requests <= value.maxRequests &&
-    value.reviewReserve.outputTokens <= value.maxReservedOutputTokens &&
-    value.reviewReserve.toolCalls <= value.maxToolCalls
-  );
+    [
+      [value.maxRequests, value.reviewReserve?.requests ?? 0],
+      [value.maxReservedOutputTokens, value.reviewReserve?.outputTokens ?? 0],
+      [value.maxToolCalls, value.reviewReserve?.toolCalls ?? 0],
+    ] as const
+  ).every(([maximum, reserve]) => (maximum === undefined ? reserve === 0 : reserve <= maximum));
 }
 
 export function createUsageAccount(input: { id: string; policy: UsagePolicy }): UsageAccount {
   if (!closed(input, ['id', 'policy']) || !id(input.id) || !validPolicy(input.policy))
     throw new DomainError(
       'INVALID_USAGE_POLICY',
-      'An explicit finite usage policy and account identity are required.',
+      'An explicit usage policy and account identity are required.',
     );
   return {
     version: 1,
@@ -226,14 +229,15 @@ function accountCopy(account: UsageAccount): UsageAccount {
     ((observed.inputTokens === null || observed.outputTokens === null) &&
       account.status !== 'poisoned') ||
     account.outstandingOutputTokens > work.reservedOutputTokens + review.reservedOutputTokens ||
-    work.requests + review.requests > account.policy.maxRequests ||
-    work.reservedOutputTokens + review.reservedOutputTokens >
-      account.policy.maxReservedOutputTokens ||
-    work.toolCalls + review.toolCalls > account.policy.maxToolCalls ||
-    work.requests > account.policy.maxRequests - account.policy.reviewReserve.requests ||
-    work.reservedOutputTokens >
-      account.policy.maxReservedOutputTokens - account.policy.reviewReserve.outputTokens ||
-    work.toolCalls > account.policy.maxToolCalls - account.policy.reviewReserve.toolCalls
+    !managedBudgetCountersWithinPolicy(
+      account.policy,
+      {
+        requests,
+        reservedOutputTokens: work.reservedOutputTokens + review.reservedOutputTokens,
+        toolCalls: work.toolCalls + review.toolCalls,
+      },
+      work,
+    )
   )
     throw invalid();
   return structuredClone(account);
@@ -243,7 +247,7 @@ const conflict = () =>
     'USAGE_RECEIPT_CONFLICT',
     'This usage operation belongs to a different admission or observation.',
   );
-const exhausted = () => denied('USAGE_LIMIT_EXHAUSTED', 'The finite usage allowance is exhausted.');
+const exhausted = () => denied('USAGE_LIMIT_EXHAUSTED', 'The configured usage quota is exhausted.');
 const poisoned = () =>
   denied('USAGE_ACCOUNT_POISONED', 'Observed usage requires attention before further dispatch.');
 const overflow = () =>
@@ -320,27 +324,27 @@ export function admitGeneration(
     });
   }
   if (next.status === 'poisoned') return poisoned();
-  const used = next.admitted,
-    policy = next.policy;
-  if (
-    used.work.requests + used.review.requests >= policy.maxRequests ||
-    (proposal.phase === 'work' &&
-      used.work.requests >= policy.maxRequests - policy.reviewReserve.requests)
-  )
-    return exhausted();
-  const remaining = Math.min(
-    policy.maxReservedOutputTokens -
-      used.work.reservedOutputTokens -
-      used.review.reservedOutputTokens,
-    proposal.phase === 'work'
-      ? policy.maxReservedOutputTokens -
-          policy.reviewReserve.outputTokens -
-          used.work.reservedOutputTokens
-      : policy.maxReservedOutputTokens,
-  );
-  const amount = Math.min(proposal.requestedOutputTokens, remaining);
+  const used = next.admitted;
+  const total = {
+    requests: used.work.requests + used.review.requests,
+    reservedOutputTokens: used.work.reservedOutputTokens + used.review.reservedOutputTokens,
+    toolCalls: used.work.toolCalls + used.review.toolCalls,
+  };
+  const remaining = managedBudgetRemaining(next.policy, total, used.work, proposal.phase);
+  if (remaining.requests !== undefined && remaining.requests < 1) return exhausted();
+  const amount =
+    remaining.reservedOutputTokens === undefined
+      ? proposal.requestedOutputTokens
+      : Math.min(proposal.requestedOutputTokens, remaining.reservedOutputTokens);
   if (amount < proposal.minimumOutputTokens) return exhausted();
-  if (!safe(next.revision + 1) || !safe(next.outstandingOutputTokens + amount)) return overflow();
+  if (
+    !safe(next.revision + 1) ||
+    !safe(total.requests + 1) ||
+    !safe(total.reservedOutputTokens + amount) ||
+    !safe(next.observed.unknownUsageRequests + 1) ||
+    !safe(next.outstandingOutputTokens + amount)
+  )
+    return overflow();
   next.revision++;
   used[proposal.phase].requests++;
   used[proposal.phase].reservedOutputTokens += amount;
@@ -387,15 +391,15 @@ export function admitTools(
     return replay(next, prior, { operationId: prior.operationId, count: prior.count });
   }
   if (next.status === 'poisoned') return poisoned();
-  const used = next.admitted,
-    policy = next.policy;
-  if (
-    proposal.count > policy.maxToolCalls - used.work.toolCalls - used.review.toolCalls ||
-    (proposal.phase === 'work' &&
-      proposal.count > policy.maxToolCalls - policy.reviewReserve.toolCalls - used.work.toolCalls)
-  )
-    return exhausted();
-  if (!safe(next.revision + 1)) return overflow();
+  const used = next.admitted;
+  const total = {
+    requests: used.work.requests + used.review.requests,
+    reservedOutputTokens: used.work.reservedOutputTokens + used.review.reservedOutputTokens,
+    toolCalls: used.work.toolCalls + used.review.toolCalls,
+  };
+  const remaining = managedBudgetRemaining(next.policy, total, used.work, proposal.phase).toolCalls;
+  if (remaining !== undefined && proposal.count > remaining) return exhausted();
+  if (!safe(next.revision + 1) || !safe(total.toolCalls + proposal.count)) return overflow();
   next.revision++;
   used[proposal.phase].toolCalls += proposal.count;
   return {

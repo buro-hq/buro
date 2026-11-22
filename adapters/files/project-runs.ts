@@ -27,7 +27,10 @@ import { createManagedRunBudget, managedBudgetSummary } from '../../core/run-bud
 import { projectRunAutonomy } from '../../core/autonomy-policy.ts';
 import { commandCopy } from '../state/transaction-values.ts';
 import { createDocumentFacet, type DocumentFacetHost } from './document-facet.ts';
-import { createDocumentRunPlanRows, validateDocumentRunPlans } from './project-run-plans.ts';
+import {
+  createDocumentRunDelegationRows,
+  validateDocumentRunDelegations,
+} from './project-run-delegations.ts';
 import {
   createDocumentRunAttemptRows,
   projectDocumentAttemptState,
@@ -49,10 +52,10 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
   const { projectId, read } = host;
   const facet = createDocumentFacet(host, (source, access) => {
     const doc = source as RunDocument;
-    const legacy = (id: string) => doc.runs.find((run) => run.id === id);
+    const aggregateRun = (id: string) => doc.runs.find((run) => run.id === id);
     const current = (id: string): RunCurrent | undefined => {
       const head = doc.runHeads?.[id],
-        run = legacy(id);
+        run = aggregateRun(id);
       if (!head) {
         if (run)
           throw new DomainError(
@@ -82,7 +85,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
     };
     const rows: RunTransactionStorage = {
       ...createDocumentRunAttemptRows(doc, access),
-      ...createDocumentRunPlanRows(doc, access),
+      ...createDocumentRunDelegationRows(doc, access),
       current,
       workspace: (id) => {
         const value = doc.runWorkspaces?.[id];
@@ -103,11 +106,11 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
       unresolvedForGoal: (goalId) =>
         doc.runs.some((run) => run.goalId === goalId && !!(run.pendingTurn || run.reconciliation)),
       parentRun: (id) => {
-        const run = legacy(id);
+        const run = aggregateRun(id);
         return run ? { id, status: run.status, commit: run.commit } : undefined;
       },
       timeline: (query) => {
-        const run = legacy(query.runId);
+        const run = aggregateRun(query.runId);
         if (!run) throw new DomainError('NOT_FOUND', 'Run not found.');
         const watermark = query.cursor?.watermark ?? run.events.length;
         if (watermark > run.events.length)
@@ -131,7 +134,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
       insertAdmission: (value) =>
         access.write(() => {
           const admission = validateRunAdmission(value, projectId);
-          if (Object.hasOwn(doc.runAdmissions ?? {}, admission.id) || legacy(admission.runId))
+          if (Object.hasOwn(doc.runAdmissions ?? {}, admission.id) || aggregateRun(admission.runId))
             throw conflict();
           doc.runAdmissions ??= {};
           Object.defineProperty(doc.runAdmissions, admission.id, {
@@ -158,7 +161,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
           const head = validateRunCurrent(value),
             admission = doc.runAdmissions?.[head.admissionId];
           if (
-            legacy(head.id) ||
+            aggregateRun(head.id) ||
             Object.hasOwn(doc.runHeads ?? {}, head.id) ||
             !admission ||
             admission.runId !== head.id ||
@@ -213,7 +216,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
         access.write(() => {
           const binding = validateRunWorkspaceBinding(value),
             head = current(binding.runId),
-            run = legacy(binding.runId);
+            run = aggregateRun(binding.runId);
           if (
             !head ||
             !run ||
@@ -257,7 +260,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
       replaceCurrent: (previous, next) =>
         access.write(() => {
           if (!isDeepStrictEqual(current(previous.id), previous)) throw conflict();
-          const run = legacy(previous.id)!;
+          const run = aggregateRun(previous.id)!;
           doc.runHeads![previous.id] = validateRunCurrent(next);
           const updated = projectDocumentAttemptState(doc, previous, next, run);
           if (!next.cancelRequested || next.phase === 'done')
@@ -287,11 +290,11 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
         }),
       appendTimeline: (entry) =>
         access.write(() => {
-          const run = legacy(entry.runId);
+          const run = aggregateRun(entry.runId);
           if (!run) throw conflict();
           if (entry.type === 'run.queued' || entry.type === 'run.cancel-requested') {
             const last = run.events.at(-1);
-            // The legacy read projector installs the queue/stop item alongside its lifecycle view.
+            // The Run projector installs the queue/stop item alongside its lifecycle view.
             if (last?.at !== entry.at || last.type !== entry.type || last.text !== entry.text)
               throw conflict();
           } else {
@@ -311,7 +314,6 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
           change.type !== 'run.admitted' &&
           change.type !== 'run.lifecycle-changed' &&
           change.type !== 'run.workspace-bound' &&
-          change.type !== 'run.plan-accepted' &&
           change.type !== 'run.worker-delegated' &&
           change.type !== 'run.attempt-stopped' &&
           change.type !== 'run.attempt-continued'
@@ -319,7 +321,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
           access.appendChange(change);
           return;
         }
-        const run = legacy(change.current.id)!;
+        const run = aggregateRun(change.current.id)!;
         const view = {
           ...(run.managedBudget ? { managedBudget: run.managedBudget } : {}),
           ...(run.effectivePolicy ? { effectivePolicy: run.effectivePolicy } : {}),
@@ -338,8 +340,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
     currentAttempt: (id: string) => facet.query((tx) => tx.currentAttempt(id)),
     attempt: (id: string) => facet.query((tx) => tx.attempt(id)),
     attemptStop: (id: string) => facet.query((tx) => tx.attemptStop(id)),
-    planningInput: (id: string) => facet.query((tx) => tx.planningInput(id)),
-    plan: (id: string) => facet.query((tx) => tx.plan(id)),
+    delegationContext: (id: string) => facet.query((tx) => tx.delegationContext(id)),
     assignment: (id: string, roleId: string) => facet.query((tx) => tx.assignment(id, roleId)),
     assignments: (id: string) => facet.query((tx) => tx.assignments(id)),
     workspace: (id: string) => facet.query((tx) => tx.workspace(id)),
@@ -361,12 +362,12 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
   });
 }
 
-/** The temporary legacy transaction API cannot rewrite captured admission identity or first-attempt records. */
+/** The aggregate transaction API cannot rewrite captured admission identity or first-attempt records. */
 export function validateDocumentRunAdmissions(
   previous: ProjectDocument,
   next: ProjectDocument,
 ): void {
-  validateDocumentRunPlans(previous, next);
+  validateDocumentRunDelegations(previous, next);
   validateDocumentRunAttempts(previous, next);
   const before = previous as RunDocument,
     after = next as RunDocument;

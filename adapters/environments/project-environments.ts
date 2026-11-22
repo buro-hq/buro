@@ -1,4 +1,5 @@
 import { operationIds } from '../../core/operation-catalog.ts';
+import { isKnownTurnRejection } from '../../core/run-reconciliation.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -20,7 +21,8 @@ import { runProjectCommand } from '../checks/project-commands.ts';
 import { EnvironmentExecutors } from './executors.ts';
 
 type Input = Parameters<ExecutionEnvironmentPort['prepare']>[0];
-/** Recipes are project data. Installation, readiness, and bounded repair share one execution world. */
+class InvalidEnvironmentRecipeError extends Error {}
+/** Recipes are project data. Installation and readiness share one execution world. */
 export class ProjectEnvironments implements ExecutionEnvironmentPort {
   readonly projects: ProjectRegistry;
   readonly runtime: AgentRuntime;
@@ -101,7 +103,7 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
     }
     let failure = '',
       previousFailure = '';
-    for (let attempt = 0; attempt < 3; attempt++) {
+    while (true) {
       input.signal.throwIfAborted();
       if (!recipe) {
         const planning = performance.now();
@@ -109,21 +111,20 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
           recipe = await this.discover(input, failure);
         } catch (error) {
           input.signal.throwIfAborted();
-          if (/invalid_json_schema|Invalid schema for response_format/.test(String(error)))
+          if (
+            isKnownTurnRejection(error) &&
+            /invalid_json_schema|Invalid schema for response_format/.test(String(error))
+          )
             return {
               name: 'Environment output schema',
               passed: false,
               error: 'The runtime rejected the environment output schema: ' + String(error),
               durationMs: performance.now() - started,
             };
-          failure = 'Invalid environment recipe: ' + String(error);
-          if (attempt === 2)
-            return {
-              name: 'Project environment',
-              passed: false,
-              error: failure,
-              durationMs: performance.now() - started,
-            };
+          // A bad proposal may be corrected; transport/configuration and unknown
+          // outcomes retain their original identity and must never become retries.
+          if (!(error instanceof InvalidEnvironmentRecipeError)) throw error;
+          failure = 'Invalid environment recipe: ' + error.message;
           continue;
         }
         await input.report({
@@ -190,7 +191,7 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
       const signature = createHash('sha256')
         .update(JSON.stringify([recipe, failure]))
         .digest('hex');
-      if (signature === previousFailure || failed.exitCode === -1 || config.recipe || attempt === 2)
+      if (signature === previousFailure || failed.exitCode === -1 || config.recipe)
         return {
           name: 'Project environment',
           passed: false,
@@ -203,7 +204,6 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
       recipe = undefined;
       cacheHit = false;
     }
-    throw Error('Environment preparation did not settle.');
   }
   private async commands(input: Input, commands: EnvironmentRecipe['setup'], stage: string) {
     const checks: Check[] = [];
@@ -269,7 +269,11 @@ Return a reusable recipe: variables must always be an array of {name, value} ent
           timeoutMs: 600000,
         },
       );
-      return parseEnvironmentRecipeOutput(JSON.parse(result.text));
+      try {
+        return parseEnvironmentRecipeOutput(JSON.parse(result.text));
+      } catch (error) {
+        throw new InvalidEnvironmentRecipeError(String(error));
+      }
     } finally {
       await this.runtime.release?.(thread.threadId);
     }

@@ -80,6 +80,7 @@ function checkpoint(): ManagedSession {
       maxRequestsPerTurn: 12,
       maxToolCallsPerTurn: 24,
       maxSessionRequests: 64,
+      maxFeedbackSteps: 2,
     },
     scope,
     assignment: {
@@ -88,6 +89,9 @@ function checkpoint(): ManagedSession {
     },
     scopeRevisions: [
       { revision: 1, scope: structuredClone(scope), instructions: anchor.instructions },
+    ],
+    turnAuthorities: [
+      { turnId: anchor.turnId, toolPolicy: 'normal', startedAtRequest: 0, scopeRevision: 1 },
     ],
     messages: [
       { role: 'system', content: anchor.instructions },
@@ -308,7 +312,7 @@ test('service checks require a persisted pending intent and cannot rewrite compl
       value.workerStepChecks!.entries[0].result!.workspaceFingerprint = 'e'.repeat(64);
     },
     (value) => {
-      value.workerStepChecks!.maxFeedbackSteps = 3 as 2;
+      value.workerStepChecks!.maxFeedbackSteps = 3;
     },
   ];
   for (const mutate of mutations) {

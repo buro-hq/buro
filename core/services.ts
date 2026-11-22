@@ -62,7 +62,7 @@ export class GoalService {
       (tx) => {
         const goal = tx.goal(input.id);
         if (!goal) throw new DomainError('NOT_FOUND', 'Goal not found.');
-        return tx.deleteGoal(input.id, goal.revision || 1);
+        return tx.deleteGoal(input.id, goal.revision);
       },
     );
   }

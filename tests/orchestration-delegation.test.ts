@@ -13,12 +13,12 @@ import {
   fixtureExecutionSelection,
 } from './fixtures/execution-resources.ts';
 import type { ProjectProfile } from '../protocol/domain.ts';
-import type { DelegateRunWorker } from '../core/project-run-plans.ts';
+import type { DelegateRunWorker } from '../core/project-run-delegations.ts';
 import {
-  setUnresolvedPlanFact,
+  setUnresolvedDelegationFact,
   failDelegationTimelineInsert,
   forgeInheritedTaskMode,
-} from './fixtures/sqlite-run-plan-fault.ts';
+} from './fixtures/sqlite-run-delegation-fault.ts';
 import { applyEvent } from '../clients/socket-client.ts';
 import { parseDomainEvent, parseSnapshot } from '../protocol/schema.ts';
 import { buildWorkerEnvelope } from '../core/worker-envelope.ts';
@@ -39,9 +39,9 @@ const command = (id: string) => ({ id, fingerprint: 'delegate:' + id });
 
 async function fixture(t: any, kind: 'file' | 'sqlite') {
   const directory = await fs.realpath(
-    await fs.mkdtemp(path.join(os.tmpdir(), 'buro-run-plan-direct-')),
+    await fs.mkdtemp(path.join(os.tmpdir(), 'buro-run-delegation-direct-')),
   );
-  await fs.writeFile(path.join(directory, '.plan-fault-fixture'), 'synthetic-only');
+  await fs.writeFile(path.join(directory, '.delegation-fault-fixture'), 'synthetic-only');
   const project = { id: 'p', name: 'Direct delegation', root: directory, managed: true };
   let authority: FileProjectStore | SqliteProjectUsageAuthority;
   const open = async () => {
@@ -125,7 +125,7 @@ async function fixture(t: any, kind: 'file' | 'sqlite') {
     assignmentId: 'D-' + roleId,
     now: now(),
     expectedRoleVersion: null,
-    expectedInput: await authority.runs.planningInput(runId),
+    expectedInput: await authority.runs.delegationContext(runId),
     expectedAttemptId: (await authority.runs.current(runId))!.attemptId,
     worker: {
       roleId,
@@ -237,7 +237,7 @@ async function fixture(t: any, kind: 'file' | 'sqlite') {
       );
     },
     unknown: async () => {
-      if (kind === 'sqlite') return setUnresolvedPlanFact(directory, runId);
+      if (kind === 'sqlite') return setUnresolvedDelegationFact(directory, runId);
       const store = authority as FileProjectStore;
       await store.transact('unknown', 'unknown', (draft) => {
         const run = draft.runs.find((r) => r.id === runId)!;
@@ -295,8 +295,6 @@ for (const kind of ['file', 'sqlite'] as const) {
     const one = await f.delegate(first);
     assert.equal(first.expectedInput.workflow.actionsRevision, 'test-action-catalog');
     assert.equal(one.role.provenance.workflow?.actionsRevision, 'test-action-catalog');
-    assert.equal(one.planId, undefined);
-    assert.equal(await f.runs().plan(f.runId), undefined);
     const two = await f.delegate(await f.proposal('tester'));
     assert.deepEqual(await f.runs().assignment(f.runId, 'builder'), one);
     assert.deepEqual(await f.runs().assignments(f.runId), [one, two]);
@@ -328,7 +326,6 @@ for (const kind of ['file', 'sqlite'] as const) {
     }
     await f.reopen();
     assert.deepEqual(await f.runs().assignments(f.runId), [one, two]);
-    assert.equal(await f.runs().plan(f.runId), undefined);
     const replay = await f.delegate(first);
     assert.deepEqual(replay, one);
     const again = { ...(await f.proposal('builder')), expectedRoleVersion: 1 };
@@ -407,7 +404,6 @@ for (const kind of ['file', 'sqlite'] as const) {
     assert.deepEqual(context.inheritedAssignments, {
       builder: { id: original.id, taskMode: 'original' },
     });
-    assert.equal(context.inheritedPlanId, undefined);
     assert.equal(context.taskMode, 'original');
     assert.deepEqual(await f.runs().assignment(f.runId, 'builder'), original);
     const added = await f.delegate(await f.proposal('tester'));
@@ -553,7 +549,7 @@ for (const kind of ['file', 'sqlite'] as const) {
         workspace: path.join(f.directory, 'workspace'),
         assignment,
       });
-    assert.equal(inheritedEnvelope(old).task.source, 'legacy-goal');
+    assert.equal(inheritedEnvelope(old).task.source, 'full-goal');
     assert.ok(inheritedEnvelope(old).task.objective.includes('G2 complete requirement'));
     assert.equal(inheritedEnvelope(current).task.source, 'coordinator');
     assert.equal(inheritedEnvelope(current).task.objective, 'Focused task for G2');

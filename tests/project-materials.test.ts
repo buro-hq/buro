@@ -158,26 +158,24 @@ test('batch deduplication consumes one slot and loader revisions retain separate
   assert.equal(f.rows.size, 2);
 });
 
-test('current finite library limits are checked against actual new and reactivated rows before mutation', () => {
+test('material collections pass the former lifetime limits while identity and reactivation remain exact', () => {
   const active = Array.from({ length: 63 }, (_, i) => material(i + 1));
   const f = fixture(active);
-  assert.throws(() => f.tx.attach([material(64), material(65)]), { code: 'CONTEXT_LIMIT' });
-  assert.equal(f.writes(), 0);
-  assert.equal(f.rows.size, 63);
+  f.tx.attach([material(64), material(65)]);
+  assert.equal(f.rows.size, 65);
+  assert.equal(f.writes(), 2);
   f.tx.attach([material(64), material(64, { id: material(66).id })]);
-  assert.equal(f.rows.size, 64);
+  assert.equal(f.rows.size, 65);
   const canonical = active[0];
   f.tx.remove(canonical.id);
   assert.equal(f.tx.attach([{ ...canonical, id: material(67).id }])[0].id, canonical.id);
   const full = fixture(
     Array.from({ length: 1000 }, (_, i) => material(i + 1, { scope: 'goal', active: false })),
   );
-  assert.throws(() => full.tx.attach([material(1001, { scope: 'goal' })]), {
-    code: 'CONTEXT_LIMIT',
-  });
-  assert.equal(full.writes(), 0);
+  full.tx.attach([material(1001, { scope: 'goal' })]);
+  assert.equal(full.rows.size, 1001);
   assert.equal(full.tx.attach([material(1, { scope: 'goal' })])[0].id, material(1).id);
-  assert.equal(full.rows.size, 1000);
+  assert.equal(full.rows.size, 1001);
 });
 
 test('public material changes reject private extras and expired transaction capabilities cannot access rows', () => {

@@ -114,7 +114,7 @@ const exec = require('node:util').promisify(execFile);
       createdAt: at(0),
       completedAt: at(300),
       updatedAt: at(300),
-      planSavedAt: at(20),
+
       threadId: 'demo-coordinator',
       phase: 'done',
       roleSnapshots: structuredClone(defaultRoles),
@@ -247,6 +247,7 @@ const exec = require('node:util').promisify(execFile);
     const store = host.ctx.projects.registry.get(project.id);
     await store.transact('docs-run', 'docs-run', (doc) => {
       const goal = {
+        revision: 1,
         id: run.goalId,
         projectId: project.id,
         title: run.title,

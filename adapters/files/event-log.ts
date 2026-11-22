@@ -4,7 +4,6 @@ import {
   mergeRunCurrent,
   mergeRunLifecycle,
   mergeRunWorkspace,
-  mergeRunPlan,
   mergeRunWorkerAssignment,
   mergeRunStopped,
   mergeRunContinued,
@@ -106,22 +105,6 @@ export function expandEvent(event: StoredEvent, runs: Map<string, Run>): DomainE
         previous,
         change.current,
         change.assignment,
-        change.entries,
-        change.view,
-      ),
-    );
-    return event as DomainEvent;
-  }
-  if (change.type === 'run.plan-accepted') {
-    const previous = runs.get(change.current.id);
-    if (!previous) throw Error('Missing run checkpoint in event log: ' + change.current.id);
-    runs.set(
-      change.current.id,
-      mergeRunPlan(
-        previous,
-        change.current,
-        change.plan,
-        change.assignments,
         change.entries,
         change.view,
       ),

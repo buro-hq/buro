@@ -23,16 +23,16 @@ const receiptSchema = z.union([
   z.strictObject({
     fingerprint: z.string(),
     setupProfileId: ResourceIdSchema,
-    runtimeIds: z.array(ResourceIdSchema).max(8),
+    runtimeIds: z.array(ResourceIdSchema),
   }),
 ]);
 export const ResourceConfigurationSchema = z
   .strictObject({
     version: z.literal(1),
     defaultProfile: ResourceIdSchema.nullable(),
-    connections: z.array(ResourceConnectionSchema).max(16),
-    runtimes: z.array(RuntimeDefinitionSchema).max(32),
-    profiles: z.array(ResourceProfileSchema).max(32),
+    connections: z.array(ResourceConnectionSchema),
+    runtimes: z.array(RuntimeDefinitionSchema),
+    profiles: z.array(ResourceProfileSchema),
     receipts: z.record(z.string(), receiptSchema).default({}),
   })
   .superRefine((value, ctx) => {
@@ -193,11 +193,6 @@ export class FileResourceConfiguration {
       const next = structuredClone(this.state);
       const index = next.connections.findIndex((item) => item.id === connection.id);
       if (index < 0) {
-        if (next.connections.length >= 16)
-          throw new DomainError(
-            'RESOURCE_CONNECTION_LIMIT',
-            'At most 16 model connections can be configured.',
-          );
         next.connections.push(connection);
       } else next.connections[index] = connection;
       Object.defineProperty(next.receipts, id, {
@@ -248,14 +243,6 @@ export class FileResourceConfiguration {
         throw new DomainError(
           'RESOURCE_SETUP_ID_EXISTS',
           'Runtime and profile IDs must be new and unique. Existing definitions cannot be replaced.',
-        );
-      if (
-        this.state.runtimes.length + setup.runtimes.length > 32 ||
-        this.state.profiles.length >= 32
-      )
-        throw new DomainError(
-          'RESOURCE_SETUP_LIMIT',
-          'At most 32 model runtimes and 32 execution profiles can be configured.',
         );
       await this.assertUnchanged();
       const next = structuredClone(this.state);

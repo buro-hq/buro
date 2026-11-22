@@ -192,11 +192,7 @@ export function projectRoleResourceChoices(input: {
         ...(role.version === undefined ? {} : { roleVersion: role.version }),
         purpose: operation.purpose,
         requirements: structuredClone(operation.requirements),
-        choices: roleResourceEligibility(
-          input.resources,
-          operation.requirements,
-          operation.purpose,
-        ),
+        choices: roleResourceEligibility(input.resources, operation.requirements),
       });
   }
   return rows;

@@ -137,6 +137,7 @@ test('workspace client replay retains evidence, cancellation and source branch w
 test('workspace event updates the File replay baseline before the next packed legacy Run delta', () => {
   const run = preparingRun();
   const goal: Goal = {
+    revision: 1,
     id: current.goalId,
     projectId: 'p',
     title: current.title,

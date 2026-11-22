@@ -18,6 +18,7 @@ async function fixture(t: any, turn: NonNullable<AgentRuntime['turn']>) {
   const run = { ...sampleRun(), status: 'running' as const, completedAt: undefined };
   await store.transact('seed', 'seed', (doc) => {
     const goal = {
+      revision: 1,
       id: run.goalId!,
       projectId: project.id,
       title: run.title,

@@ -566,3 +566,31 @@ test('a caught physical role-head failure cannot commit orphan role versions, en
   assert.equal((await f.sql!.account(owner))!.admitted.work.requests, 1);
   assert.equal((await f.sql!.pagedEvents({ after: watermark, limit: 10 })).events.length, 3);
 });
+
+for (const kind of ['file', 'sqlite'] as const) {
+  test(`${kind}: stored goal revision is mandatory while fresh create issues revision one without user input`, async (t) => {
+    const f = await fixture(t, kind);
+    const malformed = goal('missing-revision') as Partial<Goal>;
+    delete malformed.revision;
+    await assert.rejects(
+      f
+        .entities()
+        .transaction(command('missing-revision'), (tx) => tx.createGoal(malformed as Goal)),
+      { code: 'INVALID_PROJECT_ENTITY' },
+    );
+    assert.equal(await f.entities().goal('missing-revision'), undefined);
+    const created = await f.goals.create('fresh', 'fresh', request());
+    assert.equal(created.revision, 1);
+    await assert.rejects(
+      f.goals.update('missing-cas', 'missing-cas', {
+        ...request(),
+        id: created.id,
+        expectedRevision: undefined as never,
+      }),
+      { code: 'CONFLICT' },
+    );
+    assert.deepEqual(await f.entities().goal(created.id), created);
+    await f.reopen();
+    assert.equal((await f.entities().goal(created.id))?.revision, 1);
+  });
+}

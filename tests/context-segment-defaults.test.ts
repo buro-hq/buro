@@ -92,6 +92,9 @@ test('File checkpoints retain context limits and forbid rewriting their frozen p
   session.scopeRevisions = [
     { revision: 1, scope: structuredClone(session.scope), instructions: anchor.instructions },
   ];
+  session.turnAuthorities = [
+    { turnId: anchor.turnId, toolPolicy: 'normal', startedAtRequest: 0, scopeRevision: 1 },
+  ];
   await sessions.save(session);
   assert.deepEqual(await new FileManagedSessions(directory).load(session.id), session);
   const changed = structuredClone(session);

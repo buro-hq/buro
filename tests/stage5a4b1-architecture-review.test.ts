@@ -30,6 +30,7 @@ test('mixed lifecycle and legacy delta history replays the exact committed Run e
   run.phase = 'planning';
   delete run.completedAt;
   const goal: Goal = {
+    revision: 1,
     id: run.goalId,
     projectId: 'p',
     title: run.title,

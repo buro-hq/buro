@@ -125,7 +125,7 @@ export async function runGoalOrchestration(
   });
   await service.phase(projectId, runId, 'implementation', 'Coordinator is working on the goal');
   let checked: CheckedRun | undefined;
-  let expectedInput = await runs.planningInput(runId);
+  let expectedInput = await runs.delegationContext(runId);
   let expectedRoles: Role[] = [];
   let expectedAssignments = await runs.assignments(runId);
   const invalidate = async () => {
@@ -283,7 +283,7 @@ export async function runGoalOrchestration(
     if (terminal(service.get(projectId, runId))) return;
     run = assertCurrent(service, ctx);
     if (terminal(run)) return;
-    expectedInput = await runs.planningInput(runId);
+    expectedInput = await runs.delegationContext(runId);
     expectedRoles = service.env.projects.get(projectId).snapshot().roles;
     expectedAssignments = await runs.assignments(runId);
     // This complete service packet remains usable after a context rollover. Historical
@@ -327,7 +327,7 @@ export async function runGoalOrchestration(
             local,
           }))
         : [],
-      teamAllowance: policy.maxWorkers,
+      teamAllowance: policy.maxWorkers ?? null,
       filePolicy: policy.scope,
       availableActions: actions.definitions().map(({ id, description }) => ({ id, description })),
     };

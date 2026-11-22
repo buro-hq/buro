@@ -47,7 +47,7 @@ export const EffectivePolicySchema = z
       checkIds: z.array(z.string()),
     }),
     usage: z.strictObject({
-      mode: z.enum(['bounded-managed', 'unknown']),
+      mode: z.enum(['managed', 'unknown']),
       origin: z.enum(['project-profile', 'service-default', 'saved-run']),
       policy: ManagedRunBudgetPolicySchema.optional(),
       coverage: z.enum(['managed-api', 'partial', 'unknown']),
@@ -55,10 +55,10 @@ export const EffectivePolicySchema = z
     }),
   })
   .superRefine((policy, context) => {
-    if ((policy.usage.mode === 'bounded-managed') !== (policy.usage.policy !== undefined))
+    if ((policy.usage.mode === 'managed') !== (policy.usage.policy !== undefined))
       context.addIssue({
         code: 'custom',
-        message: 'A managed limit summary requires its actual policy.',
+        message: 'Managed usage accounting requires its actual policy.',
       });
     if (policy.usage.mode === 'unknown' && policy.usage.coverage !== 'unknown')
       context.addIssue({

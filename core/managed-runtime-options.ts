@@ -24,8 +24,9 @@ export type ManagedRuntimeOptions = {
   limits: {
     contextTokens: number;
     maxOutputTokens: number;
-    maxRequestsPerTurn: number;
-    maxToolCallsPerTurn: number;
-    maxSessionRequests: number;
+    maxRequestsPerTurn?: number;
+    maxToolCallsPerTurn?: number;
+    maxSessionRequests?: number;
+    maxFeedbackSteps?: number;
   };
 };

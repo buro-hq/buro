@@ -101,7 +101,7 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
           additionalProperties: false,
         },
         maxOutputTokens: 1024,
-        contextTokens: 16384,
+        contextTokens: 32768,
         signal: AbortSignal.timeout(120000),
         onProgress() {},
       });
@@ -171,7 +171,7 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
       http: { generations: 0, modelDetails: 0 },
       requests: [],
     };
-    let host, runId, timeout;
+    let host, runId;
     const observedResponses = [];
     const git = (args) => exec('git', args, { cwd: root });
     const saveReport = async () => {
@@ -248,11 +248,8 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
                 connectionId: 'ollama',
                 model,
                 limits: {
-                  contextTokens: 16384,
+                  contextTokens: 32768,
                   maxOutputTokens: 4096,
-                  maxRequestsPerTurn: 12,
-                  maxToolCallsPerTurn: 24,
-                  maxSessionRequests: 64,
                 },
               },
             },
@@ -443,12 +440,7 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
         .runId;
       report.runId = runId;
       await saveReport();
-      timeout = setTimeout(() => {
-        report.timedOut = true;
-        void command({ method: 'run.cancel', params: { projectId: 'p', runId } }).catch(() => {});
-      }, 300000);
       await host.ctx.workflows.api.jobs.get(runId)?.promise;
-      clearTimeout(timeout);
       unsubscribe();
       const run = host.ctx.workflows.api.get('p', runId);
       report.run = {
@@ -533,7 +525,6 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
       process.exitCode = 1;
       console.error('Live Ollama failed:', report.stage, report.error.code, report.error.message);
     } finally {
-      clearTimeout(timeout);
       if (host) await host.dispose();
       report.finishedAt = new Date().toISOString();
       await Promise.all(observedResponses);

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runAttemptStopTimeline, runAttemptContinuationTimeline } from './run-attempt.ts';
-import { runPlanTimeline, runWorkerAssignmentTimeline } from './run-plan.ts';
+import { runWorkerAssignmentTimeline } from './run-delegation.ts';
 import { RoleSchema as role, WorkflowIdentitySchema } from './workflow-roles.ts';
 import { VerificationViewSchema, VerificationEvidenceSchema } from './verification.ts';
 import { ManagedRunBudgetSummarySchema, ManagedBudgetErrorCodeSchema } from './run-budget.ts';
@@ -23,9 +23,7 @@ import { ContextMaterialSchema } from './context.ts';
 import { PendingRunTurnSchema, RunReconciliationSchema } from './reconciliation.ts';
 import { ExecutionPolicySchema } from './execution-policy.ts';
 import { ScopeObservationSchema } from './work-scope.ts';
-import { PlanningPolicySchema, planningPolicyMatchesResource } from './planning-policy.ts';
 import { EffectivePolicySchema, RunStopSchema } from './autonomy.ts';
-export { PlanningPolicySchema } from './planning-policy.ts';
 import {
   WorkerTaskSchema,
   WorkerEnvelopeSchema,
@@ -75,7 +73,7 @@ export const GoalInputSchema = z.strictObject({
   repairEnvironment: z.boolean().optional(),
   parentRunId: id.optional(),
   outcome: GoalOutcomeSchema.optional(),
-  materialIds: z.array(id).max(32).optional(),
+  materialIds: z.array(id).optional(),
 });
 export const CommandSchema = z.discriminatedUnion('method', [
   z.strictObject({ method: z.literal('service.info'), params: z.strictObject({}) }),
@@ -284,14 +282,14 @@ export const GoalSchema = z.object({
   criteria: z.string(),
   status: z.enum(['draft', 'running', 'completed', 'failed']),
   createdAt: z.string(),
-  revision: z.number().int().positive().optional(),
+  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   repairEnvironment: z.boolean().optional(),
   parentRunId: z.string().optional(),
   outcome: GoalOutcomeSchema.optional(),
   runId: z.string().optional(),
 });
 const goal = GoalSchema;
-/** Independent current/grant records. None of these schemas accepts a whole legacy Run. */
+/** Independent current/grant records. None of these schemas accepts a whole Run projection. */
 export const RunCurrentSchema = z.strictObject({
   version: z.literal(1),
   id: z.string().min(1),
@@ -351,7 +349,6 @@ export const RunAdmissionSchema = z.strictObject({
   workflow: WorkflowIdentitySchema,
   roleSnapshots: z.array(role.strict()),
   roleResources: z.record(z.string(), AssignmentResourceSchema),
-  planningPolicy: PlanningPolicySchema,
   contextMaterials: z.array(ContextMaterialSchema.strict()),
   checkIds: z.array(z.string().min(1)),
   repairEnvironment: z.boolean(),
@@ -362,23 +359,7 @@ export const RunAdmissionSchema = z.strictObject({
   outcome: GoalOutcomeSchema,
   parentRunId: z.string().optional(),
 });
-export const RunPlannerSessionGrantSchema = z.strictObject({
-  id: z.string().min(1),
-  roleId: z.string().min(1),
-  roleVersion: z.number().int().nonnegative(),
-  runtimeId: z.string().min(1),
-  providerId: z.string().optional(),
-  model: z.string().optional(),
-  configurationRevision: z.string().optional(),
-  selection: AssignmentSelectionSchema.optional(),
-  parentId: z.string().optional(),
-});
-export const RunPlannerHandoffSchema = z.strictObject({
-  threadId: z.string().min(1),
-  sessionId: z.string().min(1),
-  sessionGrant: RunPlannerSessionGrantSchema,
-});
-export const RunPlanningInputSchema = z.strictObject({
+export const RunDelegationContextSchema = z.strictObject({
   contextSource: z.enum(['initial-admission', 'continuation-attempt']),
   title: z.string(),
   goalText: z.string(),
@@ -388,45 +369,11 @@ export const RunPlanningInputSchema = z.strictObject({
   resources: ResourceSnapshotSchema,
   coordinator: z.strictObject({ role: role.strict(), resource: AssignmentResourceSchema }),
   workflow: WorkflowIdentitySchema,
-  planningPolicy: PlanningPolicySchema,
   repairEnvironment: z.boolean(),
-  readOnlyPlanner: RunPlannerHandoffSchema.optional(),
 });
-export const RunPlanSchema = z
-  .strictObject({
-    version: z.literal(1),
-    id: z.string().min(1),
-    runId: z.string().min(1),
-    admissionId: z.string().min(1),
-    attemptId: z.string().min(1),
-    createdAt: z.string().min(1),
-    summary: z.string(),
-    steps: z
-      .array(z.strictObject({ step: z.string().min(1), owner: z.string().min(1) }))
-      .min(2)
-      .max(12),
-    context: RunPlanningInputSchema,
-    readOnlyPlanner: RunPlannerHandoffSchema.optional(),
-  })
-  .superRefine((plan, ctx) => {
-    const handoff = plan.readOnlyPlanner;
-    if (
-      (plan.context.planningPolicy.strategy === 'read-only-inspection') !== !!handoff ||
-      JSON.stringify(handoff) !== JSON.stringify(plan.context.readOnlyPlanner) ||
-      (handoff &&
-        (handoff.sessionId !== handoff.sessionGrant.id ||
-          handoff.sessionGrant.roleId !== 'coordinator'))
-    )
-      ctx.addIssue({
-        code: 'custom',
-        path: ['readOnlyPlanner'],
-        message: 'An accepted read-only plan must retain its original planner grant.',
-      });
-  });
 export const RunWorkerAssignmentSchema = z.strictObject({
   version: z.literal(1),
   id: z.string().min(1),
-  planId: z.string().min(1).optional(),
   runId: z.string().min(1),
   admissionId: z.string().min(1),
   attemptId: z.string().min(1),
@@ -486,7 +433,6 @@ export const RunAttemptContextSchema = z
     policySource: z.enum(['admission', 'retained-attempt', 'project-profile', 'configured-host']),
     resources: ResourceSnapshotSchema,
     workflow: WorkflowIdentitySchema,
-    planningPolicy: PlanningPolicySchema,
     roleSnapshots: z.array(role.strict()),
     roleResources: z.record(z.string(), AssignmentResourceSchema),
     contextMaterials: z.array(ContextMaterialSchema.strict()),
@@ -502,8 +448,6 @@ export const RunAttemptContextSchema = z
       })
       .optional(),
     workspaceOriginAttemptId: z.string().min(1).optional(),
-    inheritedPlanId: z.string().min(1).optional(),
-    planOriginAttemptId: z.string().min(1).optional(),
     inheritedAssignments: z
       .record(
         z.string().min(1),
@@ -514,8 +458,6 @@ export const RunAttemptContextSchema = z
     taskChanged: z.boolean(),
   })
   .superRefine((context, ctx) => {
-    if ((context.inheritedPlanId === undefined) !== (context.planOriginAttemptId === undefined))
-      ctx.addIssue({ code: 'custom', message: 'Inherited plan origin is required.' });
     if (
       (context.policySource === 'admission') !== (context.continuation === undefined) ||
       (context.continuation &&
@@ -620,7 +562,6 @@ const run = z
     verificationView: VerificationViewSchema.optional(),
     verificationEvidence: VerificationEvidenceSchema.optional(),
     pendingTurn: PendingRunTurnSchema.optional(),
-    planningPolicy: PlanningPolicySchema.optional(),
     effectivePolicy: EffectivePolicySchema.optional(),
     stop: RunStopSchema.optional(),
     managedBudget: ManagedRunBudgetSummarySchema.optional(),
@@ -642,7 +583,6 @@ const run = z
       .optional(),
     delegation: z.literal('buro').optional(),
     coordinatorSession: agentSession.optional(),
-    planningSession: agentSession.optional(),
     contextMaterials: z.array(ContextMaterialSchema).optional(),
     attemptId: z.string().min(1).optional(),
     id: z.string(),
@@ -652,7 +592,6 @@ const run = z
     createdAt: z.string(),
     completedAt: z.string().optional(),
     updatedAt: z.string().optional(),
-    planSavedAt: z.string().optional(),
     threadId: z.string(),
     status: z
       .enum([
@@ -731,7 +670,6 @@ const run = z
           status: z.string(),
           result: z.string(),
           policy: z.unknown().optional(),
-          planningPolicy: PlanningPolicySchema.optional(),
           goalText: z.string(),
           contextMaterials: z.array(ContextMaterialSchema).optional(),
           repairEnvironment: z.boolean().optional(),
@@ -848,14 +786,6 @@ const run = z
         code: 'custom',
         message: 'A reconciliation issue requires its durable reference.',
       });
-    if (run.planningPolicy) {
-      const coordinator = run.roleResources?.coordinator?.resource || run.resources?.coordinator;
-      if (!coordinator || !planningPolicyMatchesResource(run.planningPolicy, coordinator))
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Planning requires its saved configured backend and capabilities.',
-        });
-    }
   });
 /** Public queued presentation only; no resource, role, session or writable grant fields. */
 export const RunAdmissionViewSchema = z.strictObject({
@@ -931,15 +861,7 @@ export const DomainEventSchema = z
         type: z.literal('run.worker-delegated'),
         current: RunCurrentSchema,
         assignment: RunWorkerAssignmentSchema,
-        context: RunPlanningInputSchema,
-        entries: z.array(RunTimelineEntrySchema.omit({ sequence: true })),
-        view: RunAdmissionViewSchema.optional(),
-      }),
-      z.strictObject({
-        type: z.literal('run.plan-accepted'),
-        current: RunCurrentSchema,
-        plan: RunPlanSchema,
-        assignments: z.array(RunWorkerAssignmentSchema),
+        context: RunDelegationContextSchema,
         entries: z.array(RunTimelineEntrySchema.omit({ sequence: true })),
         view: RunAdmissionViewSchema.optional(),
       }),
@@ -1017,7 +939,6 @@ export const DomainEventSchema = z
         current.status !== 'running' ||
         current.cancelRequested ||
         current.completedAt !== undefined ||
-        assignment.planId !== undefined ||
         assignment.runId !== current.id ||
         assignment.admissionId !== current.admissionId ||
         assignment.attemptId !== current.attemptId ||
@@ -1027,43 +948,6 @@ export const DomainEventSchema = z
         ctx.addIssue({
           code: 'custom',
           message: 'A delegation must retain its exact current grant and timeline.',
-        });
-    }
-    if (event.change.type === 'run.plan-accepted') {
-      const { current, plan, assignments, entries } = event.change;
-      if (
-        current.status !== 'running' ||
-        current.phase !== 'planning' ||
-        current.cancelRequested ||
-        current.completedAt !== undefined ||
-        plan.runId !== current.id ||
-        plan.admissionId !== current.admissionId ||
-        plan.attemptId !== current.attemptId ||
-        plan.createdAt !== current.updatedAt ||
-        plan.summary !== current.summary ||
-        JSON.stringify(plan.readOnlyPlanner) !== JSON.stringify(plan.context.readOnlyPlanner) ||
-        assignments.some(
-          (assignment) =>
-            assignment.planId !== plan.id ||
-            assignment.runId !== plan.runId ||
-            assignment.admissionId !== plan.admissionId ||
-            assignment.attemptId !== plan.attemptId,
-        ) ||
-        new Set(assignments.map((assignment) => assignment.role.id)).size !== assignments.length ||
-        plan.steps.some(
-          (step) =>
-            ![
-              'coordinator',
-              'reviewer',
-              ...assignments.map((assignment) => assignment.role.id),
-            ].includes(step.owner),
-        ) ||
-        JSON.stringify(entries) !== JSON.stringify(runPlanTimeline(plan, assignments))
-      )
-        ctx.addIssue({
-          code: 'custom',
-          path: ['change'],
-          message: 'An accepted plan must retain its exact current and assignment identities.',
         });
     }
     if (event.change.type === 'run.workspace-bound') {

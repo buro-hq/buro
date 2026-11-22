@@ -1,4 +1,4 @@
-import type { RunWorkerAssignment } from '../protocol/run-plan.ts';
+import type { RunWorkerAssignment } from '../protocol/run-delegation.ts';
 import type { Role, Run } from '../protocol/domain.ts';
 import { ContextMaterialSchema } from '../protocol/context.ts';
 import {
@@ -185,11 +185,11 @@ export function buildWorkerEnvelope(options: {
           criteria: [...compact.criteria],
         }
       : {
-          source: 'legacy-goal',
+          source: 'full-goal',
           objective: run.goalText,
           inputs: paths.filter(publicWorkerInput),
           expectedResult:
-            'Complete your assigned plan steps and return the formal execution result.',
+            'Complete the assigned goal within its permissions and return the formal execution result.',
           criteria: [],
         },
     scope: {

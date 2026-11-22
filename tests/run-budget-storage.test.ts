@@ -33,7 +33,10 @@ const generation = (operationId: string, phase: 'work' | 'review' = 'work') => (
   minimumOutputTokens: 128,
 });
 
-async function fixture(t: any, options: { missingLedger?: boolean } = {}) {
+async function fixture(
+  t: any,
+  options: { missingLedger?: boolean; policy?: ManagedRunBudgetPolicy } = {},
+) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-budget-storage-'));
   const project = { id: 'p', name: 'Budget fixture', root: directory };
   let store = await FileProjectStore.open({ directory, project });
@@ -50,6 +53,7 @@ async function fixture(t: any, options: { missingLedger?: boolean } = {}) {
   run.status = 'running';
   delete run.completedAt;
   const goal: Goal = {
+    revision: 1,
     id: run.goalId,
     projectId: project.id,
     title: run.title,
@@ -62,7 +66,11 @@ async function fixture(t: any, options: { missingLedger?: boolean } = {}) {
     draft.runs.push(run);
     draft.goals.push(goal);
     if (!options.missingLedger) {
-      const ledger = createManagedRunBudget({ ...owner, policy, coverage: 'managed-api' });
+      const ledger = createManagedRunBudget({
+        ...owner,
+        policy: options.policy ?? policy,
+        coverage: 'managed-api',
+      });
       draft.managedRunBudgets = { [run.id]: ledger };
       run.managedBudget = managedBudgetSummary(ledger);
     }
@@ -89,6 +97,71 @@ async function fixture(t: any, options: { missingLedger?: boolean } = {}) {
     },
   };
 }
+
+test('File default-none accounting survives reopen past former quotas without resetting unknown receipts or policy', async (t) => {
+  const f = await fixture(t, { policy: { version: 1 } });
+  for (let index = 0; index < 80; index++) {
+    if (index === 40) await f.reopen();
+    const operationId = 'none-request-' + index;
+    await f.budgets.reserveGeneration({ ...generation(operationId), requestedOutputTokens: 2048 });
+    await f.budgets.recordUsage({ ...owner, operationId, outcome: 'unknown' });
+  }
+  await f.budgets.reserveTools({ ...owner, operationId: 'none-tools', phase: 'work', count: 1000 });
+  const before = f.store.snapshot().runs[0].managedBudget!;
+  assert.deepEqual(before.policy, { version: 1 });
+  assert.deepEqual(before.used, { requests: 80, reservedOutputTokens: 163840, toolCalls: 1000 });
+  assert.equal(before.observed.unknownUsageRequests, 80);
+  assert.equal(before.status, 'open');
+  for (const [id, mutate] of [
+    [
+      'policy',
+      (ledger: ManagedRunBudgetLedger) => {
+        ledger.policy.maxRequests = 1000;
+      },
+    ],
+    [
+      'receipt',
+      (ledger: ManagedRunBudgetLedger) => {
+        delete ledger.operations['none-request-0'];
+      },
+    ],
+  ] as const) {
+    await assert.rejects(
+      f.store.transact('rewrite-none-' + id, id, (draft) => {
+        mutate(draft.managedRunBudgets![owner.ownerRunId]);
+        return {
+          result: null,
+          change: { type: 'run.changed', run: draft.runs[0], goal: draft.goals[0] },
+        };
+      }),
+      { code: 'INVALID_RUN_BUDGET' },
+    );
+  }
+  await f.reopen();
+  assert.deepEqual(f.store.snapshot().runs[0].managedBudget, before);
+  assert.deepEqual(
+    await f.budgets.reserveGeneration({
+      ...generation('none-request-0'),
+      requestedOutputTokens: 2048,
+    }),
+    { operationId: 'none-request-0', maxOutputTokens: 2048 },
+  );
+  await f.budgets.recordUsage({ ...owner, operationId: 'none-request-0', outcome: 'unknown' });
+  await assert.rejects(
+    f.budgets.recordUsage({
+      ...owner,
+      operationId: 'none-request-0',
+      outcome: 'observed',
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }),
+    { code: 'BUDGET_RECEIPT_CONFLICT' },
+  );
+  assert.deepEqual(f.store.snapshot().runs[0].managedBudget, before);
+  const ledger = (await f.raw()).managedRunBudgets[owner.ownerRunId];
+  assert.deepEqual(ledger.policy, { version: 1 });
+  assert.equal(Object.keys(ledger.operations).length, 81);
+  assert.equal(ledger.operations['none-request-0'].outcome, 'unknown');
+});
 
 test('concurrent coordinator and workers share one durable allowance with review capacity protected', async (t) => {
   const f = await fixture(t);
@@ -325,7 +398,7 @@ test('project transactions cannot expand frozen policy or rewrite earlier reserv
   const before = f.store.snapshot();
   const mutations: ((ledger: ManagedRunBudgetLedger) => void)[] = [
     (ledger) => {
-      ledger.policy.maxRequests++;
+      ledger.policy.maxRequests = ledger.policy.maxRequests! + 1;
     },
     (ledger) => {
       Reflect.set(ledger, 'coverage', 'unsupported-coverage');

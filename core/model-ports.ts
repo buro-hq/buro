@@ -42,20 +42,21 @@ export type ManagedSession = {
   limits: {
     contextTokens: number;
     maxOutputTokens: number;
-    maxRequestsPerTurn: number;
-    maxToolCallsPerTurn: number;
-    maxSessionRequests: number;
+    maxRequestsPerTurn?: number;
+    maxToolCallsPerTurn?: number;
+    maxSessionRequests?: number;
+    maxFeedbackSteps?: number;
   };
   providerId: string;
   providerRevision: string;
   toolRevision: string;
   requestedModel: string;
   reportedModel?: string;
-  /** Service-owned immutable routing purpose; absent legacy values use the work allowance. */
+  /** Service-owned immutable routing purpose; generic runtime starts may omit it. */
   purpose?: RuntimePurpose;
   scope: ToolScope;
   assignment?: { roleId: string; scope: WorkScope };
-  scopeRevisions?: { revision: number; scope: ToolScope; instructions: string }[];
+  scopeRevisions: { revision: number; scope: ToolScope; instructions: string }[];
   /** Service-owned per-turn authority; persisted before generation and never model-controlled. */
   turnAuthorities?: {
     turnId: string;

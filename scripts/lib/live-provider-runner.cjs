@@ -8,12 +8,9 @@ const { promisify } = require('node:util');
 const exec = promisify(execFile);
 
 const DEFAULT_LIVE_LIMITS = Object.freeze({
-  maxGenerationRequests: 24,
-  maxReservedOutputTokens: 65536,
-  maxDiagnosticRequests: 2,
   diagnosticWallTimeMs: 120000,
-  codingWallTimeMs: 300000,
-  contextTokens: 16384,
+  requestTimeoutMs: 120000,
+  contextTokens: 32768,
   maxOutputTokens: 4096,
 });
 const knownTools = new Set([
@@ -86,20 +83,30 @@ function evaluationTargetContract(options = {}) {
 }
 
 function normalizedLimits(input = {}) {
-  const limits = { ...DEFAULT_LIVE_LIMITS, ...input };
-  for (const [name, value] of Object.entries(limits))
-    if (!Number.isSafeInteger(value) || value < 1)
-      throw new LiveEvaluationError('LIVE_INVALID_LIMITS');
-  for (const name of [
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw new LiveEvaluationError('LIVE_INVALID_LIMITS');
+  const optional = [
     'maxGenerationRequests',
     'maxReservedOutputTokens',
     'maxDiagnosticRequests',
-    'diagnosticWallTimeMs',
     'codingWallTimeMs',
-  ])
-    if (limits[name] > DEFAULT_LIVE_LIMITS[name])
+  ];
+  const allowed = new Set([...Object.keys(DEFAULT_LIVE_LIMITS), ...optional]);
+  const limits = { ...DEFAULT_LIVE_LIMITS };
+  for (const [name, value] of Object.entries(input)) {
+    if (!allowed.has(name)) throw new LiveEvaluationError('LIVE_INVALID_LIMITS');
+    if (value !== undefined) limits[name] = value;
+  }
+  for (const value of Object.values(limits))
+    if (!Number.isSafeInteger(value) || value < 1)
+      throw new LiveEvaluationError('LIVE_INVALID_LIMITS');
+  // Timer range is a physical host constraint; absent overall deadlines create no timer.
+  for (const name of ['diagnosticWallTimeMs', 'requestTimeoutMs', 'codingWallTimeMs'])
+    if (limits[name] !== undefined && limits[name] > 2147483647)
       throw new LiveEvaluationError('LIVE_INVALID_LIMITS');
   if (
+    limits.requestTimeoutMs < 10000 ||
+    limits.requestTimeoutMs > 900000 ||
     limits.contextTokens < 1024 ||
     limits.contextTokens > 262144 ||
     limits.maxOutputTokens < 128 ||
@@ -108,6 +115,32 @@ function normalizedLimits(input = {}) {
   )
     throw new LiveEvaluationError('LIVE_INVALID_LIMITS');
   return Object.freeze(limits);
+}
+
+const EVALUATION_LIMIT_OPTIONS = Object.freeze({
+  'context-tokens': { type: 'string' },
+  'max-output-tokens': { type: 'string' },
+  'max-requests': { type: 'string' },
+  'max-reserved-output-tokens': { type: 'string' },
+  'max-diagnostic-requests': { type: 'string' },
+  'overall-time-ms': { type: 'string' },
+  'request-timeout-ms': { type: 'string' },
+});
+function evaluationLimitArguments(values) {
+  const fields = {
+    'context-tokens': 'contextTokens',
+    'max-output-tokens': 'maxOutputTokens',
+    'max-requests': 'maxGenerationRequests',
+    'max-reserved-output-tokens': 'maxReservedOutputTokens',
+    'max-diagnostic-requests': 'maxDiagnosticRequests',
+    'overall-time-ms': 'codingWallTimeMs',
+    'request-timeout-ms': 'requestTimeoutMs',
+  };
+  const budgets = {};
+  for (const [argument, field] of Object.entries(fields))
+    if (values[argument] !== undefined) budgets[field] = Number(values[argument]);
+  normalizedLimits(budgets);
+  return budgets;
 }
 
 /** One reservation ledger covers every probe, agent, repair and review HTTP generation. */
@@ -138,17 +171,22 @@ class EvaluationBudget {
       this.stop(code);
       throw new LiveEvaluationError(code);
     };
-    if (this.tickets.length >= this.limits.maxGenerationRequests)
+    if (
+      this.limits.maxGenerationRequests !== undefined &&
+      this.tickets.length >= this.limits.maxGenerationRequests
+    )
       reject('LIVE_REQUEST_BUDGET_EXHAUSTED');
     if (
       stage === 'diagnostic' &&
+      this.limits.maxDiagnosticRequests !== undefined &&
       this.tickets.filter((ticket) => ticket.stage === 'diagnostic').length >=
         this.limits.maxDiagnosticRequests
     )
       reject('LIVE_DIAGNOSTIC_BUDGET_EXHAUSTED');
     if (
+      this.limits.maxReservedOutputTokens !== undefined &&
       this.tickets.reduce((sum, ticket) => sum + ticket.reservedOutputTokens, 0) + amount >
-      this.limits.maxReservedOutputTokens
+        this.limits.maxReservedOutputTokens
     )
       reject('LIVE_OUTPUT_BUDGET_EXHAUSTED');
     const ticket = {
@@ -228,11 +266,7 @@ function contextBudgets(endpoints, limits, overrides = {}) {
     throw new LiveEvaluationError('LIVE_INVALID_CONTEXT_BUDGET');
   const contexts = {};
   for (const provider of Object.keys(endpoints)) {
-    const tokens =
-      overrides[provider] ??
-      (provider === 'ollama'
-        ? Math.min(limits.contextTokens, DEFAULT_LIVE_LIMITS.contextTokens)
-        : limits.contextTokens);
+    const tokens = overrides[provider] ?? limits.contextTokens;
     if (
       !Number.isSafeInteger(tokens) ||
       tokens < 1024 ||
@@ -698,7 +732,6 @@ async function prepareSyntheticFixture(temporaryDirectory, mode) {
       defaultCheckIds: ['test'],
       setup: [],
       dependencies: 'none',
-      maxWorkers: 1,
       turnTimeoutMs: 120000,
       baseBranch: 'main',
       environment: {
@@ -969,9 +1002,12 @@ async function runLiveProviderEvaluation(options = {}) {
     const runtimeLimits = {
       contextTokens: limits.contextTokens,
       maxOutputTokens: limits.maxOutputTokens,
-      maxRequestsPerTurn: limits.maxGenerationRequests,
-      maxToolCallsPerTurn: 24,
-      maxSessionRequests: limits.maxGenerationRequests,
+      ...(limits.maxGenerationRequests !== undefined
+        ? {
+            maxRequestsPerTurn: limits.maxGenerationRequests,
+            maxSessionRequests: limits.maxGenerationRequests,
+          }
+        : {}),
     };
     const configuration = ResourceConfigurationSchema.parse({
       version: 1,
@@ -1038,7 +1074,7 @@ async function runLiveProviderEvaluation(options = {}) {
       profiles: [
         {
           id: 'evaluation',
-          name: 'Bounded provider evaluation',
+          name: 'Provider evaluation',
           policy: usesDeepSeek || usesCodex ? 'hybrid' : 'local-only',
           coordinator: usesCodex ? 'codex' : usesDeepSeek ? 'deepseek-live' : 'ollama-live',
           worker: usesCodex ? 'codex' : usesOllama ? 'ollama-live' : 'deepseek-live',
@@ -1049,6 +1085,7 @@ async function runLiveProviderEvaluation(options = {}) {
     const profile = ProjectProfileSchema.parse({
       ...fixture.profile,
       resourceProfile: 'evaluation',
+      turnTimeoutMs: limits.requestTimeoutMs,
     });
     await new PrivateJSONFiles(path.join(directory, 'local')).save('resources', configuration);
     host = await createHost({
@@ -1164,11 +1201,12 @@ async function runLiveProviderEvaluation(options = {}) {
       },
     });
     report.stage = 'coding-goal';
-    codingTimer = setTimeout(() => {
-      budget.stop('LIVE_CODING_TIMEOUT');
-      if (runId)
-        void command({ method: 'run.cancel', params: { projectId: 'p', runId } }).catch(() => {});
-    }, limits.codingWallTimeMs);
+    if (limits.codingWallTimeMs !== undefined)
+      codingTimer = setTimeout(() => {
+        budget.stop('LIVE_CODING_TIMEOUT');
+        if (runId)
+          void command({ method: 'run.cancel', params: { projectId: 'p', runId } }).catch(() => {});
+      }, limits.codingWallTimeMs);
     runId = (await command({ method: 'run.start', params: { projectId: 'p', goalId: goal.id } }))
       .runId;
     report.runId = runId;
@@ -1184,7 +1222,6 @@ async function runLiveProviderEvaluation(options = {}) {
     await options.onRunFinished?.({ run, fixture });
     report.run = {
       ...evaluationRunProgress(run),
-      ...(run.planningPolicy ? { planningPolicy: { ...run.planningPolicy } } : {}),
       ...(run.managedBudget ? { managedBudget: structuredClone(run.managedBudget) } : {}),
       status: run.status,
       phase: run.phase,
@@ -1397,6 +1434,8 @@ module.exports = {
   RTX_EVALUATION_MODEL,
   evaluationTargetContract,
   DEFAULT_LIVE_LIMITS,
+  EVALUATION_LIMIT_OPTIONS,
+  evaluationLimitArguments,
   LiveEvaluationError,
   EvaluationBudget,
   normalizedLimits,

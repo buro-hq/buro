@@ -18,17 +18,13 @@ export const projectRunAttemptSchema = `
     policy_source TEXT NOT NULL CHECK(policy_source IN ('retained-attempt','project-profile','configured-host')),
     resources_json TEXT NOT NULL CHECK(json_valid(resources_json)),
     workflow_json TEXT NOT NULL CHECK(json_valid(workflow_json)),
-    planning_policy_json TEXT NOT NULL CHECK(json_valid(planning_policy_json)),
     repair_environment INTEGER NOT NULL CHECK(repair_environment IN (0,1)),
     time_policy_json TEXT NOT NULL CHECK(json_valid(time_policy_json)),
     continuation_json TEXT NOT NULL CHECK(json_valid(continuation_json)),
     workspace_origin_attempt_id TEXT NOT NULL REFERENCES run_attempts(attempt_id),
-    inherited_plan_id TEXT REFERENCES run_plans(plan_id),
-    plan_origin_attempt_id TEXT REFERENCES run_attempts(attempt_id),
     inherited_assignment_refs_json TEXT NOT NULL CHECK(json_valid(inherited_assignment_refs_json)),
     task_mode TEXT NOT NULL CHECK(task_mode IN ('original','full-goal')),
-    task_changed INTEGER NOT NULL CHECK(task_changed IN (0,1)),
-    CHECK((inherited_plan_id IS NULL)=(plan_origin_attempt_id IS NULL))
+    task_changed INTEGER NOT NULL CHECK(task_changed IN (0,1))
   );
   CREATE TABLE IF NOT EXISTS run_attempt_materials (
     attempt_id TEXT NOT NULL REFERENCES run_attempt_contexts(attempt_id),
@@ -159,7 +155,7 @@ export function createSqliteRunAttemptRows(
     attemptContext: (id) => {
       const row = database.get(
         'run.attempt-context.header',
-        'SELECT attempt_id,run_id,admission_id,goal_json,goal_text,policy_json,policy_source,resources_json,workflow_json,planning_policy_json,repair_environment,time_policy_json,continuation_json,workspace_origin_attempt_id,inherited_plan_id,plan_origin_attempt_id,inherited_assignment_refs_json,task_mode,task_changed FROM run_attempt_contexts WHERE attempt_id=?',
+        'SELECT attempt_id,run_id,admission_id,goal_json,goal_text,policy_json,policy_source,resources_json,workflow_json,repair_environment,time_policy_json,continuation_json,workspace_origin_attempt_id,inherited_assignment_refs_json,task_mode,task_changed FROM run_attempt_contexts WHERE attempt_id=?',
         id,
       );
       if (!row) return undefined;
@@ -202,7 +198,6 @@ export function createSqliteRunAttemptRows(
         policySource: row.policy_source,
         resources: parsed(row.resources_json),
         workflow: parsed(row.workflow_json),
-        planningPolicy: parsed(row.planning_policy_json),
         roleSnapshots,
         roleResources: Object.fromEntries(
           roles
@@ -215,12 +210,6 @@ export function createSqliteRunAttemptRows(
         timePolicy: parsed(row.time_policy_json),
         continuation: parsed(row.continuation_json),
         workspaceOriginAttemptId: row.workspace_origin_attempt_id,
-        ...(row.inherited_plan_id === null
-          ? {}
-          : {
-              inheritedPlanId: row.inherited_plan_id,
-              planOriginAttemptId: row.plan_origin_attempt_id,
-            }),
         inheritedAssignments: parsed(row.inherited_assignment_refs_json),
         taskMode: row.task_mode,
         taskChanged: row.task_changed === 1,
@@ -233,7 +222,7 @@ export function createSqliteRunAttemptRows(
         if (!value.continuation || !value.workspaceOriginAttemptId) throw invalid();
         database.run(
           'run.attempt-context.insert',
-          'INSERT INTO run_attempt_contexts(attempt_id,run_id,admission_id,goal_json,goal_text,policy_json,policy_source,resources_json,workflow_json,planning_policy_json,repair_environment,time_policy_json,continuation_json,workspace_origin_attempt_id,inherited_plan_id,plan_origin_attempt_id,inherited_assignment_refs_json,task_mode,task_changed) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+          'INSERT INTO run_attempt_contexts(attempt_id,run_id,admission_id,goal_json,goal_text,policy_json,policy_source,resources_json,workflow_json,repair_environment,time_policy_json,continuation_json,workspace_origin_attempt_id,inherited_assignment_refs_json,task_mode,task_changed) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
           value.attemptId,
           value.runId,
           value.admissionId,
@@ -243,13 +232,10 @@ export function createSqliteRunAttemptRows(
           value.policySource,
           database.json(value.resources),
           database.json(value.workflow),
-          database.json(value.planningPolicy),
           Number(value.repairEnvironment),
           database.json(value.timePolicy),
           database.json(value.continuation),
           value.workspaceOriginAttemptId,
-          value.inheritedPlanId ?? null,
-          value.planOriginAttemptId ?? null,
           database.json(value.inheritedAssignments ?? {}),
           value.taskMode,
           Number(value.taskChanged),

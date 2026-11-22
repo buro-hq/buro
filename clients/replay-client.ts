@@ -31,6 +31,7 @@ export class ReplayProjectClient implements ProjectClient {
       ...input,
       id: 'G-' + crypto.randomUUID(),
       status: 'draft',
+      revision: 1,
       createdAt: new Date().toISOString(),
     };
     this.state = { ...this.state, goals: [...this.state.goals, goal] };
@@ -59,7 +60,7 @@ export class ReplayProjectClient implements ProjectClient {
       (goal) => goal.id === params.id && goal.projectId === params.projectId,
     );
     if (!previous) throw Error('Goal not found.');
-    if ((previous.revision || 1) !== params.expectedRevision)
+    if (previous.revision !== params.expectedRevision)
       throw Error('The goal changed. Reopen the editor.');
     const goal: Goal = {
       ...previous,
@@ -70,7 +71,7 @@ export class ReplayProjectClient implements ProjectClient {
       parentRunId: params.parentRunId,
       outcome: params.outcome,
       materialIds: params.materialIds ?? previous.materialIds,
-      revision: (previous.revision || 1) + 1,
+      revision: previous.revision + 1,
     };
     this.state = {
       ...this.state,

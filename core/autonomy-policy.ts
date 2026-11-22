@@ -143,7 +143,7 @@ function effectivePolicy(input: PolicyInput, run?: Run): EffectivePolicy {
     },
     usage: managed
       ? {
-          mode: 'bounded-managed',
+          mode: 'managed',
           origin: run
             ? 'saved-run'
             : profile?.managedBudget
@@ -188,7 +188,6 @@ const capabilityCodes = new Set([
   'TURN_UNSUPPORTED',
   'RESUME_UNSUPPORTED',
   'VERIFICATION_UNAVAILABLE',
-  'PLANNING_UNSUPPORTED',
   'FIXED_RUNTIME_UNAVAILABLE',
 ]);
 const capacityCodes = new Set([
@@ -201,10 +200,10 @@ const capacityCodes = new Set([
 const budgetCodes = new Set([
   'RUN_BUDGET_EXHAUSTED',
   'RUN_BUDGET_RESERVE_UNAVAILABLE',
-  'RUN_BUDGET_USAGE_EXCEEDED',
-  'INVALID_RUN_BUDGET',
   'MODEL_BUDGET_EXHAUSTED',
   'TOOL_BUDGET_EXHAUSTED',
+  'WORKER_CHECK_FEEDBACK_LIMIT',
+  'WORK_SEGMENT_LIMIT',
 ]);
 const configurationCodes = new Set([
   'MODEL_AUTH_FAILED',
@@ -223,7 +222,6 @@ const configurationCodes = new Set([
   'VERIFICATION_VIEW_UNAVAILABLE',
   'SESSION_MISMATCH',
   'DATA_POLICY_BLOCKED',
-  'INVALID_PLANNING_POLICY',
   'RESOURCE_PROFILE_REQUIRED',
 ]);
 const unknownCodes = new Set([
@@ -255,10 +253,13 @@ function stopForRun(run: Run, context: RunAutonomyContext): RunStop | undefined 
     category = 'unknown';
     message =
       'An earlier operation has an unknown outcome. Work is preserved; execution cannot continue until it is reconciled.';
+  } else if (code === 'RUN_BUDGET_USAGE_EXCEEDED' || code === 'INVALID_RUN_BUDGET') {
+    category = 'configuration';
+    message =
+      'Recorded usage is inconsistent. Inspect the accounting before continuing; saved work is preserved.';
   } else if (budgetCodes.has(code) || run.issue?.code === 'MANAGED_BUDGET_BLOCKED') {
     category = 'user-policy';
-    message =
-      'This run reached a configured or built-in usage limit. Its existing usage and work are preserved.';
+    message = 'This run reached a user-configured usage limit. Its usage and work are preserved.';
   } else if (capabilityCodes.has(code)) {
     category = 'capability';
     message =
@@ -313,8 +314,10 @@ function stopForRun(run: Run, context: RunAutonomyContext): RunStop | undefined 
     const budget = run.managedBudget;
     const reviewAvailable =
       !budget ||
-      (budget.used.requests < budget.policy.maxRequests &&
-        budget.used.reservedOutputTokens < budget.policy.maxReservedOutputTokens);
+      ((budget.policy.maxRequests === undefined ||
+        budget.used.requests < budget.policy.maxRequests) &&
+        (budget.policy.maxReservedOutputTokens === undefined ||
+          budget.used.reservedOutputTokens < budget.policy.maxReservedOutputTokens));
     if (reviewAvailable) actions.push('recheck');
   }
   if (context.goalExists && !context.projectBusy) actions.push('edit-goal');

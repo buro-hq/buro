@@ -110,7 +110,7 @@ test('out-of-order known and partial settlements conserve the finite work/review
       assert.deepEqual(admitGeneration(state, undefined, proposal('later-' + phase, phase, 1)), {
         kind: 'denied',
         code: 'USAGE_LIMIT_EXHAUSTED',
-        message: 'The finite usage allowance is exhausted.',
+        message: 'The configured usage quota is exhausted.',
       });
       assert.equal(
         admitTools(state, undefined, {

@@ -250,7 +250,7 @@ export class CodexRuntime implements AgentRuntime {
     if (options.toolPolicy === 'none')
       throw new DomainError(
         'TOOL_POLICY_UNSUPPORTED',
-        'Native Codex cannot guarantee a tools-free turn. Use capability-selected read-only planning.',
+        'This native backend cannot guarantee a tools-free turn. Select a backend that supports the required tool policy.',
       );
     return this.get(threadId).turn(threadId, text, options);
   }
@@ -305,7 +305,7 @@ class Connection {
     if (this.verification)
       throw new DomainError(
         'ENVIRONMENT_UNAVAILABLE',
-        'Immutable native review requires its named permission profile, not legacy sandbox policy.',
+        'Immutable native review requires its issued named permission profile.',
       );
     return this.readOnly
       ? { type: 'readOnly', networkAccess: false }

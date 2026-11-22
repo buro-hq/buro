@@ -27,7 +27,8 @@ export async function checkManagedWorkerStep(options: {
   signal: AbortSignal;
   id: () => string;
   availableTools: string[];
-  remainingToolCalls: number;
+  remainingToolCalls?: number;
+  maxFeedbackSteps?: number;
   /** Save atomically and adopt the successfully saved checkpoint before resolving. */
   commit: (next: ManagedSession) => Promise<void>;
 }) {
@@ -56,8 +57,9 @@ export async function checkManagedWorkerStep(options: {
   if (!plan) return { disposition: 'skipped' as const };
   validateWorkerStepCheckPlan(plan);
   if (
-    !Number.isSafeInteger(options.remainingToolCalls) ||
-    options.remainingToolCalls < plan.checkIds.length
+    options.remainingToolCalls !== undefined &&
+    (!Number.isSafeInteger(options.remainingToolCalls) ||
+      options.remainingToolCalls < plan.checkIds.length)
   )
     throw new DomainError('TOOL_BUDGET_EXHAUSTED', 'The tool action budget is exhausted.');
   const scopeRevision = session.workSegments.anchor.scopeRevision;
@@ -101,7 +103,9 @@ export async function checkManagedWorkerStep(options: {
   pending.workerStepChecks ||= {
     version: 1,
     revision: WORKER_STEP_CHECK_REVISION,
-    maxFeedbackSteps: 2,
+    ...(options.maxFeedbackSteps !== undefined
+      ? { maxFeedbackSteps: options.maxFeedbackSteps }
+      : {}),
     feedbackSteps: 0,
     entries: [],
   };
@@ -153,7 +157,10 @@ export async function checkManagedWorkerStep(options: {
       toolCallsUsed: plan.checkIds.length,
     };
   const step = session.workSegments!;
-  if (session.workerStepChecks!.feedbackSteps >= session.workerStepChecks!.maxFeedbackSteps)
+  if (
+    session.workerStepChecks!.maxFeedbackSteps !== undefined &&
+    session.workerStepChecks!.feedbackSteps >= session.workerStepChecks!.maxFeedbackSteps
+  )
     throw new DomainError(
       'WORKER_CHECK_FEEDBACK_LIMIT',
       'The saved worker check feedback limit is exhausted.',

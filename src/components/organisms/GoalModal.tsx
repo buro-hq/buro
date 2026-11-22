@@ -51,7 +51,7 @@ export function GoalModal({
           params: {
             projectId: snapshot.project.id,
             id: goal.id,
-            expectedRevision: goal.revision || 1,
+            expectedRevision: goal.revision,
             title: title.trim(),
             body: body.trim(),
             criteria: criteria.trim(),

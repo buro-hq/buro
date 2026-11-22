@@ -54,7 +54,7 @@ function run(): Run {
     status: 'needs-attention',
     workspace: '/owned/workspace',
     baseCommit: 'a'.repeat(40),
-    planSavedAt: 'now',
+
     executionPolicySnapshot: {
       scope: structuredClone(profile.scope),
       checks: profile.checks,
@@ -88,7 +88,7 @@ test('policy projection freezes actual saved scope, source revision and finite m
   const policy = EffectivePolicySchema.parse(effectiveRunPolicy(saved));
   assert.equal(policy.source, 'saved-run');
   assert.deepEqual(policy.origin, { kind: 'project-profile', revision: 4 });
-  assert.equal(policy.usage.mode, 'bounded-managed');
+  assert.equal(policy.usage.mode, 'managed');
   assert.equal(policy.usage.policy!.maxRequests, 12);
   assert.equal(policy.usage.coverage, 'partial');
   assert.deepEqual(saved, before);
@@ -334,4 +334,18 @@ test('a stopped managed budget retains exact counters and only offers a still us
   assert.equal(blocked.actions.includes('recheck'), false);
   assert.equal(blocked.actions.includes('repair'), false);
   assert.equal(blocked.actions.includes('new-run'), true);
+});
+
+test('an accounting integrity failure is not described as a built-in task quota', () => {
+  const saved = run();
+  saved.issue = {
+    code: 'MANAGED_BUDGET_BLOCKED',
+    budgetCode: 'RUN_BUDGET_USAGE_EXCEEDED',
+    message: 'Provider exceeded its output reservation',
+    checks: [],
+  };
+  const stop = projectRunAutonomy(saved, context).stop!;
+  assert.equal(stop.category, 'configuration');
+  assert.match(stop.message, /usage is inconsistent/);
+  assert.doesNotMatch(stop.message, /limit/);
 });

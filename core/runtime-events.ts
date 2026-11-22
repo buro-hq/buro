@@ -21,8 +21,8 @@ export type RuntimeEvent = EventBase &
         parentThreadId: string;
         completed: boolean;
         message?: string;
-        /** Temporary metadata for legacy native children, never a permission grant. */
-        legacyAssignment?: { path?: string; prompt?: string; name?: string };
+        /** Untrusted native child activity hints, never a permission grant. */
+        activityHints?: { path?: string; prompt?: string; name?: string };
       }
     /** Transient text only; completion and durable generation receipts are separate. */
     | { type: 'message.delta'; turnId: string; requestId: string; text: string }

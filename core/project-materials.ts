@@ -148,7 +148,7 @@ export function createMaterialTransaction(options: {
         throw invalid();
       let added = 0,
         activated = 0;
-      // Resolve every identity and limit before the first write, including repeated inputs in this batch.
+      // Resolve every identity before the first write, including repeated inputs in this batch.
       for (const candidate of prepared) {
         const key = projectMaterialIdentity(candidate);
         const byId = material(candidate.id);
@@ -181,11 +181,8 @@ export function createMaterialTransaction(options: {
           results.push(candidate);
         }
       }
-      // Existing finite library limits remain until the planned paged/default-none policy cutover.
-      if (count + added > 1000)
-        throw new DomainError('CONTEXT_LIMIT', 'The project material library is full.');
-      if (active + activated > 64)
-        throw new DomainError('CONTEXT_LIMIT', 'A project can have up to 64 attached materials.');
+      if (!Number.isSafeInteger(count + added) || !Number.isSafeInteger(active + activated))
+        throw invalid();
       for (const change of changes) {
         if (change.previous)
           storage.replace(structuredClone(change.previous), structuredClone(change.next));

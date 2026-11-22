@@ -46,7 +46,7 @@ export type WorkerStepCheckEntry = {
 export type ManagedWorkerStepChecks = {
   version: 1;
   revision: 'worker-step-checks-v1';
-  maxFeedbackSteps: 2;
+  maxFeedbackSteps?: number;
   feedbackSteps: number;
   entries: WorkerStepCheckEntry[];
 };

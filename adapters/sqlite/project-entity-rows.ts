@@ -66,7 +66,7 @@ export function createSqliteEntityRows(database: EntityDatabase): EntityTransact
     );
     if (!row) return undefined;
     const value = validateProjectGoal(JSON.parse(String(row.goal_json)), database.projectId);
-    if (value.id !== row.goal_id || (value.revision ?? 1) !== row.revision)
+    if (value.id !== row.goal_id || value.revision !== row.revision)
       throw new DomainError('INVALID_PROJECT_GOAL', 'The goal differs from its indexed identity.');
     return value;
   };
@@ -139,7 +139,7 @@ export function createSqliteEntityRows(database: EntityDatabase): EntityTransact
             'goal.insert',
             'INSERT INTO project_goals(goal_id,revision,goal_json) VALUES (?,?,?)',
             value.id,
-            value.revision ?? 1,
+            value.revision,
             database.json(value),
           );
         } catch (error) {
@@ -155,10 +155,10 @@ export function createSqliteEntityRows(database: EntityDatabase): EntityTransact
         const changed = database.run(
           'goal.update',
           'UPDATE project_goals SET revision=?,goal_json=? WHERE goal_id=? AND revision=? AND deleted=0 AND goal_json=?',
-          after.revision ?? 1,
+          after.revision,
           database.json(after),
           before.id,
-          before.revision ?? 1,
+          before.revision,
           database.json(before),
         );
         if (Number(changed.changes) !== 1) throw conflict();
@@ -170,7 +170,7 @@ export function createSqliteEntityRows(database: EntityDatabase): EntityTransact
           'goal.delete',
           'UPDATE project_goals SET deleted=1 WHERE goal_id=? AND revision=? AND deleted=0 AND goal_json=?',
           before.id,
-          before.revision ?? 1,
+          before.revision,
           database.json(before),
         );
         if (Number(changed.changes) !== 1) throw conflict();

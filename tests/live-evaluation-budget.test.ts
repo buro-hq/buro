@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const {
   EvaluationBudget,
   normalizedLimits,
+  evaluationLimitArguments,
   contextBudgets,
   preflight,
   loadManagedCheckpoints,
@@ -165,7 +166,7 @@ test('source evaluation exports frozen hashes and bounded receipts without priva
 
 test('mixed evaluation does not increase local model memory when the cloud context budget is larger', () => {
   const limits = normalizedLimits({ contextTokens: 32768 });
-  assert.deepEqual(contextBudgets(endpoints, limits), { ollama: 16384, deepseek: 32768 });
+  assert.deepEqual(contextBudgets(endpoints, limits), { ollama: 32768, deepseek: 32768 });
   assert.deepEqual(contextBudgets(endpoints, limits, { ollama: 8192 }), {
     ollama: 8192,
     deepseek: 32768,
@@ -370,8 +371,8 @@ test('conservative reservations never refund missing or low observed usage', () 
   assert.equal(budget.snapshot().cost, 'unknown');
 });
 
-test('diagnostics have their own two-call cap within the shared ledger', () => {
-  const budget = new EvaluationBudget();
+test('an explicit diagnostic cap remains within the shared ledger', () => {
+  const budget = new EvaluationBudget({ maxDiagnosticRequests: 2 });
   for (const provider of ['ollama', 'deepseek'])
     budget.reserve({ provider, maxOutputTokens: 4096, stage: 'diagnostic' });
   assert.throws(
@@ -381,20 +382,39 @@ test('diagnostics have their own two-call cap within the shared ledger', () => {
   assert.equal(budget.snapshot().generationRequests, 2);
 });
 
-test('limits cannot exceed the acceptance envelope', () => {
+test('only explicit valid quotas and physical request limits are normalized', () => {
   for (const limits of [
-    { maxGenerationRequests: 25 },
-    { maxReservedOutputTokens: 65537 },
-    { maxDiagnosticRequests: 3 },
-    { codingWallTimeMs: 300001 },
-    { diagnosticWallTimeMs: 120001 },
+    { maxGenerationRequests: null },
+    { maxReservedOutputTokens: -1 },
+    { maxDiagnosticRequests: 0 },
+    { codingWallTimeMs: 2147483648 },
+    { diagnosticWallTimeMs: NaN },
+    { requestTimeoutMs: 900001 },
+    { requestTimeoutMs: 9999 },
+    { inventedQuota: 42 },
     { maxOutputTokens: 0 },
-    { maxOutputTokens: 16384 },
+    { maxOutputTokens: 32768 },
     { maxGenerationRequests: 1.1 },
   ])
     assert.throws(() => normalizedLimits(limits), { code: 'LIVE_INVALID_LIMITS' });
   assert.equal(normalizedLimits().maxOutputTokens, 4096);
-  assert.equal(normalizedLimits().contextTokens, 16384);
+  assert.equal(normalizedLimits().contextTokens, 32768);
+  assert.equal(normalizedLimits().requestTimeoutMs, 120000);
+  for (const key of [
+    'maxGenerationRequests',
+    'maxReservedOutputTokens',
+    'maxDiagnosticRequests',
+    'codingWallTimeMs',
+  ])
+    assert.equal(Object.hasOwn(normalizedLimits(), key), false);
+  const explicit = {
+    maxGenerationRequests: 25,
+    maxReservedOutputTokens: 65537,
+    maxDiagnosticRequests: 3,
+    codingWallTimeMs: 300001,
+  };
+  for (const [key, value] of Object.entries(explicit))
+    assert.equal(normalizedLimits(explicit)[key], value);
 });
 
 test('foreign routes, missing reservations and prior cancellation cannot reach HTTP', async () => {
@@ -726,4 +746,68 @@ test('native evaluation requires explicit opt-in and a pinned model without mana
     preflight({ ...options, sourceCase: { id: 'case' }, env: { BURO_LIVE_CODEX: '1' } }).code,
     'LIVE_SOURCE_TRANSFER_NOT_AUTHORIZED',
   );
+});
+
+test('default-none evaluation keeps concurrent usage and unknown outcomes beyond former request/output/diagnostic caps', async () => {
+  const budget = new EvaluationBudget();
+  let calls = 0;
+  const fetch = createBudgetedFetch({
+    endpoints,
+    budget,
+    stage: () => 'diagnostic',
+    fetch: async () => {
+      calls++;
+      await Promise.resolve();
+      return json({});
+    },
+  });
+  await Promise.all(
+    Array.from({ length: 65 }, async (_, index) => {
+      const provider = index % 2 ? 'ollama' : 'deepseek';
+      const route = provider === 'ollama' ? 'api/chat' : 'chat/completions';
+      await (await fetch(endpoints[provider] + route, generation(provider))).text();
+    }),
+  );
+  const result = budget.snapshot();
+  assert.equal(calls, 65);
+  assert.equal(result.generationRequests, 65);
+  assert.equal(result.diagnosticRequests, 65);
+  assert.equal(result.reservedOutputTokens, 65 * 4096);
+  assert.equal(result.requestsWithUnknownUsage, 65);
+  assert.equal(result.requestsWithCompleteUsage, 0);
+  assert.equal(result.reservationRefunds, 0);
+  assert.equal(result.violation, undefined);
+  assert.equal(budget.signal.aborted, false);
+});
+
+test('CLI limit arguments preserve explicit constraints and omit unspecified aggregate limits', () => {
+  assert.deepEqual(evaluationLimitArguments({}), {});
+  assert.deepEqual(
+    evaluationLimitArguments({
+      'context-tokens': '65536',
+      'max-output-tokens': '4096',
+      'max-requests': '25',
+      'max-reserved-output-tokens': '65537',
+      'max-diagnostic-requests': '3',
+      'overall-time-ms': '300001',
+      'request-timeout-ms': '180000',
+    }),
+    {
+      contextTokens: 65536,
+      maxOutputTokens: 4096,
+      maxGenerationRequests: 25,
+      maxReservedOutputTokens: 65537,
+      maxDiagnosticRequests: 3,
+      codingWallTimeMs: 300001,
+      requestTimeoutMs: 180000,
+    },
+  );
+  for (const values of [
+    { 'max-requests': '1.5' },
+    { 'overall-time-ms': '-1' },
+    { 'max-reserved-output-tokens': 'invalid' },
+    { 'max-diagnostic-requests': '0' },
+    { 'request-timeout-ms': '1000' },
+  ])
+    assert.throws(() => evaluationLimitArguments(values), { code: 'LIVE_INVALID_LIMITS' });
 });

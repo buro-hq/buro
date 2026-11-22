@@ -60,7 +60,7 @@ async function server(t: any) {
     managedBudget: {
       ...DEFAULT_MANAGED_RUN_BUDGET_POLICY,
       maxRequests: 31,
-      reviewReserve: { ...DEFAULT_MANAGED_RUN_BUDGET_POLICY.reviewReserve, requests: 4 },
+      reviewReserve: { requests: 4, outputTokens: 0, toolCalls: 0 },
     },
     context: 'Preserve project settings through machine resource setup.',
     scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },

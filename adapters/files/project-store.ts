@@ -30,7 +30,6 @@ import type {
 
 import { packEvent, expandEvent, type StoredEvent } from './event-log.ts';
 import { validateProjectRunBudgets } from './project-run-budgets.ts';
-import { validateProjectPlanningPolicies } from './project-planning-policy.ts';
 import { validateResultApplyIntents } from '../../core/result-apply.ts';
 import { validateRunReconciliationTransitions } from '../../core/reconciliation-transitions.ts';
 import { validateProjectOperationContexts } from '../../core/operation-transitions.ts';
@@ -168,7 +167,6 @@ export class FileProjectStore implements ProjectStore {
       }
       validateDocumentRunAdmissions(doc, doc);
       validateProjectRunBudgets(doc);
-      validateProjectPlanningPolicies(doc);
       validateProjectOperationContexts(doc);
       validateResearchRoleSnapshot(doc);
       validateResultApplyIntents(doc);
@@ -255,7 +253,6 @@ export class FileProjectStore implements ProjectStore {
         );
       validateDocumentRunAdmissions(this.doc, draft);
       validateProjectRunBudgets(draft, this.doc);
-      validateProjectPlanningPolicies(draft, this.doc);
       validateProjectOperationContexts(draft, this.doc);
       validateProjectResearchTransitions(this.doc.research, draft.research);
       validateRoleHistoryTransitions(this.doc.roleVersions, draft.roleVersions);

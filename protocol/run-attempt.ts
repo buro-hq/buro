@@ -2,7 +2,6 @@ import type { Goal, RunIssue, Role } from './domain.ts';
 import type { RunAdmissionPolicy, RunAttempt, RunTimelineEntry } from './run-state.ts';
 import type { ResourceSnapshot, AssignmentResource } from './resources.ts';
 import type { WorkflowIdentity } from './workflow-roles.ts';
-import type { PlanningPolicy } from './planning-policy.ts';
 import type { ContextMaterial } from './context.ts';
 
 /** Complete immutable inputs for one attempt; no session or prior-attempt histories. */
@@ -17,7 +16,6 @@ export type RunAttemptContext = {
   policySource: 'admission' | 'retained-attempt' | 'project-profile' | 'configured-host';
   resources: ResourceSnapshot;
   workflow: WorkflowIdentity;
-  planningPolicy: PlanningPolicy;
   roleSnapshots: Role[];
   roleResources: Record<string, AssignmentResource>;
   contextMaterials: ContextMaterial[];
@@ -31,8 +29,6 @@ export type RunAttemptContext = {
     useCurrentProfile: boolean;
   };
   workspaceOriginAttemptId?: string;
-  inheritedPlanId?: string;
-  planOriginAttemptId?: string;
   /** Exact inherited grant and its task validity; an older goal cannot revive invalidated tasks. */
   inheritedAssignments?: Record<string, { id: string; taskMode: 'original' | 'full-goal' }>;
   /** Conservative aggregate summary; per-role task validity belongs to inheritedAssignments. */

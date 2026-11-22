@@ -9,7 +9,7 @@ export function applyRuntimeEvent(run: Run, event: RuntimeEvent, now: string) {
     let child = run.agents.find((a) => a.threadId === tid);
     if (!child) {
       // Undeclared native children remain visible, but cannot impersonate an assignment.
-      const hints = event.legacyAssignment;
+      const hints = event.activityHints;
       const name = 'native:' + (hints?.name || 'worker');
       child = {
         threadId: tid,

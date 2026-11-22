@@ -67,7 +67,6 @@ async function main() {
     endpoints: { deepseek: 'https://api.deepseek.com', ollama: 'http://127.0.0.1:11434' },
     models: { deepseek: 'deepseek-flash', ollama: 'qwen3:4b-instruct-2507-q4_K_M' },
     budgets: { contextTokens: 32768, maxOutputTokens: 2048 },
-    contextTokensByProvider: { ollama: 16384 },
     sourceCase,
     segmentPolicy,
     forceWorker: true,

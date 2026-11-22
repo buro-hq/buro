@@ -168,3 +168,28 @@ test('immutable role versions append with expected head and public entity events
   assert.throws(() => f.tx.role(role.id), /closed/);
   assert.throws(() => f.tx.createGoal(initial), /closed/);
 });
+
+test('a stored goal without its revision cannot masquerade as revision one during edit or delete CAS', () => {
+  const f = fixture();
+  f.tx.createGoal(initial);
+  const malformed = { ...initial } as Partial<Goal>;
+  delete malformed.revision;
+  f.goals.set(initial.id, malformed as Goal);
+  const before = structuredClone(f.events);
+  assert.throws(
+    () =>
+      f.tx.updateGoal(initial.id, 1, {
+        title: 'Changed',
+        body: initial.body,
+        criteria: initial.criteria,
+      }),
+    { code: 'INVALID_PROJECT_ENTITY' },
+  );
+  assert.throws(() => f.tx.deleteGoal(initial.id, 1), { code: 'INVALID_PROJECT_ENTITY' });
+  assert.throws(
+    () => validateProjectEntityChange({ type: 'goal.created', goal: malformed }, initial.projectId),
+    { code: 'INVALID_PROJECT_ENTITY' },
+  );
+  assert.deepEqual(f.events, before);
+  assert.deepEqual(f.goals.get(initial.id), malformed);
+});

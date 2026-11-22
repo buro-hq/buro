@@ -220,11 +220,12 @@ const samePolicy = (left: UsagePolicy, right: UsagePolicy) =>
   left.maxRequests === right.maxRequests &&
   left.maxReservedOutputTokens === right.maxReservedOutputTokens &&
   left.maxToolCalls === right.maxToolCalls &&
-  left.reviewReserve.requests === right.reviewReserve.requests &&
-  left.reviewReserve.outputTokens === right.reviewReserve.outputTokens &&
-  left.reviewReserve.toolCalls === right.reviewReserve.toolCalls;
+  (left.reviewReserve === undefined) === (right.reviewReserve === undefined) &&
+  left.reviewReserve?.requests === right.reviewReserve?.requests &&
+  left.reviewReserve?.outputTokens === right.reviewReserve?.outputTokens &&
+  left.reviewReserve?.toolCalls === right.reviewReserve?.toolCalls;
 
-/** Actual finite-engine consumer; all row mutations and events remain in the adapter's open transaction. */
+/** All row mutations and events remain in the adapter's open transaction. */
 export function createUsageAuthorityTransaction(options: {
   projectId: string;
   storage: UsageTransactionStorage;
@@ -417,7 +418,6 @@ export function validateProjectAuthorityChange(
     change.type === 'run.cancel-requested' ||
     change.type === 'run.lifecycle-changed' ||
     change.type === 'run.workspace-bound' ||
-    change.type === 'run.plan-accepted' ||
     change.type === 'run.worker-delegated' ||
     change.type === 'run.attempt-stopped' ||
     change.type === 'run.attempt-continued'

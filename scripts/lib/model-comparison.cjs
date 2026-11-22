@@ -348,7 +348,6 @@ async function prepareComparisonFixture({ temporaryDirectory }) {
       defaultCheckIds: ['test'],
       setup: [],
       dependencies: 'none',
-      maxWorkers: 1,
       turnTimeoutMs: 120000,
       baseBranch: 'main',
       environment: {
@@ -528,12 +527,15 @@ async function runDirectCodex({ fixture, config, codex = {} }) {
   });
   let timedOut = false,
     cleanup = Promise.resolve();
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-    cleanup = runtime.dispose();
-    void cleanup.catch(() => {});
-  }, config.limits.codingWallTimeMs);
+  const timer =
+    config.limits.codingWallTimeMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+          cleanup = runtime.dispose();
+          void cleanup.catch(() => {});
+        }, config.limits.codingWallTimeMs);
   const started = Date.now();
   try {
     const { threadId } = await runtime.start({
@@ -552,7 +554,7 @@ async function runDirectCodex({ fixture, config, codex = {} }) {
         additionalProperties: false,
       },
       signal: controller.signal,
-      timeoutMs: config.limits.codingWallTimeMs,
+      timeoutMs: config.limits.requestTimeoutMs,
     });
     return {
       status: timedOut ? 'timeout' : 'completed',
@@ -614,9 +616,10 @@ function summarizeProvider(report, native) {
           observedOutputTokens: count(report?.nativeUsage?.outputTokens),
         }
       : {
-          kind: 'managed-enforced',
-          requestsEnforced: true,
-          tokensEnforced: true,
+          kind: 'managed-accounted',
+          requestsEnforced: budget.limits?.maxGenerationRequests !== undefined,
+          tokensEnforced: budget.limits?.maxReservedOutputTokens !== undefined,
+          requestOutputEnforced: true,
           generationRequests: count(budget.generationRequests),
           diagnosticRequests: count(budget.diagnosticRequests),
           codingGenerationRequests:

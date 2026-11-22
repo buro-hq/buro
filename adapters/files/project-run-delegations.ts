@@ -3,12 +3,10 @@ import type { ProjectDocument } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
 import type { RunTransactionStorage } from '../../core/project-runs.ts';
 import {
-  validateRunPlan,
-  plannerSessionGrant,
-  validateRunPlanningInput,
+  validateRunDelegationContext,
   validateRunWorkerAssignment,
-} from '../../core/project-run-plans.ts';
-import type { RunPlan, RunWorkerAssignment } from '../../protocol/run-plan.ts';
+} from '../../core/project-run-delegations.ts';
+import type { RunWorkerAssignment } from '../../protocol/run-delegation.ts';
 import type { RunCurrent, RunAdmission } from '../../protocol/run-state.ts';
 import { validateProjectRole } from '../../core/project-entities.ts';
 import { documentAttemptContext } from './project-run-attempts.ts';
@@ -17,9 +15,7 @@ import { validateAssignmentResource } from '../../core/assignment-routing.ts';
 import { planPathAllowed } from '../../core/execution-ports.ts';
 import { withEnvironmentRepair } from '../../core/environment-repair.ts';
 
-type PlanningDocument = ProjectDocument & {
-  runPlans?: Record<string, RunPlan>;
-  runPlanHeads?: Record<string, string>;
+type DelegationDocument = ProjectDocument & {
   runAssignments?: Record<string, RunWorkerAssignment>;
   runAssignmentHeads?: Record<string, Record<string, string>>;
   runHeads?: Record<string, RunCurrent>;
@@ -27,10 +23,10 @@ type PlanningDocument = ProjectDocument & {
 };
 type Access = { write<T>(action: () => T): T };
 const invalid = () =>
-  new DomainError('IMMUTABLE_RUN_PLAN', 'Saved run planning records cannot change.');
-const conflict = () => new DomainError('CONFLICT', 'The run planning state changed.');
-const initialPlanningInput = (admission: RunAdmission) =>
-  validateRunPlanningInput({
+  new DomainError('IMMUTABLE_RUN_ASSIGNMENT', 'Saved run delegation records cannot change.');
+const conflict = () => new DomainError('CONFLICT', 'The delegation state changed.');
+const initialDelegationContext = (admission: RunAdmission) =>
+  validateRunDelegationContext({
     contextSource: 'initial-admission',
     title: admission.goal.title,
     goalText: admission.goalText,
@@ -43,11 +39,10 @@ const initialPlanningInput = (admission: RunAdmission) =>
       resource: admission.roleResources.coordinator,
     },
     workflow: admission.workflow,
-    planningPolicy: admission.planningPolicy,
     repairEnvironment: admission.repairEnvironment,
   });
-const attemptPlanningInput = (context: RunAttemptContext) =>
-  validateRunPlanningInput({
+const attemptDelegationContext = (context: RunAttemptContext) =>
+  validateRunDelegationContext({
     contextSource: 'continuation-attempt',
     title: context.goal.title,
     goalText: context.goalText,
@@ -60,24 +55,17 @@ const attemptPlanningInput = (context: RunAttemptContext) =>
       resource: context.roleResources.coordinator,
     },
     workflow: context.workflow,
-    planningPolicy: context.planningPolicy,
     repairEnvironment: context.repairEnvironment,
   });
 
-export function createDocumentRunPlanRows(
+export function createDocumentRunDelegationRows(
   source: ProjectDocument,
   access: Access,
 ): Pick<
   RunTransactionStorage,
-  | 'planningInput'
-  | 'plan'
-  | 'assignment'
-  | 'planAssignments'
-  | 'insertPlan'
-  | 'insertAssignment'
-  | 'sealPlanningSession'
+  'delegationContext' | 'assignment' | 'assignments' | 'insertAssignment'
 > {
-  const doc = source as PlanningDocument;
+  const doc = source as DelegationDocument;
   const insertAssignment = (candidate: RunWorkerAssignment) =>
     access.write(() => {
       const assignment = validateRunWorkerAssignment(candidate);
@@ -117,13 +105,13 @@ export function createDocumentRunPlanRows(
     });
   return {
     insertAssignment,
-    planningInput: (runId) => {
+    delegationContext: (runId) => {
       const run = doc.runs.find((run) => run.id === runId);
       if (!run) throw new DomainError('NOT_FOUND', 'Run not found.');
       const head = doc.runHeads?.[runId];
       if (!head) throw invalid();
       const context = documentAttemptContext(doc, head.attemptId);
-      const input = validateRunPlanningInput({
+      const input = validateRunDelegationContext({
         contextSource: context.continuation ? 'continuation-attempt' : 'initial-admission',
         title: run.title,
         goalText: run.goalText,
@@ -136,169 +124,43 @@ export function createDocumentRunPlanRows(
           resource: run.roleResources?.coordinator,
         },
         workflow: run.workflow,
-        planningPolicy: run.planningPolicy,
         repairEnvironment: !!run.repairEnvironment,
-        ...(run.planningPolicy?.strategy === 'read-only-inspection' &&
-        run.threadId &&
-        run.coordinatorSession
-          ? {
-              readOnlyPlanner: {
-                threadId: run.threadId,
-                sessionId: run.coordinatorSession.id,
-                sessionGrant: plannerSessionGrant(run.coordinatorSession),
-              },
-            }
-          : {}),
       });
       if (!context.continuation) {
         const admissionId = doc.runHeads?.[runId]?.admissionId;
         const admission = admissionId ? doc.runAdmissions?.[admissionId] : undefined;
         if (!admission || admission.runId !== runId) throw invalid();
-        const expected = initialPlanningInput(admission);
-        const { readOnlyPlanner: _planner, ...actual } = input;
-        if (!isDeepStrictEqual(actual, expected)) throw invalid();
+        const expected = initialDelegationContext(admission);
+        if (!isDeepStrictEqual(input, expected)) throw invalid();
       } else {
-        const { readOnlyPlanner: _planner, ...actual } = input;
-        if (!isDeepStrictEqual(actual, attemptPlanningInput(context))) throw invalid();
+        if (!isDeepStrictEqual(input, attemptDelegationContext(context))) throw invalid();
       }
       return input;
-    },
-    plan: (runId) => {
-      const id = doc.runPlanHeads?.[runId];
-      if (id === undefined) return undefined;
-      const saved = doc.runPlans?.[id];
-      if (!saved) throw invalid();
-      return validateRunPlan(saved);
     },
     assignment: (runId, roleId) => {
       const id = doc.runAssignmentHeads?.[runId]?.[roleId];
       const saved = id === undefined ? undefined : doc.runAssignments?.[id];
       return saved === undefined ? undefined : validateRunWorkerAssignment(saved);
     },
-    planAssignments: (runId) =>
+    assignments: (runId) =>
       Object.values(doc.runAssignmentHeads?.[runId] ?? {}).map((id) => {
         const saved = doc.runAssignments?.[id];
         if (!saved) throw invalid();
         return validateRunWorkerAssignment(saved);
       }),
-    insertPlan: (candidate, candidates) =>
-      access.write(() => {
-        const plan = validateRunPlan(candidate),
-          run = doc.runs.find((run) => run.id === plan.runId);
-        if (
-          !run ||
-          Object.hasOwn(doc.runPlans ?? {}, plan.id) ||
-          Object.hasOwn(doc.runPlanHeads ?? {}, plan.runId)
-        )
-          throw conflict();
-        if (Object.keys(doc.runAssignmentHeads?.[plan.runId] ?? {}).length) throw conflict();
-        const assignments = candidates.map(validateRunWorkerAssignment);
-        for (const assignment of assignments) {
-          if (
-            assignment.planId !== plan.id ||
-            assignment.runId !== plan.runId ||
-            assignment.admissionId !== plan.admissionId ||
-            assignment.attemptId !== plan.attemptId
-          )
-            throw invalid();
-        }
-        doc.runPlans ??= {};
-        doc.runPlanHeads ??= {};
-        Object.defineProperty(doc.runPlans, plan.id, {
-          value: plan,
-          enumerable: true,
-          writable: false,
-          configurable: false,
-        });
-        Object.defineProperty(doc.runPlanHeads, plan.runId, {
-          value: plan.id,
-          enumerable: true,
-          writable: false,
-          configurable: false,
-        });
-        run.plan = structuredClone(plan.steps);
-        run.planSavedAt = plan.createdAt;
-        doc.runAssignmentHeads ??= {};
-        doc.runAssignmentHeads[plan.runId] = {};
-        run.roleOrigins = {};
-        run.roleAssignments = {};
-        run.assignmentResources = {};
-        run.workerTasks = {};
-        for (const assignment of assignments) insertAssignment(assignment);
-      }),
-    sealPlanningSession: (runId, planner) =>
-      access.write(() => {
-        const run = doc.runs.find((run) => run.id === runId);
-        if (
-          !run ||
-          run.threadId !== planner.threadId ||
-          run.coordinatorSession?.id !== planner.sessionId ||
-          !isDeepStrictEqual(plannerSessionGrant(run.coordinatorSession), planner.sessionGrant) ||
-          run.planningPolicy?.strategy !== 'read-only-inspection'
-        )
-          throw conflict();
-        run.planningSession = run.coordinatorSession;
-        run.coordinatorSession = undefined;
-        run.threadId = '';
-      }),
   };
 }
 
 /** Original decisions stay immutable; task refinements and continuation context retain their later owners. */
-export function validateDocumentRunPlans(previous: ProjectDocument, next: ProjectDocument) {
-  const before = previous as PlanningDocument,
-    after = next as PlanningDocument;
-  for (const [id, original] of Object.entries(before.runPlans ?? {}))
-    if (
-      !after.runPlans?.[id] ||
-      !isDeepStrictEqual(validateRunPlan(original), validateRunPlan(after.runPlans[id]))
-    )
-      throw invalid();
+export function validateDocumentRunDelegations(previous: ProjectDocument, next: ProjectDocument) {
+  const before = previous as DelegationDocument,
+    after = next as DelegationDocument;
   for (const [id, original] of Object.entries(before.runAssignments ?? {}))
     if (!after.runAssignments?.[id] || !isDeepStrictEqual(original, after.runAssignments[id]))
       throw invalid();
-  for (const [runId, planId] of Object.entries(before.runPlanHeads ?? {}))
-    if (after.runPlanHeads?.[runId] !== planId) throw invalid();
   for (const [runId, heads] of Object.entries(before.runAssignmentHeads ?? {}))
     for (const [roleId, id] of Object.entries(heads))
       if (after.runAssignmentHeads?.[runId]?.[roleId] !== id) throw invalid();
-  for (const [id, value] of Object.entries(after.runPlans ?? {})) {
-    const plan = validateRunPlan(value),
-      run = after.runs.find((run) => run.id === plan.runId),
-      head = after.runHeads?.[plan.runId];
-    if (
-      plan.id !== id ||
-      after.runPlanHeads?.[plan.runId] !== id ||
-      !run ||
-      !head ||
-      head.admissionId !== plan.admissionId ||
-      (head.attemptId !== plan.attemptId &&
-        (documentAttemptContext(after, head.attemptId).inheritedPlanId !== id ||
-          documentAttemptContext(after, head.attemptId).planOriginAttemptId !== plan.attemptId)) ||
-      !isDeepStrictEqual(run.plan, plan.steps) ||
-      run.planSavedAt !== plan.createdAt
-    )
-      throw invalid();
-    const expected =
-      plan.context.contextSource === 'initial-admission'
-        ? after.runAdmissions?.[plan.admissionId] &&
-          initialPlanningInput(after.runAdmissions[plan.admissionId])
-        : attemptPlanningInput(documentAttemptContext(after, plan.attemptId));
-    const { readOnlyPlanner: _planner, ...captured } = plan.context;
-    if (!expected || !isDeepStrictEqual(captured, expected)) throw invalid();
-    if (
-      plan.readOnlyPlanner &&
-      (!run.planningSession ||
-        !isDeepStrictEqual(
-          plannerSessionGrant(run.planningSession),
-          plan.readOnlyPlanner.sessionGrant,
-        ) ||
-        run.planningSession.id !== plan.readOnlyPlanner.sessionId ||
-        run.threadId === plan.readOnlyPlanner.threadId ||
-        run.coordinatorSession?.id === plan.readOnlyPlanner.sessionId)
-    )
-      throw invalid();
-  }
   for (const [id, value] of Object.entries(after.runAssignments ?? {})) {
     const assignment = validateRunWorkerAssignment(value);
     const head = after.runHeads?.[assignment.runId];
@@ -327,12 +189,6 @@ export function validateDocumentRunPlans(previous: ProjectDocument, next: Projec
       after.runAssignmentHeads?.[assignment.runId]?.[assignment.role.id] !== id ||
       !role ||
       !isDeepStrictEqual(validateProjectRole(role), assignment.role)
-    )
-      throw invalid();
-    if (
-      assignment.planId &&
-      (after.runPlans?.[assignment.planId]?.runId !== assignment.runId ||
-        after.runPlans[assignment.planId].attemptId !== assignment.attemptId)
     )
       throw invalid();
   }
@@ -367,11 +223,14 @@ export function validateDocumentRunPlans(previous: ProjectDocument, next: Projec
       )
         throw invalid();
   }
-  for (const [runId, planId] of Object.entries(after.runPlanHeads ?? {}))
-    if (after.runPlans?.[planId]?.runId !== runId) throw invalid();
+  const rows = createDocumentRunDelegationRows(after, {
+    write() {
+      throw invalid();
+    },
+  });
   for (const runId of Object.keys(after.runHeads ?? {})) {
+    rows.delegationContext(runId);
     const run = after.runs.find((run) => run.id === runId);
-    if (run?.planSavedAt !== undefined && !after.runPlanHeads?.[runId]) throw invalid();
     if (
       (run?.roleAssignments !== undefined || run?.assignmentResources !== undefined) &&
       !after.runAssignmentHeads?.[runId]

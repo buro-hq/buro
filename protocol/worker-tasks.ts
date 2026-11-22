@@ -31,8 +31,8 @@ export const WorkerReplanSchema = z.discriminatedUnion('status', [
 ]);
 export type WorkerReplan = z.infer<typeof WorkerReplanSchema>;
 
-const legacyTask = z.strictObject({
-  source: z.literal('legacy-goal'),
+const fullGoalTask = z.strictObject({
+  source: z.literal('full-goal'),
   // Existing goals remain complete; only coordinator proposals have the tighter task limits.
   objective: z.string(),
   inputs: z.array(z.string()),
@@ -46,7 +46,7 @@ export const WorkerEnvelopeSchema = z.strictObject({
   goal: z.strictObject({ id: z.string().optional(), title: z.string() }),
   task: z.discriminatedUnion('source', [
     WorkerTaskSchema.extend({ source: z.literal('coordinator') }),
-    legacyTask,
+    fullGoalTask,
   ]),
   scope: WorkScopeSchema,
   steps: z.array(z.string()),

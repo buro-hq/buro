@@ -16,7 +16,7 @@ import type {
 } from '../../protocol/run-state.ts';
 import type { RunAttemptContext, RunAttemptStop } from '../../protocol/run-attempt.ts';
 import type { Run } from '../../protocol/domain.ts';
-import type { RunPlan, RunWorkerAssignment } from '../../protocol/run-plan.ts';
+import type { RunWorkerAssignment } from '../../protocol/run-delegation.ts';
 import { managedBudgetSummary } from '../../core/run-budget.ts';
 import { mergeRunContinued, mergeRunStopped, mergeRunCurrent } from '../../protocol/run-view.ts';
 
@@ -27,8 +27,6 @@ type AttemptDocument = ProjectDocument & {
   runAttemptStops?: Record<string, RunAttemptStop>;
   runHeads?: Record<string, RunCurrent>;
   runWorkspaces?: Record<string, RunWorkspaceBinding>;
-  runPlans?: Record<string, RunPlan>;
-  runPlanHeads?: Record<string, string>;
   runAssignments?: Record<string, RunWorkerAssignment>;
   runAssignmentHeads?: Record<string, Record<string, string>>;
 };
@@ -46,11 +44,7 @@ const lineageRows = (doc: AttemptDocument) => ({
     },
   }),
   workspace: (runId: string) => doc.runWorkspaces?.[runId],
-  plan: (runId: string) => {
-    const id = doc.runPlanHeads?.[runId];
-    return id === undefined ? undefined : doc.runPlans?.[id];
-  },
-  planAssignments: (runId: string) => {
+  assignments: (runId: string) => {
     return Object.values(doc.runAssignmentHeads?.[runId] ?? {}).map((id) => {
       const assignment = doc.runAssignments?.[id];
       if (!assignment) throw invalid();
@@ -84,7 +78,6 @@ export function documentAttemptContext(source: ProjectDocument, id: string): Run
     policySource: 'admission',
     resources: admission.resources,
     workflow: admission.workflow,
-    planningPolicy: admission.planningPolicy,
     roleSnapshots: admission.roleSnapshots,
     roleResources: admission.roleResources,
     contextMaterials: admission.contextMaterials,
@@ -192,7 +185,7 @@ export function projectDocumentAttemptState(
     return mergeRunStopped(run, next, stop, []);
   return mergeRunCurrent(run, next);
 }
-/** File is still the sole aggregate authority; these guards prevent its legacy callback from bypassing the new owner. */
+/** File is still the sole aggregate authority; these guards prevent its aggregate update callback from bypassing the new owner. */
 export function validateDocumentRunAttempts(previous: ProjectDocument, next: ProjectDocument) {
   const before = previous as AttemptDocument,
     after = next as AttemptDocument;
@@ -252,16 +245,6 @@ export function validateDocumentRunAttempts(previous: ProjectDocument, next: Pro
       workspace.admissionId !== context.admissionId
     )
       throw invalid();
-    if (context.inheritedPlanId) {
-      const plan = after.runPlans?.[context.inheritedPlanId];
-      if (
-        !plan ||
-        plan.attemptId !== context.planOriginAttemptId ||
-        plan.runId !== context.runId ||
-        plan.admissionId !== context.admissionId
-      )
-        throw invalid();
-    }
     for (const [roleId, reference] of Object.entries(context.inheritedAssignments ?? {})) {
       const assignment = after.runAssignments?.[reference.id];
       if (
@@ -314,7 +297,6 @@ export function validateDocumentRunAttempts(previous: ProjectDocument, next: Pro
         !isDeepStrictEqual(run.checkIds, context.checkIds) ||
         run.repairEnvironment !== context.repairEnvironment ||
         !isDeepStrictEqual(run.timePolicy, context.timePolicy) ||
-        !isDeepStrictEqual(run.planningPolicy, context.planningPolicy) ||
         !isDeepStrictEqual(run.resources, context.resources) ||
         !isDeepStrictEqual(run.workflow, context.workflow) ||
         !isDeepStrictEqual(run.roleResources, context.roleResources)
@@ -351,7 +333,6 @@ export function validateDocumentRunAttempts(previous: ProjectDocument, next: Pro
           contextMaterials: priorContext.contextMaterials,
           repairEnvironment: priorContext.repairEnvironment,
           timePolicy: priorContext.timePolicy,
-          planningPolicy: priorContext.planningPolicy,
           policy: priorContext.policy,
         })
       )

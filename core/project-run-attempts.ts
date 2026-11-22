@@ -23,10 +23,9 @@ import { validateProjectMaterial } from './project-materials.ts';
 import { validateProjectProfile, executionPolicy } from './project-settings.ts';
 import { validateRoleResource } from './role-routing.ts';
 import { serviceOperationContext, operationIds } from './operation-catalog.ts';
-import { assertPlanningPolicy } from './planning-policy.ts';
-import { validateRunPlan, validateRunWorkerAssignment } from './project-run-plans.ts';
+import { validateRunWorkerAssignment } from './project-run-delegations.ts';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../protocol/domain.ts';
-import type { RunPlan, RunWorkerAssignment } from '../protocol/run-plan.ts';
+import type { RunWorkerAssignment } from '../protocol/run-delegation.ts';
 
 const invalid = () =>
   new DomainError('INVALID_RUN_ATTEMPT', 'The saved attempt or its context is invalid.');
@@ -58,20 +57,11 @@ function inheritAssignments(
   );
 }
 function continuationTaskMode(
-  plan: RunPlan | undefined,
   assignments: RunWorkerAssignment[],
   references: NonNullable<RunAttemptContext['inheritedAssignments']>,
-  previous: RunAttemptContext,
-  goalText: string,
-  priorAttemptId: string,
 ): RunAttemptContext['taskMode'] {
-  if (assignments.length > 0)
-    return assignments.every((assignment) => references[assignment.role.id].taskMode === 'original')
-      ? 'original'
-      : 'full-goal';
-  return plan &&
-    plan.context.goalText === goalText &&
-    (previous.taskMode === 'original' || plan.attemptId === priorAttemptId)
+  return assignments.length > 0 &&
+    assignments.every((assignment) => references[assignment.role.id].taskMode === 'original')
     ? 'original'
     : 'full-goal';
 }
@@ -162,7 +152,6 @@ export function validateRunAttemptContext(value: unknown): RunAttemptContext {
   )
     throw invalid();
   for (const role of context.roleSnapshots) validateProjectRole(role);
-  assertPlanningPolicy(context.planningPolicy, context.roleResources.coordinator.resource);
   const ids = new Set<string>();
   for (const material of context.contextMaterials) {
     validateProjectMaterial(material);
@@ -189,7 +178,6 @@ export function initialAttemptContext(admission: RunAdmission): RunAttemptContex
     policySource: 'admission',
     resources: admission.resources,
     workflow: admission.workflow,
-    planningPolicy: admission.planningPolicy,
     roleSnapshots: admission.roleSnapshots,
     roleResources: admission.roleResources,
     contextMaterials: admission.contextMaterials,
@@ -202,13 +190,7 @@ export function initialAttemptContext(admission: RunAdmission): RunAttemptContex
 }
 export type AttemptReadStorage = Pick<
   RunTransactionStorage,
-  | 'admission'
-  | 'attempt'
-  | 'attemptContext'
-  | 'attemptStop'
-  | 'workspace'
-  | 'plan'
-  | 'planAssignments'
+  'admission' | 'attempt' | 'attemptContext' | 'attemptStop' | 'workspace' | 'assignments'
 >;
 
 /** Compare one immutable decision with its named predecessor and origins, never the history chain. */
@@ -223,7 +205,6 @@ export function validateRunAttemptLineage(
     context.goal.projectId !== admission.goal.projectId ||
     !same(context.resources, admission.resources) ||
     !same(context.workflow, admission.workflow) ||
-    !same(context.planningPolicy, admission.planningPolicy) ||
     !same(context.roleResources, admission.roleResources)
   )
     throw invalid();
@@ -268,18 +249,7 @@ export function validateRunAttemptLineage(
     workspaceOwner.admissionId !== attempt.admissionId
   )
     throw invalid();
-  const inherited = context.inheritedPlanId ? storage.plan(attempt.runId) : undefined;
-  if (
-    context.inheritedPlanId &&
-    (!inherited ||
-      inherited.id !== context.inheritedPlanId ||
-      inherited.attemptId !== context.planOriginAttemptId ||
-      inherited.runId !== attempt.runId ||
-      inherited.admissionId !== attempt.admissionId)
-  )
-    throw invalid();
-  if (inherited) validateRunPlan(inherited);
-  const assignments = storage.planAssignments(attempt.runId).filter((assignment) => {
+  const assignments = storage.assignments(attempt.runId).filter((assignment) => {
     const owner = storage.attempt(assignment.attemptId);
     if (!owner || owner.runId !== attempt.runId || owner.admissionId !== attempt.admissionId)
       throw invalid();
@@ -287,11 +257,7 @@ export function validateRunAttemptLineage(
   });
   for (const assignment of assignments) {
     validateRunWorkerAssignment(assignment);
-    if (
-      assignment.runId !== attempt.runId ||
-      assignment.admissionId !== attempt.admissionId ||
-      (assignment.planId !== undefined && assignment.planId !== inherited?.id)
-    )
+    if (assignment.runId !== attempt.runId || assignment.admissionId !== attempt.admissionId)
       throw invalid();
   }
   const references = inheritAssignments(assignments, previous, context.goalText, prior.id);
@@ -305,14 +271,7 @@ export function validateRunAttemptLineage(
   )
     throw invalid();
   const roles = [...admission.roleSnapshots, ...assignments.map((assignment) => assignment.role)];
-  const mode = continuationTaskMode(
-    inherited,
-    assignments,
-    references,
-    previous,
-    context.goalText,
-    prior.id,
-  );
+  const mode = continuationTaskMode(assignments, references);
   if (!same(context.roleSnapshots, roles) || context.taskMode !== mode) throw invalid();
 }
 
@@ -483,7 +442,7 @@ export function prepareRunContinuation(
   const savedGoal = storage.goal(current.goalId);
   if (!savedGoal) throw new DomainError('NOT_FOUND', 'Run or goal not found.');
   const goal = validateProjectGoal(savedGoal, projectId);
-  if ((goal.revision ?? 1) !== input.expectedGoalRevision)
+  if (goal.revision !== input.expectedGoalRevision)
     throw new DomainError('CONFLICT', 'The goal changed. Refresh before continuing.');
   let policy: RunAdmissionPolicy;
   let policySource: RunAttemptContext['policySource'];
@@ -507,14 +466,6 @@ export function prepareRunContinuation(
     throw new DomainError('NO_WORKSPACE', 'This run has no saved workspace. Start the goal again.');
   const origin = storage.attempt(binding.attemptId);
   if (!origin || origin.runId !== current.id || origin.admissionId !== current.admissionId)
-    throw invalid();
-  const plan = storage.plan(current.id);
-  if (
-    plan &&
-    (plan.runId !== current.id ||
-      plan.admissionId !== current.admissionId ||
-      !storage.attempt(plan.attemptId))
-  )
     throw invalid();
   if (
     goal.repairEnvironment &&
@@ -545,11 +496,10 @@ export function prepareRunContinuation(
     ];
   }
   const goalText = goal.body + '\n\nAcceptance criteria:\n' + goal.criteria;
-  const workers = storage.planAssignments(current.id);
+  const workers = storage.assignments(current.id);
   if (
     workers.some(
       (assignment) =>
-        (assignment.planId !== undefined && assignment.planId !== plan?.id) ||
         assignment.runId !== current.id ||
         assignment.admissionId !== current.admissionId ||
         (assignment.attemptId !== current.attemptId &&
@@ -588,17 +538,9 @@ export function prepareRunContinuation(
       useCurrentProfile: input.useCurrentProfile,
     },
     workspaceOriginAttemptId: binding.attemptId,
-    ...(plan ? { inheritedPlanId: plan.id, planOriginAttemptId: plan.attemptId } : {}),
     inheritedAssignments: references,
     taskChanged: goalText !== predecessor.context.goalText,
-    taskMode: continuationTaskMode(
-      plan,
-      workers,
-      references,
-      predecessor.context,
-      goalText,
-      predecessor.attempt.id,
-    ),
+    taskMode: continuationTaskMode(workers, references),
   });
   const attempt = RunAttemptSchema.parse({
     version: 1,

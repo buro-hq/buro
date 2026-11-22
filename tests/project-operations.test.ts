@@ -109,6 +109,7 @@ async function fixture(t: any) {
   await store.transact('seed', 'seed', (doc) => {
     doc.runs.push(run);
     const goal = {
+      revision: 1,
       id: 'G-fixture',
       projectId: 'p',
       title: 'Fixture',

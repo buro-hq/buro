@@ -2,7 +2,7 @@
 
 Status: agreed implementation direction, 20 November 2026. [VISION.md](VISION.md) owns the product model. This document describes the target; [GOAL-EXECUTION-POC.md](GOAL-EXECUTION-POC.md) describes current execution.
 
-The [22 November adaptive orchestration decision](docs/ADAPTIVE-ORCHESTRATION-2026-11-22.md) defines the implemented model-selected action loop, startup contributions and optional delegation, without a model-size workflow router. It preserves planning and independent acceptance, and distinguishes this implementation from the remaining persistence/default-none target.
+The [22 November adaptive orchestration decision](docs/ADAPTIVE-ORCHESTRATION-2026-11-22.md) defines the implemented model-selected action loop, startup contributions and optional delegation, without a model-size workflow router. It preserves planning and independent acceptance, and distinguishes this implementation from the remaining persistence target.
 
 ## Architecture decision
 
@@ -146,7 +146,7 @@ Separate UsageAccounting, optional user quota, provider request capacity, schedu
 
 For clean-cutover activation, use one authoritative transactional project store for admission receipts, incremental counters, public Run projections, events and idempotency receipts. SQLite is the selected implementation behind StateStore; core decisions operate on a summary and the requested operation receipt rather than an ever-growing operation map. Large private histories and complete logs use paged immutable artifact references. No separate accounting database plus authoritative JSON summary or live dual writing.
 
-This unreleased product needs no backward compatibility: use one clean execution contract, no old runtime/checkpoint resume or legacy strategy resolver. Archive prototype state before explicit cutover without deleting it; optionally reimport domain inputs, never old generated quota defaults or executable ledgers. New configuration distinguishes none/inherit/bounded. New-format runs retain configuration identity, durable receipts and recovery. Activate observation-only defaults only after runtime, workflow, storage and UI consumers pass the former64/24/256/4/15/17408 boundaries without an unintended stop. Permissions, trusted checks, fresh review and unknown-effect reconciliation remain mandatory.
+This unreleased product needs no backward compatibility: use one clean execution contract, no old runtime/checkpoint resume or legacy strategy resolver. Archive prototype state before explicit cutover without deleting it; optionally reimport domain inputs, never old generated quota defaults or executable ledgers. New configuration distinguishes none/inherit/bounded. New-format runs retain configuration identity, durable receipts and recovery. Observation-only defaults are implemented and tested across the former request/tool/session/segment/ledger boundaries; see [the current cleanup and evidence](docs/DEFAULT-NONE-CLEANUP-2026-11-23.md). Permissions, trusted checks, fresh review and unknown-effect reconciliation remain mandatory.
 
 [Private-project evaluation details removed.]
 

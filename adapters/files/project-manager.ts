@@ -133,7 +133,6 @@ export class FileProjectRepository implements ProjectRepositoryPort {
       ...(discovery.environmentRecipe
         ? { environment: { provider: 'native' as const, recipe: discovery.environmentRecipe } }
         : {}),
-      maxWorkers: 2,
       turnTimeoutMs: 360000,
       baseBranch: branch || 'main',
       components: [],

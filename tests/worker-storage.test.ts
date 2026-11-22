@@ -90,6 +90,7 @@ async function fixture(t: any, run = workerRun()) {
   const options = { directory, project: { id: 'p', name: 'P', root: directory } };
   let store = await FileProjectStore.open(options);
   const goal: Goal = {
+    revision: 1,
     id: run.goalId!,
     projectId: 'p',
     title: run.title,
@@ -233,7 +234,7 @@ test('legacy runs remain readable without worker metadata or task truncation', a
   assert.equal(restored.agents[0].assignment?.envelope, undefined);
   const legacyEnvelope = workerRun().agents[0].assignment!.envelope!;
   legacyEnvelope.task = {
-    source: 'legacy-goal',
+    source: 'full-goal',
     objective: 'Full original goal. '.repeat(800),
     inputs: [],
     expectedResult: 'Complete the assigned steps.',

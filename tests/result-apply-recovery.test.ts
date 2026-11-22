@@ -50,6 +50,7 @@ async function fixture(t: any) {
   const run = { ...sampleRun(), commit: target };
   await store.transact('seed', 'seed', (doc) => {
     const goal = {
+      revision: 1,
       id: run.goalId,
       projectId: project.id,
       title: run.title,

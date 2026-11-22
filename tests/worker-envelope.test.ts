@@ -137,7 +137,7 @@ test('legacy assignments keep complete goal and clarification and reject overflo
     },
   });
   const envelope = build(run);
-  assert.equal(envelope.task.source, 'legacy-goal');
+  assert.equal(envelope.task.source, 'full-goal');
   assert.equal(envelope.task.objective, goalText);
   assert.equal(envelope.clarification, run.continuation!.instructions);
   assert.ok(workerPrompt(envelope).includes('Preserve every final criterion.'));
@@ -152,7 +152,7 @@ test('legacy assignments keep complete goal and clarification and reject overflo
     roleAssignments: Object.fromEntries([['constructor', ['src/session.ts']]]),
     roleSnapshots: [constructorRole],
   });
-  assert.equal(build(inheritedNameRun, { role: constructorRole }).task.source, 'legacy-goal');
+  assert.equal(build(inheritedNameRun, { role: constructorRole }).task.source, 'full-goal');
 });
 
 test('envelope is detached and deeply immutable while source snapshots remain editable', () => {

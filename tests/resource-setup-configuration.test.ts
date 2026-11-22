@@ -291,20 +291,14 @@ test('setup never overwrites IDs or leaves a partial runtime behind for invalid 
   const manyRuntimes = fixtureResources();
   for (let i = 0; i < 31; i++) manyRuntimes.runtimes.push(runtime('existing-' + i));
   const r = await fixture(t, manyRuntimes);
-  await rejects(
-    () => r.configuration.saveSetup('limit', 'limit', setup(manyRuntimes)),
-    'RESOURCE_SETUP_LIMIT',
-  );
-  assert.deepEqual(r.configuration.snapshot(), manyRuntimes);
+  await r.configuration.saveSetup('beyond-old-bound', 'beyond-old-bound', setup(manyRuntimes));
+  assert.equal(r.configuration.snapshot().runtimes.length, 33);
   const manyProfiles = fixtureResources();
   for (let i = 0; i < 31; i++)
     manyProfiles.profiles.push({ ...manyProfiles.profiles[0], id: 'existing-' + i });
   const p = await fixture(t, manyProfiles);
-  await rejects(
-    () => p.configuration.saveSetup('limit', 'limit', setup(manyProfiles)),
-    'RESOURCE_SETUP_LIMIT',
-  );
-  assert.deepEqual(p.configuration.snapshot(), manyProfiles);
+  await p.configuration.saveSetup('beyond-old-bound', 'beyond-old-bound', setup(manyProfiles));
+  assert.equal(p.configuration.snapshot().profiles.length, 33);
 });
 
 test('optimistic setup revisions serialize writers and conflict after connection or default changes', async (t) => {

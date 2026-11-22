@@ -68,7 +68,7 @@ export type SqliteProjectUsageOptions = {
   /** Counts returned/changed rows without exposing SQL parameters or private payloads. */
   onQuery?: (observation: UsageQueryObservation) => void;
 };
-const format = 'buro-project-authority-v9';
+const format = 'buro-project-authority-v10';
 const failure = (code: string, message: string) => new DomainError(code, message);
 const stateConflict = () =>
   failure('USAGE_STATE_CONFLICT', 'The stored usage state changed. Refresh before trying again.');
@@ -130,8 +130,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       currentAttempt: (id: string) => this.#readRun((tx) => tx.currentAttempt(id)),
       attempt: (id: string) => this.#readRun((tx) => tx.attempt(id)),
       attemptStop: (id: string) => this.#readRun((tx) => tx.attemptStop(id)),
-      planningInput: (id: string) => this.#readRun((tx) => tx.planningInput(id)),
-      plan: (id: string) => this.#readRun((tx) => tx.plan(id)),
+      delegationContext: (id: string) => this.#readRun((tx) => tx.delegationContext(id)),
       assignment: (id: string, roleId: string) => this.#readRun((tx) => tx.assignment(id, roleId)),
       assignments: (id: string) => this.#readRun((tx) => tx.assignments(id)),
       workspace: (id: string) => this.#readRun((tx) => tx.workspace(id)),
@@ -223,14 +222,9 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         'run_attempts',
         'run_timeline',
         'run_workspaces',
-        'run_plans',
-        'run_plan_steps',
-        'run_plan_materials',
-        'run_plan_checks',
         'run_assignments',
         'run_assignment_heads',
         'run_assignment_paths',
-        'run_plan_heads',
         'run_attempt_contexts',
         'run_attempt_materials',
         'run_attempt_checks',
@@ -255,15 +249,12 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
             'USAGE_AUTHORITY_FORMAT',
             'The saved attempt authority schema is incomplete.',
           );
-        const planColumns = database.prepare('PRAGMA table_info(run_plans)').all();
         const assignmentColumns = database.prepare('PRAGMA table_info(run_assignments)').all();
-        if (
-          !assignmentColumns.some((column) => column.name === 'ordinal') ||
-          ['coordinator_role_json', 'coordinator_resource_json'].some(
-            (name) => !planColumns.some((column) => column.name === name),
-          )
-        )
-          throw failure('USAGE_AUTHORITY_FORMAT', 'The saved plan authority schema is incomplete.');
+        if (!assignmentColumns.some((column) => column.name === 'ordinal'))
+          throw failure(
+            'USAGE_AUTHORITY_FORMAT',
+            'The saved assignment authority schema is incomplete.',
+          );
       }
       database.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; BEGIN IMMEDIATE;');
       try {

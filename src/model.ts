@@ -41,7 +41,7 @@ export function roleViewsForRun(catalog: Role[], run: Run): Record<string, RoleV
         (role?.kind === 'review'
           ? t('Code review')
           : role?.kind === 'coordination'
-            ? t('Planning and integration')
+            ? t('Goal coordination')
             : t('Current task files')),
       definition: role,
     };
@@ -137,14 +137,22 @@ export function phase(r: Run, time: number) {
         : r.status === 'needs-attention'
           ? t('Needs attention')
           : t('Accepted');
-  if (time < seconds(r.createdAt, r.planSavedAt || r.updatedAt || r.createdAt))
-    return t('Planning');
-  const reviewer = r.agents.find((a) => a.name === 'reviewer');
-  if (reviewer && agentState(r, reviewer, time) === 'working') return t('Review');
-  const test = lastTest(r, time);
-  if (test?.exitCode) return t('Repair');
-  if (test) return t('Checks');
-  return t('Implementation');
+  const observed = r.events
+    .filter((event) => event.type.startsWith('phase.') && seconds(r.createdAt, event.at) <= time)
+    .at(-1);
+  const labels: Record<string, string> = {
+    preparing: t('Preparing'),
+    queued: t('Queued'),
+    planning: t('Planning'),
+    implementation: t('Implementation'),
+    checking: t('Checks'),
+    review: t('Review'),
+    repair: t('Repair'),
+    done: t('Finishing'),
+  };
+  return observed
+    ? labels[observed.type.slice('phase.'.length)] || t('Implementation')
+    : t('Preparing');
 }
 export type Milestone = {
   event: Event;

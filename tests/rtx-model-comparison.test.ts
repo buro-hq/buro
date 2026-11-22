@@ -165,8 +165,8 @@ test('RTX comparison requires its own opt-in and exact target while ordinary com
   assert.deepEqual(config.arms, ['mixed-buro', 'ollama-buro']);
   assert.equal(config.endpoints.ollama, RTX_EVALUATION_ENDPOINT);
   assert.equal(config.models.ollama, RTX_EVALUATION_MODEL);
-  assert.equal(config.limits.codingWallTimeMs, 300000);
-  assert.equal(config.limits.maxGenerationRequests, 24);
+  assert.equal(config.limits.codingWallTimeMs, undefined);
+  assert.equal(config.limits.maxGenerationRequests, undefined);
   assert.equal(config.limits.maxOutputTokens, 2048);
   assert.equal(config.limits.contextTokens, 32768);
 });
@@ -256,12 +256,12 @@ test('RTX queue matrix keeps exact case identity and budgets and passes trust on
     assert.equal(input.target, 'rtx');
     assert.equal(input.endpoints.ollama, RTX_EVALUATION_ENDPOINT);
     assert.equal(input.models.ollama, RTX_EVALUATION_MODEL);
-    assert.equal(input.contextTokensByProvider.ollama, 16384);
+    assert.equal(input.contextTokensByProvider.ollama, 32768);
     assert.equal(input.forceWorker, true);
     assert.equal(input.env.BURO_LIVE_SOURCE_TRANSFER, '1');
-    assert.equal(input.budgets.maxGenerationRequests, 24);
+    assert.equal(input.budgets.maxGenerationRequests, undefined);
     assert.equal(input.budgets.maxOutputTokens, 2048);
-    assert.equal(input.budgets.codingWallTimeMs, 300000);
+    assert.equal(input.budgets.codingWallTimeMs, undefined);
   }
   assert.equal(report.fixture, IDENTITY);
   assert.equal(report.comparability.ollamaTarget, 'explicit-rtx-private-network');

@@ -286,19 +286,16 @@ for (const kind of ['file', 'sqlite'] as const) {
     assert.deepEqual(await f.materials().material(original.id), original);
   });
 
-  test(`${kind}: existing project-library bounds count canonical activations rather than duplicate inputs`, async (t) => {
+  test(`${kind}: project libraries grow past old bounds while canonical activations remain exact`, async (t) => {
     const f = await fixture(t, kind);
     const first = Array.from({ length: 63 }, (_value, index) => prepared(index + 1));
     await f.materials().transaction(command('63'), (tx) => tx.attach(first));
     const duplicate = { ...first[0], id: prepared(99).id };
     await f.materials().transaction(command('64'), (tx) => tx.attach([duplicate, prepared(64)]));
-    await assert.rejects(
-      f
-        .materials()
-        .transaction(command('too-many'), (tx) => tx.attach([prepared(65), prepared(66)])),
-      { code: 'CONTEXT_LIMIT' },
-    );
-    assert.equal(await f.materials().material(prepared(65).id), undefined);
+    await f
+      .materials()
+      .transaction(command('beyond-old-bound'), (tx) => tx.attach([prepared(65), prepared(66)]));
+    assert.deepEqual(await f.materials().material(prepared(65).id), prepared(65));
     await f.materials().transaction(command('free-slot'), (tx) => tx.remove(first[0].id));
     const canonical = await f
       .materials()
@@ -486,10 +483,7 @@ test('SQL material metadata, reference and counters cannot partly commit when a 
   assert.equal(await attempt(), 'caught');
   const remainder = Array.from({ length: 63 }, (_value, index) => prepared(index + 2));
   await f.materials().transaction(command('fill'), (tx) => tx.attach(remainder));
-  await assert.rejects(
-    f.materials().transaction(command('full'), (tx) => tx.attach([prepared(65)])),
-    { code: 'CONTEXT_LIMIT' },
-  );
+  await f.materials().transaction(command('beyond-old-bound'), (tx) => tx.attach([prepared(65)]));
   await f.reopen();
   assert.deepEqual(await f.materials().material(initial.id), initial);
   assert.equal(

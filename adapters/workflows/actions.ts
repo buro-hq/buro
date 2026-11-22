@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ExecutionActionCatalog } from '../../core/execution-actions.ts';
-import { EnvelopeSchema, TeamPlanSchema } from '../../protocol/execution.ts';
+import { EnvelopeSchema, WorkerProposalSchema } from '../../protocol/execution.ts';
 import { ResourceIdSchema } from '../../protocol/resources.ts';
 import { WorkerTaskSchema } from '../../protocol/worker-tasks.ts';
 
@@ -12,7 +12,7 @@ export function registerBuiltinExecutionActions(catalog: ExecutionActionCatalog)
     description:
       'Assign a focused task to one specialist when useful. Reuse an existing worker role or propose a reusable role. Respect resource preferences and file permissions. Wait for the actual result before deciding what to do next.',
     schema: z.strictObject({
-      worker: TeamPlanSchema.shape.team.element.extend({
+      worker: WorkerProposalSchema.extend({
         runtimeId: ResourceIdSchema.nullable(),
         runtimeReason: z.string().trim().max(1000),
         assignment: WorkerTaskSchema.nullable(),

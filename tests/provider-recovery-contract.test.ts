@@ -192,6 +192,7 @@ async function fixture(t: any, kind: Provider) {
   };
   await store.transact('fixture-run', 'fixture-run', (doc) => {
     const goal = {
+      revision: 1,
       id: run.goalId,
       projectId: 'p',
       title: run.title,

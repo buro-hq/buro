@@ -517,7 +517,7 @@ test('editing a stopped goal is versioned; repair resumes the original coordinat
   assert.equal(after.workerTasks, undefined);
   assert.ok(after.events.some((event) => event.type === 'agent.tasks-invalidated'));
   const worker = [...after.agents].reverse().find((agent) => agent.session?.roleId === 'builder');
-  assert.equal(worker?.assignment?.envelope?.task.source, 'legacy-goal');
+  assert.equal(worker?.assignment?.envelope?.task.source, 'full-goal');
   assert.ok(worker?.assignment?.envelope?.task.objective.includes('Updated criteria'));
   assert.equal(worker?.assignment?.envelope?.task.objective.includes('Old goal only'), false);
   assert.ok(

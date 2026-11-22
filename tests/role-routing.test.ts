@@ -222,20 +222,28 @@ test('eligibility reasons and decisions depend on mechanics instead of the clien
   );
 });
 
-test('coordination supports either tools-free planning or read-only inspection without requiring both', () => {
+test('coordination needs structured turns while readonly mechanics remain a reviewer requirement', () => {
   const saved = snapshot();
-  const toolsFree = runtime('tools-free', { toolsFreeTurns: true, readOnlySessions: false });
-  saved.coordinator = toolsFree;
-  const selected = resolveRoleResource(
-    saved,
-    role('coordinator'),
-    serviceOperationContext(operationIds.coordination, undefined, false),
+  const writer = runtime('writer');
+  saved.coordinator = writer;
+  const context = serviceOperationContext(operationIds.coordination, undefined, false);
+  assert.equal(resolveRoleResource(saved, role('coordinator'), context).resource.id, writer.id);
+  assert.equal(
+    roleResourceEligibility(saved, context.requirements).find(
+      (choice) => choice.resource.id === writer.id,
+    )!.eligible,
+    true,
   );
-  assert.equal(selected.resource.id, toolsFree.id);
-  const unsupported = runtime('unsupported');
+  assert.equal(
+    roleResourceEligibility(saved, { readOnlySessions: true, immutableReview: true }).find(
+      (choice) => choice.resource.id === writer.id,
+    )!.eligible,
+    false,
+  );
+  const unsupported = runtime('unsupported', { structuredTurns: false });
   saved.coordinator = unsupported;
   assert.equal(
-    roleResourceEligibility(saved, { structuredTurns: true }, 'coordination').find(
+    roleResourceEligibility(saved, context.requirements).find(
       (choice) => choice.resource.id === unsupported.id,
     )!.eligible,
     false,
@@ -245,7 +253,7 @@ test('coordination supports either tools-free planning or read-only inspection w
       resolveRoleResource(
         saved,
         role('coordinator', { mode: 'fixed', runtimeId: unsupported.id }),
-        serviceOperationContext(operationIds.coordination, undefined, false),
+        context,
       ),
     { code: 'FIXED_RUNTIME_UNAVAILABLE' },
   );

@@ -194,7 +194,7 @@ export function createEntityTransaction(options: {
         throw new DomainError('GOAL_RUNNING', 'Stop the run before editing the goal.');
       if (
         !validRevision(expectedRevision) ||
-        (current.revision || 1) !== expectedRevision ||
+        current.revision !== expectedRevision ||
         !validRevision(expectedRevision + 1)
       )
         throw conflict();
@@ -240,7 +240,7 @@ export function createEntityTransaction(options: {
       if (!current) throw new DomainError('NOT_FOUND', 'Goal not found.');
       if (current.status === 'running')
         throw new DomainError('GOAL_RUNNING', 'Stop the current run first.');
-      if (!validRevision(expectedRevision) || (current.revision || 1) !== expectedRevision)
+      if (!validRevision(expectedRevision) || current.revision !== expectedRevision)
         throw conflict();
       if (hasBusyResult(id))
         throw new DomainError(

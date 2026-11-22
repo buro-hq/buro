@@ -1,0 +1,137 @@
+{
+  "date": "2026-11-23",
+  "baselineCommit": "189502a",
+  "milestone": "Default-none and retirement of prototype execution contracts",
+  "fullSuite": {
+    "passed": 1379,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 81280.548875,
+    "log": "/private/tmp/buro-default-none-final-full-tests.log"
+  },
+  "buildAndTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-default-none-final-build.log"
+  },
+  "browser": {
+    "projects": 17,
+    "autonomy": 7,
+    "localization": 5,
+    "errors": [],
+    "modelRequests": 0,
+    "logs": [
+      "/private/tmp/buro-default-none-projects-browser.log",
+      "/private/tmp/buro-default-none-autonomy-browser-final.log",
+      "/private/tmp/buro-default-none-localization-browser-final.log"
+    ]
+  },
+  "fiveAgentRoles": [
+    "qwen_live_harness_review",
+    "qwen_loop_review",
+    "qwen_repair_gate",
+    "qwen_live_repair_fixture",
+    "qwen_live_boundary_review"
+  ],
+  "independentReview": {
+    "remainingBlockers": 0,
+    "focusedCountsOverlapFullSuite": true,
+    "gates": [
+      {
+        "passed": 161,
+        "log": "/private/tmp/buro-default-none-final-independent.log"
+      },
+      {
+        "passed": 43,
+        "log": "/private/tmp/buro-default-none-provenance-independent-frozen.log"
+      }
+    ]
+  },
+  "proofs": {
+    "managedPiFile": {
+      "generations": 262,
+      "tools": 260,
+      "toolRoundsPerTurn": 130,
+      "reopen": true
+    },
+    "defaultNoneFileSql": {
+      "requests": 80,
+      "reservedOutputTokens": 163840,
+      "toolCalls": 1000,
+      "reopenAndReceiptReplay": true
+    },
+    "ledgerRecords": 17409,
+    "failedCheckCorrections": 5,
+    "contextWindowsGreaterThan": 16,
+    "materialsRecordsGreaterThan": 1000,
+    "activeProjectMaterialsGreaterThan": 64,
+    "resourceRuntimeCatalogGreaterThan": 32
+  },
+  "newDefaultRunPolicy": {
+    "version": 1
+  },
+  "aggregateRuntimeDefaultsAbsent": [
+    "maxRequestsPerTurn",
+    "maxToolCallsPerTurn",
+    "maxSessionRequests",
+    "maxFeedbackSteps"
+  ],
+  "retired": [
+    "PlanningPolicy",
+    "TeamPlan",
+    "RunPlan",
+    "acceptPlan",
+    "planner handoff",
+    "plan ancestry",
+    "planSavedAt",
+    "planningSession",
+    "fixed team-quality experiment",
+    "prototype Goal revision guessing",
+    "managed scope history/turn authority guessing"
+  ],
+  "retained": [
+    "working AI plan",
+    "immutable independent delegation and exact task lineage",
+    "always-on usage/receipt ownership",
+    "explicit optional user quotas",
+    "physical context/output/operation deadlines",
+    "unknown/cancel/scope/check/review/acceptance guards"
+  ],
+  "store": {
+    "production": "File",
+    "standaloneSqlFormat": 10,
+    "migration": false,
+    "pagedHistoryComplete": false
+  },
+  "noNewLiveModelCalls": true,
+  "noNewRtxCalls": true,
+  "priorRealTrialsHashesUnchanged": true,
+  "originalUserProjectsChanged": false,
+  "outputUxPreserved": true,
+  "reducedBetaApproved": false,
+  "published": false,
+  "codeSha256": {
+    "core/run-budget.ts": "4e52c620f8c3fa0d68a784ac1f01e4c53357b5be21b2e0221ea9a7ea13420154",
+    "core/usage-accounting.ts": "35c990af7dc735d709d0aa3ba5fb767f8e75284607a136b15254a7302b432d61",
+    "core/usage-authority.ts": "fb0294736e0ca650269baa98a343c03e8615679f21001723f53a15bc6740e350",
+    "protocol/run-budget.ts": "514757eadafcb65a00f623e27d308e5bb682138ef3411fa8c6288352b70d313d",
+    "core/project-run-delegations.ts": "fd4d46abe6aae06f2f29a9e07212c1fa0bfc0dfbc25dd7cfee04a768d00ebf03",
+    "protocol/run-delegation.ts": "1b726725dc596bcfe45e04639b7814dd7dd217b03a74e3a6e3baeb2b767f5420",
+    "core/project-run-attempts.ts": "8c51a34a5f554f72e42977275001879c9e0e210981311611cae236c3a4c1fd79",
+    "adapters/files/project-run-delegations.ts": "b33be9142983eba9782106d5292302e7202c676651521b146601339e11dcac3f",
+    "adapters/sqlite/project-run-delegation-rows.ts": "34432126a14c8990e63fb2b53aabdaa50a25418678c6ad550ecb4ce053b96dc3",
+    "core/managed-session-authority.ts": "694c5815ec02b6fce04d29b6f81238d91175c3ad60e1dffb9505ecbff4dd2b00",
+    "core/managed-coding-context.ts": "8eb060eda1de27a9b2b7b68f56ddf2f25338b9942c740fbd7dffb6110377c68f",
+    "core/managed-host-effects.ts": "e7c91780e56f864c11333df8f5cc22e1c2a6acdeb3c9e9a21a9d7ba87b9b968e",
+    "adapters/files/managed-sessions.ts": "b243d8a19d43d8b5a02d8aceb3c48a83ac751d339f26ed0c2c5b89788533f4e7",
+    "protocol/resource-builtins.ts": "ab7688170eac7fc9d122a97d79e1104adf3a782771fac963c538ec7b4ebc15ed",
+    "core/autonomy-policy.ts": "da8ae02faf3c9df6859f7c14e40910a0a3214437520a6c3419c8b1e3bae781be",
+    "scripts/lib/live-provider-runner.cjs": "46975ae0c6cf3e9c874ded3a77ecaa3f0242b8562392bdbbc11657ef0a7d3280",
+    "adapters/environments/project-environments.ts": "ea14d185e8d9b3a0595d9264bff0b7b984ca73c77748a072ee59e74694179248"
+  },
+  "remaining": [
+    "real-model quality after cleanup; RTX endpoint availability",
+    "complete session/effect journals, paged persistence and adverse recovery",
+    "clean installation and other first-release gates",
+    "task reassignment to a different task within one role requires settled ownership contract"
+  ]
+}

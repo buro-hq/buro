@@ -16,7 +16,7 @@ import {
 import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
 import { RoleService } from '../core/services.ts';
 import { ResultService } from '../core/results.ts';
-import { resolveTeam } from '../core/execution-ports.ts';
+import { resolveWorkerRole } from '../core/execution-ports.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { FileRuntimeRoutes } from '../adapters/files/runtime-routes.ts';
 import { ProjectStoreRegistry } from '../core/project-registry.ts';
@@ -135,28 +135,25 @@ test('validated coordinator worker creation receives the saved host workflow, ne
     maxWorkers: 1,
     turnTimeoutMs: 10000,
   };
-  const plan: any = {
-    summary: 'Plan',
-    team: [
-      {
-        action: 'create',
-        roleId: 'worker',
-        title: 'Worker',
-        description: 'Scoped worker',
-        instructions: 'Implement the task',
-        kind: 'implementation',
-        paths: ['src/'],
-        provenance: { origin: 'user' },
-      },
-    ],
-    steps: [{ step: 'Implement', owner: 'worker' }],
+  const worker: any = {
+    action: 'create',
+    roleId: 'worker',
+    title: 'Worker',
+    description: 'Scoped worker',
+    instructions: 'Implement the task',
+    kind: 'implementation',
+    paths: ['src/'],
+    provenance: { origin: 'user' },
   };
-  const result = resolveTeam(plan, [], policy, 'now', { id: 'saved-workflow', revision: 'old-v1' });
-  assert.deepEqual(result.roles[0].provenance, {
+  const result = resolveWorkerRole(worker, [], policy, 'now', {
+    id: 'saved-workflow',
+    revision: 'old-v1',
+  });
+  assert.deepEqual(result.provenance, {
     origin: 'coordinator',
     workflow: { id: 'saved-workflow', revision: 'old-v1' },
   });
-  assert.equal(result.roles[0].id, 'worker');
+  assert.equal(result.id, 'worker');
 });
 
 async function fixture(t: any) {
@@ -347,6 +344,7 @@ test('result preparation creates only its missing role and preserves its origina
   await f.store.transact('seed-run', 'seed-run', (doc) => {
     doc.runs.push(run);
     const goal = {
+      revision: 1,
       id: 'G',
       projectId: 'p',
       title: 'Goal',

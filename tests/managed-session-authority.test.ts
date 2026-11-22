@@ -206,6 +206,9 @@ test('frozen review authority is bound to its owning run, base and view and neve
 test('explicit resume cannot erase an unknown generation or pending tool effect', () => {
   const f = fixture();
   const session = prepareManagedSession(f.options, f.input, 'M-owned');
+  session.turnAuthorities = [
+    { turnId: 'T', toolPolicy: 'normal', startedAtRequest: 0, scopeRevision: 1 },
+  ];
   session.generation = { requestId: 'pending', outcome: 'unknown' };
   assert.throws(
     () =>

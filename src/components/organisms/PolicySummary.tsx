@@ -7,6 +7,11 @@ import { operationLabel } from '../../ui/operation-label.ts';
 export function PolicySummary({ policy }: { policy?: EffectivePolicy }) {
   if (!policy) return null;
   const limit = policy.usage.policy;
+  const hasLimits =
+    limit &&
+    [limit.maxRequests, limit.maxReservedOutputTokens, limit.maxToolCalls].some(
+      (value) => value !== undefined,
+    );
   return (
     <Stack gap={4} my="xs" data-policy-source={policy.source}>
       <Group gap="xs" justify="space-between" wrap="nowrap">
@@ -45,12 +50,16 @@ export function PolicySummary({ policy }: { policy?: EffectivePolicy }) {
       </Group>
       <Group gap="xs" justify="space-between" wrap="nowrap">
         <Text size="xs" c="dimmed">
-          {t('Managed usage limit')}
+          {t('Managed model usage')}
         </Text>
         <Text size="xs">
-          {limit
-            ? t('Up to {p0} requests', { p0: limit.maxRequests })
-            : t('Usage accounting unavailable')}
+          {!limit
+            ? t('Usage accounting unavailable')
+            : limit.maxRequests !== undefined
+              ? t('Up to {p0} requests', { p0: limit.maxRequests })
+              : hasLimits
+                ? t('User-defined usage limits')
+                : t('No task usage limit')}
         </Text>
       </Group>
       <details>
@@ -108,18 +117,22 @@ export function PolicySummary({ policy }: { policy?: EffectivePolicy }) {
               )}
             </Text>
           )}
-          {limit && (
+          {limit?.maxReservedOutputTokens !== undefined && (
             <Text size="xs" c="dimmed">
-              {t('Output reservation: {p0} tokens · Tool calls: {p1}', {
+              {t('Output reservation limit: {p0} tokens', {
                 p0: limit.maxReservedOutputTokens,
-                p1: limit.maxToolCalls,
               })}
+            </Text>
+          )}
+          {limit?.maxToolCalls !== undefined && (
+            <Text size="xs" c="dimmed">
+              {t('Tool call limit: {p0}', { p0: limit.maxToolCalls })}
             </Text>
           )}
           {limit && (
             <Text size="xs" c="dimmed">
               {t(
-                'This limit covers managed model calls. Model sessions and individual operations also have limits.',
+                'Usage is recorded. Individual requests use the configured context, output window and operation timeout.',
               )}
             </Text>
           )}
