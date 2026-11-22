@@ -15,7 +15,8 @@ import { ProjectResearchPanel } from './ProjectResearchPanel';
 import { profileWithResearch } from '../../../protocol/research-profile';
 
 export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: () => void }) {
-  const { projects, snapshot, client, mode, refreshProjects, switchProject } = useProject();
+  const { projects, snapshot, service, client, mode, refreshProjects, switchProject } =
+    useProject();
   const [root, setRoot] = useState(''),
     [name, setName] = useState(''),
     [info, setInfo] = useState<RepositoryInfo | null>(null),
@@ -27,7 +28,9 @@ export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: (
     [connected, setConnected] = useState<Project | null>(null),
     [studying, setStudying] = useState(false),
     [proposal, setProposal] = useState<ProjectProfile | null>(null);
-  const supportsResearch = !!snapshot?.capabilities.includes('project.research');
+  const supportsResearch = !!(snapshot?.capabilities || service?.capabilities)?.includes(
+    'project.research',
+  );
   useEffect(() => {
     if (opened) {
       void refreshProjects().catch((e) => setError(e.message));
@@ -134,13 +137,17 @@ export function ProjectPicker({ opened, onClose }: { opened: boolean; onClose: (
                 <Button
                   variant="light"
                   size="xs"
-                  disabled={!snapshot?.capabilities.includes('project.connect')}
+                  disabled={
+                    !(snapshot?.capabilities || service?.capabilities)?.includes('project.connect')
+                  }
                   leftSection={<Plus size={13} />}
                   onClick={() => setForm((v) => !v)}
                 >
                   {t('Connect project')}
                 </Button>
-                {!snapshot?.capabilities.includes('project.connect') && (
+                {!(snapshot?.capabilities || service?.capabilities)?.includes(
+                  'project.connect',
+                ) && (
                   <p className="source-notice">
                     {t('The service is outdated. Restart it to connect projects.')}
                   </p>

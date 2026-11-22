@@ -12,7 +12,7 @@ import { promisify } from 'node:util';
 import { ExecutionService } from '../core/execution.ts';
 import { GoalService } from '../core/services.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { CodexRuntime } from '../adapters/codex/runtime.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
@@ -37,7 +37,7 @@ async function fixture(t: any) {
       directory: path.join(root, '.buro'),
       project: { id: 'p', name: 'P', root },
     }),
-    projects = new FileProjectRegistry([store]),
+    projects = new ProjectStoreRegistry([store]),
     workspaces = new GitWorkspaces(projects),
     listeners = new Set<(event: RuntimeEvent) => void>(),
     threads = new Map<string, any>(),

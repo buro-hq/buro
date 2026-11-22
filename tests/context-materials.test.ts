@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { LocalBrowser } from '../adapters/files/local-browser.ts';
 import { ContextMaterials, stageContextMaterials } from '../adapters/files/context-materials.ts';
 import { GoalService } from '../core/services.ts';
@@ -22,7 +22,7 @@ async function fixture(t: any) {
       project: { id: 'p', name: 'Project', root },
     },
     store = await FileProjectStore.open(options),
-    projects = new FileProjectRegistry([store]);
+    projects = new ProjectStoreRegistry([store]);
   const materials = new ContextMaterials(projects),
     browser = new LocalBrowser(projects),
     goals = new GoalService({

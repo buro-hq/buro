@@ -273,7 +273,7 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
       host = await createHost({
         projects: [
           {
-            directory,
+            storageAddress: directory,
             project: { id: 'p', name: 'Live Ollama fixture', root, managed: true },
             profile,
           },

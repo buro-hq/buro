@@ -15,7 +15,7 @@ import { ExecutionService } from '../core/execution.ts';
 import { DomainError } from '../core/ports.ts';
 import { GoalService } from '../core/services.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import type { AgentRuntime } from '../core/ports.ts';
 import type { ResourceSnapshot } from '../protocol/resources.ts';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
@@ -41,7 +41,7 @@ async function fixture(
     directory,
     project: { id: 'p', name: 'Planning fixture', root: directory },
   });
-  const projects = new FileProjectRegistry([store]);
+  const projects = new ProjectStoreRegistry([store]);
   let sequence = 0,
     plans = 0,
     malformedPlans = 0;

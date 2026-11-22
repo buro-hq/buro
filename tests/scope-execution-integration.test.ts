@@ -14,7 +14,7 @@ import { RuntimeCatalog } from '../core/runtimes.ts';
 import { RuntimeRouter, type RuntimeRoute } from '../core/runtime-router.ts';
 import { ResourceSelection } from '../core/resource-selection.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { ProjectRunBudgets } from '../adapters/files/project-run-budgets.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
@@ -73,7 +73,7 @@ for (const mode of ['advisory', 'strict'] as const)
       project: { id: 'p', name: 'Synthetic', root },
       profile,
     });
-    const projects = new FileProjectRegistry([store]);
+    const projects = new ProjectStoreRegistry([store]);
     const executors = new EnvironmentExecutors();
     const sessions = new FileManagedSessions(path.join(root, '.buro/local/scope-sessions'));
     let reviewerReads = 0;

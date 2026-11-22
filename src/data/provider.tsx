@@ -11,11 +11,12 @@ import {
 import type { Connection, ProjectClient } from '../../clients/project-client.ts';
 import { ReplayProjectClient } from '../../clients/replay-client.ts';
 import { SocketProjectClient } from '../../clients/socket-client.ts';
-import type { Goal, Project, Snapshot } from '../../protocol/domain.ts';
+import type { Goal, Project, Snapshot, ServiceInfo } from '../../protocol/domain.ts';
 import { parseSnapshot } from '../../protocol/schema.ts';
 
 type DataContext = {
   snapshot: Snapshot | null;
+  service: ServiceInfo | null;
   client: ProjectClient | null;
   mode: 'service' | 'replay';
   connection: Connection;
@@ -62,30 +63,47 @@ function daemonUrl() {
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [client, setClient] = useState<ProjectClient | null>(null);
-  const [mode, setMode] = useState<'service' | 'replay'>('replay'),
+  const [mode, setMode] = useState<'service' | 'replay'>('service'),
     [connection, setConnection] = useState<Connection>('connecting'),
     [error, setError] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [service, setService] = useState<ServiceInfo | null>(null);
   const selected = useRef(
     new URLSearchParams(location.search).get('project') ||
       localStorage.getItem('project-panel-last-project') ||
-      'codex-panel',
+      undefined,
   );
   const current = useRef<ProjectClient | null>(null),
     generation = useRef(0),
     unsubscribers = useRef<(() => void)[]>([]);
   const switchMode = useCallback(
-    async (next: 'service' | 'replay', projectId = selected.current) => {
+    async (
+      next: 'service' | 'replay',
+      projectId = selected.current,
+      explicit = new URLSearchParams(location.search).has('project'),
+    ) => {
       const version = ++generation.current;
       setConnection('connecting');
       setError('');
       let candidate: ProjectClient | null = null;
       let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
-        candidate =
-          next === 'service' ? new SocketProjectClient(daemonUrl(), projectId) : await replay();
+        candidate = next === 'service' ? new SocketProjectClient(daemonUrl()) : await replay();
+        let serviceInfo: ServiceInfo | null = null;
+        let selectionError = '';
+        const discover = async (): Promise<Snapshot | null> => {
+          if (!(candidate instanceof SocketProjectClient)) return candidate!.connect();
+          serviceInfo = await candidate.connectService();
+          const wanted = projectId && serviceInfo.projects.find((p) => p.id === projectId);
+          if (projectId && explicit && !wanted) {
+            selectionError = t('The selected project is unavailable. Choose an existing project.');
+            return null;
+          }
+          const chosen = wanted || serviceInfo.projects[0];
+          return chosen ? candidate.selectProject(chosen.id) : null;
+        };
         const value = await Promise.race([
-          candidate.connect(),
+          discover(),
           new Promise<never>((_, reject) => {
             timeout = setTimeout(
               () => reject(Error(t('Could not connect to the local service. Try reconnecting.'))),
@@ -102,49 +120,41 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         current.current = candidate;
         setClient(candidate);
         setSnapshot(value);
+        const discovered = candidate instanceof SocketProjectClient ? candidate.service : null;
+        setService(discovered);
+        setProjects(discovered?.projects || []);
+        setError(selectionError);
         setMode(candidate.mode);
         setConnection('connected');
-        if (next === 'service') {
+        if (next === 'service' && value) {
           selected.current = value.project.id;
           localStorage.setItem('project-panel-last-project', value.project.id);
-          void candidate
-            .command<Project[]>({ method: 'project.list', params: {} })
-            .then((projects) => {
-              if (version === generation.current) setProjects(projects);
-            })
-            .catch(() => {});
         }
         unsubscribers.current = [
           candidate.onChange(setSnapshot),
           candidate.onConnection(setConnection),
+          ...(candidate instanceof SocketProjectClient
+            ? [
+                candidate.onServiceChange((info) => {
+                  setService(info);
+                  setProjects(info.projects);
+                }),
+              ]
+            : []),
         ];
-        return value;
+        return value || undefined;
       } catch (e) {
         candidate?.close();
         if (version !== generation.current) return;
         setError(e instanceof Error ? e.message : String(e));
-        if (
-          next === 'service' &&
-          !current.current &&
-          new URLSearchParams(location.search).has('project')
-        ) {
-          setMode('service');
+        if (!current.current) {
+          setClient(null);
+          setSnapshot(null);
+          setService(null);
+          setProjects([]);
+          setMode(next);
           setConnection('offline');
-          return;
-        }
-        if (next === 'service' && !current.current) {
-          const offline = await replay();
-          if (version !== generation.current) {
-            offline.close();
-            return;
-          }
-          current.current = offline;
-          setClient(offline);
-          setSnapshot(await offline.connect());
-          setMode('replay');
-          setConnection('offline');
-          unsubscribers.current = [offline.onChange(setSnapshot)];
-        } else setConnection(current.current ? 'connected' : 'offline');
+        } else setConnection('connected');
       } finally {
         if (timeout) clearTimeout(timeout);
       }
@@ -165,13 +175,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const refreshProjects = useCallback(async () => {
     const source = current.current;
     if (source?.mode === 'service') {
-      const projects = await source.command<Project[]>({ method: 'project.list', params: {} });
-      if (source === current.current) setProjects(projects);
+      if (source instanceof SocketProjectClient) {
+        const info = await source.refreshService();
+        if (source === current.current) {
+          setService(info);
+          setProjects(info.projects);
+        }
+      }
     }
   }, []);
   const switchProject = useCallback(
     async (id: string) => {
-      const value = await switchMode('service', id);
+      const value = await switchMode('service', id, true);
       if (!value) throw Error(t('Could not open the project.'));
       const url = new URL(location.href);
       url.searchParams.set('project', id);
@@ -184,6 +199,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     <Context.Provider
       value={{
         snapshot,
+        service,
         client,
         mode,
         connection,

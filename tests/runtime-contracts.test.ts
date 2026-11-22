@@ -191,7 +191,7 @@ test('generic Cordis runtime composition works without loading Codex and owns cl
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-runtimes-'));
   let cleaned = 0;
   const host = await createHost({
-    projects: [{ directory, project: { id: 'p', name: 'P', root: directory } }],
+    projects: [{ storageAddress: directory, project: { id: 'p', name: 'P', root: directory } }],
   });
   t.after(async () => {
     await host.dispose();

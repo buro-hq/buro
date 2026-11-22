@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ProjectManager } from '../adapters/files/project-manager.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { resultApplyReceiptId } from '../core/result-apply.ts';
 import { sampleRun } from './fixtures/sample-run.ts';
@@ -28,7 +28,7 @@ async function fixture(t: any) {
   await fs.writeFile(path.join(root, 'value.txt'), 'before\n');
   await git(['add', '.']);
   await git(['commit', '-m', 'Initial']);
-  let registry = new FileProjectRegistry([]);
+  let registry = new ProjectStoreRegistry([]);
   const makeManager = () =>
     new ProjectManager({
       registry,
@@ -90,7 +90,7 @@ async function fixture(t: any) {
       await manager.dispose();
       await registry.close();
       store = await FileProjectStore.open({ directory: data, project });
-      registry = new FileProjectRegistry([store]);
+      registry = new ProjectStoreRegistry([store]);
       manager = makeManager();
     },
   };

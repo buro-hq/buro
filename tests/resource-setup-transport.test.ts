@@ -80,7 +80,7 @@ async function server(t: any) {
   const privateFiles = new PrivateJSONFiles(path.join(directory, 'local'));
   await privateFiles.save('resources', original);
   const filename = path.join(directory, 'local/resources.json');
-  const host = await createHost({ projects: [{ directory: projectDirectory, project }] });
+  const host = await createHost({ projects: [{ storageAddress: projectDirectory, project }] });
   const http: string[] = [];
   const clients: SocketProjectClient[] = [];
   const raws: RawSocket[] = [];

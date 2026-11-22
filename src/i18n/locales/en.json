@@ -1136,5 +1136,10 @@
   "Changes crossed a protected or strict file boundary. Review the saved changes before continuing repairs.": "Changes crossed a protected or strict file boundary. Review the saved changes before continuing repairs.",
   "Model settings need attention": "Model settings need attention",
   "The service could not resolve this role’s model selection.": "The service could not resolve this role’s model selection.",
-  "Another run of this goal has an unknown operation. Reconcile it before continuing.": "Another run of this goal has an unknown operation. Reconcile it before continuing."
+  "Another run of this goal has an unknown operation. Reconcile it before continuing.": "Another run of this goal has an unknown operation. Reconcile it before continuing.",
+  "Your workspace starts with a project": "Your workspace starts with a project",
+  "Connect a Git repository. Buro keeps its goals, team and results together.": "Connect a Git repository. Buro keeps its goals, team and results together.",
+  "Choose project": "Choose project",
+  "Configure models": "Configure models",
+  "The selected project is unavailable. Choose an existing project.": "The selected project is unavailable. Choose an existing project."
 }

@@ -2,15 +2,21 @@ import { Context, Service, type Plugin } from 'cordis';
 import { randomUUID } from 'node:crypto';
 import { CommandBus } from '../core/command-bus.ts';
 import { GoalService, RoleService } from '../core/services.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
-import { FileProjectStore } from '../adapters/files/project-store.ts';
-import type { Project, Run, Role, Snapshot } from '../protocol/domain.ts';
-import type { ProjectRegistry } from '../core/ports.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
+import { FileProjectStoreFactory } from '../adapters/files/project-store-factory.ts';
+import type { Snapshot, ServiceInfo } from '../protocol/domain.ts';
+import type {
+  MutableProjectRegistry,
+  ProjectStore,
+  ProjectStoreFactory,
+  ProjectStoreOpenSpec,
+} from '../core/ports.ts';
 import { localFilesPlugin } from './local-files.ts';
 
 declare module 'cordis' {
   interface Events {
     'project/snapshot'(snapshot: Snapshot): void;
+    'service/info'(info: ServiceInfo): void;
   }
   interface Context {
     projects: Projects;
@@ -26,10 +32,12 @@ class Commands extends Service {
   }
 }
 class Projects extends Service {
-  registry: FileProjectRegistry;
-  constructor(ctx: Context, registry: FileProjectRegistry) {
+  registry: MutableProjectRegistry;
+  stores: ProjectStoreFactory;
+  constructor(ctx: Context, registry: MutableProjectRegistry, stores: ProjectStoreFactory) {
     super(ctx, 'projects');
     this.registry = registry;
+    this.stores = stores;
   }
 }
 class Goals extends Service {
@@ -54,19 +62,22 @@ class Roles extends Service {
     });
   }
 }
-type ProjectOptions = { directory: string; project: Project; runs?: Run[]; roles?: Role[] };
-const storagePlugin: Plugin.Object<ProjectOptions[]> = {
+const storagePlugin: Plugin.Object<{
+  projects: ProjectStoreOpenSpec[];
+  factory: ProjectStoreFactory;
+}> = {
   name: 'project-storage',
   async apply(ctx, config) {
-    const stores: FileProjectStore[] = [];
+    const stores: ProjectStore[] = [];
+    let registry: ProjectStoreRegistry;
     try {
-      for (const item of config) stores.push(await FileProjectStore.open(item));
-    } catch (e) {
-      await Promise.all(stores.map((s) => s.close()));
-      throw e;
+      for (const item of config.projects) stores.push(await config.factory.open(item));
+      registry = new ProjectStoreRegistry(stores);
+    } catch (error) {
+      await Promise.allSettled(stores.map((store) => Promise.resolve().then(() => store.close())));
+      throw error;
     }
-    const registry = new FileProjectRegistry(stores);
-    new Projects(ctx, registry);
+    new Projects(ctx, registry, config.factory);
     ctx.effect(() => () => registry.close());
   },
 };
@@ -93,6 +104,18 @@ export const projectsPlugin: Plugin.Object = {
         snapshot.capabilities.push('project.storage', 'project.storage.gc');
     });
 
+    ctx.effect(() =>
+      ctx.commands.bus.register('service.info', () => {
+        const info: ServiceInfo = {
+          version: 1,
+          projects: ctx.projects.registry.list(),
+          capabilities: ['project.list'],
+        };
+        ctx.emit('service/info', info);
+        info.capabilities = [...new Set(info.capabilities)];
+        return info;
+      }),
+    );
     ctx.effect(() => ctx.commands.bus.register('project.list', () => ctx.projects.registry.list()));
     ctx.effect(() =>
       ctx.commands.bus.register('project.snapshot', (p) =>
@@ -138,18 +161,23 @@ export const rolesPlugin: Plugin.Object = {
   },
 };
 /** Cordis is confined to this composition layer; core use cases take explicit ports. */
-export async function createHost(options: { projects: ProjectOptions[] }) {
+export async function createHost(
+  options: { projects?: ProjectStoreOpenSpec[]; storeFactory?: ProjectStoreFactory } = {},
+) {
   const ctx = new Context();
   try {
     await ctx.plugin(Commands);
-    await ctx.plugin(storagePlugin, options.projects);
+    await ctx.plugin(storagePlugin, {
+      projects: options.projects || [],
+      factory: options.storeFactory || new FileProjectStoreFactory(),
+    });
     await ctx.plugin(projectsPlugin);
     await ctx.plugin(localFilesPlugin);
     await ctx.plugin(goalsPlugin);
     await ctx.plugin(rolesPlugin);
     return { ctx, dispose: () => ctx.fiber.dispose() };
   } catch (e) {
-    await ctx.fiber.dispose();
+    await ctx.fiber.dispose().catch(() => {});
     throw e;
   }
 }

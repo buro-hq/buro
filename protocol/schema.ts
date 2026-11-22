@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { VerificationViewSchema, VerificationEvidenceSchema } from './verification.ts';
 import { ManagedRunBudgetSummarySchema, ManagedBudgetErrorCodeSchema } from './run-budget.ts';
-import { roleIdPattern, type DomainEvent, type Snapshot } from './domain.ts';
+import { roleIdPattern, type DomainEvent, type Snapshot, type ServiceInfo } from './domain.ts';
 import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
 import { DeliverySchema, PreviewSchema, ResearchSchema, GoalOutcomeSchema } from './operations.ts';
 import { ContextMaterialSchema } from './context.ts';
@@ -55,6 +55,7 @@ export const GoalInputSchema = z.strictObject({
   materialIds: z.array(id).max(32).optional(),
 });
 export const CommandSchema = z.discriminatedUnion('method', [
+  z.strictObject({ method: z.literal('service.info'), params: z.strictObject({}) }),
   z.strictObject({
     method: z.literal('resources.list'),
     params: z.strictObject({ projectId: id.optional() }),
@@ -618,6 +619,27 @@ export const SnapshotSchema = z
   });
 export function parseSnapshot(input: unknown): Snapshot {
   return SnapshotSchema.parse(input) as unknown as Snapshot;
+}
+export const ServiceInfoSchema = z
+  .strictObject({
+    version: z.literal(1),
+    projects: z.array(
+      z.strictObject({
+        id,
+        name: z.string().min(1),
+        root: z.string().min(1),
+        managed: z.boolean().optional(),
+        dataDirectory: z.string().optional(),
+      }),
+    ),
+    capabilities: z.array(z.string()),
+  })
+  .superRefine((info, ctx) => {
+    if (new Set(info.projects.map((project) => project.id)).size !== info.projects.length)
+      ctx.addIssue({ code: 'custom', message: 'Service project IDs must be unique.' });
+  });
+export function parseServiceInfo(input: unknown): ServiceInfo {
+  return ServiceInfoSchema.parse(input);
 }
 export function parseDomainEvent(input: unknown): DomainEvent {
   return DomainEventSchema.parse(input) as DomainEvent;

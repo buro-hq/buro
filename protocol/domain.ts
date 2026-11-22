@@ -26,6 +26,8 @@ export type Project = {
   managed?: boolean;
   dataDirectory?: string;
 };
+/** Service discovery is valid before the first project is connected. */
+export type ServiceInfo = { version: 1; projects: Project[]; capabilities: string[] };
 export type ProjectCommand = {
   id: string;
   title: string;

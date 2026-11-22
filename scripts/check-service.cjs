@@ -15,7 +15,7 @@ const { promisify } = require('node:util');
   try {
     host = await createHost({
       projects: [
-        { directory, project: { id: 'codex-panel', name: 'Codex Panel', root: directory }, runs },
+        { storageAddress: directory, project: { id: 'codex-panel', name: 'Codex Panel', root: directory }, runs },
       ],
     });
     let port = 0;
@@ -95,7 +95,7 @@ const { promisify } = require('node:util');
     emptyHost = await createHost({
       projects: [
         {
-          directory: path.join(directory, 'empty'),
+          storageAddress: path.join(directory, 'empty'),
           project: { id: 'codex-panel', name: 'Empty Project', root: directory },
           runs: [],
         },

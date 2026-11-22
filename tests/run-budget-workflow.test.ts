@@ -74,7 +74,7 @@ async function fixture(
   const host = await createHost({
     projects: [
       {
-        directory: path.join(root, '.buro'),
+        storageAddress: path.join(root, '.buro'),
         project: { id: 'p', name: 'Budget workflow', root, managed: true },
         profile,
       },

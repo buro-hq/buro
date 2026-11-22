@@ -197,7 +197,7 @@ async function runTeamExperimentTrial(options = {}) {
       { ManagedAgentRuntime },
       { FileManagedSessions },
       { FileProjectStore },
-      { FileProjectRegistry },
+      { ProjectStoreRegistry },
       { ProjectRunBudgets },
       budgetsModule,
       { RepositoryTools },
@@ -214,7 +214,7 @@ async function runTeamExperimentTrial(options = {}) {
       import('../../core/managed-runtime.ts'),
       import('../../adapters/files/managed-sessions.ts'),
       import('../../adapters/files/project-store.ts'),
-      import('../../adapters/files/registry.ts'),
+      import('../../core/project-registry.ts'),
       import('../../adapters/files/project-run-budgets.ts'),
       import('../../core/run-budget.ts'),
       import('../../adapters/tools/repository-tools.ts'),
@@ -240,7 +240,7 @@ async function runTeamExperimentTrial(options = {}) {
       project: { id: projectId, name: 'Isolated team experiment', root, managed: true },
       profile,
     });
-    const projects = new FileProjectRegistry([store]);
+    const projects = new ProjectStoreRegistry([store]);
     const workspaces = new GitWorkspaces(projects);
     const prepared = await workspaces.prepare(projectId, ownerRunId, 'HEAD', {
       profile,

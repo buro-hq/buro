@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { OllamaProvider } from '../adapters/models/ollama.ts';
 import { DeepSeekProvider } from '../adapters/models/deepseek.ts';
@@ -20,7 +20,7 @@ async function fixture(t: any) {
     directory: path.join(root, 'state'),
     project: { id: 'p', name: 'Provider outcome fixture', root },
   });
-  const projects = new FileProjectRegistry([store]);
+  const projects = new ProjectStoreRegistry([store]);
   const directory = path.join(root, 'private-sessions');
   const runtimes: ManagedAgentRuntime[] = [];
   let toolCalls = 0;

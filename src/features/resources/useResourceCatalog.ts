@@ -3,11 +3,17 @@ import type { ResourceCatalog } from '../../../protocol/resources.ts';
 import { useProject } from '../../data/provider';
 
 export function useResourceCatalog(projectId?: string) {
-  const { client, snapshot, connection } = useProject();
+  const { client, snapshot, service, connection } = useProject();
   const supported =
-    !!client && connection === 'connected' && !!snapshot?.capabilities.includes('resources.list');
-  const canConfigure = supported && !!snapshot?.capabilities.includes('resources.connection.save');
-  const canSetup = supported && !!snapshot?.capabilities.includes('resources.setup.save');
+    !!client &&
+    connection === 'connected' &&
+    !!(snapshot?.capabilities || service?.capabilities)?.includes('resources.list');
+  const canConfigure =
+    supported &&
+    !!(snapshot?.capabilities || service?.capabilities)?.includes('resources.connection.save');
+  const canSetup =
+    supported &&
+    !!(snapshot?.capabilities || service?.capabilities)?.includes('resources.setup.save');
   const roleRevision = snapshot?.roles
     .map((role) => `${role.id}:${role.version}`)
     .sort()

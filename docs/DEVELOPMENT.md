@@ -36,7 +36,10 @@ Open http://127.0.0.1:4327 and keep the daemon running. The build does not bundl
 | `PROJECT_DAEMON_PORT` | Listen port | `4341` |
 | `PROJECT_DATA_DIR` | Service data directory | checkout `.buro/` |
 | `PROJECT_DAEMON_URL` | CLI endpoint | `ws://127.0.0.1:4341` |
-| `PROJECT_ID` | CLI project | built-in Buro project |
+| `PROJECT_ID` | CLI project | the sole connected project; required when there are zero or multiple projects |
+| `BURO_DEMO` | Explicit development fixtures | disabled; `1` opens isolated demo stores |
+
+Normal startup has no built-in project or run. Connect a repository in the UI or CLI; saved connections are restored on restart. A service connection failure shows an error and a reconnect action. Browser-local drafts require explicit `?source=replay`.
 
 The UI accepts `?daemon=ws%3A%2F%2F127.0.0.1%3APORT` and `?project=p-ID` for another local endpoint or project.
 

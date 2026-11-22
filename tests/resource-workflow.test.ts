@@ -309,7 +309,7 @@ async function fixture(
   const originalHead = (await git(['rev-parse', 'HEAD'])).stdout.trim();
   const host = await createHost({
     projects: [
-      { directory, project: { id: 'p', name: 'HTTP fixture project', root, managed: true } },
+      { storageAddress: directory, project: { id: 'p', name: 'HTTP fixture project', root, managed: true } },
     ],
   });
   const profile = ProjectProfileSchema.parse({

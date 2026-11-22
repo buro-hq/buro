@@ -18,7 +18,7 @@ import { promisify } from 'node:util';
 import { ExecutionService } from '../core/execution.ts';
 import { resolveTeam, type ExecutionPolicy, type TeamPlan } from '../core/execution-ports.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { GoalService } from '../core/services.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { NodeChecks } from '../adapters/checks/node-checks.ts';
@@ -77,7 +77,7 @@ async function fixture(
       directory,
       project: { id: 'p', name: 'P', root: directory },
     }),
-    projects = new FileProjectRegistry([store]);
+    projects = new ProjectStoreRegistry([store]);
   let n = 0,
     reviews = 0,
     workerFailures = 0;

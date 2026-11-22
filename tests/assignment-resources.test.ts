@@ -9,7 +9,7 @@ import { validateAssignmentResource } from '../core/assignment-routing.ts';
 import { ResourceSelection } from '../core/resource-selection.ts';
 import { RoleService } from '../core/services.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import {
   ResourceConfigurationSchema,
   defaultResources,
@@ -248,7 +248,7 @@ test('role edits preserve saved preferences, explicit auto clears them, and serv
     await fs.rm(directory, { recursive: true, force: true });
   });
   const service = new RoleService({
-    projects: new FileProjectRegistry([store]),
+    projects: new ProjectStoreRegistry([store]),
     now: () => 'now',
     id: () => 'id',
   });

@@ -87,6 +87,17 @@ export const resourcesPlugin: Plugin.Object<{
         resources.saveSetup(params, meta),
       ),
     );
+    ctx.on('service/info', (info) => {
+      info.capabilities.push(
+        'resources.list',
+        'resources.init',
+        'resources.models',
+        'resources.probe',
+        'resources.use',
+        'resources.connection.save',
+        'resources.setup.save',
+      );
+    });
     ctx.on('project/snapshot', (snapshot) => {
       snapshot.capabilities.push(
         'resources.list',

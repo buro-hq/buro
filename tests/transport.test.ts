@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { WebSocket as RawSocket } from 'ws';
+import { defaultRoles } from '../core/defaults.ts';
 import { createHost } from '../plugins/host.ts';
 import { websocketPlugin } from '../daemon/websocket.ts';
 import { SocketProjectClient, applyEvent } from '../clients/socket-client.ts';
@@ -12,7 +13,13 @@ import { RequestSchema } from '../protocol/schema.ts';
 async function server(t: any) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'project-transport-'));
   const host = await createHost({
-    projects: [{ directory, project: { id: 'codex-panel', name: 'Demo', root: directory } }],
+    projects: [
+      {
+        storageAddress: directory,
+        project: { id: 'codex-panel', name: 'Demo', root: directory },
+        roles: structuredClone(defaultRoles),
+      },
+    ],
   });
   let port = 0;
   const transport = await host.ctx.plugin(websocketPlugin, {
@@ -27,8 +34,8 @@ async function server(t: any) {
 }
 test('independent clients share goals and role revisions over the versioned protocol', async (t) => {
   const s = await server(t);
-  const a = new SocketProjectClient(s.url),
-    b = new SocketProjectClient(s.url);
+  const a = new SocketProjectClient(s.url, 'codex-panel'),
+    b = new SocketProjectClient(s.url, 'codex-panel');
   t.after(() => {
     a.close();
     b.close();
@@ -70,7 +77,7 @@ test('independent clients share goals and role revisions over the versioned prot
 });
 test('transport unload does not stop core; reconnect catches work committed while disconnected', async (t) => {
   const s = await server(t);
-  const client = new SocketProjectClient(s.url);
+  const client = new SocketProjectClient(s.url, 'codex-panel');
   t.after(() => client.close());
   await client.connect();
   await s.transport.dispose();
@@ -98,7 +105,7 @@ test('transport unload does not stop core; reconnect catches work committed whil
 });
 test('event projection ignores duplicates and refuses missing or foreign sequences', async (t) => {
   const s = await server(t);
-  const client = new SocketProjectClient(s.url);
+  const client = new SocketProjectClient(s.url, 'codex-panel');
   t.after(() => client.close());
   const before = await client.connect();
   await client.createGoal({ projectId: 'codex-panel', title: 'One', body: 'Body', criteria: '' });
@@ -138,7 +145,7 @@ test('unknown commands, protocol versions and arbitrary project ids are rejected
     }),
   );
   assert.equal((await result).error.code, 'BAD_REQUEST');
-  const client = new SocketProjectClient(s.url);
+  const client = new SocketProjectClient(s.url, 'codex-panel');
   t.after(() => client.close());
   await client.connect();
   await assert.rejects(
@@ -194,8 +201,8 @@ test('lost mutation response can be retried on a new connection without a duplic
 
 test('context uploads larger than the former message limit propagate to other clients and survive reconnect', async (t) => {
   const s = await server(t),
-    a = new SocketProjectClient(s.url),
-    b = new SocketProjectClient(s.url);
+    a = new SocketProjectClient(s.url, 'codex-panel'),
+    b = new SocketProjectClient(s.url, 'codex-panel');
   t.after(() => {
     a.close();
     b.close();
@@ -231,7 +238,7 @@ test('context uploads larger than the former message limit propagate to other cl
     params: { projectId: 'codex-panel', materialId: materials[0].id },
   });
   assert.equal(a.snapshot().contextMaterials?.[0].active, false);
-  const c = new SocketProjectClient(s.url);
+  const c = new SocketProjectClient(s.url, 'codex-panel');
   t.after(() => c.close());
   const snapshot = await c.connect();
   assert.deepEqual(snapshot.goals[0].materialIds, goal.materialIds);

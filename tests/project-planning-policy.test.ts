@@ -10,7 +10,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { ExecutionService } from '../core/execution.ts';
 import type { AgentRuntime } from '../core/ports.ts';
 import type { Goal, Run } from '../protocol/domain.ts';
@@ -263,7 +263,7 @@ test('the selected coordinator decision owns planning even when the profile defa
 test('resume archives the frozen planning strategy and rejects attempt-history rewriting', async (t) => {
   for (const original of [toolsFree, inspection]) {
     const f = await fixture(t, original);
-    const projects = new FileProjectRegistry([f.store]);
+    const projects = new ProjectStoreRegistry([f.store]);
     const runtime: AgentRuntime = {
       id: 'unused',
       async start() {

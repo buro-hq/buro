@@ -38,6 +38,8 @@ npm start
 
 Open **http://127.0.0.1:4317**. `npm start` runs the local service and frontend together; Ctrl+C stops both. There is no packaged desktop app yet.
 
+The first startup opens an empty workspace. Connect your repository to begin; later startups restore saved connections. Development demo projects require the explicit `BURO_DEMO=1` setting.
+
 Draft PRs also need an authenticated GitHub CLI (`gh`) and a GitHub remote for the connected repository.
 
 ## Your first task

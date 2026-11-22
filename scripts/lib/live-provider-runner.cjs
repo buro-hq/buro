@@ -960,7 +960,7 @@ async function runLiveProviderEvaluation(options = {}) {
     host = await createHost({
       projects: [
         {
-          directory,
+          storageAddress: directory,
           project: { id: 'p', name: 'Provider evaluation fixture', root, managed: true },
           profile,
         },

@@ -5,10 +5,12 @@ import type {
   Role,
   SaveRole,
   Snapshot,
+  ServiceInfo,
 } from '../protocol/domain.ts';
 import {
   parseDomainEvent,
   parseSnapshot,
+  parseServiceInfo,
   type ClientCommand,
   type Request,
 } from '../protocol/schema.ts';
@@ -64,7 +66,12 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
 export class SocketProjectClient implements ProjectClient {
   readonly mode = 'service' as const;
   url: string;
-  projectId: string;
+  projectId: string | undefined;
+  service: ServiceInfo | null = null;
+  private serviceMode = false;
+  private initialService?: { resolve: (s: ServiceInfo) => void; reject: (e: Error) => void };
+  private serviceListeners = new Set<(s: ServiceInfo) => void>();
+  private selectionRevision = 0;
   ws: WebSocket | null = null;
   state: Snapshot | null = null;
   closed = false;
@@ -76,17 +83,69 @@ export class SocketProjectClient implements ProjectClient {
   initial: { resolve: (s: Snapshot) => void; reject: (e: Error) => void } | undefined;
   private projectionRevision = 0;
   private observedProjectionRevision = 0;
-  private projectionRefresh?: { socket: WebSocket; events: DomainEvent[]; promise: Promise<void> };
-  constructor(url = 'ws://127.0.0.1:4341', projectId = 'codex-panel') {
+  private projectionRefresh?: {
+    socket: WebSocket;
+    projectId: string;
+    selection: number;
+    events: DomainEvent[];
+    promise: Promise<void>;
+  };
+  constructor(url = 'ws://127.0.0.1:4341', projectId?: string) {
     this.url = url;
     this.projectId = projectId;
   }
   connect() {
+    if (!this.projectId) return Promise.reject(Error('Select a project before connecting.'));
+    this.serviceMode = false;
     this.closed = false;
     return new Promise<Snapshot>((resolve, reject) => {
       this.initial = { resolve, reject };
       this.open();
     });
+  }
+  connectService(): Promise<ServiceInfo> {
+    this.serviceMode = true;
+    this.closed = false;
+    return new Promise((resolve, reject) => {
+      this.initialService = { resolve, reject };
+      this.open();
+    });
+  }
+  async refreshService(): Promise<ServiceInfo> {
+    const info = parseServiceInfo(await this.request({ method: 'service.info', params: {} }));
+    this.service = info;
+    for (const listener of this.serviceListeners) listener(info);
+    return info;
+  }
+  onServiceChange(listener: (info: ServiceInfo) => void) {
+    this.serviceListeners.add(listener);
+    return () => this.serviceListeners.delete(listener);
+  }
+  async selectProject(id: string): Promise<Snapshot> {
+    if (!this.ready) throw Error('Connect to the service before selecting a project.');
+    const selection = ++this.selectionRevision;
+    const socket = this.ws;
+    const snapshot = parseSnapshot(
+      await this.request({ method: 'project.snapshot', params: { projectId: id } }),
+    );
+    if (this.closed || this.ws !== socket || selection !== this.selectionRevision)
+      throw Error('Project selection was superseded.');
+    if (snapshot.project.id !== id) throw Error('The service returned another project.');
+    this.projectId = id;
+    this.state = snapshot;
+    try {
+      await this.request({
+        method: 'events.subscribe',
+        params: { projectId: id, after: snapshot.sequence },
+      });
+    } catch (error) {
+      if (this.ws === socket && selection === this.selectionRevision) socket?.close();
+      throw error;
+    }
+    if (this.closed || this.ws !== socket || selection !== this.selectionRevision)
+      throw Error('Project selection was superseded.');
+    this.notify();
+    return this.snapshot();
   }
   open() {
     if (this.closed) return;
@@ -96,6 +155,8 @@ export class SocketProjectClient implements ProjectClient {
     this.ws = ws;
     ws.onopen = () => {
       void this.handshake().catch((error) => {
+        this.initialService?.reject(error);
+        this.initialService = undefined;
         this.initial?.reject(error);
         this.initial = undefined;
         ws.close();
@@ -144,7 +205,7 @@ export class SocketProjectClient implements ProjectClient {
       // Handshake reads can be retried with fresh ids. Mutations retain their original id.
       for (const [id, p] of this.pending)
         if (
-          ['project.snapshot', 'events.subscribe', 'project.list'].includes(
+          ['service.info', 'project.snapshot', 'events.subscribe', 'project.list'].includes(
             p.request.command.method,
           )
         ) {
@@ -156,6 +217,21 @@ export class SocketProjectClient implements ProjectClient {
     };
   }
   async handshake() {
+    if (this.serviceMode) {
+      const info = parseServiceInfo(
+        await this.request({ method: 'service.info', params: {} }, true),
+      );
+      this.service = info;
+      for (const listener of this.serviceListeners) listener(info);
+      this.ready = true;
+      if (this.projectId && this.state) await this.selectProject(this.projectId);
+      this.status('connected');
+      for (const pending of this.pending.values()) this.ws?.send(JSON.stringify(pending.request));
+      this.initialService?.resolve(info);
+      this.initialService = undefined;
+      return;
+    }
+    if (!this.projectId) throw Error('Select a project before connecting.');
     const snapshot = parseSnapshot(
       await this.request(
         { method: 'project.snapshot', params: { projectId: this.projectId } },
@@ -221,6 +297,9 @@ export class SocketProjectClient implements ProjectClient {
     void this.refreshProjection().catch(() => {});
   }
   private refreshProjection(): Promise<void> {
+    if (!this.projectId || !this.state) return Promise.resolve();
+    const projectId = this.projectId;
+    const selection = this.selectionRevision;
     const socket = this.ws;
     if (
       this.closed ||
@@ -230,17 +309,35 @@ export class SocketProjectClient implements ProjectClient {
       this.projectionRevision === this.observedProjectionRevision
     )
       return Promise.resolve();
-    if (this.projectionRefresh?.socket === socket) return this.projectionRefresh.promise;
+    if (
+      this.projectionRefresh?.socket === socket &&
+      this.projectionRefresh.projectId === projectId &&
+      this.projectionRefresh.selection === selection
+    )
+      return this.projectionRefresh.promise;
     const revision = this.projectionRevision;
     const after = this.state?.sequence || 0;
-    const refresh = { socket, events: [] as DomainEvent[], promise: Promise.resolve() };
+    const refresh = {
+      socket,
+      projectId,
+      selection,
+      events: [] as DomainEvent[],
+      promise: Promise.resolve(),
+    };
     this.projectionRefresh = refresh;
     refresh.promise = (async () => {
       try {
         let next = parseSnapshot(
-          await this.request({ method: 'project.snapshot', params: { projectId: this.projectId } }),
+          await this.request({ method: 'project.snapshot', params: { projectId } }),
         );
-        if (this.closed || this.ws !== socket || !this.ready) return;
+        if (
+          this.closed ||
+          this.ws !== socket ||
+          !this.ready ||
+          this.projectId !== projectId ||
+          selection !== this.selectionRevision
+        )
+          return;
         if (next.project.id !== this.projectId || next.sequence < after)
           throw Error('The refreshed snapshot does not cover the current project history.');
         for (const event of refresh.events)
@@ -252,7 +349,13 @@ export class SocketProjectClient implements ProjectClient {
         this.observedProjectionRevision = revision;
         this.notify();
       } catch (error) {
-        if (!this.closed && this.ws === socket) socket.close();
+        if (
+          !this.closed &&
+          this.ws === socket &&
+          this.projectId === projectId &&
+          selection === this.selectionRevision
+        )
+          socket.close();
         throw error;
       } finally {
         if (this.projectionRefresh === refresh) {
@@ -301,6 +404,11 @@ export class SocketProjectClient implements ProjectClient {
       p.reject(Error('The client is closed.'));
     }
     this.pending.clear();
+    this.initialService?.reject(Error('The client is closed.'));
+    this.initialService = undefined;
+    this.initial?.reject(Error('The client is closed.'));
+    this.initial = undefined;
+    this.serviceListeners.clear();
     this.listeners.clear();
     this.connections.clear();
   }

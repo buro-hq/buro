@@ -37,7 +37,7 @@ const exec = promisify(execFile);
   const host = await createHost({
     projects: [
       {
-        directory: path.join(dir, 'control'),
+        storageAddress: path.join(dir, 'control'),
         project: { id: 'control', name: 'Setup control', root: dir },
       },
     ],

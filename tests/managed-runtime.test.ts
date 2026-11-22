@@ -20,7 +20,7 @@ import type {
 import type { RuntimeEvent } from '../core/ports.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { RepositoryTools } from '../adapters/tools/repository-tools.ts';
 import { OllamaProvider } from '../adapters/models/ollama.ts';
@@ -92,7 +92,7 @@ async function fixture(t: any) {
     project: { id: 'p', name: 'Fixture', root },
     profile,
   });
-  const projects = new FileProjectRegistry([store]);
+  const projects = new ProjectStoreRegistry([store]);
   const executors = new EnvironmentExecutors();
   const tools = new RepositoryTools(executors);
   const sessions = new FileManagedSessions(path.join(root, '.buro/local/managed'));

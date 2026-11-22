@@ -7,7 +7,7 @@ import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { DeepSeekProvider } from '../adapters/models/deepseek.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
 import type { ManagedSessionStore, ToolBroker } from '../core/model-ports.ts';
 import type { RuntimeEvent } from '../core/ports.ts';
@@ -57,7 +57,7 @@ async function fixture(t: any) {
     directory: path.join(root, 'state'),
     project: { id: 'p', name: 'SDK recovery fixture', root },
   });
-  const projects = new FileProjectRegistry([store]);
+  const projects = new ProjectStoreRegistry([store]);
   const directory = path.join(root, 'private-sessions');
   const sessions = new FileManagedSessions(directory);
   const runtimes: ManagedAgentRuntime[] = [];

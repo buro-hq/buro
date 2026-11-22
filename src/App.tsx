@@ -1,5 +1,5 @@
 import { useLocale, t } from './i18n/index.ts';
-import { Button } from '@mantine/core';
+import { Button, Stack, Text, Title } from '@mantine/core';
 import { History } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from './components/molecules/EmptyState';
@@ -30,9 +30,13 @@ import { FilesView } from './pages/FilesView';
 import { GoalsView } from './pages/GoalsView';
 import { SettingsView } from './pages/SettingsView';
 import { UserSettingsPage } from './pages/UserSettingsPage';
+import { ProjectPicker } from './components/organisms/ProjectPicker';
+import { ExecutionResources } from './components/organisms/ExecutionResources';
 export default function App() {
   useLocale();
   const data = useProject();
+  if (data.client && data.service && data.connection === 'connected' && !data.snapshot)
+    return <ServiceOnboarding />;
   if (!data.snapshot || !data.client)
     return (
       <div className="startup">
@@ -48,6 +52,47 @@ export default function App() {
       </div>
     );
   return <ProjectWorkspace key={data.snapshot.project.id} />;
+}
+function ServiceOnboarding() {
+  const { service, error } = useProject();
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [modelsOpen, setModelsOpen] = useState(false);
+  return (
+    <main className="startup service-onboarding">
+      <Stack gap="md" maw={640} w="100%" px="xl">
+        <span className="startup-logo">
+          <BrandMark size={32} />
+          Buro
+        </span>
+        <Title order={1} c="var(--text)">
+          {t('Your workspace starts with a project')}
+        </Title>
+        <Text c="dimmed">
+          {t('Connect a Git repository. Buro keeps its goals, team and results together.')}
+        </Text>
+        {error && (
+          <Text c="red" role="alert">
+            {error}
+          </Text>
+        )}
+        <Button
+          size="md"
+          w="fit-content"
+          onClick={() => setProjectsOpen(true)}
+          disabled={!service?.projects.length && !service?.capabilities.includes('project.connect')}
+        >
+          {service?.projects.length ? t('Choose project') : t('Connect project')}
+        </Button>
+        {service?.capabilities.includes('resources.list') && (
+          <Button variant="subtle" onClick={() => setModelsOpen((value) => !value)}>
+            {t('Configure models')}
+          </Button>
+        )}
+        {modelsOpen && <ExecutionResources />}
+      </Stack>
+      <ProjectPicker opened={projectsOpen} onClose={() => setProjectsOpen(false)} />
+    </main>
+  );
 }
 function ProjectWorkspace() {
   const locale = useLocale();

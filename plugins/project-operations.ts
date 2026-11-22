@@ -38,6 +38,7 @@ export const projectOperationsPlugin: Plugin.Object<{ operations: ResultOperatio
     };
     for (const [method, handler] of Object.entries(handlers))
       ctx.effect(() => ctx.commands.bus.register(method as keyof typeof handlers, handler));
+    ctx.on('service/info', (info) => info.capabilities.push('project.research'));
     ctx.on('project/snapshot', (snapshot) => {
       snapshot.capabilities.push('project.research');
       if (snapshot.project.managed) snapshot.capabilities.push(...Object.keys(handlers));

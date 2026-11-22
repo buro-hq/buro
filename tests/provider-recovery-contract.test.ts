@@ -20,7 +20,7 @@ import { RequestGate } from '../adapters/models/http.ts';
 import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { FileRuntimeRoutes } from '../adapters/files/runtime-routes.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { RepositoryTools } from '../adapters/tools/repository-tools.ts';
 import { EnvironmentExecutors } from '../adapters/environments/executors.ts';
 
@@ -206,7 +206,7 @@ async function fixture(t: any, kind: Provider) {
     doc.runs.push(run);
     return { result: null, change: { type: 'run.changed', run, goal } };
   });
-  const projects = new FileProjectRegistry([store]);
+  const projects = new ProjectStoreRegistry([store]);
   const directory = path.join(root, '.buro/local');
   const nativeByAssignment = new Map<string, string>();
   const rigs: { close: () => Promise<void> }[] = [];

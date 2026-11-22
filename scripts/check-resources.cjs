@@ -92,7 +92,7 @@ const { chromium, expect } = require('@playwright/test');
     host = await createHost({
       projects: [
         {
-          directory: path.join(root, 'project'),
+          storageAddress: path.join(root, 'project'),
           project: { id: 'codex-panel', name: 'Resource settings fixture', root, managed: true },
           profile,
           roles: [
@@ -829,7 +829,7 @@ const { chromium, expect } = require('@playwright/test');
     host = await createHost({
       projects: [
         {
-          directory: path.join(root, 'project'),
+          storageAddress: path.join(root, 'project'),
           project: { id: 'codex-panel', name: 'Resource settings fixture', root, managed: true },
         },
       ],
@@ -942,7 +942,7 @@ const { chromium, expect } = require('@playwright/test');
     host = await createHost({
       projects: [
         {
-          directory: path.join(root, 'project'),
+          storageAddress: path.join(root, 'project'),
           project: { id: 'codex-panel', name: 'Resource settings fixture', root, managed: true },
         },
       ],

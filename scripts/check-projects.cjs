@@ -47,7 +47,7 @@ const exec = promisify(execFile);
     host = await createHost({
       projects: [
         {
-          directory: path.join(data, 'control'),
+          storageAddress: path.join(data, 'control'),
           project: { id: 'codex-panel', name: 'Control project', root: data },
         },
       ],

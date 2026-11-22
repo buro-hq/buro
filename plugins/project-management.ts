@@ -1,6 +1,13 @@
 import type { ExecutionEnvironmentPort } from '../core/environment-ports.ts';
 import { Service, type Context, type Plugin } from 'cordis';
-import { ProjectManager, policyView } from '../adapters/files/project-manager.ts';
+import { randomUUID } from 'node:crypto';
+import { FileProjectRepository, FileProjectCatalog } from '../adapters/files/project-manager.ts';
+import {
+  ProjectApplication,
+  policyView,
+  type ProjectRepositoryPort,
+  type ProjectCatalogPort,
+} from '../core/project-application.ts';
 import type { ExecutionPolicy, WorkspacePort, CheckPort } from '../core/execution-ports.ts';
 declare module 'cordis' {
   interface Context {
@@ -8,15 +15,17 @@ declare module 'cordis' {
   }
 }
 class Management extends Service {
-  api: ProjectManager;
-  constructor(ctx: Context, api: ProjectManager) {
+  api: ProjectApplication;
+  constructor(ctx: Context, api: ProjectApplication) {
     super(ctx, 'projectManagement');
     this.api = api;
   }
 }
 export const projectManagementPlugin: Plugin.Object<{
   environments?: ExecutionEnvironmentPort;
-  catalogFile: string;
+  catalogFile?: string;
+  repository?: ProjectRepositoryPort;
+  catalog?: ProjectCatalogPort;
   policies: Record<string, ExecutionPolicy>;
   workspaces: WorkspacePort;
   checks: CheckPort;
@@ -24,11 +33,18 @@ export const projectManagementPlugin: Plugin.Object<{
   name: 'project-management',
   inject: ['projects', 'commands'],
   async apply(ctx, options) {
-    const api = new ProjectManager({
+    if (!options.catalog && !options.catalogFile) throw Error('A project catalog is required.');
+    const api = new ProjectApplication({
       registry: ctx.projects.registry,
+      stores: ctx.projects.stores,
       policies: options.policies,
-      catalogFile: options.catalogFile,
+      repository: options.repository || new FileProjectRepository(),
+      catalog: options.catalog || new FileProjectCatalog(options.catalogFile!),
       environments: options.environments,
+      id: randomUUID,
+      now: () => new Date().toISOString(),
+      report: (message, error, root) =>
+        console.error(message, root || '', error instanceof Error ? error.message : String(error)),
     });
     new Management(ctx, api);
     ctx.effect(() => () => api.dispose());
@@ -45,6 +61,9 @@ export const projectManagementPlugin: Plugin.Object<{
     } as const;
     for (const [method, handler] of Object.entries(handlers))
       ctx.effect(() => ctx.commands.bus.register(method as keyof typeof handlers, handler));
+    ctx.on('service/info', (info) => {
+      info.capabilities.push('project.inspect', 'project.connect');
+    });
     ctx.on('project/snapshot', (snapshot) => {
       snapshot.capabilities.push('project.connect');
       if (snapshot.project.managed) {

@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { GoalService, RoleService, canAccept } from '../core/services.ts';
 import { evaluateAcceptance, type PhaseReceipt } from '../core/workflow.ts';
 import { createHost, goalsPlugin } from '../plugins/host.ts';
@@ -23,7 +23,7 @@ async function fixture(t: any, extra: Record<string, unknown> = {}) {
     await store.close();
     await fs.rm(directory, { recursive: true, force: true });
   });
-  const registry = new FileProjectRegistry([store]);
+  const registry = new ProjectStoreRegistry([store]);
   const env = {
     projects: registry,
     now: () => new Date().toISOString(),
@@ -77,7 +77,7 @@ test('retrying a committed request is idempotent, conflicting reuse is rejected'
   const restored = await FileProjectStore.open(f.options);
   t.after(() => restored.close());
   const service = new GoalService({
-    projects: new FileProjectRegistry([restored]),
+    projects: new ProjectStoreRegistry([restored]),
     now: () => '',
     id: () => '',
   });
@@ -144,7 +144,7 @@ test('one writer per project; a failing observer cannot invalidate a commit', as
 test('plugin disposal withdraws handlers and leaves independent services working', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'project-plugins-'));
   const host = await createHost({
-    projects: [{ directory, project: { id: 'sample', name: 'Sample', root: directory } }],
+    projects: [{ storageAddress: directory, project: { id: 'sample', name: 'Sample', root: directory } }],
   });
   t.after(async () => {
     await host.dispose();
@@ -214,7 +214,7 @@ test('completion and reviewer participation are insufficient for acceptance', ()
 test('Codex runtime is a replaceable plugin; same session supports follow-up turns', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'project-runtime-'));
   const host = await createHost({
-    projects: [{ directory, project: { id: 'sample', name: 'Sample', root: directory } }],
+    projects: [{ storageAddress: directory, project: { id: 'sample', name: 'Sample', root: directory } }],
   });
   t.after(async () => {
     await host.dispose();

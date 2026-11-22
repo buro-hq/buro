@@ -104,11 +104,27 @@ The production factory lazily loads the SDK for managed backends. Direct model c
 
 This is actual scheduler adoption, not merely a fake spike or interface move. It does not complete a portable backend lifecycle, four installable packages, history paging, default-none quotas, operational-preparation recovery or live-model quality evaluation. Those remain in contribution/persistence/package work below; no public alias over Buro-specific session data is called a reusable AgentBackend. [Source-derived SDK integration plan](../output/research/stage3-sdk-integration-plan-2026-11-22.md) records the earlier gates and why host authority was retained.
 
+## Stage 4 — application services and Cordis composition
+
+### Substep 4A — injected project storage, application use cases and empty startup
+
+Status: complete. Final full suite **890/890 passed**, with no skips; build/typecheck, formatting, production desktop/mobile smoke and service-onboarding browser checks passed. Three implementation agents and two independent review agents worked in waves; parent owns production composition and integrated checks. [Validation receipt](../output/research/stage4a-validation-2026-11-22.json), [architecture/code/boundary review](../output/research/stage4a-architecture-review-2026-11-22.md), [independent lifecycle/transport/UI review](../output/research/stage4a-tests-review-2026-11-22.md).
+
+ProjectStoreFactory and MutableProjectRegistry are explicit application ports. ProjectStoreRegistry owns admitted stores independently of their backend, rejects duplicate ownership and blocks use during disposal. The file factory snapshots inputs, preserves locks and receipts, and seeds no implicit roles. Startup failure attempts cleanup of every opened store and preserves the original admission error even if cleanup rejects; this does not claim resource release after a failed close.
+
+ProjectApplication now owns connect/restore/configure/research-apply/verify/result-apply workflows through repository, catalog, store, environment and check ports. Filesystem and Git details remain in file adapters. The Cordis project-management plugin constructs the core application directly and accepts injected repository/catalog ports; its public service type no longer depends on the file manager. Factory store identity is checked before workflow mutation or registry admission, and stores rejected before ownership transfer are closed. Connection receipts are adopted only after catalog persistence succeeds.
+
+The actual production daemon composition starts with no built-in project, goal, run or project-specific check policy. Saved connections are restored; explicit BURO_DEMO=1 loads isolated demo stores. service.info discovers service-wide capabilities and real projects without a fake snapshot. UI onboarding, model configuration entry points and global CLI commands work before a project is connected. A failed service connection displays the error and retry; browser-local drafts require explicit user selection. Snapshot selection adopts state before event replay, and delayed projection responses/errors cannot roll history back or close another selected project.
+
+Validation includes actual application startup, connecting/reopening a real temporary Git repository, opaque non-file stores through the actual Cordis host, partial-startup cleanup failures, and stale A→B/A→B→A client reads. The browser onboarding test uses synthetic repository handlers; the separate application tests prove the real file/Git workflow. No model requests or original user repositories are involved. Production desktop/mobile smoke also passed.
+
+Bounded follow-ups: connecting a real project still installs coordinator/reviewer/operational role templates; default resource configuration still describes Codex, and provider/backend configuration remains a closed first-party union. Contribution registries, generated workflow defaults and cross-client configuration invalidation are subsequent work, not claimed by this service extraction. File persistence, default finite quotas, operational-preparation outcome recovery and portable backend packages remain unchanged. [Contribution implementation plan](../output/research/stage4-contributions-plan-2026-11-22.md).
+
 ## Remaining authorized stages
 
 Stage 2A–2C is complete within the recorded scope. Portable ModelProvider contracts, capabilities, common role choices, scope and policy projection are implemented; the neutral AgentBackend loop belongs to stage 3 below.
 The pinned SDK spike and production scheduler adoption are complete in 3A/3B1/3B2. Portable backend lifecycle/package exports still require the contribution/persistence/package cutover below; an optional mini backend remains conditional, not a required second loop.
-4. Contribution-based Cordis composition, project services/store factory and empty production startup; demo fixtures remain explicit.
+4. Project application/store ports and empty production startup are complete in 4A. Provider/backend/tool/context/analysis/check/workflow contribution registries and cross-client invalidation remain 4B/4C; demo fixtures remain explicit.
 5. One transactional SQLite authority, incremental accounting, complete private artifacts and paged context/history; clean pre-release cutover and default-none quotas only after every hidden lifetime stop is removed.
 6. Same-writer repair, fresh criticism, complete revision-bound review packets and independently consumable packages proved by a second host.
 7. Incremental teams, isolated concurrent runs/capacity queues, accurate attempts/sessions and MCP over the same application API; controlled quality comparisons.

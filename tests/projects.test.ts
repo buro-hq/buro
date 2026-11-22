@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ProjectManager } from '../adapters/files/project-manager.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { ProjectChecks, runProjectCommand } from '../adapters/checks/project-commands.ts';
 import { GoalService } from '../core/services.ts';
@@ -32,7 +32,7 @@ async function fixture(t: any) {
   await fs.writeFile(path.join(root, '.gitignore'), 'node_modules/\ndist/\n');
   await git(['add', '.']);
   await git(['commit', '-m', 'Initial']);
-  const registry = new FileProjectRegistry([]),
+  const registry = new ProjectStoreRegistry([]),
     policies: Record<string, ExecutionPolicy> = {},
     manager = new ProjectManager({
       registry,
@@ -197,7 +197,7 @@ test('connect persists a per-repo profile and isolated roles; aliases and retrie
   });
   await f.manager.dispose();
   await f.registry.close();
-  const registry = new FileProjectRegistry([]),
+  const registry = new ProjectStoreRegistry([]),
     manager = new ProjectManager({
       registry,
       policies: {},
@@ -263,7 +263,7 @@ test('restart recovers a committed profile when its readable project.json export
   await fs.writeFile(path.join(f.root, '.buro/project.json'), oldFile);
   await f.manager.dispose();
   await f.registry.close();
-  const registry = new FileProjectRegistry([]),
+  const registry = new ProjectStoreRegistry([]),
     policies: Record<string, ExecutionPolicy> = {},
     manager = new ProjectManager({
       registry,
@@ -423,7 +423,7 @@ test('verification retries share one command execution and return the persisted 
   );
   await f.manager.dispose();
   await f.registry.close();
-  const registry = new FileProjectRegistry([]),
+  const registry = new ProjectStoreRegistry([]),
     manager = new ProjectManager({
       registry,
       policies: {},

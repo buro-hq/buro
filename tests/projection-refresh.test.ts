@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { defaultRoles } from '../core/defaults.ts';
 import { createHost } from '../plugins/host.ts';
 import { websocketPlugin } from '../daemon/websocket.ts';
 import { SocketProjectClient } from '../clients/socket-client.ts';
@@ -24,7 +25,13 @@ test(
   async (t) => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-projection-refresh-'));
     const host = await createHost({
-      projects: [{ directory, project: { id: 'p', name: 'Projection fixture', root: directory } }],
+      projects: [
+        {
+          storageAddress: directory,
+          project: { id: 'p', name: 'Projection fixture', root: directory },
+          roles: structuredClone(defaultRoles),
+        },
+      ],
     });
     let client: SocketProjectClient | undefined;
     const captured = deferred<void>(),
@@ -130,7 +137,10 @@ test(
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-machine-projection-'));
     const host = await createHost({
       projects: [
-        { directory, project: { id: 'p', name: 'Machine projection fixture', root: directory } },
+        {
+          storageAddress: directory,
+          project: { id: 'p', name: 'Machine projection fixture', root: directory },
+        },
       ],
     });
     let client: SocketProjectClient | undefined,
@@ -198,7 +208,7 @@ test(
     const host = await createHost({
       projects: [
         {
-          directory,
+          storageAddress: directory,
           project: { id: 'p', name: 'Recovery projection fixture', root: directory },
           runs: [stopped],
         },

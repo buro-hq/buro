@@ -6,7 +6,7 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { ProjectManager } from '../adapters/files/project-manager.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 const exec = promisify(execFile);
@@ -109,7 +109,7 @@ test('read-only repository inspection does not execute fsmonitor or content conv
   const f = await fixture(t, true);
   await fs.writeFile(path.join(f.root, 'file.txt'), 'changed\n');
   const manager = new ProjectManager({
-    registry: new FileProjectRegistry([]),
+    registry: new ProjectStoreRegistry([]),
     policies: {},
     catalogFile: path.join(f.directory, 'catalog.json'),
   });

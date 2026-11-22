@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ProjectManager } from '../adapters/files/project-manager.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import type { Run } from '../protocol/domain.ts';
 
@@ -34,7 +34,7 @@ test('applying accepted model-written attributes cannot activate host smudge fil
   await git(['config', 'filter.sideeffect.smudge', quote(program)]);
   await git(['config', 'filter.sideeffect.required', 'true']);
 
-  const registry = new FileProjectRegistry([]);
+  const registry = new ProjectStoreRegistry([]);
   const manager = new ProjectManager({
     registry,
     policies: {},

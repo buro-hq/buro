@@ -1,0 +1,58 @@
+{
+  "stage": "4A",
+  "date": "2026-11-22",
+  "parentCommit": "a33f112",
+  "tests": {
+    "total": 890,
+    "passed": 890,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 69084.045875,
+    "log": "/private/tmp/buro-stage4a-final-tests.log"
+  },
+  "typecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage4a-final-typecheck.log"
+  },
+  "build": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage4a-build.log"
+  },
+  "format": {
+    "passed": true,
+    "logs": ["/private/tmp/buro-stage4a-format.log", "/private/tmp/buro-stage4a-server-format.log"]
+  },
+  "browser": {
+    "productionDesktopMobile": true,
+    "emptyServiceFirstProject": true,
+    "explicitMissingProject": true,
+    "staleSelectionRecovery": true,
+    "failedDiscoveryWithoutImplicitReplay": true,
+    "explicitReplayAvailable": true,
+    "modelRequests": 0,
+    "pageErrors": 0,
+    "logs": [
+      "/private/tmp/buro-stage4a-production.log",
+      "/private/tmp/buro-stage4a-bootstrap-browser.log"
+    ]
+  },
+  "independentReviews": [
+    "stage4a-architecture-review-2026-11-22.md",
+    "stage4a-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementation": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Connected project workflow role templates remain until contribution extraction.",
+    "Provider/backend configuration is not an open contribution catalog yet.",
+    "Finite default quotas and file persistence remain until stage 5.",
+    "No live model quality/speed evaluation or RTX requests.",
+    "Cleanup attempts do not prove physical release after a rejected close."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

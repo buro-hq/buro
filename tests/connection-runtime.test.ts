@@ -373,7 +373,7 @@ test('resource plugin publishes and executes API connection saves through the sh
   const host = await createHost({
     projects: [
       {
-        directory: path.join(f.directory, 'project-store'),
+        storageAddress: path.join(f.directory, 'project-store'),
         project: { id: 'p', name: 'Fixture', root: f.directory, managed: true },
       },
     ],

@@ -10,7 +10,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { ProjectResearchService } from '../core/project-research.ts';
 import { ResultService, type ResultOperations } from '../core/results.ts';
 import { operationalRoles } from '../core/operational-roles.ts';
@@ -100,7 +100,7 @@ async function fixture(t: any) {
     profile: structuredClone(profile),
     roles: operationalRoles,
   });
-  const projects = new FileProjectRegistry([store]);
+  const projects = new ProjectStoreRegistry([store]);
   const run = record();
   await store.transact('seed', 'seed', (doc) => {
     doc.runs.push(run);
@@ -336,7 +336,7 @@ test('native local preview uses a private HTTP port, verifies readiness, and sto
     directory: path.join(directory, '.buro'),
     project: { id: 'p', name: 'Preview', root: directory },
   });
-  const registry = new FileProjectRegistry([store]);
+  const registry = new ProjectStoreRegistry([store]);
   t.after(() => store.close());
   const workspaces = new GitWorkspaces(registry),
     workspace = await workspaces.prepare('p', 'R-preview');
@@ -411,7 +411,7 @@ test('native PR delivery pushes an isolated branch and reuses its PR without cha
       directory: path.join(root, '.buro'),
       project: { id: 'p', name: 'PR', root },
     }),
-    registry = new FileProjectRegistry([store]),
+    registry = new ProjectStoreRegistry([store]),
     operations = new NativeProjectOperations();
   t.after(async () => {
     process.env.PATH = previousPath;

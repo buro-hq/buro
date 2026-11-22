@@ -35,7 +35,7 @@ const { execFile } = require('node:child_process'),
     host = await createHost({
       projects: [
         {
-          directory: path.join(directory, 'control'),
+          storageAddress: path.join(directory, 'control'),
           project: { id: 'codex-panel', name: 'Control', root: directory },
         },
       ],

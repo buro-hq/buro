@@ -53,6 +53,21 @@ export interface ProjectRegistry {
   get(id: string): ProjectStore;
   list(): Project[];
 }
+/** Application-level storage address; each factory interprets it without leaking storage options. */
+export type ProjectStoreOpenSpec = {
+  storageAddress: string;
+  project: Project;
+  profile?: ProjectProfile;
+  roles?: Role[];
+  runs?: Run[];
+};
+export interface ProjectStoreFactory {
+  open(spec: ProjectStoreOpenSpec): Promise<ProjectStore>;
+}
+export interface MutableProjectRegistry extends ProjectRegistry {
+  add(store: ProjectStore): void;
+  close(): Promise<void>;
+}
 export class DomainError extends Error {
   code: string;
   constructor(code: string, message: string) {

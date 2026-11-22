@@ -31,6 +31,7 @@ export const localFilesPlugin: Plugin.Object = {
         materials.remove(m.id, m.fingerprint, p),
       ),
     );
+    ctx.on('service/info', (info) => info.capabilities.push('filesystem.list'));
     ctx.on('project/snapshot', (s) => s.capabilities.push(...capabilities));
   },
 };

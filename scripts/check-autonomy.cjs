@@ -103,7 +103,7 @@ const { chromium, expect } = require('@playwright/test');
     host = await createHost({
       projects: [
         {
-          directory: path.join(root, 'state'),
+          storageAddress: path.join(root, 'state'),
           project: { id: 'autonomy', name: 'Autonomy fixture', root },
           runs: [run],
         },

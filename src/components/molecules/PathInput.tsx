@@ -32,10 +32,12 @@ export function PathInput({
   root?: string;
   projectId?: string;
 }) {
-  const { snapshot, mode } = useProject();
+  const { snapshot, service, mode } = useProject();
   const [opened, setOpened] = useState(false),
     [error, setError] = useState('');
-  const canBrowse = mode === 'service' && snapshot?.capabilities.includes('filesystem.list');
+  const canBrowse =
+    mode === 'service' &&
+    (snapshot?.capabilities || service?.capabilities)?.includes('filesystem.list');
   const initial = root
     ? root.replace(/\/$/, '') + '/' + (value === './' ? '' : value)
     : value || undefined;
@@ -97,7 +99,7 @@ export function PathListInput({
   root?: string;
   projectId?: string;
 }) {
-  const { snapshot, mode } = useProject();
+  const { snapshot, service, mode } = useProject();
   const [opened, setOpened] = useState(false),
     [error, setError] = useState('');
   return (
@@ -114,7 +116,10 @@ export function PathListInput({
           size="xs"
           variant="subtle"
           leftSection={<Plus size={13} />}
-          disabled={mode !== 'service' || !snapshot?.capabilities.includes('filesystem.list')}
+          disabled={
+            mode !== 'service' ||
+            !(snapshot?.capabilities || service?.capabilities)?.includes('filesystem.list')
+          }
           onClick={() => setOpened(true)}
         >
           {t('Choose files and directories')}

@@ -12,7 +12,7 @@ import { promisify } from 'node:util';
 import { NodeEnvironment } from '../adapters/dependencies/node-environment.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
-import { FileProjectRegistry } from '../adapters/files/registry.ts';
+import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { ExecutionService } from '../core/execution.ts';
 import { GoalService } from '../core/services.ts';
 import { dependencyManifestPreserved, withEnvironmentRepair } from '../core/environment-repair.ts';
@@ -44,7 +44,7 @@ async function fixture(t: any, enabled = true, tamper = false) {
     directory: path.join(root, '.buro'),
     project: { id: 'p', name: 'P', root },
   });
-  const projects = new FileProjectRegistry([store]),
+  const projects = new ProjectStoreRegistry([store]),
     installations: string[] = [],
     prompts: string[] = [],
     inputs = new Map<string, any>(),
