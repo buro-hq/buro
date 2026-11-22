@@ -7,5 +7,4 @@ export const ExecutionPolicySchema = z.strictObject({
   checks: z.array(z.object({ id: z.string(), title: z.string() })),
   defaultCheckIds: z.array(z.string()),
   maxWorkers: z.number(),
-  maxRepairs: z.number(),
 });

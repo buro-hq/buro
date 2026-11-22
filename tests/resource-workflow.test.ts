@@ -35,14 +35,7 @@ const fixtureKey = 'resource-workflow-fake-key';
 const checkCommand = 'node --test checks/value.test.mjs';
 type Mode = 'ollama' | 'deepseek' | 'mixed';
 type Call = { name: string; arguments: unknown };
-type Phase =
-  | 'planning'
-  | 'worker'
-  | 'integration'
-  | 'review'
-  | 'research'
-  | 'environment'
-  | 'delivery';
+type Phase = 'coordination' | 'worker' | 'review' | 'research' | 'environment' | 'delivery';
 type Generation = { provider: 'ollama' | 'deepseek'; model: string; phase: Phase; tools: string[] };
 type ScenarioResponse = { phase: Phase; calls: Call[]; content: string };
 
@@ -167,26 +160,41 @@ function scenario(body: any): ScenarioResponse {
       ),
       'The provider-specific continuation must survive tool rounds',
     );
-  if (prompt.startsWith('First,'))
-    return answer('planning', {
-      summary: 'Update the value and verify the actual change',
-      steps: [
-        { step: 'Set value to two', owner: 'builder' },
-        { step: 'Inspect the diff', owner: 'reviewer' },
-      ],
-      team: [
-        {
-          roleId: 'builder',
-          action: 'create',
-          title: 'Builder',
-          description: 'Implements the assigned module',
-          instructions: 'Implement the assigned behavior and preserve the trusted checks.',
-          kind: 'implementation',
-          paths: ['src/value.mjs'],
-          runtimeId: null,
-          runtimeReason: '',
-        },
-      ],
+  const choose = (action: string, input: unknown = {}) =>
+    answer('coordination', { decision: { action, input } });
+  if (prompt.startsWith('Goal:') || prompt.startsWith('The service rejected this action'))
+    return choose('delegate', {
+      worker: {
+        roleId: 'builder',
+        action: 'create',
+        title: 'Builder',
+        description: 'Implements the assigned module',
+        instructions: 'Implement the assigned behavior and preserve the trusted checks.',
+        kind: 'implementation',
+        paths: ['src/value.mjs'],
+        runtimeId: null,
+        runtimeReason: '',
+        assignment: null,
+      },
+    });
+  if (prompt.startsWith('Service observation for delegate')) return choose('check');
+  if (prompt.startsWith('Service observation for check'))
+    return choose('review', {
+      result: {
+        status: 'success',
+        summary: 'The assigned module is updated',
+        artifacts: ['src/value.mjs'],
+        notesForNextAgent: '',
+      },
+    });
+  if (prompt.startsWith('Service observation for review'))
+    return choose('finish', {
+      result: {
+        status: 'success',
+        summary: 'The independently reviewed change is complete',
+        artifacts: ['src/value.mjs'],
+        notesForNextAgent: '',
+      },
     });
   if (prompt.startsWith('Execute your assigned work')) {
     if (!outputs.length) return tool('worker', 'read_file', { path: 'src/value.mjs' });
@@ -223,13 +231,6 @@ function scenario(body: any): ScenarioResponse {
       summary: 'Inspected the actual integrated diff',
     });
   }
-  if (prompt.startsWith('Plan accepted'))
-    return answer('integration', {
-      status: 'success',
-      summary: 'Integrated the service-owned worker result',
-      artifacts: ['src/value.mjs'],
-      notesForNextAgent: '',
-    });
   if (prompt.startsWith('Inspect the project and existing settings.')) {
     assert.equal(
       (body.tools || []).some((tool: any) =>
@@ -329,7 +330,6 @@ async function fixture(
     setup: [],
     dependencies: 'none',
     maxWorkers: options.twoWorkers ? 2 : 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
     baseBranch: 'main',
   });
@@ -346,7 +346,6 @@ async function fixture(
           checks: profile.checks.map(({ id, title }) => ({ id, title })),
           defaultCheckIds: profile.defaultCheckIds,
           maxWorkers: profile.maxWorkers,
-          maxRepairs: 0,
         },
       },
     };
@@ -529,32 +528,47 @@ function selectedScenario(options: {
 }) {
   return (body: any): ScenarioResponse => {
     const { prompt, outputs } = taskContext(body);
-    if (prompt.startsWith('First,')) {
+    if (prompt.startsWith('Goal:') || prompt.startsWith('The service rejected this action')) {
       const response = scenario(body),
-        plan = JSON.parse(response.content),
-        corrected = prompt.includes('Correct the previous plan:');
-      if (corrected) options.onCorrection?.();
-      plan.team[0].action = options.reuse ? 'reuse' : 'create';
-      plan.team[0].runtimeId = corrected
+        proposal = JSON.parse(response.content);
+      const corrected = prompt.startsWith('The service rejected this action');
+      if (corrected && (body.format || body.response_format)) options.onCorrection?.();
+      const worker = proposal.decision.input.worker;
+      worker.action = options.reuse ? 'reuse' : 'create';
+      worker.runtimeId = corrected
         ? (options.correctedRuntimeId ?? null)
         : (options.runtimeId ?? null);
-      plan.team[0].runtimeReason = plan.team[0].runtimeId
-        ? 'Use this model for the assigned module.'
-        : '';
-      if (options.twoWorkers) {
-        plan.team.push({
-          ...plan.team[0],
-          roleId: 'other_builder',
-          title: 'Other builder',
-          description: 'Implements a separate module',
-          paths: ['src/other.mjs'],
-          runtimeId: 'local-reviewer',
-          runtimeReason: 'Use the second permitted model for the independent module.',
-        });
-        plan.steps.splice(1, 0, { step: 'Set other to two', owner: 'other_builder' });
-      }
-      return { ...response, content: JSON.stringify(plan) };
+      worker.runtimeReason = worker.runtimeId ? 'Use this model for the assigned module.' : '';
+      return { ...response, content: JSON.stringify(proposal) };
     }
+    if (
+      options.twoWorkers &&
+      prompt.startsWith('Service observation for delegate') &&
+      !prompt.includes('other_builder')
+    )
+      return {
+        phase: 'coordination',
+        calls: [],
+        content: JSON.stringify({
+          decision: {
+            action: 'delegate',
+            input: {
+              worker: {
+                roleId: 'other_builder',
+                action: 'create',
+                title: 'Other builder',
+                description: 'Implements a separate module',
+                instructions: 'Implement the assigned module and preserve checks.',
+                kind: 'implementation',
+                paths: ['src/other.mjs'],
+                runtimeId: 'local-reviewer',
+                runtimeReason: 'Use the second permitted model for the independent module.',
+                assignment: null,
+              },
+            },
+          },
+        }),
+      };
     if (options.twoWorkers && prompt.startsWith('Execute your assigned work')) {
       const name = prompt.includes('Role: other_builder.') ? 'other' : 'value',
         file = `src/${name}.mjs`;
@@ -616,7 +630,7 @@ async function executeGoal(f: Awaited<ReturnType<typeof fixture>>) {
   const run = await startGoal(f);
   assert.equal(run.status, 'completed', [run.result, ...f.failures].join('\n'));
   assert.ok(run.commit);
-  assert.equal(run.baseline.passed, 0);
+  assert.equal(run.baseline.total, 0, 'The chosen action sequence has no mandatory baseline');
   assert.equal(run.acceptance.passed, 1);
   assert.equal(run.independentReviewer, true);
   assert.equal((await f.git(['rev-parse', 'HEAD'])).stdout.trim(), f.originalHead);
@@ -719,7 +733,12 @@ test('a conflicting coordinator proposal is corrected before dispatch and a user
   );
   const run = await executeGoal(f);
   assert.equal(corrected, true);
-  assert.equal(run.events.filter((event) => event.type === 'plan.rejected').length, 1);
+  assert.equal(
+    run.events.filter(
+      (event) => event.type === 'action.requested' && JSON.parse(event.text).action === 'delegate',
+    ).length,
+    2,
+  );
   assert.equal(run.assignmentResources?.builder.source, 'fixed');
   assert.equal(run.assignmentResources?.builder.resource.id, 'local-reviewer');
   assert.equal(
@@ -750,10 +769,15 @@ test('an eligible runtime used by another role is available to a worker without 
       .filter((request) => request.phase === 'worker')
       .every((request) => request.model === 'local-review'),
   );
-  assert.equal(run.events.filter((event) => event.type === 'plan.rejected').length, 0);
+  assert.equal(
+    run.events.filter(
+      (event) => event.type === 'action.requested' && JSON.parse(event.text).action === 'delegate',
+    ).length,
+    1,
+  );
 });
 
-test('an unavailable user fixed runtime requires attention after one plan without dispatch or fallback', async (t) => {
+test('an unavailable user fixed runtime requires attention after one delegation proposal without dispatch or fallback', async (t) => {
   const f = await fixture(t, 'mixed', false, {
     scenario: selectedScenario({ reuse: true }),
   });
@@ -782,7 +806,7 @@ test('an unavailable user fixed runtime requires attention after one plan withou
     1,
     'A fixed user choice cannot be repaired by another model plan',
   );
-  assert.equal(f.generations[0].phase, 'planning');
+  assert.equal(f.generations[0].phase, 'coordination');
   assert.equal(f.generations[0].provider, 'deepseek');
   assert.equal(
     await fs.readFile(path.join(run.workspace!, 'src/value.mjs'), 'utf8'),
@@ -809,7 +833,13 @@ for (const [label, runtimeId, pool] of [
     });
     const run = await executeGoal(f);
     assert.equal(corrected, true);
-    assert.equal(run.events.filter((event) => event.type === 'plan.rejected').length, 1);
+    assert.equal(
+      run.events.filter(
+        (event) =>
+          event.type === 'action.requested' && JSON.parse(event.text).action === 'delegate',
+      ).length,
+      2,
+    );
     assert.deepEqual(
       run.resources?.workerPool?.map((resource) => resource.id),
       pool,
@@ -834,9 +864,9 @@ for (const [label, runtimeId, pool] of [
     );
   });
 
-test('role pin changes during planning reject the stale plan, while a later pin cannot reroute an accepted worker', async (t) => {
+test('role pin changes during a coordinator turn reject the stale delegation, while a later pin cannot reroute an accepted worker', async (t) => {
   let f: Awaited<ReturnType<typeof fixture>>;
-  let planningUpdated = false,
+  let proposalUpdated = false,
     workerUpdated = false,
     corrections = 0;
   const save = (expectedVersion: number, runtimeId: string) =>
@@ -858,16 +888,19 @@ test('role pin changes during planning reject the stale plan, while a later pin 
     workerPool: ['local-worker', 'local-reviewer'],
     async scenario(body) {
       const { prompt } = taskContext(body);
-      if (prompt.startsWith('First,')) {
-        if (!planningUpdated) {
+      if (
+        (prompt.startsWith('Goal:') || prompt.startsWith('The service rejected this action')) &&
+        (body.format || body.response_format)
+      ) {
+        if (!proposalUpdated) {
           assert.match(prompt, /"id":"builder","version":1/);
           assert.match(prompt, /"runtimePreference":\{"mode":"fixed","runtimeId":"local-worker"\}/);
           assert.equal(f.generations.filter((request) => request.phase === 'worker').length, 0);
           await save(1, 'local-reviewer');
-          planningUpdated = true;
+          proposalUpdated = true;
         } else {
-          assert.match(prompt, /Correct the previous plan:/);
-          assert.match(prompt, /Role builder changed during planning/);
+          assert.match(prompt, /The service rejected this action/);
+          assert.match(prompt, /ROLE_CHANGED/);
           assert.match(prompt, /"id":"builder","version":2/);
           assert.match(
             prompt,
@@ -894,10 +927,15 @@ test('role pin changes during planning reject the stale plan, while a later pin 
   });
   await save(0, 'local-worker');
   const run = await executeGoal(f);
-  assert.equal(planningUpdated, true);
+  assert.equal(proposalUpdated, true);
   assert.equal(workerUpdated, true);
   assert.equal(corrections, 1);
-  assert.equal(run.events.filter((event) => event.type === 'plan.rejected').length, 1);
+  assert.equal(
+    run.events.filter(
+      (event) => event.type === 'action.requested' && JSON.parse(event.text).action === 'delegate',
+    ).length,
+    2,
+  );
   assert.equal(run.assignmentResources?.builder.roleVersion, 2);
   assert.equal(run.assignmentResources?.builder.resource.id, 'local-reviewer');
   assert.deepEqual(run.assignmentResources?.builder.preference, {
@@ -940,7 +978,7 @@ for (const mode of ['ollama', 'deepseek', 'mixed'] as const)
     const run = f.host.ctx.workflows.api.get('p', runId);
     assert.equal(run.status, 'completed', [run.result, ...f.failures].join('\n'));
     assert.ok(run.commit);
-    assert.equal(run.baseline.passed, 0, 'The trusted test must detect the initial bug');
+    assert.equal(run.baseline.total, 0, 'A baseline check is not a mandatory model stage');
     assert.equal(run.acceptance.passed, 1);
     assert.equal(run.independentReviewer, true);
     assert.equal(run.resources?.profileId, mode);
@@ -995,8 +1033,7 @@ for (const mode of ['ollama', 'deepseek', 'mixed'] as const)
     const expected = (runtimeId: string) =>
       f.config.runtimes.find((runtime) => runtime.id === runtimeId)!;
     for (const [phase, runtimeId] of [
-      ['planning', selected.coordinator],
-      ['integration', selected.coordinator],
+      ['coordination', selected.coordinator],
       ['worker', selected.worker],
       ['review', selected.reviewer],
     ] as const) {

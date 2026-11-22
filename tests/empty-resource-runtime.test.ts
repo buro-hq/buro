@@ -31,7 +31,6 @@ const profile = (resourceProfile?: string) =>
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 1,
     turnTimeoutMs: 10000,
     ...(resourceProfile ? { resourceProfile } : {}),
   });

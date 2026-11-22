@@ -28,7 +28,6 @@ const policy: ExecutionPolicy = {
   checks: [],
   defaultCheckIds: [],
   maxWorkers: 2,
-  maxRepairs: 1,
   turnTimeoutMs: 10000,
 };
 const profile: ProjectProfile = {
@@ -41,7 +40,6 @@ const profile: ProjectProfile = {
   checks: [],
   defaultCheckIds: [],
   maxWorkers: 2,
-  maxRepairs: 1,
   turnTimeoutMs: 10000,
 };
 

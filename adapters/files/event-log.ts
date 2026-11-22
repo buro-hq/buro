@@ -5,6 +5,7 @@ import {
   mergeRunLifecycle,
   mergeRunWorkspace,
   mergeRunPlan,
+  mergeRunWorkerAssignment,
   mergeRunStopped,
   mergeRunContinued,
 } from '../../protocol/run-view.ts';
@@ -93,6 +94,21 @@ export function expandEvent(event: StoredEvent, runs: Map<string, Run>): DomainE
             change.entries,
             change.view,
           ),
+    );
+    return event as DomainEvent;
+  }
+  if (change.type === 'run.worker-delegated') {
+    const previous = runs.get(change.current.id);
+    if (!previous) throw Error('Missing run checkpoint in event log: ' + change.current.id);
+    runs.set(
+      change.current.id,
+      mergeRunWorkerAssignment(
+        previous,
+        change.current,
+        change.assignment,
+        change.entries,
+        change.view,
+      ),
     );
     return event as DomainEvent;
   }

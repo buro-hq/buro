@@ -89,9 +89,11 @@ export function projectManagedRequestContext(
   const instruction =
     schema === undefined
       ? 'Use the available tools when needed to complete the task. When the work is complete, give a brief completion note; the final response is requested separately.'
-      : (state.finalizing || state.closing
-          ? 'Match this schema: '
-          : 'Return your final answer as JSON matching this schema: ') + JSON.stringify(schema);
+      : host.options.provider.structuredOutputMode === 'schema'
+        ? 'Return your final answer as JSON matching the response format supplied by the service.'
+        : (state.finalizing || state.closing
+            ? 'Match this schema: '
+            : 'Return your final answer as JSON matching this schema: ') + JSON.stringify(schema);
   // Extend only this detached view. Never infer or remove instructions from historical text.
   const task = [...messages].reverse().find((message) => message.role === 'user');
   if (task) task.content += '\n' + instruction;

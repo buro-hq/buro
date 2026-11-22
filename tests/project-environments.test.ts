@@ -40,7 +40,6 @@ async function fixture(t: any) {
     checks: [],
     defaultCheckIds: [],
     maxWorkers: 2,
-    maxRepairs: 2,
     turnTimeoutMs: 1000,
   };
   const command = (id: string, script: string) => ({

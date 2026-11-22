@@ -29,7 +29,8 @@ type AttemptDocument = ProjectDocument & {
   runWorkspaces?: Record<string, RunWorkspaceBinding>;
   runPlans?: Record<string, RunPlan>;
   runPlanHeads?: Record<string, string>;
-  runAssignments?: Record<string, Record<string, RunWorkerAssignment>>;
+  runAssignments?: Record<string, RunWorkerAssignment>;
+  runAssignmentHeads?: Record<string, Record<string, string>>;
 };
 type Access = { write<T>(action: () => T): T };
 const invalid = () =>
@@ -50,8 +51,11 @@ const lineageRows = (doc: AttemptDocument) => ({
     return id === undefined ? undefined : doc.runPlans?.[id];
   },
   planAssignments: (runId: string) => {
-    const id = doc.runPlanHeads?.[runId];
-    return id === undefined ? [] : Object.values(doc.runAssignments?.[id] ?? {});
+    return Object.values(doc.runAssignmentHeads?.[runId] ?? {}).map((id) => {
+      const assignment = doc.runAssignments?.[id];
+      if (!assignment) throw invalid();
+      return assignment;
+    });
   },
 });
 export function documentAttemptContext(source: ProjectDocument, id: string): RunAttemptContext {
@@ -255,6 +259,16 @@ export function validateDocumentRunAttempts(previous: ProjectDocument, next: Pro
         plan.attemptId !== context.planOriginAttemptId ||
         plan.runId !== context.runId ||
         plan.admissionId !== context.admissionId
+      )
+        throw invalid();
+    }
+    for (const [roleId, reference] of Object.entries(context.inheritedAssignments ?? {})) {
+      const assignment = after.runAssignments?.[reference.id];
+      if (
+        !assignment ||
+        assignment.role.id !== roleId ||
+        assignment.runId !== context.runId ||
+        assignment.admissionId !== context.admissionId
       )
         throw invalid();
     }

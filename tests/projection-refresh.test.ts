@@ -49,7 +49,6 @@ test(
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 1,
-          maxRepairs: 0,
         },
       });
       // The fixture's derived revision makes a role-dependent service refresh observable.
@@ -157,7 +156,6 @@ test(
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 1,
-          maxRepairs: 0,
         },
       });
       snapshot.effectivePolicy.origin.revision = profileRevision;

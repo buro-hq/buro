@@ -44,7 +44,6 @@ const profile: ProjectProfile = {
   setup: [],
   dependencies: 'none',
   maxWorkers: 2,
-  maxRepairs: 1,
   turnTimeoutMs: 360000,
   baseBranch: 'main',
   components: [component],
@@ -247,7 +246,6 @@ test('disabled delivery waits for configuration, then retries without rebuilding
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 2,
-          maxRepairs: 1,
         },
       },
     };
@@ -267,7 +265,6 @@ test('disabled delivery waits for configuration, then retries without rebuilding
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 2,
-          maxRepairs: 1,
         },
       },
     };
@@ -527,7 +524,6 @@ test('redeploy respects newly required confirmation and cannot repeat a pull req
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 2,
-          maxRepairs: 1,
         },
       },
     };
@@ -547,7 +543,6 @@ test('redeploy respects newly required confirmation and cannot repeat a pull req
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 2,
-          maxRepairs: 1,
         },
       },
     };

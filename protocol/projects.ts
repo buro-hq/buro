@@ -31,7 +31,6 @@ export const ProjectProfileSchema = z
     checkConcurrency: z.number().int().min(1).max(4).optional(),
     dependencies: z.enum(['none', 'link-node-modules']),
     maxWorkers: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
-    maxRepairs: z.number().int().min(0).max(2),
     turnTimeoutMs: z.number().int().min(10000).max(900000),
     baseBranch: z
       .string()

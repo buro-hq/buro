@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -35,7 +36,6 @@ const profile = (): ProjectProfile => ({
   setup: [],
   dependencies: 'none',
   maxWorkers: 1,
-  maxRepairs: 0,
   turnTimeoutMs: 10000,
   baseBranch: 'main',
 });
@@ -148,6 +148,7 @@ async function fixture(t: any, kind: 'file' | 'sqlite', managedQueue = false) {
     },
   };
   const service = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     ...env,
     policies: { p: executionPolicy(profile()) },
     selection,

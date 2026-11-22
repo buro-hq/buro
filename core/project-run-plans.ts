@@ -62,6 +62,121 @@ export type AcceptRunPlan = {
   expectedInput: RunPlanningInput;
   expectedAttemptId?: string;
 };
+export type DelegateRunWorker = {
+  runId: string;
+  assignmentId: string;
+  now: string;
+  worker: TeamPlan['team'][number];
+  expectedRoleVersion: number | null;
+  expectedInput: RunPlanningInput;
+  expectedAttemptId: string;
+};
+
+/** A delegation issues one immutable grant; a working plan never grants effects. */
+export function delegateRunWorker(
+  input: DelegateRunWorker,
+  current: RunCurrent,
+  storage: RunTransactionStorage,
+): RunWorkerAssignment {
+  if (input.expectedAttemptId !== current.attemptId)
+    throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
+  if (current.cancelRequested || current.status === 'canceling')
+    throw new DOMException('Interrupted', 'AbortError');
+  if (current.status !== 'running' || current.completedAt !== undefined)
+    throw new DomainError('INVALID_STATE', 'Only a running attempt may delegate work.');
+  if (storage.unresolvedForGoal(current.goalId))
+    throw new DomainError(
+      'RUN_RECONCILIATION_REQUIRED',
+      'Reconcile unknown operations before delegation.',
+    );
+  if (!storage.workspace(current.id))
+    throw new DomainError('NO_WORKSPACE', 'Delegation requires the saved workspace.');
+  const context = validateRunPlanningInput(storage.planningInput(current.id));
+  if (JSON.stringify(context) !== JSON.stringify(validateRunPlanningInput(input.expectedInput)))
+    throw new DomainError(
+      'PLANNING_CONTEXT_CHANGED',
+      'The task or admission changed while deciding.',
+    );
+  const parsed = TeamPlanSchema.shape.team.element.safeParse(input.worker);
+  if (!parsed.success)
+    throw new DomainError('INVALID_ASSIGNMENT', 'The proposed worker is invalid.');
+  const worker = parsed.data;
+  const policy = withEnvironmentRepair(context.policy, context.repairEnvironment);
+  const existing = storage.assignment(current.id, worker.roleId);
+  if (existing) {
+    const grant = validateRunWorkerAssignment(existing);
+    const resource = validateAssignmentResource(
+      context.resources,
+      grant.role,
+      resolveWorkerResource(
+        context.resources,
+        grant.role,
+        worker,
+        policy.scope.mode === 'strict' ? { strictPlannedWrites: true } : {},
+      ),
+      policy.scope.mode === 'strict' ? { strictPlannedWrites: true } : {},
+    );
+    if (
+      input.expectedRoleVersion !== grant.role.version ||
+      JSON.stringify(worker.paths) !== JSON.stringify(grant.paths) ||
+      JSON.stringify(worker.assignment ? validateWorkerTask(worker.assignment) : undefined) !==
+        JSON.stringify(grant.task ? validateWorkerTask(grant.task) : undefined) ||
+      JSON.stringify(resource) !== JSON.stringify(grant.resource) ||
+      (worker.action === 'create' &&
+        ['title', 'description', 'instructions', 'kind'].some(
+          (key) => worker[key as 'title'] !== grant.role[key as 'title'],
+        ))
+    )
+      throw new DomainError(
+        'ASSIGNMENT_EXISTS',
+        'This role already has a different immutable assignment. Delegate a distinct role instead.',
+      );
+    return grant;
+  }
+  if (storage.planAssignments(current.id).length >= policy.maxWorkers)
+    throw new DomainError('INVALID_ASSIGNMENT', 'The captured team allowance is exhausted.');
+  const value = storage.role(worker.roleId);
+  const role = value ? validateProjectRole(value) : undefined;
+  if ((role?.version ?? null) !== input.expectedRoleVersion)
+    throw new DomainError('ROLE_CHANGED', 'The role changed during the delegation decision.');
+  let team: ReturnType<typeof resolveTeam>;
+  try {
+    team = resolveTeam(
+      { summary: '', steps: [], team: [worker] },
+      role ? [role] : [],
+      policy,
+      input.now,
+      context.workflow,
+    );
+  } catch (error) {
+    throw new DomainError(
+      'INVALID_ASSIGNMENT',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  const assignedRole = team.roles[0];
+  const resource = resolveWorkerResource(
+    context.resources,
+    assignedRole,
+    worker,
+    policy.scope.mode === 'strict' ? { strictPlannedWrites: true } : {},
+  );
+  const assignment = validateRunWorkerAssignment({
+    version: 1,
+    id: input.assignmentId,
+    runId: current.id,
+    admissionId: current.admissionId,
+    attemptId: current.attemptId,
+    role: assignedRole,
+    origin: team.origins[assignedRole.id],
+    paths: worker.paths,
+    ...(worker.assignment == null ? {} : { task: worker.assignment }),
+    resource,
+  });
+  if (assignment.origin === 'created') storage.appendRole(assignedRole, 0);
+  storage.insertAssignment(assignment);
+  return assignment;
+}
 export function validateRunPlanningInput(value: unknown): RunPlanningInput {
   const parsed = RunPlanningInputSchema.safeParse(value);
   if (!parsed.success) throw invalid();
@@ -173,7 +288,7 @@ export function acceptRunPlan(
     );
   if (!storage.workspace(current.id))
     throw new DomainError('NO_WORKSPACE', 'A plan requires its saved prepared workspace.');
-  if (storage.plan(current.id))
+  if (storage.plan(current.id) || storage.planAssignments(current.id).length > 0)
     throw new DomainError('PLAN_EXISTS', 'This run already has an accepted plan.');
   const context = validateRunPlanningInput(storage.planningInput(current.id));
   if (JSON.stringify(context) !== JSON.stringify(validateRunPlanningInput(input.expectedInput)))

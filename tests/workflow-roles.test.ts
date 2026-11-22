@@ -133,7 +133,6 @@ test('validated coordinator worker creation receives the saved host workflow, ne
     checks: [],
     defaultCheckIds: [],
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
   };
   const plan: any = {

@@ -33,7 +33,6 @@ const profile = (): ProjectProfile => ({
   setup: [],
   dependencies: 'none',
   maxWorkers: 1,
-  maxRepairs: 0,
   turnTimeoutMs: 10000,
   baseBranch: 'main',
 });

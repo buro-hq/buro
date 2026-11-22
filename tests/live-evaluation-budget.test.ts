@@ -309,9 +309,9 @@ test('actual checks and review rejection remain quality failures despite quoted 
 test('run progress retains counts and allowlisted phases without plan or event payload', () => {
   const privateText = 'PRIVATE_PLAN_OR_EVENT_TEXT';
   const summary = evaluationRunProgress({
-    planSavedAt: 'saved',
     plan: [{ step: privateText }, { step: privateText }],
     events: [
+      { type: 'plan.updated', text: privateText },
       { type: 'phase.planning', text: privateText },
       { type: 'phase.implementation', text: privateText },
       { type: 'phase.' + privateText, text: privateText },

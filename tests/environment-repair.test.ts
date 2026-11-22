@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import {
   fixtureExecutionSelection,
@@ -48,6 +49,7 @@ async function fixture(t: any, enabled = true, tamper = false) {
   const projects = new ProjectStoreRegistry([store]),
     installations: string[] = [],
     prompts: string[] = [],
+    instructions: string[] = [],
     inputs = new Map<string, any>(),
     listeners = new Set<(event: RuntimeEvent) => void>();
   const workspaces = new GitWorkspaces(
@@ -75,6 +77,7 @@ async function fixture(t: any, enabled = true, tamper = false) {
     id: 'fixture',
     async start(input) {
       const threadId = 't-' + ++id;
+      instructions.push(input.instructions);
       inputs.set(threadId, input);
       return { threadId };
     },
@@ -91,28 +94,6 @@ async function fixture(t: any, enabled = true, tamper = false) {
     async turn(threadId, text) {
       prompts.push(text);
       const input = inputs.get(threadId);
-      if (text.startsWith('First,'))
-        return {
-          turnId: 'plan',
-          text: JSON.stringify({
-            summary: 'Implement; repair dependencies if needed',
-            steps: [
-              { step: 'Implement', owner: 'builder' },
-              { step: 'Verify', owner: 'reviewer' },
-            ],
-            team: [
-              {
-                roleId: 'builder',
-                action: 'create',
-                title: 'Builder',
-                description: 'Implementation',
-                instructions: 'Implement assigned changes.',
-                kind: 'implementation',
-                paths: ['src/main.mjs'],
-              },
-            ],
-          }),
-        };
       if (input.readOnly) {
         reviews++;
         return {
@@ -120,22 +101,42 @@ async function fixture(t: any, enabled = true, tamper = false) {
           text: JSON.stringify({ verdict: 'approved', blockingFindings: [], summary: 'Verified' }),
         };
       }
-      if (text.startsWith('Repair') || tamper) {
-        const next = structuredClone(manifest);
-        next.dependencies.fixture = '2.0.0';
-        if (tamper) next.scripts.test = 'exit 0';
-        await fs.writeFile(path.join(input.workspace, 'package.json'), JSON.stringify(next));
-      }
-      await fs.writeFile(path.join(input.workspace, 'src/main.mjs'), 'export const value=2;');
-      return {
-        turnId: 'work',
-        text: JSON.stringify({
-          status: 'success',
-          summary: 'Done',
-          artifacts: ['src/main.mjs'],
-          notesForNextAgent: '',
-        }),
+      const current = store.snapshot().runs.find((run) => run.threadId === threadId)!;
+      const choose = (action: string, args: unknown = {}) => ({
+        turnId: 'choice',
+        text: JSON.stringify({ decision: { action, input: args } }),
+      });
+      const result = {
+        status: 'success',
+        summary: 'Done',
+        artifacts: ['src/main.mjs'],
+        notesForNextAgent: '',
       };
+      if (text.startsWith('Goal:')) {
+        await fs.writeFile(path.join(input.workspace, 'src/main.mjs'), 'export const value=2;');
+        return choose('check');
+      }
+      if (text.startsWith('Service observation for check')) {
+        if (current.acceptance.passed !== current.acceptance.total) {
+          if (!current.repairEnvironment)
+            return choose('ask_user', {
+              question: 'The dependency check failed; authorize dependency repair to continue.',
+            });
+          if (!current.specsUnchanged)
+            return choose('ask_user', {
+              question:
+                'The edited manifest changed a protected check definition. Inspect this unaccepted work.',
+            });
+          const next = structuredClone(manifest);
+          next.dependencies.fixture = '2.0.0';
+          if (tamper) next.scripts.test = 'exit 0';
+          await fs.writeFile(path.join(input.workspace, 'package.json'), JSON.stringify(next));
+          return choose('check');
+        }
+        return choose('review', { result });
+      }
+      if (text.startsWith('Service observation for review')) return choose('finish', { result });
+      throw Error('Unexpected environment fixture decision: ' + text.slice(0, 100));
     },
   };
   const policy: ExecutionPolicy = {
@@ -143,7 +144,6 @@ async function fixture(t: any, enabled = true, tamper = false) {
     checks: [{ id: 'types', title: 'Types' }],
     defaultCheckIds: ['types'],
     maxWorkers: 1,
-    maxRepairs: 1,
     turnTimeoutMs: 10000,
     profile: {
       version: 1,
@@ -155,7 +155,6 @@ async function fixture(t: any, enabled = true, tamper = false) {
       setup: [],
       dependencies: 'link-node-modules',
       maxWorkers: 1,
-      maxRepairs: 1,
       turnTimeoutMs: 10000,
     },
   };
@@ -185,6 +184,7 @@ async function fixture(t: any, enabled = true, tamper = false) {
   const env = { projects, now: () => new Date().toISOString(), id: () => crypto.randomUUID() },
     goals = new GoalService(env),
     engine = new ExecutionService({
+      actions: createBuiltinExecutionActions(),
       workflowRoles: createBuiltinWorkflowRoles(),
       ...env,
       runtime,
@@ -222,12 +222,13 @@ async function fixture(t: any, enabled = true, tamper = false) {
     engine,
     installations,
     prompts,
+    instructions,
     run: engine.get('p', started.runId),
     reviews,
     checkCalls,
   };
 }
-test('per-goal opt-in repairs baseline dependencies, installs in isolation, and returns to normal acceptance', async (t) => {
+test('a coordinator repairs observed dependency failures only with per-goal authorization and installs in isolation', async (t) => {
   const f = await fixture(t);
   assert.equal(f.run.status, 'completed', f.run.result);
   assert.equal(f.run.repairEnvironment, true);
@@ -235,11 +236,19 @@ test('per-goal opt-in repairs baseline dependencies, installs in isolation, and 
   assert.equal(f.run.acceptance.passed, 1);
   assert.equal(f.reviews, 1);
   assert.equal(f.installations.length, 1);
-  const brief = JSON.parse(f.prompts[0].split('Brief: ')[1]);
-  assert.equal(brief.baseline.passed, 0);
-  assert.equal(brief.baseline.total, 1);
-  assert.ok(f.prompts[0].includes('The user authorized'));
-  assert.ok(f.run.events.some((e) => e.type === 'phase.repair'));
+  assert.equal(
+    f.run.baseline.total,
+    0,
+    'The coordinator requests checks without a mandatory initial baseline',
+  );
+  assert.equal(f.checkCalls, 2, 'The first failed check is observed before the chosen repair');
+  assert.ok(f.instructions[0].includes('The user authorized'));
+  assert.ok(
+    f.prompts.some(
+      (prompt) =>
+        prompt.startsWith('Service observation for check') && prompt.includes('Missing dependency'),
+    ),
+  );
   assert.ok(f.run.events.some((e) => e.type === 'environment.install-completed'));
   assert.deepEqual(f.run.executionPolicySnapshot?.scope.plannedPaths, ['src/']);
   assert.deepEqual(f.policy.scope.plannedPaths, ['src/']);
@@ -271,21 +280,44 @@ test('per-goal opt-in repairs baseline dependencies, installs in isolation, and 
   assert.equal(f.store.snapshot().goals[0].repairEnvironment, false);
   assert.equal(f.store.snapshot().runs[0].repairEnvironment, true);
 });
-test('without the checkbox, unchanged baseline failures remain needs-attention and no dependencies are installed', async (t) => {
+test('without authorization the coordinator pauses on observed dependency failure without installing', async (t) => {
   const f = await fixture(t, false);
   assert.equal(f.run.status, 'needs-attention');
-  assert.equal(f.run.issue?.code, 'BASELINE_CHECKS_FAILED');
+  assert.equal(f.run.issue?.code, 'OPERATOR_INPUT_REQUIRED');
   assert.equal(f.installations.length, 0);
   assert.equal(f.reviews, 0);
-  assert.equal(f.prompts.length, 3);
+  assert.equal(f.run.acceptance.passed, 0);
+  assert.match(f.run.acceptance.results[0].output || '', /Missing dependency/);
+  assert.deepEqual(
+    JSON.parse(await fs.readFile(path.join(f.root, 'package.json'), 'utf8')),
+    f.manifest,
+  );
+  assert.equal(
+    await fs.readFile(path.join(f.root, 'src/main.mjs'), 'utf8'),
+    'export const value=1;',
+  );
+  assert.equal(f.checkCalls, 1);
+  assert.equal(f.prompts.length, 2);
+  assert.ok(!f.instructions[0].includes('The user authorized'));
 });
 test('the opt-in never permits changing test scripts and does not execute a tampered manifest', async (t) => {
   const f = await fixture(t, true, true);
-  assert.equal(f.run.status, 'failed');
-  assert.equal(f.run.scopePreserved, false);
+  assert.equal(f.run.status, 'needs-attention');
+  assert.equal(f.run.issue?.code, 'OPERATOR_INPUT_REQUIRED');
+  assert.equal(f.run.specsUnchanged, false);
+  assert.equal(f.run.commit, undefined);
   assert.equal(f.installations.length, 0);
   assert.equal(f.checkCalls, 1);
   assert.equal(f.reviews, 0);
+  assert.match(f.run.acceptance.results[0].error || '', /protected package.json definition/i);
+  assert.deepEqual(
+    JSON.parse(await fs.readFile(path.join(f.root, 'package.json'), 'utf8')),
+    f.manifest,
+  );
+  assert.equal(
+    await fs.readFile(path.join(f.root, 'node_modules/fixture/version'), 'utf8'),
+    '1.0.0',
+  );
 });
 test('dependency scope preserves protected paths and rejects tsconfig or script bypasses', () => {
   const policy: ExecutionPolicy = {
@@ -293,7 +325,6 @@ test('dependency scope preserves protected paths and rejects tsconfig or script 
     checks: [],
     defaultCheckIds: [],
     maxWorkers: 1,
-    maxRepairs: 1,
     turnTimeoutMs: 10000,
   };
   const expanded = withEnvironmentRepair(policy, true);

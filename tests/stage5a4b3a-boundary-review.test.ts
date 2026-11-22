@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -34,7 +35,6 @@ async function fixture(t: any, readonly = false) {
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
   };
   const store = await FileProjectStore.open({ directory, project, profile });
@@ -48,6 +48,7 @@ async function fixture(t: any, readonly = false) {
     throw Error('No external dispatch in boundary review.');
   };
   const service = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     ...env,
     policies: { p: executionPolicy(profile) },
     workflowRoles: createBuiltinWorkflowRoles(),

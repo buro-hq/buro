@@ -1,5 +1,7 @@
 # Stage 5A4: real Run admission, current state and journal
 
+Current execution checkpoint after `1935607`: [model-selected actions](../../GOAL-EXECUTION-POC.md) replace the fixed initial-plan pipeline. `delegateWorker` issues independent immutable grants; per-role inherited assignment references preserve task validity across genuine continuation. The default executor no longer needs an accepted TeamPlan. Initial-plan records and capability-planning metadata remain internal cleanup work. Current task reassignment, invocation/outcome/session/effect journals, complete artifacts/history and default-none remain pending; production stays File and the fresh standalone SQL format is v9. Follow [latest progress](../../docs/IMPLEMENTATION-PROGRESS-2026-11-21.md) before selecting the next writer. The historical proposal and its evidence below are retained, not claimed as fully implemented.
+
 Date: 2026-11-22. **Read-only implementation proposal** against the working 5A3c tree. No production sources, user projects, model endpoints or credentials changed. Current production remains the sole File authority; the SQLite kernel is not a live execution sidecar. Finite policies and current repair/context limits remain unchanged until 5C.
 
 Implementation checkpoint: 5A4a is committed as `a169551`, 5A4b1 as `de0e71f`. The latter migrates actual initial/continued execution activation and phases. 5A4b2 adds immutable observed workspace binding, its real prepare/restore consumers, cancellation retention and acquired-path cleanup, with independent File commit/open/replay proof. See [progress](../../docs/IMPLEMENTATION-PROGRESS-2026-11-21.md) and [latest validation](stage5a4b2-validation-2026-11-22.json). This does not complete 5A4b: plan, assignment, continuation, finish and runtime observations still need their actual consumers; 5A4c/5A4d and production SQL cutover remain pending. Workspace preparation still lacks durable pre-dispatch ownership and crash-orphan recovery. The proposal below is retained as the full target contract.
@@ -28,27 +30,27 @@ Additional consumers currently obtain authority from `snapshot().runs`: `Managed
 
 ## Exact field separation
 
-| Existing Run data | New owner/current reference | Reason |
-| --- | --- | --- |
-| `id,key,goalId,parentRunId,title,status,phase,createdAt,updatedAt,completedAt,cancelRequested,delegation` | `RunCurrent` scalar row | Actual lifecycle facts; no history arrays |
-| `summary,result,goalText,continuation.instructions` | Immutable complete text artifacts plus a labelled public excerpt; current references | Strings can be large; original criteria/task must never be truncated into authority |
-| `workflow,executionPolicySnapshot,planningPolicy,timePolicy,repairEnvironment,checkIds,resources` | Immutable `RunAdmission`/attempt policy and selected-resource grant rows, current admission/attempt ID | Frozen identity and user policy, not mutable UI state |
-| `contextMaterials` | Immutable material-grant reference rows for the admitted task/attempt | Removal from the active library cannot revoke historical authority; no library-sized JSON list in each update |
-| `roleSnapshots,roleOrigins,roleResources` | Immutable role-version references and operation-specific role/resource grants | Retain content/provenance and pinned decisions, not latest team defaults |
-| `roleAssignments,assignmentResources,workerTasks,workerReplan` | Per-assignment scope/task revisions and grant rows; current plan/assignment pointers | Maps accumulate across work; a replan is a new decision, not overwriting old evidence |
-| `plan,planSavedAt` | Immutable accepted plan header and step rows; `RunCurrent.planId` | Current plan retrieval is separate from correction history |
-| `threadId,coordinatorSession,planningSession` | Current coordinator/planner session IDs, referencing immutable session grants | A read-only planner cannot become the writer after restart |
-| `agents,resultAgents` and each `Agent.messages[]` | Per-agent/session headers and indexed messages/events | Both agent count and nested messages can grow; latest role assignment is an indexed query |
-| `events,commands` | Append-only timeline and command rows; full command output artifact references | Neither an array append nor an output tail is complete durable evidence |
-| `attempts,deliveryHistory` | Immutable attempt and delivery-attempt rows | Resume appends history; it must not copy all prior attempts every time |
-| `workspace,baseCommit,baseBranch,sourceHash,commit` | Workspace binding and accepted-revision references with scalar identity | Preserve original tree/base/branch; commit alone is not acceptance evidence |
-| `changedFiles` | Revision-bound change-set manifest, per-file metadata and complete before/after artifacts | Current diff may contain many files and complete source content |
-| `baseline,acceptance,review` | Check-set/review receipt rows and full output/finding artifacts; current IDs | Avoid growing/large check and finding payloads in lifecycle updates |
-| `verificationView,verificationEvidence,scopeObservation` | Host-issued view/evidence/change-set records referenced by exact revision | Acceptance needs the same tree/check selection/fresh reviewer and actual additional paths |
-| `pendingTurn,reconciliation` | Effect/journal authority with indexed unsettled state; bounded Run stop projection | Once the journal is active, do not create a second independently editable unresolved marker |
-| `delivery,preview,operationContexts,operationResources` | Separate preparation/delivery/preview owners and frozen operation grants | A failed/unknown preparation must not unaccept completed coding work |
-| `appliedAt,appliedBranch` | Application effect receipt and bounded applied-result projection | Git prepare/dispatch/settle remains its own owner |
-| `managedBudget,effectivePolicy,stop,issue` | Bounded derived projection from actual usage, frozen grants and unsettled effects | Useful display state, never a replacement admission grant |
+| Existing Run data                                                                                         | New owner/current reference                                                                            | Reason                                                                                                        |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `id,key,goalId,parentRunId,title,status,phase,createdAt,updatedAt,completedAt,cancelRequested,delegation` | `RunCurrent` scalar row                                                                                | Actual lifecycle facts; no history arrays                                                                     |
+| `summary,result,goalText,continuation.instructions`                                                       | Immutable complete text artifacts plus a labelled public excerpt; current references                   | Strings can be large; original criteria/task must never be truncated into authority                           |
+| `workflow,executionPolicySnapshot,planningPolicy,timePolicy,repairEnvironment,checkIds,resources`         | Immutable `RunAdmission`/attempt policy and selected-resource grant rows, current admission/attempt ID | Frozen identity and user policy, not mutable UI state                                                         |
+| `contextMaterials`                                                                                        | Immutable material-grant reference rows for the admitted task/attempt                                  | Removal from the active library cannot revoke historical authority; no library-sized JSON list in each update |
+| `roleSnapshots,roleOrigins,roleResources`                                                                 | Immutable role-version references and operation-specific role/resource grants                          | Retain content/provenance and pinned decisions, not latest team defaults                                      |
+| `roleAssignments,assignmentResources,workerTasks,workerReplan`                                            | Per-assignment scope/task revisions and grant rows; current plan/assignment pointers                   | Maps accumulate across work; a replan is a new decision, not overwriting old evidence                         |
+| `plan,planSavedAt`                                                                                        | Immutable accepted plan header and step rows; `RunCurrent.planId`                                      | Current plan retrieval is separate from correction history                                                    |
+| `threadId,coordinatorSession,planningSession`                                                             | Current coordinator/planner session IDs, referencing immutable session grants                          | A read-only planner cannot become the writer after restart                                                    |
+| `agents,resultAgents` and each `Agent.messages[]`                                                         | Per-agent/session headers and indexed messages/events                                                  | Both agent count and nested messages can grow; latest role assignment is an indexed query                     |
+| `events,commands`                                                                                         | Append-only timeline and command rows; full command output artifact references                         | Neither an array append nor an output tail is complete durable evidence                                       |
+| `attempts,deliveryHistory`                                                                                | Immutable attempt and delivery-attempt rows                                                            | Resume appends history; it must not copy all prior attempts every time                                        |
+| `workspace,baseCommit,baseBranch,sourceHash,commit`                                                       | Workspace binding and accepted-revision references with scalar identity                                | Preserve original tree/base/branch; commit alone is not acceptance evidence                                   |
+| `changedFiles`                                                                                            | Revision-bound change-set manifest, per-file metadata and complete before/after artifacts              | Current diff may contain many files and complete source content                                               |
+| `baseline,acceptance,review`                                                                              | Check-set/review receipt rows and full output/finding artifacts; current IDs                           | Avoid growing/large check and finding payloads in lifecycle updates                                           |
+| `verificationView,verificationEvidence,scopeObservation`                                                  | Host-issued view/evidence/change-set records referenced by exact revision                              | Acceptance needs the same tree/check selection/fresh reviewer and actual additional paths                     |
+| `pendingTurn,reconciliation`                                                                              | Effect/journal authority with indexed unsettled state; bounded Run stop projection                     | Once the journal is active, do not create a second independently editable unresolved marker                   |
+| `delivery,preview,operationContexts,operationResources`                                                   | Separate preparation/delivery/preview owners and frozen operation grants                               | A failed/unknown preparation must not unaccept completed coding work                                          |
+| `appliedAt,appliedBranch`                                                                                 | Application effect receipt and bounded applied-result projection                                       | Git prepare/dispatch/settle remains its own owner                                                             |
+| `managedBudget,effectivePolicy,stop,issue`                                                                | Bounded derived projection from actual usage, frozen grants and unsettled effects                      | Useful display state, never a replacement admission grant                                                     |
 
 Do not define `RunCurrent = Omit<Run, 'events' | 'commands'>`: that retains most growing data. Nor should `getExecutionRun()` silently assemble all historical agents/attempts/messages for decision making. Query exact current assignment/attempt/grant and explicit evidence needed by the operation.
 
@@ -78,19 +80,51 @@ Four dependencies need deliberate extraction in this first slice, not hidden fal
 
 ```ts
 type RunCurrent = {
-  id: string; goalId: string; revision: number;
-  admissionId: string; attemptId: string;
-  title: string; status: 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'interrupted' | 'needs-attention';
-  phase: 'queued' | 'preparing' | 'planning' | 'implementation' | 'checking' | 'review' | 'repair' | 'done';
-  cancelRequested: boolean; createdAt: string; updatedAt: string; completedAt?: string;
+  id: string;
+  goalId: string;
+  revision: number;
+  admissionId: string;
+  attemptId: string;
+  title: string;
+  status:
+    | 'queued'
+    | 'running'
+    | 'canceling'
+    | 'completed'
+    | 'failed'
+    | 'interrupted'
+    | 'needs-attention';
+  phase:
+    | 'queued'
+    | 'preparing'
+    | 'planning'
+    | 'implementation'
+    | 'checking'
+    | 'review'
+    | 'repair'
+    | 'done';
+  cancelRequested: boolean;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
 };
 type RunAttempt = {
-  id: string; runId: string; admissionId: string; ordinal: number;
-  reason: 'initial' | 'repair' | 'recheck'; createdAt: string; priorAttemptId?: string;
+  id: string;
+  runId: string;
+  admissionId: string;
+  ordinal: number;
+  reason: 'initial' | 'repair' | 'recheck';
+  createdAt: string;
+  priorAttemptId?: string;
 };
 type RunTimelineEntry = {
-  runId: string; sequence: number; at: string; type: string;
-  assignmentId?: string; textExcerpt?: string; completeTextArtifactId?: string;
+  runId: string;
+  sequence: number;
+  at: string;
+  type: string;
+  assignmentId?: string;
+  textExcerpt?: string;
+  completeTextArtifactId?: string;
 };
 ```
 

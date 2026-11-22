@@ -39,7 +39,6 @@ export function demoBootstrap(root: string, directory: string) {
     checks: checks.map(({ id, title }) => ({ id, title })),
     defaultCheckIds: ['session_list'],
     maxWorkers: 2,
-    maxRepairs: 2,
     turnTimeoutMs: 360000,
   };
   return {

@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
@@ -32,7 +33,7 @@ const envelope = {
   artifacts: ['src/value.mjs'],
   notesForNextAgent: '',
 };
-const policyFor = (requests = 5): ManagedRunBudgetPolicy => ({
+const policyFor = (requests = 7): ManagedRunBudgetPolicy => ({
   version: 1,
   maxRequests: requests,
   maxReservedOutputTokens: requests * 512,
@@ -69,7 +70,6 @@ async function fixture(
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
     managedBudget: policyFor(options.requests),
   });
@@ -100,23 +100,32 @@ async function fixture(
       const task =
         [...input.messages].reverse().find((message) => message.role === 'user')?.content || '';
       let content: string, phase: string;
-      if (task.startsWith('First,')) {
-        phase = 'planning';
-        content = JSON.stringify({
-          summary: 'One coherent assignment.',
-          steps: [
-            { step: 'Update the module.', owner: 'builder' },
-            { step: 'Review the result.', owner: 'reviewer' },
-          ],
-          team: [
-            {
+      if (
+        task.startsWith('Goal:') ||
+        task.startsWith('Service observation') ||
+        task.startsWith('The service rejected')
+      ) {
+        phase = 'coordination';
+        let action: string,
+          args: unknown = {};
+        if (
+          task.startsWith('Goal:') ||
+          (task.startsWith('Service observation for delegate') && task.includes('MODEL_INCOMPLETE'))
+        ) {
+          action = 'delegate';
+          args = {
+            worker: {
               roleId: 'builder',
-              action: 'create',
+              action: store.snapshot().roles.some((role) => role.id === 'builder')
+                ? 'reuse'
+                : 'create',
               title: 'Builder',
               description: 'Implements a bounded edit.',
               instructions: 'Use the assigned path and preserve checks.',
               kind: 'implementation',
               paths: ['src/value.mjs'],
+              runtimeId: null,
+              runtimeReason: '',
               assignment: {
                 objective: 'Set the exported value to two.',
                 inputs: ['src/value.mjs'],
@@ -124,14 +133,16 @@ async function fixture(
                 criteria: ['Change only the assigned module.'],
               },
             },
-          ],
-        });
-      } else if (task.startsWith('Refine the failed worker assignment')) {
-        phase = 'refinement';
-        content = JSON.stringify({
-          objective: 'Read current state and finish the value-two edit.',
-          inputs: ['src/value.mjs'],
-        });
+          };
+        } else if (task.startsWith('Service observation for delegate')) action = 'check';
+        else if (task.startsWith('Service observation for check')) {
+          action = 'review';
+          args = { result: envelope };
+        } else {
+          action = 'finish';
+          args = { result: envelope };
+        }
+        content = JSON.stringify({ decision: { action, input: args } });
       } else if (task.startsWith('Review goal')) {
         phase = 'review';
         content = JSON.stringify({
@@ -166,8 +177,7 @@ async function fixture(
         }
         content = JSON.stringify(envelope);
       } else {
-        phase = 'integration';
-        content = JSON.stringify(envelope);
+        throw Error('Unexpected budget fixture task: ' + task.slice(0, 100));
       }
       calls.push({ phase, cap: input.maxOutputTokens });
       return {
@@ -262,6 +272,7 @@ async function fixture(
     if (options.poisonAfterReview && session?.purpose === 'review') await poison();
   };
   const engine = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     workflowRoles: createBuiltinWorkflowRoles(),
     projects,
     runtime,
@@ -353,10 +364,10 @@ test('managed workflow freezes its ledger at creation and leaves final review ca
   const run = await f.start();
   assert.equal(run.status, 'completed', run.result);
   assert.equal(run.managedBudget?.coverage, 'managed-api');
-  assert.equal(run.managedBudget?.workUsed.requests, 4);
+  assert.equal(run.managedBudget?.workUsed.requests, 6);
   assert.equal(run.managedBudget?.reviewUsed.requests, 1);
-  assert.equal(run.managedBudget?.used.requests, 5);
-  assert.equal(f.calls.length, 5);
+  assert.equal(run.managedBudget?.used.requests, 7);
+  assert.equal(f.calls.length, 7);
   assert.equal(f.tools, 1);
   assert.equal(run.independentReviewer, true);
   const raw = await f.raw();
@@ -412,15 +423,20 @@ test('manual continuation with a larger current profile cannot reset the frozen 
   assert.equal(f.calls.length, 3);
 });
 
-test('a replacement worker shares all prior charges and cannot restart the allowance', async (t) => {
-  const f = await fixture(t, { requests: 7, incompleteWorkerOnce: true });
+test('a chosen worker continuation shares all prior charges and cannot restart the allowance', async (t) => {
+  const f = await fixture(t, { requests: 9, incompleteWorkerOnce: true });
   const run = await f.start();
   assert.equal(run.status, 'completed', run.result);
-  assert.equal(run.workerReplan?.status, 'completed');
-  assert.equal(run.managedBudget?.used.requests, 7);
-  assert.equal(run.managedBudget?.workUsed.requests, 6);
-  assert.equal(run.agents.filter((agent) => agent.session?.roleId === 'builder').length, 2);
-  assert.equal(f.calls.filter((call) => call.phase === 'refinement').length, 1);
+  assert.equal(run.workerReplan, undefined);
+  assert.equal(run.managedBudget?.used.requests, 9);
+  assert.equal(run.managedBudget?.workUsed.requests, 8);
+  const workers = run.agents.filter((agent) => agent.session?.roleId === 'builder');
+  assert.equal(workers.length, 1, 'A resumable specialist retains its logical session');
+  assert.equal(
+    run.events.find((event) => event.type === 'agent.failed')?.threadId,
+    workers[0].threadId,
+  );
+  assert.equal(f.calls.filter((call) => call.phase === 'refinement').length, 0);
 });
 
 test('poison observed after reviewer approval prevents checkpoint and accepted commit', async (t) => {

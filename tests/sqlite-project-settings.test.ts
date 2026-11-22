@@ -20,7 +20,6 @@ const profile = (revision = 1, context = 'Authoritative context'): ProjectProfil
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 1,
     turnTimeoutMs: 10000,
     baseBranch: 'main',
   });

@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -32,7 +33,6 @@ async function fixture(t: test.TestContext) {
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
     baseBranch: 'main',
   };
@@ -172,6 +172,7 @@ test('actual start and cancel reject a foreign run facet before receipt, resourc
     throw Error('No execution effect is authorized by a foreign facet.');
   };
   const service = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     projects: { get: () => store, list: () => [f.store.project] },
     policies: { p: f.proposal.policy },
     workflowRoles: f.workflow,

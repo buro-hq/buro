@@ -67,7 +67,6 @@ const { chromium, expect } = require('@playwright/test');
       setup: [],
       dependencies: 'none',
       maxWorkers: 1,
-      maxRepairs: 1,
       turnTimeoutMs: 10000,
     };
     const policy = {
@@ -75,7 +74,6 @@ const { chromium, expect } = require('@playwright/test');
       checks: [{ id: 'unit', title: 'Unit tests' }],
       defaultCheckIds: ['unit'],
       maxWorkers: 1,
-      maxRepairs: 1,
       turnTimeoutMs: 10000,
       profile,
     };

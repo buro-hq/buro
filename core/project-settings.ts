@@ -128,7 +128,6 @@ export function executionPolicy(profile: ProjectProfile): ExecutionPolicy {
     checks: profile.checks.map(({ id, title }) => ({ id, title })),
     defaultCheckIds: [...profile.defaultCheckIds],
     maxWorkers: profile.maxWorkers,
-    maxRepairs: profile.maxRepairs,
     turnTimeoutMs: profile.turnTimeoutMs,
     context: profile.context,
     profile: structuredClone(profile),

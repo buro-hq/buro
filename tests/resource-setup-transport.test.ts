@@ -69,7 +69,6 @@ async function server(t: any) {
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
   });
   const seed = await FileProjectStore.open({

@@ -45,9 +45,9 @@ async function main() {
     JSON.stringify(
       {
         reportPath,
-        results: report.results.map(({ arm, planning, status, accepted, canonical }) => ({
+        results: report.results.map(({ arm, executionMode, status, accepted, canonical }) => ({
           arm,
-          planning,
+          executionMode,
           status,
           accepted,
           publicPassed: canonical?.public?.passed,

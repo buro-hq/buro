@@ -312,6 +312,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
           change.type !== 'run.lifecycle-changed' &&
           change.type !== 'run.workspace-bound' &&
           change.type !== 'run.plan-accepted' &&
+          change.type !== 'run.worker-delegated' &&
           change.type !== 'run.attempt-stopped' &&
           change.type !== 'run.attempt-continued'
         ) {
@@ -340,6 +341,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
     planningInput: (id: string) => facet.query((tx) => tx.planningInput(id)),
     plan: (id: string) => facet.query((tx) => tx.plan(id)),
     assignment: (id: string, roleId: string) => facet.query((tx) => tx.assignment(id, roleId)),
+    assignments: (id: string) => facet.query((tx) => tx.assignments(id)),
     workspace: (id: string) => facet.query((tx) => tx.workspace(id)),
     timeline: (query: RunTimelineQuery) => {
       const captured = structuredClone(query);

@@ -143,7 +143,6 @@ function fixture(t: any) {
       checks: [],
       defaultCheckIds: [],
       maxWorkers: 1,
-      maxRepairs: 0,
       turnTimeoutMs: 1000,
     },
     roleSnapshots: [structuredClone(role)],

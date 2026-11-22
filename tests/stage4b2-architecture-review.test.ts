@@ -35,7 +35,6 @@ test(
           checks: [],
           defaultCheckIds: [],
           maxWorkers: 1,
-          maxRepairs: 0,
         },
       });
       snapshot.effectivePolicy.origin.revision = revision;

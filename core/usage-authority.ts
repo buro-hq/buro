@@ -418,6 +418,7 @@ export function validateProjectAuthorityChange(
     change.type === 'run.lifecycle-changed' ||
     change.type === 'run.workspace-bound' ||
     change.type === 'run.plan-accepted' ||
+    change.type === 'run.worker-delegated' ||
     change.type === 'run.attempt-stopped' ||
     change.type === 'run.attempt-continued'
   )

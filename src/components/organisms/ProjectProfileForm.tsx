@@ -274,24 +274,15 @@ export function ProjectProfileForm({
         onChange={(e) => setSetup(e.currentTarget.value)}
         minRows={2}
       />
-      <div className="profile-paths">
-        <NumberInput
-          label={t('Maximum team size')}
-          value={profile.maxWorkers}
-          onChange={(v) => update({ maxWorkers: Number(v) })}
-          min={1}
-          max={Number.MAX_SAFE_INTEGER}
-          allowDecimal={false}
-          allowNegative={false}
-        />
-        <Select
-          label={t('Repair attempts')}
-          value={String(profile.maxRepairs)}
-          onChange={(v) => update({ maxRepairs: Number(v) })}
-          data={['0', '1', '2']}
-          allowDeselect={false}
-        />
-      </div>
+      <NumberInput
+        label={t('Maximum team size')}
+        value={profile.maxWorkers}
+        onChange={(v) => update({ maxWorkers: Number(v) })}
+        min={1}
+        max={Number.MAX_SAFE_INTEGER}
+        allowDecimal={false}
+        allowNegative={false}
+      />
       {error && (
         <p role="alert" className="form-error">
           {t(error)}

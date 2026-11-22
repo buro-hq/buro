@@ -41,7 +41,6 @@ const policy: ExecutionPolicy = {
   checks: [{ id: 'unit', title: 'Unit' }],
   defaultCheckIds: ['unit'],
   maxWorkers: 1,
-  maxRepairs: 1,
   turnTimeoutMs: 1000,
   context: 'Keep compatibility with the installed runtime.',
 };

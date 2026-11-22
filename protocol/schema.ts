@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runAttemptStopTimeline, runAttemptContinuationTimeline } from './run-attempt.ts';
-import { runPlanTimeline } from './run-plan.ts';
+import { runPlanTimeline, runWorkerAssignmentTimeline } from './run-plan.ts';
 import { RoleSchema as role, WorkflowIdentitySchema } from './workflow-roles.ts';
 import { VerificationViewSchema, VerificationEvidenceSchema } from './verification.ts';
 import { ManagedRunBudgetSummarySchema, ManagedBudgetErrorCodeSchema } from './run-budget.ts';
@@ -426,7 +426,7 @@ export const RunPlanSchema = z
 export const RunWorkerAssignmentSchema = z.strictObject({
   version: z.literal(1),
   id: z.string().min(1),
-  planId: z.string().min(1),
+  planId: z.string().min(1).optional(),
   runId: z.string().min(1),
   admissionId: z.string().min(1),
   attemptId: z.string().min(1),
@@ -460,6 +460,7 @@ export const RunIssueSchema = z
       'BASELINE_CHECKS_FAILED',
       'EXECUTION_FAILED',
       'MANAGED_BUDGET_BLOCKED',
+      'OPERATOR_INPUT_REQUIRED',
       'RECONCILIATION_REQUIRED',
     ]),
     budgetCode: ManagedBudgetErrorCodeSchema.optional(),
@@ -503,6 +504,12 @@ export const RunAttemptContextSchema = z
     workspaceOriginAttemptId: z.string().min(1).optional(),
     inheritedPlanId: z.string().min(1).optional(),
     planOriginAttemptId: z.string().min(1).optional(),
+    inheritedAssignments: z
+      .record(
+        z.string().min(1),
+        z.strictObject({ id: z.string().min(1), taskMode: z.enum(['original', 'full-goal']) }),
+      )
+      .optional(),
     taskMode: z.enum(['original', 'full-goal']),
     taskChanged: z.boolean(),
   })
@@ -702,6 +709,7 @@ const run = z
           'BASELINE_CHECKS_FAILED',
           'EXECUTION_FAILED',
           'MANAGED_BUDGET_BLOCKED',
+          'OPERATOR_INPUT_REQUIRED',
           'RECONCILIATION_REQUIRED',
         ]),
         budgetCode: ManagedBudgetErrorCodeSchema.optional(),
@@ -775,6 +783,7 @@ const run = z
         status: z.string(),
         assignment: z
           .object({
+            grantId: z.string().min(1).optional(),
             paths: z.array(z.string()),
             envelope: WorkerEnvelopeSchema.optional(),
             knownFailure: WorkerKnownFailureSchema.optional(),
@@ -919,6 +928,14 @@ export const DomainEventSchema = z
         view: RunAdmissionViewSchema.optional(),
       }),
       z.strictObject({
+        type: z.literal('run.worker-delegated'),
+        current: RunCurrentSchema,
+        assignment: RunWorkerAssignmentSchema,
+        context: RunPlanningInputSchema,
+        entries: z.array(RunTimelineEntrySchema.omit({ sequence: true })),
+        view: RunAdmissionViewSchema.optional(),
+      }),
+      z.strictObject({
         type: z.literal('run.plan-accepted'),
         current: RunCurrentSchema,
         plan: RunPlanSchema,
@@ -993,6 +1010,24 @@ export const DomainEventSchema = z
         JSON.stringify(entries) !== JSON.stringify(runAttemptContinuationTimeline(context))
       )
         ctx.addIssue({ code: 'custom', message: 'Continued attempt identities differ.' });
+    }
+    if (event.change.type === 'run.worker-delegated') {
+      const { current, assignment, entries } = event.change;
+      if (
+        current.status !== 'running' ||
+        current.cancelRequested ||
+        current.completedAt !== undefined ||
+        assignment.planId !== undefined ||
+        assignment.runId !== current.id ||
+        assignment.admissionId !== current.admissionId ||
+        assignment.attemptId !== current.attemptId ||
+        JSON.stringify(entries) !==
+          JSON.stringify(runWorkerAssignmentTimeline(assignment, current.updatedAt))
+      )
+        ctx.addIssue({
+          code: 'custom',
+          message: 'A delegation must retain its exact current grant and timeline.',
+        });
     }
     if (event.change.type === 'run.plan-accepted') {
       const { current, plan, assignments, entries } = event.change;

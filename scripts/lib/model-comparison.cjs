@@ -348,7 +348,6 @@ async function prepareComparisonFixture({ temporaryDirectory }) {
       setup: [],
       dependencies: 'none',
       maxWorkers: 1,
-      maxRepairs: 1,
       turnTimeoutMs: 120000,
       baseBranch: 'main',
       environment: {
@@ -655,7 +654,7 @@ async function writeDirectTrialReport(trial, fixture, config, provider) {
   });
 }
 
-/** Runs arms sequentially; each service run selects planning from its saved backend capabilities. */
+/** Runs arms sequentially through the current model-selected service action loop. */
 async function runModelComparison(options = {}) {
   const config = validateComparison(options);
   if (options.planningControls !== undefined) throw codeError('COMPARISON_INVALID_CONTROLS');
@@ -687,9 +686,9 @@ async function runModelComparison(options = {}) {
   const directRunner = options.runDirect || runDirectCodex;
   const oracle = options.oracle || canonicalOracle;
   for (const arm of config.arms) {
-    const control = { id: arm === 'codex-direct' ? 'not-applicable' : 'capability-selected' };
+    const control = { id: arm === 'codex-direct' ? 'not-applicable' : 'model-selected-actions' };
     {
-      let fixture, workspace, actualPlanning;
+      let fixture, workspace, orchestrationPolicy;
       const trial = comparisonTrialReport(options.reportPath, arm, control.id);
       const started = Date.now();
       let provider;
@@ -732,13 +731,12 @@ async function runModelComparison(options = {}) {
             },
             async onRunFinished(input) {
               workspace = input.run?.workspace;
-              const policy = input.run?.planningPolicy;
-              if (['tools-free-structured', 'read-only-inspection'].includes(policy?.strategy))
-                actualPlanning = {
-                  strategy: policy.strategy,
-                  revision: /^[a-zA-Z0-9._:-]{1,100}$/.test(policy.revision || '')
-                    ? policy.revision
-                    : 'unknown',
+              if (typeof input.run?.workflow?.actionsRevision === 'string')
+                orchestrationPolicy = {
+                  strategy: 'model-selected-actions',
+                  actionRequests: (input.run.events || []).filter(
+                    (event) => event.type === 'action.requested',
+                  ).length,
                 };
             },
           });
@@ -760,11 +758,11 @@ async function runModelComparison(options = {}) {
         const summary = summarizeProvider(provider, arm.startsWith('codex-'));
         report.results.push({
           arm,
-          planning: control.id,
+          executionMode: control.id,
           ...(trial ? { trialReport: trial.reference } : {}),
-          planningCoverage:
-            arm === 'codex-direct' ? 'not-applicable' : 'service-capability-selected',
-          actualPlanning: actualPlanning || null,
+          orchestrationCoverage:
+            arm === 'codex-direct' ? 'not-applicable' : 'service-action-catalog',
+          orchestrationPolicy: orchestrationPolicy || null,
           model: arm.startsWith('codex-')
             ? config.models.codex
             : arm === 'mixed-buro'
@@ -799,7 +797,7 @@ async function runModelComparison(options = {}) {
         }
         report.results.push({
           arm,
-          planning: control.id,
+          executionMode: control.id,
           status: 'failed',
           accepted: false,
           canonical: fixture ? canonical : null,

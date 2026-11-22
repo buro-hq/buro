@@ -9,7 +9,42 @@ import type {
   RunWorkspaceBinding,
 } from './run-state.ts';
 
-/** Temporary legacy read projection for File/UI consumers; never a SQL execution authority. */
+/** Read projections never grant dispatch authority. */
+export function mergeRunWorkerAssignment(
+  run: Run,
+  current: RunCurrent,
+  assignment: RunWorkerAssignment,
+  entries: Omit<RunTimelineEntry, 'sequence'>[],
+  view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>,
+): Run {
+  if (
+    assignment.runId !== run.id ||
+    current.id !== run.id ||
+    assignment.admissionId !== current.admissionId ||
+    assignment.attemptId !== current.attemptId
+  )
+    throw Error('Worker delegation identities differ.');
+  return {
+    ...mergeRunCurrent(run, current),
+    ...view,
+    roleSnapshots: [
+      ...(run.roleSnapshots ?? []).filter((role) => role.id !== assignment.role.id),
+      structuredClone(assignment.role),
+    ],
+    roleOrigins: { ...run.roleOrigins, [assignment.role.id]: assignment.origin },
+    roleAssignments: { ...run.roleAssignments, [assignment.role.id]: [...assignment.paths] },
+    assignmentResources: {
+      ...run.assignmentResources,
+      [assignment.role.id]: structuredClone(assignment.resource),
+    },
+    workerTasks: {
+      ...run.workerTasks,
+      ...(assignment.task ? { [assignment.role.id]: structuredClone(assignment.task) } : {}),
+    },
+    events: [...run.events, ...entries.map(({ runId: _runId, ...entry }) => entry)],
+  };
+}
+
 export function initialRunView(
   current: RunCurrent,
   admission: RunAdmission,
@@ -252,6 +287,11 @@ export function mergeRunContinued(
     planningPolicy: run.planningPolicy,
     policy: run.executionPolicySnapshot,
   };
+  const workerTasks = Object.fromEntries(
+    Object.entries(run.workerTasks ?? {}).filter(
+      ([roleId]) => context.inheritedAssignments?.[roleId]?.taskMode === 'original',
+    ),
+  );
   return {
     ...mergeRunCurrent(run, current),
     attempts: [...(run.attempts ?? []), previous],
@@ -277,7 +317,7 @@ export function mergeRunContinued(
     independentReviewer: false,
     issue: undefined,
     stop: undefined,
-    workerTasks: context.taskMode === 'full-goal' ? undefined : run.workerTasks,
+    workerTasks: Object.keys(workerTasks).length ? workerTasks : undefined,
     agents: run.agents.filter((agent) => agent.threadId !== run.threadId),
     events: [...run.events, ...entries.map(({ runId: _runId, ...entry }) => entry)],
     ...view,

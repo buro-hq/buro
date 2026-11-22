@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
@@ -286,6 +287,7 @@ test('resume archives the frozen planning strategy and rejects attempt-history r
     };
     let sequence = 0;
     const engine = new ExecutionService({
+      actions: createBuiltinExecutionActions(),
       workflowRoles: createBuiltinWorkflowRoles(),
       projects,
       runtime,
@@ -316,7 +318,6 @@ test('resume archives the frozen planning strategy and rejects attempt-history r
           checks: [{ id: 'suite', title: 'Suite' }],
           defaultCheckIds: ['suite'],
           maxWorkers: 1,
-          maxRepairs: 0,
           turnTimeoutMs: 1000,
         },
       },

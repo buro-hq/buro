@@ -30,6 +30,7 @@ const failure = (code: string, message: string) =>
   new ProviderFailure(code, message, { outcome: 'unknown' });
 export class OllamaProvider implements ModelProvider {
   readonly structuredToolMode = 'separate-turn' as const;
+  readonly structuredOutputMode = 'schema' as const;
   readonly id: string;
   readonly revision: string;
   readonly local: boolean;

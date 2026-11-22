@@ -52,7 +52,7 @@ export const projectRunPlanSchema = `
   );
   CREATE TABLE IF NOT EXISTS run_assignments (
     assignment_id TEXT PRIMARY KEY NOT NULL,
-    plan_id TEXT NOT NULL REFERENCES run_plans(plan_id),
+    plan_id TEXT REFERENCES run_plans(plan_id),
     run_id TEXT NOT NULL REFERENCES run_current(run_id),
     admission_id TEXT NOT NULL REFERENCES run_admissions(admission_id),
     attempt_id TEXT NOT NULL REFERENCES run_attempts(attempt_id),
@@ -73,6 +73,14 @@ export const projectRunPlanSchema = `
     path TEXT NOT NULL,
     PRIMARY KEY(assignment_id,ordinal)
   );
+  CREATE TABLE IF NOT EXISTS run_assignment_heads (
+    run_id TEXT NOT NULL REFERENCES run_current(run_id),
+    role_id TEXT NOT NULL,
+    assignment_id TEXT NOT NULL UNIQUE REFERENCES run_assignments(assignment_id),
+    ordinal INTEGER NOT NULL CHECK(ordinal>=0),
+    PRIMARY KEY(run_id,role_id),
+    UNIQUE(run_id,ordinal)
+  );
   CREATE TABLE IF NOT EXISTS run_plan_heads (
     run_id TEXT PRIMARY KEY NOT NULL REFERENCES run_current(run_id),
     plan_id TEXT NOT NULL UNIQUE REFERENCES run_plans(plan_id)
@@ -83,6 +91,7 @@ export const projectRunPlanSchema = `
     'run_plan_materials',
     'run_plan_checks',
     'run_assignments',
+    'run_assignment_heads',
     'run_assignment_paths',
   ]
     .map(
@@ -110,7 +119,13 @@ export function createSqliteRunPlanRows(
   database: PlanDatabase,
 ): Pick<
   RunTransactionStorage,
-  'planningInput' | 'plan' | 'assignment' | 'planAssignments' | 'insertPlan' | 'sealPlanningSession'
+  | 'planningInput'
+  | 'plan'
+  | 'assignment'
+  | 'planAssignments'
+  | 'insertPlan'
+  | 'insertAssignment'
+  | 'sealPlanningSession'
 > {
   const plan: RunTransactionStorage['plan'] = (runId) => {
     const row = database.get(
@@ -180,6 +195,49 @@ export function createSqliteRunPlanRows(
       ...readOnlyPlanner,
     });
   };
+  const insertAssignment: RunTransactionStorage['insertAssignment'] = (candidate) =>
+    database.mutate(() => {
+      const assignment = validateRunWorkerAssignment(candidate);
+      const count = database.get(
+        'run.assignment.count',
+        'SELECT count(*) AS total FROM run_assignment_heads WHERE run_id=?',
+        assignment.runId,
+      );
+      const ordinal = Number(count?.total ?? 0);
+      const inserted = database.run(
+        'run.assignment.insert',
+        'INSERT INTO run_assignments(assignment_id,plan_id,run_id,admission_id,attempt_id,ordinal,role_id,role_version,role_json,origin,task_json,resource_json) SELECT ?,?,run_id,admission_id,attempt_id,?,?,?,?,?,?,? FROM run_current WHERE run_id=? AND admission_id=? AND attempt_id=?',
+        assignment.id,
+        assignment.planId ?? null,
+        ordinal,
+        assignment.role.id,
+        assignment.role.version,
+        database.json(assignment.role),
+        assignment.origin,
+        assignment.task === undefined ? null : database.json(assignment.task),
+        database.json(assignment.resource),
+        assignment.runId,
+        assignment.admissionId,
+        assignment.attemptId,
+      );
+      if (Number(inserted.changes) !== 1) throw invalid();
+      for (const [ordinal, path] of assignment.paths.entries())
+        database.run(
+          'run.assignment.path.insert',
+          'INSERT INTO run_assignment_paths(assignment_id,ordinal,path) VALUES (?,?,?)',
+          assignment.id,
+          ordinal,
+          path,
+        );
+      database.run(
+        'run.assignment.head.insert',
+        'INSERT INTO run_assignment_heads(run_id,role_id,assignment_id,ordinal) VALUES (?,?,?,?)',
+        assignment.runId,
+        assignment.role.id,
+        assignment.id,
+        ordinal,
+      );
+    });
   const rows: Pick<
     RunTransactionStorage,
     | 'planningInput'
@@ -187,8 +245,10 @@ export function createSqliteRunPlanRows(
     | 'assignment'
     | 'planAssignments'
     | 'insertPlan'
+    | 'insertAssignment'
     | 'sealPlanningSession'
   > = {
+    insertAssignment,
     planningInput: (runId) => {
       const row = database.get(
         'run.planning-input',
@@ -244,7 +304,7 @@ export function createSqliteRunPlanRows(
       database
         .all(
           'run.assignments.current',
-          'SELECT a.role_id,a.ordinal FROM run_plan_heads h JOIN run_assignments a ON a.plan_id=h.plan_id WHERE h.run_id=? ORDER BY a.ordinal',
+          'SELECT h.role_id,h.ordinal FROM run_assignment_heads h WHERE h.run_id=? ORDER BY h.ordinal',
           runId,
         )
         .map((row, index) => {
@@ -256,7 +316,7 @@ export function createSqliteRunPlanRows(
     assignment: (runId, roleId) => {
       const row = database.get(
         'run.assignment',
-        'SELECT a.assignment_id,a.plan_id,a.run_id,a.admission_id,a.attempt_id,a.role_id,a.role_version,a.role_json,a.origin,a.task_json,a.resource_json FROM run_plan_heads h JOIN run_assignments a ON a.plan_id=h.plan_id WHERE h.run_id=? AND a.role_id=?',
+        'SELECT a.assignment_id,a.plan_id,a.run_id,a.admission_id,a.attempt_id,a.role_id,a.role_version,a.role_json,a.origin,a.task_json,a.resource_json FROM run_assignment_heads h JOIN run_assignments a ON a.assignment_id=h.assignment_id WHERE h.run_id=? AND h.role_id=?',
         runId,
         roleId,
       );
@@ -270,7 +330,7 @@ export function createSqliteRunPlanRows(
       const assignment = validateRunWorkerAssignment({
         version: 1,
         id: row.assignment_id,
-        planId: row.plan_id,
+        ...(row.plan_id === null ? {} : { planId: row.plan_id }),
         runId: row.run_id,
         admissionId: row.admission_id,
         attemptId: row.attempt_id,
@@ -336,7 +396,7 @@ export function createSqliteRunPlanRows(
             step.step,
             step.owner,
           );
-        for (const [ordinal, candidate] of candidates.entries()) {
+        for (const candidate of candidates) {
           const assignment = validateRunWorkerAssignment(candidate);
           if (
             assignment.planId !== saved.id ||
@@ -345,30 +405,7 @@ export function createSqliteRunPlanRows(
             assignment.attemptId !== saved.attemptId
           )
             throw invalid();
-          database.run(
-            'run.assignment.insert',
-            'INSERT INTO run_assignments(assignment_id,plan_id,run_id,admission_id,attempt_id,ordinal,role_id,role_version,role_json,origin,task_json,resource_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-            assignment.id,
-            saved.id,
-            saved.runId,
-            saved.admissionId,
-            saved.attemptId,
-            ordinal,
-            assignment.role.id,
-            assignment.role.version,
-            database.json(assignment.role),
-            assignment.origin,
-            assignment.task === undefined ? null : database.json(assignment.task),
-            database.json(assignment.resource),
-          );
-          for (const [ordinal, path] of assignment.paths.entries())
-            database.run(
-              'run.assignment.path.insert',
-              'INSERT INTO run_assignment_paths(assignment_id,ordinal,path) VALUES (?,?,?)',
-              assignment.id,
-              ordinal,
-              path,
-            );
+          insertAssignment(assignment);
         }
         database.run(
           'run.plan.head.update',

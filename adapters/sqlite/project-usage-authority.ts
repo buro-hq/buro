@@ -68,7 +68,7 @@ export type SqliteProjectUsageOptions = {
   /** Counts returned/changed rows without exposing SQL parameters or private payloads. */
   onQuery?: (observation: UsageQueryObservation) => void;
 };
-const format = 'buro-project-authority-v8';
+const format = 'buro-project-authority-v9';
 const failure = (code: string, message: string) => new DomainError(code, message);
 const stateConflict = () =>
   failure('USAGE_STATE_CONFLICT', 'The stored usage state changed. Refresh before trying again.');
@@ -133,6 +133,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       planningInput: (id: string) => this.#readRun((tx) => tx.planningInput(id)),
       plan: (id: string) => this.#readRun((tx) => tx.plan(id)),
       assignment: (id: string, roleId: string) => this.#readRun((tx) => tx.assignment(id, roleId)),
+      assignments: (id: string) => this.#readRun((tx) => tx.assignments(id)),
       workspace: (id: string) => this.#readRun((tx) => tx.workspace(id)),
       timeline: (query: RunTimelineQuery) => {
         let captured: RunTimelineQuery;
@@ -227,6 +228,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         'run_plan_materials',
         'run_plan_checks',
         'run_assignments',
+        'run_assignment_heads',
         'run_assignment_paths',
         'run_plan_heads',
         'run_attempt_contexts',
@@ -245,7 +247,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         const contextColumns = database.prepare('PRAGMA table_info(run_attempt_contexts)').all();
         if (
           !attemptColumns.some((column) => column.name === 'prior_attempt_id') ||
-          ['task_changed', 'policy_source'].some(
+          ['task_changed', 'policy_source', 'inherited_assignment_refs_json'].some(
             (name) => !contextColumns.some((column) => column.name === name),
           )
         )

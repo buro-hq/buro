@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -35,7 +36,6 @@ const profile: ProjectProfile = {
   setup: [],
   dependencies: 'none',
   maxWorkers: 1,
-  maxRepairs: 0,
   turnTimeoutMs: 10000,
   baseBranch: 'synthetic-source',
 };
@@ -189,6 +189,7 @@ async function fixture(
   };
   if (options.nondefaultCoordinator) resources.workerPool = [resources.worker, pinnedCoordinator];
   const service = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     ...env,
     policies: { p: executionPolicy(configuredProfile) },
     workflowRoles: createBuiltinWorkflowRoles(),
@@ -341,99 +342,6 @@ async function fixture(
       } finally {
         allowLegacy = false;
       }
-    },
-    async actualPlanning(
-      failCommit = false,
-      cancelAfterCommit = false,
-      changeTaskDuringTurn = false,
-    ) {
-      assert.ok(authority instanceof FileProjectStore);
-      const starts: { readOnly: boolean | undefined; threadId: string }[] = [];
-      const handoffs: {
-        threadId: string;
-        plannerId: string | undefined;
-        coordinatorId: string | undefined;
-        parentId: string | undefined;
-        planId: string | undefined;
-      }[] = [];
-      let planTurns = 0,
-        otherTurns = 0,
-        dispatches = 0,
-        resultBoundaries = 0;
-      service.env.workspaces.prepare = async () => ({ ...workspace });
-      service.env.runtime.start = async (input) => {
-        const threadId = 'thread-' + (starts.length + 1);
-        starts.push({ readOnly: input.readOnly, threadId });
-        if (input.readOnly === false) {
-          const run = (authority as FileProjectStore)
-            .snapshot()
-            .runs.find((run) => run.id === runId)!;
-          handoffs.push({
-            threadId: run.threadId,
-            plannerId: run.planningSession?.id,
-            coordinatorId: run.coordinatorSession?.id,
-            parentId: run.coordinatorSession?.parentId,
-            planId: (await authority.runs.plan(runId))?.id,
-          });
-        }
-        return { threadId };
-      };
-      service.env.runtime.release = async () => {};
-      service.verify = async () => ({ checks: { passed: 0, total: 0, results: [] } }) as any;
-      service.completedTurn = async (_projectId, _runId, _threadId, text) => {
-        if (text.startsWith('First,')) {
-          planTurns++;
-          if (changeTaskDuringTurn)
-            await service.update('p', runId, (run) => {
-              run.goalText += '\nLater task clarification.';
-            });
-          return candidate();
-        }
-        otherTurns++;
-        return {
-          status: 'success',
-          summary: 'Synthetic downstream boundary only',
-          artifacts: [],
-          notesForNextAgent: '',
-        };
-      };
-      service.dispatchWorkers = async () => {
-        dispatches++;
-        return [];
-      };
-      service.validateAndAccept = async () => {
-        resultBoundaries++;
-      };
-      failObservedPlanCommit = failCommit;
-      let committed!: () => void, release!: () => void;
-      const retained = new Promise<void>((resolve) => {
-        committed = resolve;
-      });
-      const released = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      if (cancelAfterCommit)
-        afterPlanCommit = async () => {
-          committed();
-          await released;
-        };
-      allowLegacy = true;
-      const execution = service.execute('p', runId, new AbortController().signal);
-      try {
-        if (cancelAfterCommit) {
-          await retained;
-          await service.cancel('cancel-accepted-plan', 'cancel-accepted-plan', {
-            projectId: 'p',
-            runId,
-          });
-        }
-      } finally {
-        release();
-        await execution;
-        afterPlanCommit = undefined;
-        allowLegacy = false;
-      }
-      return { starts, handoffs, planTurns, otherTurns, dispatches, resultBoundaries };
     },
     fileSnapshot() {
       assert.ok(authority instanceof FileProjectStore);
@@ -664,111 +572,6 @@ test('sqlite: readonly plan cannot invent an authoritative planner-session hando
   await assert.rejects(f.accept(), { code: 'PLANNING_HANDOFF_UNAVAILABLE' });
   assert.equal(await f.runs().plan(f.runId), undefined);
   assert.deepEqual(await f.events(), before);
-});
-
-test('file: actual readonly planner acceptance clears the exact planner before a fresh writer starts', async (t) => {
-  const f = await fixture(t, 'file', { readonly: true, ready: false });
-  const observed = await f.actualPlanning();
-  assert.equal(observed.planTurns, 1);
-  assert.deepEqual(
-    observed.starts.map((start) => start.readOnly),
-    [true, false],
-  );
-  assert.equal(observed.handoffs.length, 1);
-  const plan = await f.runs().plan(f.runId),
-    handoff = observed.handoffs[0];
-  assert.equal(handoff.threadId, '');
-  assert.equal(handoff.plannerId, plan?.readOnlyPlanner?.sessionId);
-  assert.equal(handoff.parentId, plan?.readOnlyPlanner?.sessionId);
-  assert.equal(plan?.readOnlyPlanner?.threadId, observed.starts[0].threadId);
-  assert.notEqual(handoff.coordinatorId, handoff.plannerId);
-  assert.equal(handoff.planId, plan?.id);
-  assert.equal(f.effects(), 0);
-});
-
-test('file: actual readonly planning retains a fixed nondefault coordinator through the planner-to-writer handoff', async (t) => {
-  const f = await fixture(t, 'file', { readonly: true, ready: false, nondefaultCoordinator: true });
-  const observed = await f.actualPlanning();
-  assert.equal(observed.planTurns, 1);
-  assert.deepEqual(
-    observed.starts.map((start) => start.readOnly),
-    [true, false],
-  );
-  const plan = await f.runs().plan(f.runId);
-  assert.deepEqual(plan?.context.coordinator.role, f.coordinatorRole);
-  assert.deepEqual(plan?.context.coordinator.resource.resource, f.pinnedCoordinator);
-  assert.equal(plan?.readOnlyPlanner?.sessionGrant.runtimeId, f.pinnedCoordinator.id);
-  assert.equal(
-    plan?.readOnlyPlanner?.sessionGrant.configurationRevision,
-    f.pinnedCoordinator.configurationRevision,
-  );
-  assert.equal(plan?.readOnlyPlanner?.sessionGrant.model, f.pinnedCoordinator.model);
-  assert.equal(f.effects(), 0);
-});
-
-test('file: failed observed-plan commit triggers no corrective model turn, writer or worker dispatch', async (t) => {
-  const f = await fixture(t, 'file', { readonly: true, ready: false });
-  const observed = await f.actualPlanning(true);
-  assert.equal(observed.planTurns, 1);
-  assert.equal(observed.otherTurns, 0);
-  assert.deepEqual(
-    observed.starts.map((start) => start.readOnly),
-    [true],
-  );
-  assert.equal(observed.dispatches, 0);
-  assert.equal(observed.resultBoundaries, 0);
-  assert.equal(await f.runs().plan(f.runId), undefined);
-  assert.equal(await f.runs().assignment(f.runId, 'builder'), undefined);
-  const run = f.fileSnapshot().runs.find((run) => run.id === f.runId)!;
-  assert.equal(
-    run.events.some((event) => event.type === 'plan.rejected'),
-    false,
-  );
-  assert.equal(
-    run.events.some((event) => event.type === 'plan.saved'),
-    false,
-  );
-  assert.equal(f.effects(), 0);
-});
-
-test('file: actual task change during the model turn rejects stale acceptance without corrective generation', async (t) => {
-  const f = await fixture(t, 'file', { readonly: true, ready: false });
-  const observed = await f.actualPlanning(false, false, true);
-  assert.equal(observed.planTurns, 1);
-  assert.deepEqual(
-    observed.starts.map((start) => start.readOnly),
-    [true],
-  );
-  assert.equal(observed.dispatches, 0);
-  assert.equal(observed.resultBoundaries, 0);
-  assert.equal(await f.runs().plan(f.runId), undefined);
-  const run = f.fileSnapshot().runs.find((run) => run.id === f.runId)!;
-  assert.equal(
-    run.events.some((event) => event.type === 'plan.rejected'),
-    false,
-  );
-  assert.ok(run.goalText?.endsWith('Later task clarification.'));
-  assert.equal(f.effects(), 0);
-});
-
-test('file: cancellation after accepted readonly plan commit prevents fresh writer dispatch', async (t) => {
-  const f = await fixture(t, 'file', { readonly: true, ready: false });
-  const observed = await f.actualPlanning(false, true);
-  assert.deepEqual(
-    observed.starts.map((start) => start.readOnly),
-    [true],
-  );
-  assert.equal(observed.dispatches, 0);
-  assert.equal(observed.resultBoundaries, 0);
-  assert.equal(observed.otherTurns, 0);
-  const plan = await f.runs().plan(f.runId);
-  assert.ok(plan?.readOnlyPlanner);
-  const run = f.fileSnapshot().runs.find((run) => run.id === f.runId)!;
-  assert.equal(run.threadId, '');
-  assert.equal(run.coordinatorSession, undefined);
-  assert.equal(run.planningSession?.id, plan.readOnlyPlanner.sessionId);
-  assert.equal(run.status, 'interrupted');
-  assert.equal(f.effects(), 0);
 });
 
 test('file: actual dispatcher reads the accepted named grant after later role and material-library edits', async (t) => {

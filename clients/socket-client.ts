@@ -4,6 +4,7 @@ import {
   mergeRunLifecycle,
   mergeRunWorkspace,
   mergeRunPlan,
+  mergeRunWorkerAssignment,
   mergeRunStopped,
   mergeRunContinued,
 } from '../protocol/run-view.ts';
@@ -111,6 +112,20 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
         ? mergeRunWorkspace(previous, c.current, c.binding, c.entry, c.view)
         : previous,
     );
+  }
+  if (c.type === 'run.worker-delegated') {
+    if (!snapshot.runs.some((previous) => previous.id === c.current.id))
+      throw Error('Worker delegation needs a current run projection.');
+    next.runs = snapshot.runs.map((previous) =>
+      previous.id === c.current.id
+        ? mergeRunWorkerAssignment(previous, c.current, c.assignment, c.entries, c.view)
+        : previous,
+    );
+    if (c.assignment.origin === 'created')
+      next.roles = [
+        ...snapshot.roles.filter((role) => role.id !== c.assignment.role.id),
+        c.assignment.role,
+      ];
   }
   if (c.type === 'run.plan-accepted') {
     if (!snapshot.runs.some((previous) => previous.id === c.current.id))
@@ -312,6 +327,8 @@ export class SocketProjectClient implements ProjectClient {
             this.notify();
             if (
               event.change.type === 'role.saved' ||
+              (event.change.type === 'run.worker-delegated' &&
+                event.change.assignment.origin === 'created') ||
               (event.change.type === 'run.plan-accepted' &&
                 event.change.assignments.some((assignment) => assignment.origin === 'created')) ||
               event.change.type === 'project.configured' ||
@@ -327,6 +344,7 @@ export class SocketProjectClient implements ProjectClient {
                 'run.lifecycle-changed',
                 'run.workspace-bound',
                 'run.plan-accepted',
+                'run.worker-delegated',
                 'run.attempt-stopped',
                 'run.attempt-continued',
               ].includes(event.change.type) &&

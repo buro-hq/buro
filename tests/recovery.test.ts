@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import {
   fixtureExecutionSelection,
@@ -71,28 +72,52 @@ async function fixture(t: any) {
     async turn(id: string, text: string) {
       turns.push({ id, text });
       const input = threads.get(id);
-      if (text.startsWith('First,'))
-        return {
-          turnId: 'p',
-          text: JSON.stringify({
-            summary: 'Plan',
-            steps: [
-              { step: 'Implement', owner: 'builder' },
-              { step: 'Review', owner: 'reviewer' },
-            ],
-            team: [
-              {
-                roleId: options.invalidPlan ? '' : 'builder',
-                action: 'create',
-                title: 'Builder',
-                description: 'Implements modules',
-                instructions: 'Implement assigned modules.',
-                kind: 'implementation',
-                paths: ['src/code.mjs'],
-              },
-            ],
-          }),
+      const current = store.snapshot().runs.find((run) => run.threadId === id);
+      if (current) {
+        const choose = (action: string, value: unknown = {}) => ({
+          turnId: 'choice',
+          text: JSON.stringify({ decision: { action, input: value } }),
+        });
+        const result = {
+          status: 'success',
+          summary: 'Done',
+          artifacts: ['src/code.mjs'],
+          notesForNextAgent: '',
         };
+        if (options.invalidPlan && text.startsWith('The service rejected this action'))
+          return choose('ask_user', { question: 'Which specialist should receive this task?' });
+        if (text.includes('VERIFICATION_REVISION_CHANGED'))
+          return choose('ask_user', {
+            question:
+              'The source changed during verification. Inspect the saved work before continuing.',
+          });
+        if (!current.roleAssignments?.builder || text.startsWith('Goal:'))
+          return choose('delegate', {
+            worker: {
+              roleId: options.invalidPlan ? '' : 'builder',
+              action: store.snapshot().roles.some((role) => role.id === 'builder')
+                ? 'reuse'
+                : 'create',
+              title: 'Builder',
+              description: 'Implements modules',
+              instructions: 'Implement assigned modules.',
+              kind: 'implementation',
+              paths: ['src/code.mjs'],
+              runtimeId: null,
+              runtimeReason: '',
+              assignment: null,
+            },
+          });
+        if (current.review?.verdict === 'approved') return choose('finish', { result });
+        if (current.review?.verdict === 'changes_requested')
+          return choose('ask_user', { question: 'The reviewer reports a blocking issue.' });
+        if (!current.verificationEvidence) return choose('check');
+        if (current.acceptance.passed !== current.acceptance.total)
+          return choose('ask_user', {
+            question: 'Configured checks are blocked by the source environment.',
+          });
+        return choose('review', { result });
+      }
       if (input.readOnly)
         return {
           turnId: 'r',
@@ -137,6 +162,7 @@ async function fixture(t: any) {
   const env = { projects, now: () => new Date().toISOString(), id: () => crypto.randomUUID() },
     goals = new GoalService(env),
     engine = new ExecutionService({
+      actions: createBuiltinExecutionActions(),
       workflowRoles: createBuiltinWorkflowRoles(),
       ...env,
       runtime,
@@ -152,7 +178,6 @@ async function fixture(t: any) {
           checks: [{ id: 'suite', title: 'Suite' }],
           defaultCheckIds: ['suite'],
           maxWorkers: 1,
-          maxRepairs: 1,
           turnTimeoutMs: 1000,
         },
       },
@@ -205,17 +230,17 @@ test('recheck retains run/worktree/history, reruns gates, and accepts without re
   const f = await fixture(t);
   f.options.rejectReview = true;
   const before = await f.start();
-  assert.equal(before.status, 'failed');
+  assert.equal(before.status, 'needs-attention');
   const body = await fs.readFile(path.join(before.workspace!, 'src/code.mjs'), 'utf8'),
     turns = f.turns.length;
   f.options.rejectReview = false;
   const after = await f.resume(before.id);
   assert.equal(after.id, before.id);
   assert.equal(after.workspace, before.workspace);
-  assert.equal(after.status, 'completed');
+  assert.equal(after.status, 'completed', after.result);
   assert.ok(after.commit);
   assert.equal(after.attempts?.length, 1);
-  assert.equal(after.events.filter((e) => e.type === 'plan.saved').length, 1);
+  assert.equal(after.events.filter((e) => e.type === 'plan.saved').length, 0);
   assert.equal(await fs.readFile(path.join(after.workspace!, 'src/code.mjs'), 'utf8'), body);
   assert.equal(f.resumed.length, 0);
   assert.equal(f.turns.length, turns + 1);
@@ -242,7 +267,7 @@ test('check-time workspace edits invalidate evidence and preserve the actual cha
   let checks = 0;
   f.engine.env.checks.run = async (...args) => {
     const result = await original(...args);
-    if (++checks === 2)
+    if (++checks === 1)
       await fs.writeFile(path.join(args[1], 'README.md'), 'A check changed this file.');
     return result;
   };
@@ -364,7 +389,6 @@ function verificationProfile(command: string, outputPaths: string[] = []): Proje
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
     environment: { provider: 'native' },
   };
@@ -381,7 +405,6 @@ test('a real acceptance command cannot temporarily replace frozen input and rest
       ),
   );
   f.engine.env.policies.p.profile = profile;
-  f.engine.env.policies.p.maxRepairs = 0;
   f.engine.env.checks = new ProjectChecks(
     f.projects,
     {
@@ -487,7 +510,7 @@ test('editing a stopped goal is versioned; repair resumes the original coordinat
   );
   f.options.rejectReview = false;
   const after = await f.resume(before.id, 'repair');
-  assert.equal(after.status, 'completed');
+  assert.equal(after.status, 'completed', after.result);
   assert.deepEqual(f.resumed, [before.threadId]);
   assert.equal(after.threadId, before.threadId);
   assert.equal(after.title, 'Updated goal');
@@ -502,20 +525,20 @@ test('editing a stopped goal is versioned; repair resumes the original coordinat
   );
   assert.equal(after.attempts?.[0].goalText, before.goalText);
 });
-test('unchanged dependency declaration failures stop at needs-attention without repeated reviewer/repair model calls', async (t) => {
+test('the coordinator pauses on dependency failures without repeated reviewer or repair calls', async (t) => {
   const f = await fixture(t);
   f.options.environmentFailure = true;
   const before = await f.start();
   assert.equal(before.status, 'needs-attention', before.result);
-  assert.equal(before.issue?.code, 'BASELINE_CHECKS_FAILED');
-  assert.equal(f.turns.length, 3);
+  assert.equal(before.issue?.code, 'OPERATOR_INPUT_REQUIRED');
+  assert.equal(f.turns.length, 4);
   assert.equal(
     before.events.some((e) => e.type === 'phase.repair'),
     false,
   );
   const after = await f.resume(before.id);
-  assert.equal(after.status, 'needs-attention');
-  assert.equal(f.turns.length, 3);
+  assert.notEqual(after.status, 'completed');
+  assert.equal(f.turns.length, 4);
   assert.equal(after.attempts?.length, 1);
 });
 test('workspace restoration validates project identity/base and reconstructs its diff after adapter restart', async (t) => {
@@ -585,25 +608,15 @@ test('native adapter restores the saved thread id through thread/resume', async 
   assert.ok(result.text.includes('workspaceWrite'));
 });
 
-test('failed planning resumes the same workspace and coordinator, then saves a valid team', async (t) => {
+test('a rejected delegation resumes the same workspace and coordinator, then grants a valid specialist', async (t) => {
   const f = await fixture(t);
   f.options.invalidPlan = true;
   const before = await f.start();
-  assert.equal(before.status, 'failed');
+  assert.equal(before.status, 'needs-attention');
   assert.equal(before.plan.length, 0);
-  assert.ok(before.result.includes('roleId'));
-  assert.equal(before.events.filter((e) => e.type === 'plan.rejected').length, 2);
-  await assert.rejects(
-    f.engine.resume('invalid-recheck', 'invalid-recheck', {
-      projectId: 'p',
-      runId: before.id,
-      mode: 'recheck',
-      instructions: '',
-      useCurrentProfile: false,
-    }),
-    { code: 'REPLAN_REQUIRED' },
-  );
-  assert.equal(f.engine.get('p', before.id).status, 'failed');
+  assert.equal(before.issue?.code, 'OPERATOR_INPUT_REQUIRED');
+  assert.deepEqual(await f.store.runs.assignments(before.id), []);
+  assert.equal(before.agents.length, 0, 'A rejected action cannot start a specialist');
   f.options.invalidPlan = false;
   const after = await f.resume(before.id, 'repair');
   assert.equal(after.status, 'completed', after.result);
@@ -611,7 +624,7 @@ test('failed planning resumes the same workspace and coordinator, then saves a v
   assert.equal(after.workspace, before.workspace);
   assert.equal(after.threadId, before.threadId);
   assert.deepEqual(f.resumed, [before.threadId]);
-  assert.equal(after.events.filter((e) => e.type === 'plan.saved').length, 1);
+  assert.equal(after.events.filter((e) => e.type === 'plan.saved').length, 0);
 });
 
 test('repair picks up new goal attachments and retains the previous attempt material snapshot', async (t) => {
@@ -643,7 +656,7 @@ test('repair picks up new goal attachments and retains the previous attempt mate
   });
   f.options.rejectReview = false;
   const continued = await f.resume(before.id, 'repair');
-  assert.equal(continued.status, 'completed');
+  assert.equal(continued.status, 'completed', continued.result);
   assert.deepEqual(
     continued.contextMaterials?.map((m) => m.id),
     [shared.id, attachment.id],

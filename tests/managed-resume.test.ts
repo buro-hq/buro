@@ -35,7 +35,6 @@ const policy = (allowedPaths = ['src/'], command = 'node old-check') => ({
   checks: [{ id: 'check', title: 'Check' }],
   defaultCheckIds: ['check'],
   maxWorkers: 1,
-  maxRepairs: 1,
   turnTimeoutMs: 10000,
   profile: { checks: [{ id: 'check', title: 'Check', command, timeoutMs: 10000 }] },
 });

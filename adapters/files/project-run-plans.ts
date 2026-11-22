@@ -13,11 +13,15 @@ import type { RunCurrent, RunAdmission } from '../../protocol/run-state.ts';
 import { validateProjectRole } from '../../core/project-entities.ts';
 import { documentAttemptContext } from './project-run-attempts.ts';
 import type { RunAttemptContext } from '../../protocol/run-attempt.ts';
+import { validateAssignmentResource } from '../../core/assignment-routing.ts';
+import { planPathAllowed } from '../../core/execution-ports.ts';
+import { withEnvironmentRepair } from '../../core/environment-repair.ts';
 
 type PlanningDocument = ProjectDocument & {
   runPlans?: Record<string, RunPlan>;
   runPlanHeads?: Record<string, string>;
-  runAssignments?: Record<string, Record<string, RunWorkerAssignment>>;
+  runAssignments?: Record<string, RunWorkerAssignment>;
+  runAssignmentHeads?: Record<string, Record<string, string>>;
   runHeads?: Record<string, RunCurrent>;
   runAdmissions?: Record<string, RunAdmission>;
 };
@@ -65,10 +69,54 @@ export function createDocumentRunPlanRows(
   access: Access,
 ): Pick<
   RunTransactionStorage,
-  'planningInput' | 'plan' | 'assignment' | 'planAssignments' | 'insertPlan' | 'sealPlanningSession'
+  | 'planningInput'
+  | 'plan'
+  | 'assignment'
+  | 'planAssignments'
+  | 'insertPlan'
+  | 'insertAssignment'
+  | 'sealPlanningSession'
 > {
   const doc = source as PlanningDocument;
+  const insertAssignment = (candidate: RunWorkerAssignment) =>
+    access.write(() => {
+      const assignment = validateRunWorkerAssignment(candidate);
+      const run = doc.runs.find((value) => value.id === assignment.runId);
+      if (
+        !run ||
+        Object.hasOwn(doc.runAssignments ?? {}, assignment.id) ||
+        Object.hasOwn(doc.runAssignmentHeads?.[assignment.runId] ?? {}, assignment.role.id)
+      )
+        throw conflict();
+      doc.runAssignments ??= {};
+      doc.runAssignmentHeads ??= {};
+      doc.runAssignmentHeads[assignment.runId] ??= {};
+      Object.defineProperty(doc.runAssignments, assignment.id, {
+        value: assignment,
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      });
+      Object.defineProperty(doc.runAssignmentHeads[assignment.runId], assignment.role.id, {
+        value: assignment.id,
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      });
+      run.roleSnapshots = [...(run.roleSnapshots ?? []), structuredClone(assignment.role)];
+      run.roleOrigins = { ...run.roleOrigins, [assignment.role.id]: assignment.origin };
+      run.roleAssignments = { ...run.roleAssignments, [assignment.role.id]: [...assignment.paths] };
+      run.assignmentResources = {
+        ...run.assignmentResources,
+        [assignment.role.id]: structuredClone(assignment.resource),
+      };
+      run.workerTasks = {
+        ...run.workerTasks,
+        ...(assignment.task ? { [assignment.role.id]: structuredClone(assignment.task) } : {}),
+      };
+    });
   return {
+    insertAssignment,
     planningInput: (runId) => {
       const run = doc.runs.find((run) => run.id === runId);
       if (!run) throw new DomainError('NOT_FOUND', 'Run not found.');
@@ -123,17 +171,16 @@ export function createDocumentRunPlanRows(
       return validateRunPlan(saved);
     },
     assignment: (runId, roleId) => {
-      const planId = doc.runPlanHeads?.[runId];
-      if (planId === undefined) return undefined;
-      const saved = doc.runAssignments?.[planId]?.[roleId];
+      const id = doc.runAssignmentHeads?.[runId]?.[roleId];
+      const saved = id === undefined ? undefined : doc.runAssignments?.[id];
       return saved === undefined ? undefined : validateRunWorkerAssignment(saved);
     },
-    planAssignments: (runId) => {
-      const id = doc.runPlanHeads?.[runId];
-      return id === undefined
-        ? []
-        : Object.values(doc.runAssignments?.[id] ?? {}).map(validateRunWorkerAssignment);
-    },
+    planAssignments: (runId) =>
+      Object.values(doc.runAssignmentHeads?.[runId] ?? {}).map((id) => {
+        const saved = doc.runAssignments?.[id];
+        if (!saved) throw invalid();
+        return validateRunWorkerAssignment(saved);
+      }),
     insertPlan: (candidate, candidates) =>
       access.write(() => {
         const plan = validateRunPlan(candidate),
@@ -144,27 +191,19 @@ export function createDocumentRunPlanRows(
           Object.hasOwn(doc.runPlanHeads ?? {}, plan.runId)
         )
           throw conflict();
+        if (Object.keys(doc.runAssignmentHeads?.[plan.runId] ?? {}).length) throw conflict();
         const assignments = candidates.map(validateRunWorkerAssignment);
-        const rows: Record<string, RunWorkerAssignment> = {};
         for (const assignment of assignments) {
           if (
             assignment.planId !== plan.id ||
             assignment.runId !== plan.runId ||
             assignment.admissionId !== plan.admissionId ||
-            assignment.attemptId !== plan.attemptId ||
-            Object.hasOwn(rows, assignment.role.id)
+            assignment.attemptId !== plan.attemptId
           )
             throw invalid();
-          Object.defineProperty(rows, assignment.role.id, {
-            value: assignment,
-            enumerable: true,
-            writable: false,
-            configurable: false,
-          });
         }
         doc.runPlans ??= {};
         doc.runPlanHeads ??= {};
-        doc.runAssignments ??= {};
         Object.defineProperty(doc.runPlans, plan.id, {
           value: plan,
           enumerable: true,
@@ -177,37 +216,15 @@ export function createDocumentRunPlanRows(
           writable: false,
           configurable: false,
         });
-        Object.defineProperty(doc.runAssignments, plan.id, {
-          value: rows,
-          enumerable: true,
-          writable: false,
-          configurable: false,
-        });
         run.plan = structuredClone(plan.steps);
         run.planSavedAt = plan.createdAt;
-        run.roleSnapshots = [
-          ...(run.roleSnapshots ?? []).filter((role) =>
-            ['coordinator', 'reviewer'].includes(role.id),
-          ),
-          ...assignments.map((assignment) => structuredClone(assignment.role)),
-        ];
-        run.roleOrigins = Object.fromEntries(
-          assignments.map((assignment) => [assignment.role.id, assignment.origin]),
-        );
-        run.roleAssignments = Object.fromEntries(
-          assignments.map((assignment) => [assignment.role.id, [...assignment.paths]]),
-        );
-        run.workerTasks = Object.fromEntries(
-          assignments
-            .filter((assignment) => assignment.task !== undefined)
-            .map((assignment) => [assignment.role.id, structuredClone(assignment.task!)]),
-        );
-        run.assignmentResources = Object.fromEntries(
-          assignments.map((assignment) => [
-            assignment.role.id,
-            structuredClone(assignment.resource),
-          ]),
-        );
+        doc.runAssignmentHeads ??= {};
+        doc.runAssignmentHeads[plan.runId] = {};
+        run.roleOrigins = {};
+        run.roleAssignments = {};
+        run.assignmentResources = {};
+        run.workerTasks = {};
+        for (const assignment of assignments) insertAssignment(assignment);
       }),
     sealPlanningSession: (runId, planner) =>
       access.write(() => {
@@ -231,27 +248,28 @@ export function createDocumentRunPlanRows(
 export function validateDocumentRunPlans(previous: ProjectDocument, next: ProjectDocument) {
   const before = previous as PlanningDocument,
     after = next as PlanningDocument;
-  for (const [id, original] of Object.entries(before.runPlans ?? {})) {
-    const saved = after.runPlans?.[id];
-    if (!saved || !isDeepStrictEqual(validateRunPlan(original), validateRunPlan(saved)))
+  for (const [id, original] of Object.entries(before.runPlans ?? {}))
+    if (
+      !after.runPlans?.[id] ||
+      !isDeepStrictEqual(validateRunPlan(original), validateRunPlan(after.runPlans[id]))
+    )
       throw invalid();
-  }
-  for (const [id, original] of Object.entries(before.runAssignments ?? {})) {
-    const saved = after.runAssignments?.[id];
-    if (!saved || !isDeepStrictEqual(original, saved)) throw invalid();
-  }
-  for (const [runId, planId] of Object.entries(before.runPlanHeads ?? {})) {
+  for (const [id, original] of Object.entries(before.runAssignments ?? {}))
+    if (!after.runAssignments?.[id] || !isDeepStrictEqual(original, after.runAssignments[id]))
+      throw invalid();
+  for (const [runId, planId] of Object.entries(before.runPlanHeads ?? {}))
     if (after.runPlanHeads?.[runId] !== planId) throw invalid();
-  }
+  for (const [runId, heads] of Object.entries(before.runAssignmentHeads ?? {}))
+    for (const [roleId, id] of Object.entries(heads))
+      if (after.runAssignmentHeads?.[runId]?.[roleId] !== id) throw invalid();
   for (const [id, value] of Object.entries(after.runPlans ?? {})) {
-    const plan = validateRunPlan(value);
-    const run = after.runs.find((run) => run.id === plan.runId);
-    const head = after.runHeads?.[plan.runId];
+    const plan = validateRunPlan(value),
+      run = after.runs.find((run) => run.id === plan.runId),
+      head = after.runHeads?.[plan.runId];
     if (
       plan.id !== id ||
       after.runPlanHeads?.[plan.runId] !== id ||
       !run ||
-      !after.runAssignments?.[id] ||
       !head ||
       head.admissionId !== plan.admissionId ||
       (head.attemptId !== plan.attemptId &&
@@ -261,68 +279,13 @@ export function validateDocumentRunPlans(previous: ProjectDocument, next: Projec
       run.planSavedAt !== plan.createdAt
     )
       throw invalid();
-    if (plan.context.contextSource === 'initial-admission') {
-      const admission = after.runAdmissions?.[plan.admissionId];
-      const { readOnlyPlanner: _planner, ...captured } = plan.context;
-      if (
-        !admission ||
-        admission.runId !== plan.runId ||
-        !isDeepStrictEqual(captured, initialPlanningInput(admission))
-      )
-        throw invalid();
-    } else if (plan.context.contextSource === 'continuation-attempt') {
-      const { readOnlyPlanner: _planner, ...captured } = plan.context;
-      if (
-        !isDeepStrictEqual(
-          captured,
-          attemptPlanningInput(documentAttemptContext(after, plan.attemptId)),
-        )
-      )
-        throw invalid();
-    } else if (!run.continuation) throw invalid();
-    const assignments = Object.entries(after.runAssignments[id]).map(([roleId, value]) => {
-      const assignment = validateRunWorkerAssignment(value);
-      if (
-        assignment.planId !== id ||
-        assignment.runId !== plan.runId ||
-        assignment.admissionId !== plan.admissionId ||
-        assignment.attemptId !== plan.attemptId ||
-        assignment.role.id !== roleId
-      )
-        throw invalid();
-      return assignment;
-    });
-    if (
-      !isDeepStrictEqual(
-        run.roleAssignments,
-        Object.fromEntries(assignments.map((assignment) => [assignment.role.id, assignment.paths])),
-      ) ||
-      !isDeepStrictEqual(
-        run.roleOrigins,
-        Object.fromEntries(
-          assignments.map((assignment) => [assignment.role.id, assignment.origin]),
-        ),
-      ) ||
-      !isDeepStrictEqual(
-        run.assignmentResources,
-        Object.fromEntries(
-          assignments.map((assignment) => [assignment.role.id, assignment.resource]),
-        ),
-      )
-    )
-      throw invalid();
-    for (const assignment of assignments) {
-      const role = run.roleSnapshots?.find((role) => role.id === assignment.role.id);
-      const savedRole = after.roleVersions.find(
-        (role) => role.id === assignment.role.id && role.version === assignment.role.version,
-      );
-      if (
-        !isDeepStrictEqual(role, assignment.role) ||
-        !savedRole ||
-        !isDeepStrictEqual(validateProjectRole(savedRole), assignment.role)
-      )
-        throw invalid();
-    }
+    const expected =
+      plan.context.contextSource === 'initial-admission'
+        ? after.runAdmissions?.[plan.admissionId] &&
+          initialPlanningInput(after.runAdmissions[plan.admissionId])
+        : attemptPlanningInput(documentAttemptContext(after, plan.attemptId));
+    const { readOnlyPlanner: _planner, ...captured } = plan.context;
+    if (!expected || !isDeepStrictEqual(captured, expected)) throw invalid();
     if (
       plan.readOnlyPlanner &&
       (!run.planningSession ||
@@ -336,21 +299,82 @@ export function validateDocumentRunPlans(previous: ProjectDocument, next: Projec
     )
       throw invalid();
   }
-  for (const [runId, planId] of Object.entries(after.runPlanHeads ?? {})) {
+  for (const [id, value] of Object.entries(after.runAssignments ?? {})) {
+    const assignment = validateRunWorkerAssignment(value);
+    const head = after.runHeads?.[assignment.runId];
+    const context = documentAttemptContext(after, assignment.attemptId);
+    const scope = withEnvironmentRepair(context.policy, context.repairEnvironment).scope;
+    if (
+      (scope.mode === 'strict' && !assignment.paths.length) ||
+      assignment.paths.some((path) => !planPathAllowed(path, scope))
+    )
+      throw invalid();
+    validateAssignmentResource(
+      context.resources,
+      assignment.role,
+      assignment.resource,
+      scope.mode === 'strict' ? { strictPlannedWrites: true } : {},
+    );
+    const role = after.roleVersions.find(
+      (role) => role.id === assignment.role.id && role.version === assignment.role.version,
+    );
+    if (
+      assignment.id !== id ||
+      !head ||
+      head.admissionId !== assignment.admissionId ||
+      context.runId !== assignment.runId ||
+      context.admissionId !== assignment.admissionId ||
+      after.runAssignmentHeads?.[assignment.runId]?.[assignment.role.id] !== id ||
+      !role ||
+      !isDeepStrictEqual(validateProjectRole(role), assignment.role)
+    )
+      throw invalid();
+    if (
+      assignment.planId &&
+      (after.runPlans?.[assignment.planId]?.runId !== assignment.runId ||
+        after.runPlans[assignment.planId].attemptId !== assignment.attemptId)
+    )
+      throw invalid();
+  }
+  for (const [runId, heads] of Object.entries(after.runAssignmentHeads ?? {})) {
+    const run = after.runs.find((run) => run.id === runId),
+      head = after.runHeads?.[runId];
+    if (!run || !head) throw invalid();
+    const inherited = documentAttemptContext(after, head.attemptId).inheritedAssignments;
+    const assignments = Object.entries(heads).map(([roleId, id]) => {
+      const value = after.runAssignments?.[id];
+      if (
+        !value ||
+        value.role.id !== roleId ||
+        value.runId !== runId ||
+        (value.attemptId !== head.attemptId && inherited?.[roleId]?.id !== id)
+      )
+        throw invalid();
+      return validateRunWorkerAssignment(value);
+    });
+    for (const [field, expected] of [
+      ['roleAssignments', Object.fromEntries(assignments.map((a) => [a.role.id, a.paths]))],
+      ['roleOrigins', Object.fromEntries(assignments.map((a) => [a.role.id, a.origin]))],
+      ['assignmentResources', Object.fromEntries(assignments.map((a) => [a.role.id, a.resource]))],
+    ] as const)
+      if (!isDeepStrictEqual(run[field], expected)) throw invalid();
+    for (const assignment of assignments)
+      if (
+        !isDeepStrictEqual(
+          run.roleSnapshots?.find((role) => role.id === assignment.role.id),
+          assignment.role,
+        )
+      )
+        throw invalid();
+  }
+  for (const [runId, planId] of Object.entries(after.runPlanHeads ?? {}))
     if (after.runPlans?.[planId]?.runId !== runId) throw invalid();
-  }
-  for (const planId of Object.keys(after.runAssignments ?? {})) {
-    if (!after.runPlans?.[planId]) throw invalid();
-  }
   for (const runId of Object.keys(after.runHeads ?? {})) {
     const run = after.runs.find((run) => run.id === runId);
+    if (run?.planSavedAt !== undefined && !after.runPlanHeads?.[runId]) throw invalid();
     if (
-      run &&
-      (run.planSavedAt !== undefined ||
-        run.plan.length > 0 ||
-        run.roleAssignments !== undefined ||
-        run.assignmentResources !== undefined) &&
-      !after.runPlanHeads?.[runId]
+      (run?.roleAssignments !== undefined || run?.assignmentResources !== undefined) &&
+      !after.runAssignmentHeads?.[runId]
     )
       throw invalid();
   }

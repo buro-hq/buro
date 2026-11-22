@@ -7,11 +7,11 @@
 
 Buro is a local workspace for automating coding goals with a coordinator, focused agent sessions and independent checks. Connect a Git repository and describe the outcome. Each goal keeps its plan, agent sessions, commands, diff and review in one place.
 
-Work happens in a separate Git worktree. You can inspect the result, apply it to your branch, or have Buro open a draft PR. A coordinator plans the work and selects workers when needed; a separate reviewer checks the result.
+Work happens in a separate Git worktree. You can inspect the result, apply it to your branch, or have Buro open a draft PR. The coordinator chooses useful work from the available tools and registered actions: plan, implement, delegate, check, request review, repair or ask you. A separate reviewer and service evidence gate acceptance.
 
 Buro is still in development. Its built-in adapters support your installed Codex CLI and opt-in **Ollama and DeepSeek model API** connections through a Buro-managed runtime. Trusted service plugins can register additional provider and backend factories. A new installation has no configured model or default backend. Configure [execution resources](docs/RESOURCES.md) and explicitly select a profile to use a local, remote or mixed team.
 
-The [product vision](VISION.md), [target architecture](ARCHITECTURE.md) and [provider integration contract](docs/PROVIDERS.md) define the full direction. Buro owns worker dispatch, tools and verification; richer replanning and concurrent runs remain on the roadmap.
+The [product vision](VISION.md), [target architecture](ARCHITECTURE.md) and [provider integration contract](docs/PROVIDERS.md) define the full direction. The [implemented action loop](GOAL-EXECUTION-POC.md) has no mandatory planning/delegation/integration sequence. Plugins expose bounded capabilities; Buro owns dispatch and acceptance. Complete task/session/effect persistence, default-none and concurrent runs remain unfinished.
 
 The [implementation sequence](docs/IMPLEMENTATION.md) tracks the transition from the existing route to that vision. The [controlled model comparison](docs/MODEL-COMPARISON-2026-11-21.md) records direct Codex, Buro and local/cloud model results and their current limits.
 

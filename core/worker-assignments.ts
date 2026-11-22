@@ -114,35 +114,65 @@ export async function runWorkerAssignments(options: {
       workspace: workspace.path,
       assignment: grant,
     });
-    const session: AgentSession = {
-      id: 'S-' + options.id(),
-      roleId: role.id,
-      roleVersion: role.version,
-      ...(decision
-        ? {
-            runtimeId: decision.resource.id,
-            providerId: decision.resource.providerId,
-            model: decision.resource.model,
-            configurationRevision: decision.resource.configurationRevision,
-            selection: { source: decision.source, reason: decision.reason },
-          }
-        : sessionResource(run.resources, 'implementation', runtime.id)),
-      parentId: run.coordinatorSession?.id,
-    };
+    const previous = [...run.agents]
+      .reverse()
+      .find((agent) => agent.assignment?.grantId === grant.id);
+    if (previous && (!previous.completedAt || !['completed', 'failed'].includes(previous.status)))
+      throw new DomainError(
+        'SESSION_RECONCILIATION_REQUIRED',
+        'Settle the previous specialist action before continuing it.',
+      );
+    const resume = !!(
+      previous?.session &&
+      runtime.resume &&
+      decision?.resource.capabilities.resumeSessions &&
+      (previous.session.result || previous.assignment?.knownFailure?.scopeVerified) &&
+      previous.assignment?.knownFailure?.code !== 'MODEL_CONTEXT_EXHAUSTED' &&
+      JSON.stringify(previous.assignment?.envelope?.task) === JSON.stringify(envelope.task) &&
+      JSON.stringify(previous.assignment?.envelope?.scope) === JSON.stringify(envelope.scope)
+    );
+    const session: AgentSession = resume
+      ? structuredClone(previous!.session!)
+      : {
+          id: 'S-' + options.id(),
+          roleId: role.id,
+          roleVersion: role.version,
+          ...(decision
+            ? {
+                runtimeId: decision.resource.id,
+                providerId: decision.resource.providerId,
+                model: decision.resource.model,
+                configurationRevision: decision.resource.configurationRevision,
+                selection: { source: decision.source, reason: decision.reason },
+              }
+            : sessionResource(run.resources, 'implementation', runtime.id)),
+          parentId: previous?.session?.id || run.coordinatorSession?.id,
+        };
     // Persist dispatch intent before opening a client. An unknown outcome is never replayed on restart.
     await update((r) => {
-      r.agents.push({
-        session,
-        threadId: session.id,
-        name: role.id,
-        agentPath: '/root/' + role.id,
-        startedAt: now(),
-        completedAt: '',
-        messages: [],
-        commands: 0,
-        status: 'starting',
-        assignment: { paths: [...paths], envelope: structuredClone(envelope) },
-      });
+      if (resume) {
+        const agent = r.agents.find((item) => item.session?.id === session.id)!;
+        agent.status = 'starting';
+        agent.completedAt = '';
+        agent.session!.result = undefined;
+        agent.assignment = {
+          grantId: grant.id,
+          paths: [...paths],
+          envelope: structuredClone(envelope),
+        };
+      } else
+        r.agents.push({
+          session,
+          threadId: session.id,
+          name: role.id,
+          agentPath: '/root/' + role.id,
+          startedAt: now(),
+          completedAt: '',
+          messages: [],
+          commands: 0,
+          status: 'starting',
+          assignment: { grantId: grant.id, paths: [...paths], envelope: structuredClone(envelope) },
+        });
       r.events.push({
         at: now(),
         type: 'agent.dispatch-requested',
@@ -173,10 +203,10 @@ export async function runWorkerAssignments(options: {
     try {
       abort();
       before = await workspaces.changes(workspace.path, workspace.base);
-      const started = await runtime.start({
+      const input = {
         projectId,
         runId: run.id,
-        purpose: 'implementation',
+        purpose: 'implementation' as const,
         operationId: operationIds.implementation,
         workspace: workspace.path,
         assignment: {
@@ -185,7 +215,10 @@ export async function runWorkerAssignments(options: {
           scope: structuredClone(scope),
         },
         instructions: workerInstructions(role, policy),
-      });
+      };
+      const started = resume
+        ? await runtime.resume!({ ...input, threadId: previous!.threadId })
+        : await runtime.start(input);
       threadId = started.threadId;
       options.track(threadId);
       abort();

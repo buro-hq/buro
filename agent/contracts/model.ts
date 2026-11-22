@@ -43,6 +43,8 @@ export interface ModelProvider {
   readonly revision: string;
   readonly local: boolean;
   readonly structuredToolMode?: 'combined' | 'separate-turn';
+  /** Tools-free response grammar is sent natively in schema mode; omitted means instruction guidance. */
+  readonly structuredOutputMode?: 'schema' | 'instruction';
   /** Provider-specific request view; the host supplies a clone of the full private history. */
   contextMessages?(messages: readonly ModelMessage[], context?: ModelContext): ModelMessage[];
   complete(input: {

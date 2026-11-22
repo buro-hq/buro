@@ -15,6 +15,7 @@ type Options = HttpOptions & { id: string; think?: boolean | string; trust?: End
 /** Buro owns identity, data policy and preflight; portable code owns the actual model protocol. */
 export class OllamaProvider implements ModelProvider {
   readonly structuredToolMode = 'separate-turn' as const;
+  readonly structuredOutputMode = 'schema' as const;
   readonly id: string;
   readonly revision: string;
   readonly local: boolean;

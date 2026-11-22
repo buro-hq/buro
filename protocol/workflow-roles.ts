@@ -4,6 +4,7 @@ import { ResourceIdSchema, RuntimePreferenceSchema } from './resources.ts';
 export const WorkflowIdentitySchema = z.strictObject({
   id: ResourceIdSchema,
   revision: z.string().min(1),
+  actionsRevision: z.string().min(1).optional(),
 });
 export type WorkflowIdentity = z.infer<typeof WorkflowIdentitySchema>;
 export const RoleProvenanceSchema = z.discriminatedUnion('origin', [

@@ -26,7 +26,6 @@ const profile: ProjectProfile = {
   setup: [],
   dependencies: 'none',
   maxWorkers: 2,
-  maxRepairs: 1,
   turnTimeoutMs: 10000,
   baseBranch: 'main',
 };

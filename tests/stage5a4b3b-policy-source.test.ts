@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -34,7 +35,6 @@ for (const kind of ['file', 'sqlite'] as const) {
         setup: [],
         dependencies: 'none',
         maxWorkers: 1,
-        maxRepairs: 0,
         turnTimeoutMs: 10000,
       };
       const original: ExecutionPolicy = executionPolicy(embedded);
@@ -78,6 +78,7 @@ for (const kind of ['file', 'sqlite'] as const) {
         throw Error('Policy-source proof dispatched an external effect.');
       };
       const service = new ExecutionService({
+        actions: createBuiltinExecutionActions(),
         ...env,
         policies: { p: structuredClone(original) },
         selection: fixtureExecutionSelection('fake', fixtureExecutionCapabilities()),
@@ -118,7 +119,7 @@ for (const kind of ['file', 'sqlite'] as const) {
       });
       await service.finish('p', runId, 'failed', 'Original attempt stopped');
 
-      const configured = { ...structuredClone(original), maxRepairs: 1 };
+      const configured = { ...structuredClone(original), maxWorkers: 2 };
       service.env.policies.p = configured;
       await service.resume('retain', 'retain', {
         projectId: 'p',
@@ -144,8 +145,8 @@ for (const kind of ['file', 'sqlite'] as const) {
       assert.equal(current.context.policySource, 'configured-host');
       assert.deepEqual(current.context.policy, configured);
       assert.notEqual(
-        current.context.policy.maxRepairs,
-        current.context.policy.profile!.maxRepairs,
+        current.context.policy.maxWorkers,
+        current.context.policy.profile!.maxWorkers,
       );
       assert.equal(Object.hasOwn(current.context.policy, 'context'), hostContext === 'override');
       assert.equal(await authority.settings.profile(), undefined);

@@ -51,11 +51,11 @@ export type RunPlan = {
   context: RunPlanningInput;
   readOnlyPlanner?: RunPlannerHandoff;
 };
-/** Original plan assignment. Later current-task refinements retain their existing owner for now. */
+/** Immutable worker grant; planId is optional decision provenance, never a prerequisite for dispatch. */
 export type RunWorkerAssignment = {
   version: 1;
   id: string;
-  planId: string;
+  planId?: string;
   runId: string;
   admissionId: string;
   attemptId: string;
@@ -87,5 +87,26 @@ export function runPlanTimeline(
       },
     ]),
     { runId: plan.runId, at: plan.createdAt, type: 'plan.saved', text: plan.summary },
+  ];
+}
+
+export function runWorkerAssignmentTimeline(
+  assignment: RunWorkerAssignment,
+  at: string,
+): Omit<RunTimelineEntry, 'sequence'>[] {
+  return [
+    {
+      runId: assignment.runId,
+      at,
+      type: assignment.origin === 'created' ? 'role.proposed' : 'role.reused',
+      text: `${assignment.role.id}: ${assignment.role.title}`,
+    },
+    {
+      runId: assignment.runId,
+      at,
+      type: 'agent.resource-selected',
+      text: `${assignment.role.id}: ${assignment.resource.resource.model || assignment.resource.resource.id}. ${assignment.resource.reason}`,
+    },
+    { runId: assignment.runId, at, type: 'worker.delegated', text: assignment.role.id },
   ];
 }

@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -36,7 +37,6 @@ async function fixture(t: any) {
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
   });
   const reads: { operation: string; rows: number }[] = [];
@@ -97,6 +97,7 @@ async function fixture(t: any) {
     },
   } as ProjectStore;
   const service = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     projects: {
       get: (id) => {
         assert.equal(id, 'p');

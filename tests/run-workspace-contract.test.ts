@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -34,7 +35,6 @@ const profile: ProjectProfile = {
   setup: [],
   dependencies: 'none',
   maxWorkers: 1,
-  maxRepairs: 0,
   turnTimeoutMs: 10000,
   baseBranch: 'retained-source-branch',
 };
@@ -155,6 +155,7 @@ async function fixture(t: any, kind: 'file' | 'sqlite') {
     },
   } as WorkspacePort;
   const service = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     ...env,
     policies: { p: executionPolicy(profile) },
     workflowRoles: createBuiltinWorkflowRoles(),
@@ -177,7 +178,7 @@ async function fixture(t: any, kind: 'file' | 'sqlite') {
     } as ExecutionEnvironmentPort,
   });
   service.schedule = () => {};
-  service.planAndImplement = async (_projectId, runId) => {
+  service.orchestrate = async (_projectId, runId) => {
     planning++;
     assert.deepEqual(await authority.runs.workspace(runId), {
       version: 1,

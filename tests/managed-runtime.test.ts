@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
@@ -86,7 +87,6 @@ async function fixture(t: any) {
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
     baseBranch: 'main',
   });
@@ -148,28 +148,38 @@ test('managed execution reads, edits and checks a real worktree, then independen
     const lastUser = input.messages.map((m) => m.role).lastIndexOf('user');
     const prompt = input.messages[lastUser].content;
     const toolMessages = input.messages.slice(lastUser + 1).filter((m) => m.role === 'tool');
-    if (prompt.startsWith('First,'))
-      return response(
-        [],
-        JSON.stringify({
-          summary: 'Update value',
-          steps: [
-            { step: 'Implement value', owner: 'builder' },
-            { step: 'Review', owner: 'reviewer' },
-          ],
-          team: [
-            {
-              roleId: 'builder',
-              action: 'create',
-              title: 'Builder',
-              description: 'Implementation',
-              instructions: 'Implement the assigned change.',
-              kind: 'implementation',
-              paths: ['src/value.mjs'],
-            },
-          ],
-        }),
-      );
+    if (input.messages[0].content.includes('You own the goal.')) {
+      const result = {
+        status: 'success',
+        summary: 'Changed value to two',
+        artifacts: ['src/value.mjs'],
+        notesForNextAgent: '',
+      };
+      const choice = prompt.startsWith('Service observation for delegate')
+        ? { action: 'check', input: {} }
+        : prompt.startsWith('Service observation for check')
+          ? { action: 'review', input: { result } }
+          : prompt.startsWith('Service observation for review')
+            ? { action: 'finish', input: { result } }
+            : {
+                action: 'delegate',
+                input: {
+                  worker: {
+                    roleId: 'builder',
+                    action: 'create',
+                    title: 'Builder',
+                    description: 'Implementation',
+                    instructions: 'Implement the assigned change.',
+                    kind: 'implementation',
+                    paths: ['src/value.mjs'],
+                    runtimeId: null,
+                    runtimeReason: '',
+                    assignment: null,
+                  },
+                },
+              };
+      return response([], JSON.stringify({ decision: choice }));
+    }
     if (prompt.startsWith('Execute your assigned work')) {
       const calls: ModelToolCall[] = [
         { id: 'read', name: 'read_file', arguments: { path: 'src/value.mjs' } },
@@ -248,7 +258,6 @@ test('managed execution reads, edits and checks a real worktree, then independen
     checks: f.profile.checks.map(({ id, title }) => ({ id, title })),
     defaultCheckIds: f.profile.defaultCheckIds,
     maxWorkers: f.profile.maxWorkers,
-    maxRepairs: f.profile.maxRepairs,
     turnTimeoutMs: f.profile.turnTimeoutMs,
   };
   const checks = new ProjectChecks(
@@ -262,6 +271,7 @@ test('managed execution reads, edits and checks a real worktree, then independen
   );
   const env = { projects: f.projects, now: () => new Date().toISOString(), id: randomUUID };
   const engine = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     workflowRoles: createBuiltinWorkflowRoles(),
     ...env,
     runtime,

@@ -30,7 +30,6 @@ const profile: ProjectProfile = {
   setup: [],
   dependencies: 'none',
   maxWorkers: 2,
-  maxRepairs: 1,
   turnTimeoutMs: 10000,
 };
 const initialGoal: Goal = {
@@ -321,7 +320,7 @@ test('a matching embedded profile cannot hide relaxed top-level execution rules'
       policy.maxWorkers = 20;
     },
     (policy) => {
-      policy.maxRepairs = 20;
+      Reflect.set(policy, 'unsupportedRepairLimit', 20);
     },
     (policy) => {
       policy.context = 'Different instructions';
@@ -337,7 +336,11 @@ test('a matching embedded profile cannot hide relaxed top-level execution rules'
     candidate.policy = executionPolicy(strict);
     change(candidate.policy);
     assert.deepEqual(candidate.policy.profile, strict);
-    assert.throws(() => f.tx.admit(candidate, f.resolver), { code: 'CONFLICT' });
+    assert.throws(() => f.tx.admit(candidate, f.resolver), {
+      code: Object.hasOwn(candidate.policy, 'unsupportedRepairLimit')
+        ? 'INVALID_RUN_STATE'
+        : 'CONFLICT',
+    });
     assert.equal(f.writes(), 0);
     assert.equal(f.roles.size, 0);
     assert.equal(f.currents.size, 0);

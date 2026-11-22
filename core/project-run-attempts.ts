@@ -26,11 +26,55 @@ import { serviceOperationContext, operationIds } from './operation-catalog.ts';
 import { assertPlanningPolicy } from './planning-policy.ts';
 import { validateRunPlan, validateRunWorkerAssignment } from './project-run-plans.ts';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../protocol/domain.ts';
+import type { RunPlan, RunWorkerAssignment } from '../protocol/run-plan.ts';
 
 const invalid = () =>
   new DomainError('INVALID_RUN_ATTEMPT', 'The saved attempt or its context is invalid.');
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+function inheritAssignments(
+  assignments: RunWorkerAssignment[],
+  previous: RunAttemptContext,
+  goalText: string,
+  priorAttemptId: string,
+): NonNullable<RunAttemptContext['inheritedAssignments']> {
+  const unchanged = goalText === previous.goalText;
+  return Object.fromEntries(
+    assignments.map((assignment) => {
+      const prior = previous.inheritedAssignments?.[assignment.role.id];
+      return [
+        assignment.role.id,
+        {
+          id: assignment.id,
+          taskMode:
+            unchanged &&
+            (assignment.attemptId === priorAttemptId ||
+              (prior?.id === assignment.id && prior.taskMode === 'original'))
+              ? 'original'
+              : 'full-goal',
+        },
+      ];
+    }),
+  );
+}
+function continuationTaskMode(
+  plan: RunPlan | undefined,
+  assignments: RunWorkerAssignment[],
+  references: NonNullable<RunAttemptContext['inheritedAssignments']>,
+  previous: RunAttemptContext,
+  goalText: string,
+  priorAttemptId: string,
+): RunAttemptContext['taskMode'] {
+  if (assignments.length > 0)
+    return assignments.every((assignment) => references[assignment.role.id].taskMode === 'original')
+      ? 'original'
+      : 'full-goal';
+  return plan &&
+    plan.context.goalText === goalText &&
+    (previous.taskMode === 'original' || plan.attemptId === priorAttemptId)
+    ? 'original'
+    : 'full-goal';
+}
 const closed = (value: unknown, required: string[], optional: string[] = []) =>
   !!value &&
   typeof value === 'object' &&
@@ -235,24 +279,40 @@ export function validateRunAttemptLineage(
   )
     throw invalid();
   if (inherited) validateRunPlan(inherited);
-  const assignments = inherited ? storage.planAssignments(attempt.runId) : [];
+  const assignments = storage.planAssignments(attempt.runId).filter((assignment) => {
+    const owner = storage.attempt(assignment.attemptId);
+    if (!owner || owner.runId !== attempt.runId || owner.admissionId !== attempt.admissionId)
+      throw invalid();
+    return owner.ordinal <= prior.ordinal;
+  });
   for (const assignment of assignments) {
     validateRunWorkerAssignment(assignment);
     if (
-      assignment.planId !== inherited!.id ||
-      assignment.attemptId !== inherited!.attemptId ||
       assignment.runId !== attempt.runId ||
-      assignment.admissionId !== attempt.admissionId
+      assignment.admissionId !== attempt.admissionId ||
+      (assignment.planId !== undefined && assignment.planId !== inherited?.id)
     )
       throw invalid();
   }
+  const references = inheritAssignments(assignments, previous, context.goalText, prior.id);
+  if (
+    Object.keys(context.inheritedAssignments ?? {}).length !== assignments.length ||
+    assignments.some((assignment) => {
+      const actual = context.inheritedAssignments?.[assignment.role.id],
+        expected = references[assignment.role.id];
+      return actual?.id !== expected.id || actual.taskMode !== expected.taskMode;
+    })
+  )
+    throw invalid();
   const roles = [...admission.roleSnapshots, ...assignments.map((assignment) => assignment.role)];
-  const mode =
-    inherited &&
-    inherited.context.goalText === context.goalText &&
-    (previous.taskMode === 'original' || inherited.attemptId === prior.id)
-      ? 'original'
-      : 'full-goal';
+  const mode = continuationTaskMode(
+    inherited,
+    assignments,
+    references,
+    previous,
+    context.goalText,
+    prior.id,
+  );
   if (!same(context.roleSnapshots, roles) || context.taskMode !== mode) throw invalid();
 }
 
@@ -449,11 +509,6 @@ export function prepareRunContinuation(
   if (!origin || origin.runId !== current.id || origin.admissionId !== current.admissionId)
     throw invalid();
   const plan = storage.plan(current.id);
-  if (input.mode === 'recheck' && !plan)
-    throw new DomainError(
-      'REPLAN_REQUIRED',
-      'No plan has been saved. Choose Continue to finish planning.',
-    );
   if (
     plan &&
     (plan.runId !== current.id ||
@@ -490,15 +545,15 @@ export function prepareRunContinuation(
     ];
   }
   const goalText = goal.body + '\n\nAcceptance criteria:\n' + goal.criteria;
-  const workers = plan ? storage.planAssignments(current.id) : [];
+  const workers = storage.planAssignments(current.id);
   if (
-    plan &&
     workers.some(
       (assignment) =>
-        assignment.planId !== plan.id ||
+        (assignment.planId !== undefined && assignment.planId !== plan?.id) ||
         assignment.runId !== current.id ||
         assignment.admissionId !== current.admissionId ||
-        assignment.attemptId !== plan.attemptId,
+        (assignment.attemptId !== current.attemptId &&
+          predecessor.context.inheritedAssignments?.[assignment.role.id]?.id !== assignment.id),
     )
   )
     throw invalid();
@@ -508,6 +563,12 @@ export function prepareRunContinuation(
     ),
     ...workers.map((assignment) => assignment.role),
   ];
+  const references = inheritAssignments(
+    workers,
+    predecessor.context,
+    goalText,
+    predecessor.attempt.id,
+  );
   const context = validateRunAttemptContext({
     ...predecessor.context,
     attemptId: input.attemptId,
@@ -528,13 +589,16 @@ export function prepareRunContinuation(
     },
     workspaceOriginAttemptId: binding.attemptId,
     ...(plan ? { inheritedPlanId: plan.id, planOriginAttemptId: plan.attemptId } : {}),
+    inheritedAssignments: references,
     taskChanged: goalText !== predecessor.context.goalText,
-    taskMode:
-      plan &&
-      plan.context.goalText === goalText &&
-      (predecessor.context.taskMode === 'original' || plan.attemptId === predecessor.attempt.id)
-        ? 'original'
-        : 'full-goal',
+    taskMode: continuationTaskMode(
+      plan,
+      workers,
+      references,
+      predecessor.context,
+      goalText,
+      predecessor.attempt.id,
+    ),
   });
   const attempt = RunAttemptSchema.parse({
     version: 1,

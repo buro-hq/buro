@@ -66,7 +66,6 @@ export type ProjectProfile = {
   setup: ProjectCommand[];
   dependencies: 'none' | 'link-node-modules';
   maxWorkers: number;
-  maxRepairs: number;
   turnTimeoutMs: number;
   baseBranch?: string;
   components?: ProjectComponent[];
@@ -143,6 +142,7 @@ export type Agent = {
   commands: number;
   status: string;
   assignment?: {
+    grantId?: string;
     paths: string[];
     envelope?: import('./worker-tasks.ts').WorkerEnvelopeV1;
     knownFailure?: {
@@ -204,6 +204,7 @@ export type RunIssue = {
     | 'BASELINE_CHECKS_FAILED'
     | 'EXECUTION_FAILED'
     | 'MANAGED_BUDGET_BLOCKED'
+    | 'OPERATOR_INPUT_REQUIRED'
     | 'RECONCILIATION_REQUIRED';
   budgetCode?: import('./run-budget.ts').ManagedBudgetErrorCode;
   message: string;
@@ -364,6 +365,14 @@ export type DomainEvent = {
         view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
       }
     | {
+        type: 'run.worker-delegated';
+        current: RunCurrent;
+        assignment: import('./run-plan.ts').RunWorkerAssignment;
+        context: import('./run-plan.ts').RunPlanningInput;
+        entries: Omit<RunTimelineEntry, 'sequence'>[];
+        view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
+      }
+    | {
         type: 'run.plan-accepted';
         current: RunCurrent;
         plan: import('./run-plan.ts').RunPlan;
@@ -395,7 +404,6 @@ export type ExecutionPolicyView = {
   checks: { id: string; title: string }[];
   defaultCheckIds: string[];
   maxWorkers: number;
-  maxRepairs: number;
 };
 export type Snapshot = {
   contextMaterials?: ContextMaterial[];

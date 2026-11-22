@@ -30,6 +30,7 @@ export const executionPlugin: Plugin.Object<{
   async apply(ctx, options) {
     const api = new ExecutionService({
       ...options,
+      actions: ctx.projectContributions.actions,
       workflowRoles: createWorkflowRoleResolver({
         templates: ctx.projectContributions.roleTemplates,
         workflows: ctx.projectContributions.workflows,

@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import test from 'node:test';
@@ -79,7 +80,6 @@ async function fixture(t: any, frozen: ResourceSnapshot | undefined) {
     ],
     defaultCheckIds: ['test'],
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 1000,
     environment: { provider: 'native' },
   };
@@ -153,6 +153,7 @@ test('baseline and final verification never run checks on the host after their r
   );
   let sequence = 0;
   const service = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     workflowRoles: createBuiltinWorkflowRoles(),
     projects: f.projects,
     runtime,
@@ -209,6 +210,7 @@ test('native-only and legacy verification require immutable check isolation too'
     });
     let sequence = 0;
     const service = new ExecutionService({
+      actions: createBuiltinExecutionActions(),
       workflowRoles: createBuiltinWorkflowRoles(),
       projects: f.projects,
       runtime,

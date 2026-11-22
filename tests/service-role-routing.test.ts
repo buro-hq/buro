@@ -65,7 +65,6 @@ function fixture(t: any) {
       defaultCheckIds: [],
       checks: [],
       maxWorkers: 1,
-      maxRepairs: 0,
       turnTimeoutMs: 1000,
       scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
     },

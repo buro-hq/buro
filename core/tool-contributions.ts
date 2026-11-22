@@ -76,7 +76,14 @@ function assertNoDroppedKeys(input: unknown, parsed: unknown): void {
  * Accessors and checks are compared by function identity, never executed by this observer.
  * Closed-over callback state remains the trusted contribution's revision responsibility.
  */
-function schemaLiveness(schema: z.ZodObject): () => void {
+function schemaLiveness(
+  schema: z.ZodObject,
+  changed = {
+    code: 'TOOL_CONFIGURATION_CHANGED',
+    message:
+      'A registered tool argument definition changed. Rebuild the tool catalog before continuing.',
+  },
+): () => void {
   const identities = new WeakMap<object, number>(),
     symbols = new Map<symbol, number>();
   let nextIdentity = 0;
@@ -149,17 +156,52 @@ function schemaLiveness(schema: z.ZodObject): () => void {
     try {
       current = fingerprint();
     } catch {
-      throw new DomainError(
-        'TOOL_CONFIGURATION_CHANGED',
-        'A registered tool argument definition changed. Rebuild the tool catalog before continuing.',
-      );
+      throw new DomainError(changed.code, changed.message);
     }
-    if (current !== captured)
-      throw new DomainError(
-        'TOOL_CONFIGURATION_CHANGED',
-        'A registered tool argument definition changed. Rebuild the tool catalog before continuing.',
-      );
+    if (current !== captured) throw new DomainError(changed.code, changed.message);
   };
+}
+
+/** Capture the actual Zod parser and detached JSON grammar shared by trusted contributions. */
+export function captureContributionArguments<Shape extends z.ZodRawShape>(
+  input: z.ZodObject<Shape>,
+  errors = {
+    arguments: { code: 'TOOL_ARGUMENTS', message: 'Invalid tool arguments.' },
+    changed: {
+      code: 'TOOL_CONFIGURATION_CHANGED',
+      message:
+        'A registered tool argument definition changed. Rebuild the tool catalog before continuing.',
+    },
+  },
+) {
+  const schema = input.strict();
+  const parameters = immutable(structuredClone(z.toJSONSchema(schema)));
+  const assertCurrent = schemaLiveness(schema, errors.changed);
+  return {
+    schema,
+    parameters,
+    assertCurrent,
+    parse(value: unknown): z.output<typeof schema> {
+      assertCurrent();
+      let parsed: z.output<typeof schema>;
+      try {
+        const captured = structuredClone(value);
+        const validated = schema.parse(captured);
+        assertNoDroppedKeys(captured, validated);
+        parsed = immutable(ResourceConfigSchema.parse(validated)) as z.output<typeof schema>;
+      } catch {
+        assertCurrent();
+        throw new DomainError(errors.arguments.code, errors.arguments.message);
+      }
+      assertCurrent();
+      return parsed;
+    },
+  };
+}
+
+/** Invalid post-handler output must remain distinguishable from argument rejection. */
+export function parseContributionResult(value: unknown): ToolResult {
+  return structuredClone(resultSchema.parse(value));
 }
 
 /** Startup registrations are trusted application code, not a hostile-plugin sandbox. */
@@ -199,9 +241,7 @@ export class ToolContributionCatalog {
     if (this.#tools.has(input.name))
       throw new DomainError('TOOL_EXISTS', 'A tool with this name is already registered.');
     const { name, revision, description, effect, execute } = input;
-    const schema = input.schema.strict();
-    const parameters = immutable(structuredClone(z.toJSONSchema(schema)));
-    const assertCurrent = schemaLiveness(schema);
+    const { parameters, assertCurrent, parse } = captureContributionArguments(input.schema);
     this.#schemaChecks.set(name, assertCurrent);
     this.#tools.set(
       name,
@@ -212,21 +252,10 @@ export class ToolContributionCatalog {
         effect,
         parameters,
         invoke: async (value: unknown, operations: RepositoryToolOperations) => {
-          assertCurrent();
-          let parsed: z.output<typeof schema>;
-          try {
-            const captured = structuredClone(value);
-            const validated = schema.parse(captured);
-            assertNoDroppedKeys(captured, validated);
-            parsed = immutable(ResourceConfigSchema.parse(validated)) as z.output<typeof schema>;
-          } catch {
-            assertCurrent();
-            throw new DomainError('TOOL_ARGUMENTS', 'Invalid tool arguments.');
-          }
-          assertCurrent();
+          const parsed = parse(value);
           const result = await execute(parsed, operations);
           // Invalid post-handler output cannot disguise a potentially completed mutation as a preflight rejection.
-          return structuredClone(resultSchema.parse(result));
+          return parseContributionResult(result);
         },
       }),
     );

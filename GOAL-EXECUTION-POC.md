@@ -1,38 +1,44 @@
 # Goal execution: architecture and evidence
 
-This document describes current execution through native Codex or managed Ollama/DeepSeek sessions. [ARCHITECTURE.md](ARCHITECTURE.md) defines the complete target; [VISION.md](VISION.md) defines product behavior. See [resource configuration](docs/RESOURCES.md) for supported routes and limits.
+Current implementation, 22 November 2026. [VISION.md](VISION.md) defines the product; [ARCHITECTURE.md](ARCHITECTURE.md) defines the full target. [Adaptive orchestration](docs/ADAPTIVE-ORCHESTRATION-2026-11-22.md) records the implementation decision and remaining limits.
 
-Buro executes project goals through isolated workspaces, configured checks and independent review. Integration checks use synthetic fixtures rather than recorded local sessions.
+Buro freezes a goal, policy, resources and material selection, prepares an isolated workspace and starts its coordinator. The coordinator can inspect and change sources using the existing backend tools, then choose a registered service action. Planning, delegation, integration and repair have no mandatory sequence. Native Codex and managed providers use the same structured action contract; Pi continues to own scheduling inside managed sessions.
 
 ```mermaid
 flowchart TD
-  Goal[Goal and acceptance criteria] --> Freeze[Freeze policy, checks and materials]
-  Freeze --> Workspace[Create isolated Git worktree]
-  Workspace --> Baseline[Baseline checks]
-  Baseline --> Plan[Coordinator plans and selects roles]
-  Plan --> Validate[Validate ownership and role definitions]
-  Validate --> Workers[Buro starts independent worker sessions]
-  Workers --> Checks[Service checks diff and commands]
-  Checks --> Review[Fresh independent reviewer]
-  Checks --> Repair[Repair in the same coordinator session]
-  Review --> Repair
-  Repair --> Checks
-  Review --> Accept[Accepted commit and saved reusable roles]
-  Accept --> Inspect[Local preview]
-  Accept --> PR[Draft PR]
-  Accept --> Delivery[Configured delivery and verification]
+  Goal[Goal and frozen constraints] --> Workspace[Isolated workspace]
+  Workspace --> AI[Coordinator chooses useful work]
+  AI <--> Tools[Scoped repository tools]
+  AI --> Actions[Registered service action]
+  Actions --> Plan[Update working plan]
+  Actions --> Delegate[Delegate or continue a specialist]
+  Actions --> Check[Check current revision]
+  Actions --> Review[Fresh independent review]
+  Actions --> Ask[Wait for user input]
+  Plan --> AI
+  Delegate --> AI
+  Check --> AI
+  Review --> AI
+  Ask --> Resume[Explicit continuation]
+  Resume --> AI
+  Actions --> Finish[Submit for acceptance]
+  Finish --> Guard{Current checks and fresh approval of exact bytes?}
+  Guard -->|No| AI
+  Guard -->|Yes| Accepted[Accepted commit]
 ```
 
-The coordinator is not the acceptance authority. Saved Buro-owned worker assignments and results, scope preservation, protected instructions, configured check results and reviewer approval are required. A successful message alone cannot accept a result. Coordinator/reviewer are supplied by the service; proposed worker roles have validated stable IDs and nonoverlapping paths. New reusable role definitions are saved only after acceptance.
+The action catalog is a sealed startup contribution. Plugins receive bounded semantic operations, not a Run/store mutation callback. An invocation serializes and drains its started operations, revokes retained ports when its handler returns and cannot swallow an uncertain operation to continue. The admitted catalog identity is checked before dispatch and continuation. A plugin-provided `accepted` or `terminal` value never grants completion authority.
 
-Buro records each worker's dispatch intent and session ID before starting the client. Sessions snapshot the role version and runtime. Workers execute sequentially in one run worktree; observed edits are compared before and after each assignment. Scope violations and worker failures preserve the workspace and stop acceptance. This is post-execution observation for the native client, not a per-worker filesystem sandbox. The managed ToolBroker additionally validates edits before dispatch and confines commands away from private machine state. The coordinator integrates worker results and handles bounded repairs. Native child tools are disabled; undeclared child activity cannot claim a planned role by name, path or prompt.
+A working plan is a recorded, editable artifact; it grants no permissions. Each delegation commits its own immutable role/version/resource/path/task grant before opening a worker session. The team may grow after new findings, within the saved project allowance. Exact repeated assignments can resume their original worker when supported. Otherwise a new session preserves the logical role and known context explicitly. Unknown outcomes block retry or replacement.
 
-The Codex adapter uses isolated stdio JSON-RPC sessions, completed-turn structured outputs and real lifecycle events. It normalizes native payloads before publishing typed activity to core. Execution and project research consume this contract; run projection is separate from execution decisions. A generic Cordis runtime plugin composes a process-local registry with an explicitly selected default route. Trusted checks run outside editable agent scope. Runtime, checks and workspace ports are replaceable. Deterministic fixture tests verify integration without billing model calls; native adapter contract tests separately verify CLI behavior.
+Workers execute serially in the run worktree. Before/after observations detect forbidden changes and reversions. Managed repository tools also enforce scope before dispatch. Native execution retains its backend constraints and post-execution checks; native child observations cannot manufacture an assignment grant. Fully local profiles never silently route to cloud models.
 
-Runs freeze their resource profile and coordinator/worker/reviewer routes. Buro handles keep native thread references private and scoped to a runtime configuration. Environment/result preparation explicitly references its owning run. Managed continuation saves a new scope/material revision without rewriting earlier evidence or widening worker assignments.
+Checks, review and finish are separate operations. Checks issue a host-owned receipt for the actual base/HEAD/index/tree and immutable verification view. Review uses a fresh read-only session on that view. Source changes invalidate prior evidence; Git identity changes require intervention. Finish rechecks receipts, worker grants/results, scope, protected check definitions, cancellation, unknown effects and the actual revision before checkpoint and final acceptance. The coordinator can repair and request new evidence; it cannot approve itself.
 
-Current limits include one unfinished run per project, a plan schema capped at two workers and a team chosen before implementation. Richer coordinator decisions and a general task graph are subsequent work. Live-provider validation is separate from deterministic HTTP fixture workflows. See [implementation progress](docs/IMPLEMENTATION.md).
+Stopped attempts retain their workspace and exact inherited assignment references. Task validity follows each assignment separately, so a changed goal invalidates old compact tasks without dropping newly delegated tasks for the revised goal. Check-only recovery needs no formal TeamPlan and runs fresh service verification. Repair continuation returns control to the coordinator. An explicit user question creates a genuine needs-attention stop.
 
-Workspace policies, roles and materials are snapshots. Independent goals start from the base branch; explicit parents start from an accepted commit. Source branches and uncommitted changes are preserved until an explicit apply action. Saved threads/worktrees support repair and check-only recovery.
+Production still uses the sole File authority. The standalone SQL adapter implements the same delegation/continuation contracts on a fresh v9 format; production SQL routing and complete effect/history migration remain unfinished. Prototype formats have no compatibility or migration path. Lifetime request/tool/session/segment/history bounds remain; default-none is not implemented. `maxRepairs` is removed from production policy and UI because strategy is selected by the coordinator.
 
-Current behavior and limits are documented in [README](README.md), [recovery](RECOVERY.md) and [delivery](ONBOARDING-AND-DELIVERY.md).
+Deterministic tests exercise real File/SQL commands, routed managed sessions, injected Ollama/DeepSeek HTTP streams, immutable checks/review, plugin lifetimes and negative acceptance. A 16K injected Ollama test verifies context fit with the current six-action grammar, full goal/history and request accounting. These are protocol and controlled integration evidence, not live-model coding quality. Actual native/RTX quality and broader crash/install gates remain separate. See [implementation progress](docs/IMPLEMENTATION-PROGRESS-2026-11-21.md).
+
+Accepted results still use the existing [preview and delivery](ONBOARDING-AND-DELIVERY.md) services. Original source branches stay unchanged until explicit application.

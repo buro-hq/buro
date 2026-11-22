@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-22",
+  "baselineCommit": "1935607",
+  "milestone": "Model-selected execution actions",
+  "fullSuite": {
+    "passed": 1427,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 79446.680917,
+    "log": "/private/tmp/buro-orchestration-final-validation-tests.log"
+  },
+  "buildAndTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-orchestration-release-gate-build.log"
+  },
+  "browser": {
+    "scenarios": 17,
+    "errors": [],
+    "log": "/private/tmp/buro-orchestration-final-browser.log"
+  },
+  "formattingAndDiffCheck": true,
+  "agentRoles": [
+    "orchestration_authority",
+    "orchestration_execution",
+    "orchestration_contract",
+    "orchestration_integration_tests",
+    "orchestration_regressions"
+  ],
+  "independentReview": {
+    "remainingBlockers": 0,
+    "closedFindings": [
+      "terminal operation guard",
+      "leased ports serialize/drain/revoke and latch failure",
+      "central same-grant validation",
+      "worker route identity on resume",
+      "no-plan recheck eligibility",
+      "exact task-mode lineage and serial assignment order",
+      "per-assignment task validity after goal edits without old-task revival"
+    ],
+    "logs": [
+      "/private/tmp/buro-orchestration-independent-review.log",
+      "/private/tmp/buro-task-validity-final-probe.log"
+    ]
+  },
+  "contextEvidence": {
+    "provider": "actual Ollama transport with injected NDJSON",
+    "runtime": "actual ManagedRuntime / Pi / File checkpoints",
+    "contextTokens": 16384,
+    "maximumEstimatedInput": 12479,
+    "outputReservations": 2048,
+    "grammarBytes": 4777,
+    "realModelInference": false,
+    "limitation": "Request/protocol evidence, not actual service acceptance or model quality."
+  },
+  "scope": {
+    "fixedPipelineRemoved": true,
+    "mandatoryInitialPlanRemoved": true,
+    "incrementalDelegation": true,
+    "sameAssignmentAuthorResume": true,
+    "productionMaxRepairsRemoved": true,
+    "forcedProposalRetryThreshold": false,
+    "productionStore": "File",
+    "standaloneSqlFormat": 9,
+    "prototypeMigration": false,
+    "realModelCalls": 0,
+    "rtxCalls": 0,
+    "userProjectsChanged": false,
+    "outputUxPreserved": true,
+    "published": false,
+    "reducedBetaApproved": false
+  },
+  "remaining": [
+    "unused internal planning-era metadata/contracts",
+    "role reassignment to a different task with settled invocation ownership",
+    "complete session/effect/artifact journals and paged active context/history",
+    "remaining lifetime limits and default-none",
+    "real-model quality, installation and adverse crash release gates"
+  ],
+  "focusedCountsOverlapFullSuite": true
+}

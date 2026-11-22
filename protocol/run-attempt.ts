@@ -33,6 +33,9 @@ export type RunAttemptContext = {
   workspaceOriginAttemptId?: string;
   inheritedPlanId?: string;
   planOriginAttemptId?: string;
+  /** Exact inherited grant and its task validity; an older goal cannot revive invalidated tasks. */
+  inheritedAssignments?: Record<string, { id: string; taskMode: 'original' | 'full-goal' }>;
+  /** Conservative aggregate summary; per-role task validity belongs to inheritedAssignments. */
   taskMode: 'original' | 'full-goal';
   taskChanged: boolean;
 };

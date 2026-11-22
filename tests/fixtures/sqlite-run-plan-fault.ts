@@ -26,6 +26,45 @@ export async function failPlanTimelineInsert(directory: string, enabled: boolean
     db.close();
   }
 }
+export async function failDelegationTimelineInsert(directory: string, enabled: boolean) {
+  const db = await openMarked(directory);
+  try {
+    db.exec(
+      enabled
+        ? `CREATE TRIGGER injected_delegation_failure BEFORE INSERT ON run_timeline
+      WHEN NEW.type='worker.delegated' BEGIN SELECT RAISE(FAIL,'injected delegation timeline failure'); END;`
+        : 'DROP TRIGGER injected_delegation_failure',
+    );
+  } finally {
+    db.close();
+  }
+}
+/** Corruption probe against an actual invalidated reference, never a production writer. */
+export async function forgeInheritedTaskMode(directory: string, attemptId: string, roleId: string) {
+  const db = await openMarked(directory);
+  try {
+    const row = db
+      .prepare('SELECT inherited_assignment_refs_json FROM run_attempt_contexts WHERE attempt_id=?')
+      .get(attemptId);
+    if (!row) throw Error('The probe requires a genuine continued attempt.');
+    const references = JSON.parse(String(row.inherited_assignment_refs_json));
+    if (references[roleId]?.taskMode !== 'full-goal')
+      throw Error('The probe requires an invalidated task reference.');
+    references[roleId].taskMode = 'original';
+    db.exec('DROP TRIGGER immutable_run_attempt_contexts_update');
+    try {
+      db.prepare(
+        'UPDATE run_attempt_contexts SET inherited_assignment_refs_json=? WHERE attempt_id=?',
+      ).run(JSON.stringify(references), attemptId);
+    } finally {
+      db.exec(
+        "CREATE TRIGGER immutable_run_attempt_contexts_update BEFORE UPDATE ON run_attempt_contexts BEGIN SELECT RAISE(ABORT,'Run attempt records are immutable'); END;",
+      );
+    }
+  } finally {
+    db.close();
+  }
+}
 /** An indexed unresolved fact only: this does not pretend to be the future SQL effect journal. */
 export async function setUnresolvedPlanFact(directory: string, runId: string) {
   const db = await openMarked(directory);

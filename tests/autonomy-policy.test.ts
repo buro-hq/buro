@@ -39,7 +39,6 @@ const profile: ProjectProfile = {
   setup: [],
   dependencies: 'none',
   maxWorkers: 2,
-  maxRepairs: 1,
   turnTimeoutMs: 10000,
 };
 const context = {
@@ -61,7 +60,6 @@ function run(): Run {
       checks: profile.checks,
       defaultCheckIds: ['unit'],
       maxWorkers: 2,
-      maxRepairs: 1,
       turnTimeoutMs: 10000,
       profile: structuredClone(profile),
     },
@@ -249,7 +247,7 @@ test('unknown operation projections never offer execution or erase the original 
   }
 });
 
-test('service stop actions reflect capability, saved workspace, project capacity and plan guards', () => {
+test('service stop actions reflect capability, saved workspace and project capacity', () => {
   const saved = run();
   const capability = projectRunAutonomy(saved, {
     ...context,
@@ -276,6 +274,24 @@ test('service stop actions reflect capability, saved workspace, project capacity
   ]);
   saved.status = 'running';
   assert.equal(projectRunAutonomy(saved, context).stop, undefined);
+});
+
+test('a coordinator question preserves its text and offers repair or recheck without a formal plan', () => {
+  const saved = run();
+  saved.plan = [];
+  saved.planSavedAt = undefined;
+  saved.roleSnapshots = [];
+  saved.status = 'needs-attention';
+  saved.issue = {
+    code: 'OPERATOR_INPUT_REQUIRED',
+    message: 'Which behavior should be preserved?',
+    checks: [],
+  };
+  const stop = projectRunAutonomy(saved, context).stop!;
+  assert.equal(stop.category, 'user-policy');
+  assert.equal(stop.message, saved.issue.message);
+  assert.ok(stop.actions.includes('repair'));
+  assert.ok(stop.actions.includes('recheck'));
 });
 
 test('another unresolved run of the same goal blocks conflicting actions without fabricating an owning-run marker', () => {

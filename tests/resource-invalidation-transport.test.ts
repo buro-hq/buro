@@ -33,7 +33,6 @@ async function fixture(t: any, ids = ['a', 'b']) {
         checks: [],
         defaultCheckIds: [],
         maxWorkers: 1,
-        maxRepairs: 0,
       },
     });
     snapshot.effectivePolicy.origin.revision = policyRevision;

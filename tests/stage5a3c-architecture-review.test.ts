@@ -33,7 +33,6 @@ test('automatic base-branch initialization does not claim that the user reviewed
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
   };
   const role = {
@@ -129,7 +128,6 @@ test('dispose during an awaited active-run check prevents late verification work
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
     baseBranch: 'main',
   };
@@ -234,7 +232,6 @@ test('queued connect captures its input and returned metadata cannot rewrite cat
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
     baseBranch: 'main',
   };
@@ -319,7 +316,6 @@ test('a same-ID proposal replacement during awaited HEAD cannot apply stale sugg
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
     baseBranch: 'main',
   };

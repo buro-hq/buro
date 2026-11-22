@@ -215,7 +215,6 @@ if (process.env.BURO_LIVE_OLLAMA !== '1') {
         setup: [],
         dependencies: 'none',
         maxWorkers: 1,
-        maxRepairs: 1,
         turnTimeoutMs: 120000,
         baseBranch: 'main',
         environment: {

@@ -212,6 +212,8 @@ const configurationCodes = new Set([
   'MODEL_BILLING_BLOCKED',
   'MODEL_NOT_FOUND',
   'RUNTIME_CONFIG_CHANGED',
+  'EXECUTION_ACTIONS_CHANGED',
+  'EXECUTION_ACTIONS_EMPTY',
   'TOOL_CONFIGURATION_CHANGED',
   'TOOL_CONTRIBUTION_CHANGED',
   'INVALID_TOOL_BROKER',
@@ -272,6 +274,9 @@ function stopForRun(run: Run, context: RunAutonomyContext): RunStop | undefined 
   } else if (run.status === 'interrupted') {
     category = 'user-policy';
     message = 'Work was stopped. Continue from the saved workspace when ready.';
+  } else if (code === 'OPERATOR_INPUT_REQUIRED') {
+    category = 'user-policy';
+    message = run.issue?.message || 'The coordinator needs your answer before continuing.';
   } else if (!run.scopePreserved) {
     category = 'user-policy';
     message =
@@ -305,15 +310,12 @@ function stopForRun(run: Run, context: RunAutonomyContext): RunStop | undefined 
       !(budgetCodes.has(code) || run.issue?.code === 'MANAGED_BUDGET_BLOCKED')
     )
       actions.push('repair');
-    const savedPlan =
-      !!run.planSavedAt ||
-      !!run.roleSnapshots?.some((role) => !['coordinator', 'reviewer'].includes(role.id));
     const budget = run.managedBudget;
     const reviewAvailable =
       !budget ||
       (budget.used.requests < budget.policy.maxRequests &&
         budget.used.reservedOutputTokens < budget.policy.maxReservedOutputTokens);
-    if (savedPlan && reviewAvailable) actions.push('recheck');
+    if (reviewAvailable) actions.push('recheck');
   }
   if (context.goalExists && !context.projectBusy) actions.push('edit-goal');
   if (

@@ -58,7 +58,6 @@ async function fixture(t: any, override?: string) {
                   setup: [],
                   dependencies: 'none',
                   maxWorkers: 1,
-                  maxRepairs: 0,
                   turnTimeoutMs: 10000,
                   resourceProfile: override,
                 }),

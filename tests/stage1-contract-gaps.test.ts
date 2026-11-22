@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,6 +43,7 @@ async function fixture(t: any, turn: NonNullable<AgentRuntime['turn']>) {
     turn,
   };
   const engine = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     workflowRoles: createBuiltinWorkflowRoles(),
     projects: { get: () => store, list: () => [project] },
     runtime,

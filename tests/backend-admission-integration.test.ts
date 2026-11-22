@@ -144,7 +144,6 @@ const filePolicy = (mode: 'advisory' | 'strict') => ({
   checks: [],
   defaultCheckIds: [],
   maxWorkers: 1,
-  maxRepairs: 0,
   turnTimeoutMs: 10000,
 });
 async function rejectionOf(work: Promise<unknown>) {

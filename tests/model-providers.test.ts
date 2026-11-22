@@ -190,6 +190,7 @@ test('Ollama discovers installed models and preserves native tools/thinking with
     },
   });
   assert.equal(p.local, true);
+  assert.equal(p.structuredOutputMode, 'schema');
   assert.deepEqual(await p.listModels(new AbortController().signal), [
     { id: 'fixture-model', digest: 'digest' },
   ]);

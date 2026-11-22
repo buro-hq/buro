@@ -33,7 +33,6 @@ async function fixture(t: any) {
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 1,
     turnTimeoutMs: 10000,
   });
   const authority = await SqliteProjectUsageAuthority.open({ directory, project, profile });

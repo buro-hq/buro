@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
@@ -65,7 +66,6 @@ for (const mode of ['advisory', 'strict'] as const)
       setup: [],
       dependencies: 'none',
       maxWorkers: 1,
-      maxRepairs: 0,
       turnTimeoutMs: 10000,
       environment: { provider: 'native' },
     };
@@ -90,15 +90,19 @@ for (const mode of ['advisory', 'strict'] as const)
       local: true,
       async complete(input) {
         const properties = (input.schema as any)?.properties || {};
-        if (properties.team)
-          return reply({
-            summary: 'One focused change',
-            steps: [
-              { step: 'Implement', owner: 'coordinator' },
-              { step: 'Review', owner: 'reviewer' },
-            ],
-            team: [],
-          });
+        const result = {
+          status: 'success',
+          summary: 'Updated value',
+          artifacts: ['src/value.mjs'],
+          notesForNextAgent: '',
+        };
+        const prompt = [...input.messages]
+          .reverse()
+          .find((message) => message.role === 'user')!.content;
+        if (properties.decision && prompt.startsWith('Service observation for check'))
+          return reply({ decision: { action: 'review', input: { result } } });
+        if (properties.decision && prompt.startsWith('Service observation for review'))
+          return reply({ decision: { action: 'finish', input: { result } } });
         if (properties.verdict) {
           assert.ok(!input.tools.some((tool) => ['edit_file', 'run_command'].includes(tool.name)));
           const observed = input.messages.find((message) => message.toolCallId === 'review-input');
@@ -152,12 +156,7 @@ for (const mode of ['advisory', 'strict'] as const)
               ],
             },
           };
-        return reply({
-          status: 'success',
-          summary: 'Updated value',
-          artifacts: ['src/value.mjs'],
-          notesForNextAgent: '',
-        });
+        return reply({ decision: { action: 'check', input: {} } });
       },
     };
     const managed = new ManagedAgentRuntime({
@@ -232,6 +231,7 @@ for (const mode of ['advisory', 'strict'] as const)
     );
     const env = { projects, now: () => new Date().toISOString(), id: randomUUID };
     const engine = new ExecutionService({
+      actions: createBuiltinExecutionActions(),
       workflowRoles: createBuiltinWorkflowRoles(),
       ...env,
       runtime,

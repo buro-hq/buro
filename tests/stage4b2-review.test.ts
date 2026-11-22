@@ -67,7 +67,6 @@ async function fixture(t: any) {
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
     delivery: {
       remote: 'origin',
@@ -106,7 +105,6 @@ async function fixture(t: any) {
       checks: [],
       defaultCheckIds: [],
       maxWorkers: 1,
-      maxRepairs: 0,
       turnTimeoutMs: 10000,
       profile,
     },

@@ -145,28 +145,47 @@ async function expectRoleSources(page) {
               ],
             }),
           };
-        if (text.startsWith('First,'))
-          return {
-            turnId: 'plan',
-            text: JSON.stringify({
-              summary: 'Implement and verify',
-              steps: [
-                { step: 'Implement assigned module', owner: 'js_developer' },
-                { step: 'Review', owner: 'reviewer' },
-              ],
-              team: [
-                {
-                  roleId: 'js_developer',
-                  action: 'create',
-                  title: 'JS developer',
-                  description: 'Implements JS modules',
-                  instructions: 'Implement and verify assigned behavior.',
-                  kind: 'implementation',
-                  paths: ['src/value.mjs'],
-                },
-              ],
-            }),
+        if (input.purpose === 'coordination') {
+          const run = host.ctx.projects.registry
+            .get(project.id)
+            .snapshot()
+            .runs.find((item) => item.id === input.runId);
+          const result = {
+            status: 'success',
+            summary: 'Updated value to two',
+            artifacts: ['src/value.mjs'],
+            notesForNextAgent: '',
           };
+          const choice = text.startsWith('Service observation for check')
+            ? { action: 'review', input: { result } }
+            : text.startsWith('Service observation for review')
+              ? rejectReview
+                ? {
+                    action: 'ask_user',
+                    input: { question: 'Please clarify the requested follow-up.' },
+                  }
+                : { action: 'finish', input: { result } }
+              : run.roleAssignments?.js_developer
+                ? { action: 'check', input: {} }
+                : {
+                    action: 'delegate',
+                    input: {
+                      worker: {
+                        roleId: 'js_developer',
+                        action: 'create',
+                        title: 'JS developer',
+                        description: 'Implements JS modules',
+                        instructions: 'Implement and verify assigned behavior.',
+                        kind: 'implementation',
+                        paths: ['src/value.mjs'],
+                        runtimeId: null,
+                        runtimeReason: '',
+                        assignment: null,
+                      },
+                    },
+                  };
+          return { turnId: 'decision', text: JSON.stringify({ decision: choice }) };
+        }
         if (input.readOnly)
           return {
             turnId: 'review',
@@ -308,7 +327,7 @@ async function expectRoleSources(page) {
     await page.getByRole('button', { name: 'Start goal', exact: true }).click();
     await page
       .locator('.phase-badge')
-      .filter({ hasText: 'Failed' })
+      .filter({ hasText: 'Needs attention' })
       .waitFor()
       .catch(async (error) => {
         console.error(
@@ -325,7 +344,9 @@ async function expectRoleSources(page) {
         throw error;
       });
     const stopped = host.ctx.projects.registry.get(project.id).snapshot().runs[0];
-    assert.equal(stopped.status, 'failed');
+    assert.equal(stopped.status, 'needs-attention');
+    assert.equal(stopped.review.verdict, 'changes_requested');
+    assert.equal(stopped.commit, undefined);
     assert.ok(stopped.workspace);
     const createdRoles = host.ctx.projects.registry.get(project.id).snapshot().roles;
     assert.deepEqual(
@@ -350,7 +371,7 @@ async function expectRoleSources(page) {
       'first goal creates workflow coordinator/reviewer and a live coordinator-authored specialist without reload; fresh review still blocks acceptance',
     );
     await page.reload();
-    await page.locator('.phase-badge').filter({ hasText: 'Failed' }).waitFor();
+    await page.locator('.phase-badge').filter({ hasText: 'Needs attention' }).waitFor();
     await page.getByRole('button', { name: 'Edit goal', exact: true }).click();
     await page
       .getByRole('textbox', { name: 'What should we achieve?' })

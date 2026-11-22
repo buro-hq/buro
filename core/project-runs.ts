@@ -16,7 +16,7 @@ import {
 } from '../protocol/run-attempt.ts';
 import type { RunIssue } from '../protocol/domain.ts';
 import { withEnvironmentRepair } from './environment-repair.ts';
-import { runPlanTimeline } from '../protocol/run-plan.ts';
+import { runPlanTimeline, runWorkerAssignmentTimeline } from '../protocol/run-plan.ts';
 import { planPathAllowed } from './execution-ports.ts';
 import { validateAssignmentResource } from './assignment-routing.ts';
 import {
@@ -25,6 +25,8 @@ import {
   validateRunWorkerAssignment,
   validateRunPlanningInput,
   type AcceptRunPlan,
+  delegateRunWorker,
+  type DelegateRunWorker,
 } from './project-run-plans.ts';
 import type {
   RunPlan,
@@ -84,6 +86,7 @@ export type ProjectRunChange = Extract<
       | 'run.lifecycle-changed'
       | 'run.workspace-bound'
       | 'run.plan-accepted'
+      | 'run.worker-delegated'
       | 'run.attempt-stopped'
       | 'run.attempt-continued';
   }
@@ -128,6 +131,8 @@ export interface RunTransaction {
     expectedAttemptId?: string;
   }): RunWorkspaceBinding;
   acceptPlan(input: AcceptRunPlan): { plan: RunPlan; assignments: RunWorkerAssignment[] };
+  delegateWorker(input: DelegateRunWorker): RunWorkerAssignment;
+  assignments(runId: string): RunWorkerAssignment[];
   planningInput(runId: string): RunPlanningInput;
   plan(runId: string): RunPlan | undefined;
   assignment(runId: string, roleId: string): RunWorkerAssignment | undefined;
@@ -150,6 +155,7 @@ export interface ProjectRuns {
   planningInput(runId: string): Promise<RunPlanningInput>;
   plan(runId: string): Promise<RunPlan | undefined>;
   assignment(runId: string, roleId: string): Promise<RunWorkerAssignment | undefined>;
+  assignments(runId: string): Promise<RunWorkerAssignment[]>;
   workspace(runId: string): Promise<RunWorkspaceBinding | undefined>;
   timeline(query: RunTimelineQuery): Promise<RunTimelinePage>;
   receipt(command: RunCommand): Promise<{ result: unknown } | undefined>;
@@ -173,6 +179,7 @@ export interface RunTransactionStorage {
   plan(runId: string): RunPlan | undefined;
   assignment(runId: string, roleId: string): RunWorkerAssignment | undefined;
   insertPlan(plan: RunPlan, assignments: RunWorkerAssignment[]): void;
+  insertAssignment(assignment: RunWorkerAssignment): void;
   sealPlanningSession(runId: string, planner: RunPlannerHandoff): void;
   goal(id: string): Goal | undefined;
   profile(): ProjectProfile | undefined;
@@ -301,6 +308,33 @@ export function validateProjectRunChange(value: unknown, projectId?: string): Pr
     if (value.type === 'run.attempt-stopped') validateRunAttemptStop(value.stop);
     else if (value.type === 'run.attempt-continued') validateRunAttemptContext(value.context);
     else throw invalid();
+    return canonical(value);
+  }
+  if (input.type === 'run.worker-delegated') {
+    const parsed = DomainEventSchema.safeParse({
+      version: 1,
+      id: 'validation',
+      projectId: projectId || 'validation',
+      seq: 1,
+      at: 'validation',
+      change: input,
+    });
+    if (!parsed.success || parsed.data.change.type !== 'run.worker-delegated') throw invalid();
+    const value = parsed.data.change;
+    const context = validateRunPlanningInput(value.context);
+    const assignment = validateRunWorkerAssignment(value.assignment);
+    const scope = withEnvironmentRepair(context.policy, context.repairEnvironment).scope;
+    if (
+      (scope.mode === 'strict' && !assignment.paths.length) ||
+      assignment.paths.some((path) => !planPathAllowed(path, scope))
+    )
+      throw invalid();
+    validateAssignmentResource(
+      context.resources,
+      assignment.role,
+      assignment.resource,
+      scope.mode === 'strict' ? { strictPlannedWrites: true } : {},
+    );
     return canonical(value);
   }
   if (input.type === 'run.plan-accepted') {
@@ -654,21 +688,75 @@ export function createRunTransaction(options: {
     },
     plan,
     assignment(runId: string, roleId: string) {
-      const selected = plan(runId);
-      if (!selected) return undefined;
+      const owner = current(runId);
+      if (!owner) throw new DomainError('NOT_FOUND', 'Run not found.');
       if (!identity(roleId)) throw invalid();
       const saved = storage.assignment(runId, roleId);
       if (saved === undefined) return undefined;
       const value = validateRunWorkerAssignment(saved);
       if (
-        value.planId !== selected.id ||
         value.runId !== runId ||
-        value.admissionId !== selected.admissionId ||
-        value.attemptId !== selected.attemptId ||
+        value.admissionId !== owner.admissionId ||
+        (value.attemptId !== owner.attemptId &&
+          currentAttempt(runId).context.inheritedAssignments?.[roleId]?.id !== value.id) ||
         value.role.id !== roleId
       )
         throw invalid();
       return value;
+    },
+    assignments(runId: string) {
+      const owner = current(runId);
+      if (!owner) throw new DomainError('NOT_FOUND', 'Run not found.');
+      const inherited = currentAttempt(runId).context.inheritedAssignments;
+      return storage.planAssignments(runId).map((raw) => {
+        const value = validateRunWorkerAssignment(raw);
+        if (
+          value.runId !== runId ||
+          value.admissionId !== owner.admissionId ||
+          (value.attemptId !== owner.attemptId && inherited?.[value.role.id]?.id !== value.id)
+        )
+          throw invalid();
+        return value;
+      });
+    },
+    delegateWorker(input: DelegateRunWorker) {
+      assertActive();
+      if (
+        !closed(input, [
+          'runId',
+          'assignmentId',
+          'now',
+          'worker',
+          'expectedRoleVersion',
+          'expectedInput',
+          'expectedAttemptId',
+        ])
+      )
+        throw invalid();
+      const previous = current(input.runId);
+      if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      currentAttempt(input.runId);
+      const previousIds = new Set(
+        storage.planAssignments(input.runId).map((assignment) => assignment.id),
+      );
+      const assignment = delegateRunWorker(input, previous, storage);
+      if (previousIds.has(assignment.id)) return assignment;
+      const next = validateRunCurrent({
+        ...previous,
+        revision: previous.revision + 1,
+        updatedAt: input.now,
+      });
+      storage.replaceCurrent(previous, next);
+      const entries = runWorkerAssignmentTimeline(assignment, input.now);
+      for (const entry of entries) storage.appendTimeline(entry);
+      storage.appendChange({
+        type: 'run.worker-delegated',
+        current: next,
+        assignment,
+        context: input.expectedInput,
+        entries,
+      });
+      return assignment;
     },
     acceptPlan(input: AcceptRunPlan) {
       assertActive();

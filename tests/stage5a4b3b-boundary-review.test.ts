@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -35,7 +36,6 @@ async function fixture(t: any) {
     setup: [],
     dependencies: 'none',
     maxWorkers: 1,
-    maxRepairs: 0,
     turnTimeoutMs: 10000,
   };
   const options = { directory, project, profile };
@@ -50,6 +50,7 @@ async function fixture(t: any) {
     throw Error('No external dispatch in attempt boundary proof.');
   };
   const service = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     ...env,
     policies: { p: executionPolicy(profile) },
     workflowRoles: createBuiltinWorkflowRoles(),

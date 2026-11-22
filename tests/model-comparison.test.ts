@@ -228,7 +228,7 @@ test('inner trial reports live beside the outer report with relative public refe
   assert.equal(comparisonTrialReport(undefined, 'codex-direct', 'not-applicable'), undefined);
 });
 
-test('the complete matrix keeps task/oracle/wall constant without overriding capability-selected planning', async (t) => {
+test('the complete matrix keeps task/oracle/wall constant without overriding model-selected actions', async (t) => {
   const roots: string[] = [];
   t.after(() => Promise.all(roots.map((root) => rm(root, { recursive: true, force: true }))));
   const providerInputs: any[] = [];
@@ -286,8 +286,8 @@ test('the complete matrix keeps task/oracle/wall constant without overriding cap
   assert.deepEqual(
     report.results
       .filter((result: any) => result.arm === 'codex-buro')
-      .map((result: any) => result.planning),
-    ['capability-selected'],
+      .map((result: any) => result.executionMode),
+    ['model-selected-actions'],
   );
   assert.doesNotMatch(JSON.stringify(report), /never retain|privateText|fixtureDirectory/);
 });

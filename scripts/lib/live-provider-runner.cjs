@@ -667,7 +667,6 @@ async function prepareSyntheticFixture(temporaryDirectory, mode) {
       setup: [],
       dependencies: 'none',
       maxWorkers: 1,
-      maxRepairs: 1,
       turnTimeoutMs: 120000,
       baseBranch: 'main',
       environment: {
@@ -819,7 +818,7 @@ function evaluationRunProgress(run) {
     )
     .at(-1);
   return {
-    planSaved: typeof run.planSavedAt === 'string' && !!run.planSavedAt,
+    planSaved: (run.events || []).some((event) => event.type === 'plan.updated'),
     planStepsCount: Array.isArray(run.plan) ? run.plan.length : 0,
     ...(last ? { lastPhaseBeforeDone: last.slice(6) } : {}),
   };

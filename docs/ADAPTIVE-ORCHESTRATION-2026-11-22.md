@@ -2,6 +2,8 @@
 
 22 ноября 2026. Уточнение направления после ревью сложности и исследования mini-SWE, Aider, Pi и OpenHands. Основание — запрос пользователя: качество через повторную работу с обратной связью, самостоятельные решения оркестратора, расширяемые инструменты и команда. Сокращённая бета не утверждена. Этот документ различает выбранный контракт и уже реализованное поведение.
 
+Основной цикл теперь реализован: `ExecutionService.orchestrate` запускает координатора, а модель выбирает действия из sealed `ExecutionActionCatalog`. Удалены `planAndImplement`, обязательная интеграция, автоматический worker refinement и repair-loop. Доступны независимые операции рабочего плана, делегирования, checks, свежего review, finish и вопроса пользователю. Пользовательский recheck остаётся явной командой проверки сохранённой работы.
+
 ## Выбранный контракт
 
 Один оркестратор ведёт цель и выбирает следующее действие по наблюдаемым фактам: исследовать, уточнить план, выполнить работу, привлечь специалиста, проверить, запросить независимое ревью, исправить или задать вопрос. Планирование остаётся работой внутри этого цикла. Отдельный архитектор полезен, когда оркестратор видит для него задачу. Размер и название модели не задают последовательность стадий.
@@ -17,7 +19,11 @@
 
 Плагин не получает произвольный callback изменения Run и не разрешает модели расширять права. Используем существующие каталоги contributions и semantic commands. Описание возможности само по себе не создаёт dispatch authority. Произвольный workflow DSL, второй scheduler, отдельный сервис и обязательный Python runtime не нужны.
 
-Managed-сессии уже используют установленный Pi agent-core 1.6.0 как scheduler. Buro формирует canonical requests и сохраняет session/effect receipts; полный durable журнал входных request packets ещё не реализован. Codex остаётся peer backend: его отсутствие host-tool lifecycle нельзя скрыть предположением, что он способен вызывать любой Buro action как обычный инструмент. У native read-only planning и writer разные grants и сессии.
+Managed-сессии используют установленный Pi agent-core 1.6.0 как scheduler. Buro формирует canonical requests и сохраняет session/effect receipts; полный durable журнал входных request packets ещё не реализован. Codex остаётся peer backend: выбор сервисного действия передаётся структурированным результатом turn, поэтому host-tool lifecycle не требуется. Координатор работает по writable admission grant без фиктивного плана; независимый reviewer получает отдельную read-only session и immutable view.
+
+Делегирование выдаёт собственный immutable grant с role/version/resource/path/task и сохраняет intent до запуска worker. Команда может дополняться после новых findings. Продолжение той же задачи проверяет тот же grant и восстанавливает автора/сессию, если backend это поддерживает; неизвестный outcome блокирует replacement и retry. Новая задача под уже занятым role ID требует отдельного контракта переназначения, поэтому сейчас изменённый grant под тем же ID отклоняется. Рабочий план не выдаёт полномочий.
+
+Действия плагинов ограничены временем их invocation: host-порты сериализуют операции, дожидаются запущенных effects и отзываются после возврата handler. Пойманная плагином ошибка эффекта не разрешает следующие операции. После finish или вопроса пользователю Run больше не допускает работу. Каталог и его schema binding сохраняются с admission/attempt и проверяются перед dispatch; scope и приёмка остаются у Buro.
 
 ## Что действительно стоит брать из других проектов
 
@@ -46,7 +52,7 @@ Managed-сессии уже используют установленный Pi a
 | Повторяемые host JSON schemas                                                | Текущий формат ответа принадлежит запросу; не накапливать его в каждой исторической задаче. Исходные требования и ответы не удалять.                  |
 | Максимум два участника команды                                               | Убрать из общего формата. Размер команды выбирает оркестратор в пределах сохранённого `maxWorkers` проекта; workers пока исполняются последовательно. |
 | Принудительное closing после 3 tool rounds / 60%                             | Убрать из default. Rotation нужна при недостатке контекста для projected input и полного configured output reservation, после settled batch.          |
-| Run/turn/session/repair/planning counters                                    | Свести к явному optional allowance и scheduling/recovery, без скрытого объявления цели неудачной по числу итераций. Полностью ещё не реализовано.     |
+| Run/turn/session/repair/planning counters                                    | Production `maxRepairs` и скрытый автоматический refinement удалены. Сведение остальных counters к optional allowance ещё не реализовано.             |
 | Lifetime segments/materials/history ceilings                                 | Удалять вместе с bounded active context и полной paged history. Растущие File aggregates пока не позволяют честно объявить default-none.              |
 | Per-call bytes/pages, idle/deadline, scope, credentials, revision, ownership | Сохранить как ограничения конкретного ресурса или эффекта. Они не являются бюджетом качества.                                                         |
 
@@ -55,14 +61,18 @@ Managed-сессии уже используют установленный Pi a
 ## Порядок изменения существующего исполнения
 
 1. Убрать лишний host context и административные остановки; поддерживать один текущий формат без миграций и fallback для прежних версий до первого релиза. Объединить дублирующий evaluation entrypoint. Проверить код и границы до новых live-запусков.
-2. Дать оркестратору semantic actions вместо фиксированного `planAndImplement → dispatch all → integrate → validateAndAccept`. Использовать одну текущую authority и фактические receipts, а не расширяемый callback записи Run.
-3. Перенести выдачу writer/delegation grants из обязательного первоначального TeamPlan в явные admission/action commands; план становится изменяемым рабочим артефактом. Сейчас принятый план ещё является источником полномочий, поэтому просто пропустить его нельзя. Worker task revisions, session ownership и unknown outcomes должны изменяться вместе с этим dispatch-контрактом.
+2. Выполнено: semantic actions заменили фиксированный `planAndImplement → dispatch all → integrate → validateAndAccept`. Плагин получает ограниченные операции, а не callback записи Run.
+3. Выполнено для direct writer и добавления команды: writer использует admission grant; делегирование имеет свою semantic transaction без TeamPlan. План стал изменяемым рабочим артефактом. Переназначение существующего worker на другую задачу и полный task/session/effect journal остаются следующей частью контракта.
 4. Снять привязки service-role IDs в operation routing, admission, continuation и File/SQL validators на основе сохранённых operation bindings. Замена строк в prompt без изменения frozen grants неполна. Purpose defaults `coordinator/worker/reviewer` сами по себе не задают имена ролей или порядок работы.
 5. Довести единое incremental хранение effects/history и default-none, затем проверить recovery и качество на реальных моделях. Развёртывание второго production store и дальнейшая нарезка пакетов не являются условием первого изменения цикла.
 
 Это уточняет порядок сохранённого Run/journal плана. Его требования к единой authority, полным данным, восстановлению и default-none остаются; расширение SQL по одному scalar writer не должно подменять работающий гибкий цикл. Полная перестройка dispatch этим документом не объявлена завершённой.
 
 До первого релиза обратная совместимость со старыми форматами не требуется по явному решению пользователя. Добавленный fallback к старой segment policy удалён; production и evaluation используют текущий default. Проверка точной конфигурации активной сессии сохраняется: она защищает текущую работу от подмены настроек. Прежние live reports остаются историческими результатами своего кода и policy; новый default не выдаётся за уже измеренный live-результат.
+
+Внутренние `planningPolicy` metadata и optional accepted-plan use case пока остаются у прежних потребителей сохранённых контрактов; default controller их не использует как стратегию. Их полное удаление не заявляется. Production по-прежнему на File; standalone SQL использует свежий v9 без миграций. Default-none, полная paged history и crash recovery внешних effects не завершены.
+
+Для 16K контекста provider-native schema не дублируется в prompt: Ollama объявляет `structuredOutputMode: schema`, DeepSeek/default transport получает текстовую инструкцию формата. Это выбор по реальной wire-механике provider, без ветвления по названию или размеру модели. Injected Ollama/Pi/File test сохраняет полную цель, историю и receipt через check → review → finish и reload: максимальный input estimate 12 479, все output reservations 2048. Этот controlled test не является live-доказательством качества модели или приёмки.
 
 ## Источники и проверяемость
 

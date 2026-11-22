@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -35,7 +36,6 @@ const profile: ProjectProfile = {
   setup: [],
   dependencies: 'none',
   maxWorkers: 1,
-  maxRepairs: 0,
   turnTimeoutMs: 10000,
   baseBranch: 'original-source',
 };
@@ -174,6 +174,7 @@ async function fixture(t: any, kind: 'file' | 'sqlite', ready = true) {
     throw Error('Attempt contract cannot dispatch external effects.');
   };
   const service = new ExecutionService({
+    actions: createBuiltinExecutionActions(),
     ...env,
     policies: { p: executionPolicy(profile) },
     selection: { forProject: () => structuredClone(resources) },
@@ -416,14 +417,7 @@ async function fixture(t: any, kind: 'file' | 'sqlite', ready = true) {
         await cleanupRelease.promise;
         cleanupDone = true;
       };
-      service.planAndImplement = async (
-        _projectId,
-        _runId,
-        _workspace,
-        _policy,
-        _signal,
-        threads,
-      ) => {
+      service.orchestrate = async (_projectId, _runId, _workspace, _policy, _signal, threads) => {
         runs++;
         dispatchedAttempts.push((await authority.runs.current(runId))!.attemptId);
         if (runs === 1) {

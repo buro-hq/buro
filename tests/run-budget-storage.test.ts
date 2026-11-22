@@ -181,7 +181,6 @@ test('unknown usage remains charged and budget policy survives continuation or d
       setup: [],
       dependencies: 'none',
       maxWorkers: 1,
-      maxRepairs: 0,
       turnTimeoutMs: 10000,
       managedBudget: { ...policy, maxRequests: 8, maxReservedOutputTokens: 8192 },
     });
@@ -191,7 +190,6 @@ test('unknown usage remains charged and budget policy survives continuation or d
       checks: [],
       defaultCheckIds: [],
       maxWorkers: 1,
-      maxRepairs: 0,
       turnTimeoutMs: 10000,
       profile: changedProfile,
     };

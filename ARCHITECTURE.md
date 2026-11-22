@@ -2,7 +2,7 @@
 
 Status: agreed implementation direction, 20 November 2026. [VISION.md](VISION.md) owns the product model. This document describes the target; [GOAL-EXECUTION-POC.md](GOAL-EXECUTION-POC.md) describes current execution.
 
-The [22 November adaptive orchestration decision](docs/ADAPTIVE-ORCHESTRATION-2026-11-22.md) refines the implementation order: one evidence-driven orchestration loop, existing contribution catalogs and optional delegation, without a model-size workflow router. It preserves planning, independent acceptance and the default-none target, and distinguishes the target from the currently fixed execution sequence.
+The [22 November adaptive orchestration decision](docs/ADAPTIVE-ORCHESTRATION-2026-11-22.md) defines the implemented model-selected action loop, startup contributions and optional delegation, without a model-size workflow router. It preserves planning and independent acceptance, and distinguishes this implementation from the remaining persistence/default-none target.
 
 ## Architecture decision
 

@@ -17,7 +17,6 @@ const profile = (): ProjectProfile => ({
   setup: [],
   dependencies: 'none',
   maxWorkers: 1,
-  maxRepairs: 1,
   turnTimeoutMs: 10000,
   baseBranch: 'main',
 });

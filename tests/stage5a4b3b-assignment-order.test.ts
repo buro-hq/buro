@@ -1,3 +1,4 @@
+import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -33,7 +34,6 @@ for (const kind of ['file', 'sqlite'] as const) {
       setup: [],
       dependencies: 'none',
       maxWorkers: 2,
-      maxRepairs: 0,
       turnTimeoutMs: 10000,
     };
     let authority: FileProjectStore | SqliteProjectUsageAuthority;
@@ -70,6 +70,7 @@ for (const kind of ['file', 'sqlite'] as const) {
       throw Error('Order proof dispatched an external effect.');
     };
     const service = new ExecutionService({
+      actions: createBuiltinExecutionActions(),
       ...env,
       policies: { p: executionPolicy(profile) },
       selection: fixtureExecutionSelection('fake', fixtureExecutionCapabilities()),

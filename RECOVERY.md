@@ -6,12 +6,14 @@ Native Codex resumes its client thread; Ollama/DeepSeek use private Buro-managed
 
 ## Operator flow
 
-- **Rerun checks** verifies the saved implementation without replanning or rewriting files. A saved plan/team is required.
-- **Continue with clarification** resumes the coordinator in the same workspace when supported. Revise the goal and provide specific instructions. If planning never completed, the coordinator finishes planning first.
+- **Rerun checks** verifies the saved implementation and obtains fresh independent review without rewriting files. A formal plan or team is not required.
+- **Continue with clarification** resumes the coordinator in the same workspace when supported. Revise the goal or answer its question; the coordinator chooses the next work from current evidence.
 - **Use current project settings** opts into revised commands/boundaries; otherwise the run keeps its original policy.
 - **Start again** creates a new run from the configured base or selected parent rather than modifying the old run.
 
 Stopped goal edits use optimistic revisions. A previous attempt records the old result, task, policy, time policy and material manifest before continuation. Independent checks and a fresh reviewer still gate acceptance.
+
+An explicit coordinator question preserves its text as the stop reason. Per-assignment references preserve valid compact tasks across continuation. A changed goal invalidates old tasks; newly delegated tasks belong to that revised goal and retain their own validity. Reverting old goal text does not revive an invalidated task. Unknown outcomes still prevent continuation or replacement.
 
 Repair picks up revised goal attachments. Shared project context follows the current-profile choice; prior material snapshots remain in attempt history. Check-only recovery preserves the original material selection. Staged files are verified by hash.
 
@@ -19,7 +21,7 @@ Repair picks up revised goal attachments. Shared project context follows the cur
 
 Managed runs restore their execution provider and probe readiness before continuing. A matching setup fingerprint skips installation only while readiness still passes; missing generated/runtime artifacts trigger preparation again. Environment recipes and project artifact caches survive between runs, and failed or cancelled setup never publishes a ready fingerprint.
 
-Unchanged baseline dependency declaration failures can require attention rather than repeated agent repair/review calls. Fix dependencies or the configured environment and recheck. The explicit environment-repair option permits dependency/lockfile changes and installation in a private workspace; it does not permit bypassing checks, changing scripts or editing TypeScript configuration.
+The coordinator receives actual dependency/check failures and can choose further investigation, authorized repair or a question to the user. The explicit environment-repair option permits dependency/lockfile changes and installation in a private workspace; it does not permit bypassing checks, changing scripts or editing TypeScript configuration.
 
 Worktree restoration checks canonical path, repository identity, Git base/control files and dependency layout. Unsafe or changed workspaces fail instead of being silently replaced. Accepted preview/delivery rechecks workspace cleanliness and the accepted commit.
 

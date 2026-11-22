@@ -1,28 +1,23 @@
 import type { RunAttemptStop } from '../protocol/run-attempt.ts';
+import type { ExecutionActionCatalog } from './execution-actions.ts';
+import { runGoalOrchestration } from './goal-orchestration.ts';
 import { validateProjectRole } from './project-entities.ts';
 import type { RunPlanningInput } from '../protocol/run-plan.ts';
 import { executionPolicy as savedExecutionPolicy } from './project-settings.ts';
 import type { ExecutionPhase } from './project-runs.ts';
 import { runWorkerAssignments } from './worker-assignments.ts';
-import { planningTurn, assertPlanningPolicy, planningOutputSchema } from './planning-policy.ts';
 import { ManagedBudgetErrorCodeSchema } from '../protocol/run-budget.ts';
-import { validateWorkerTask } from './worker-envelope.ts';
-import { workerFailureForReplan, refineWorkerTask, pendingWorkerRoles } from './worker-recovery.ts';
-import { workerRefinementOutputSchema } from '../protocol/worker-tasks.ts';
-import { resolveWorkerResource, workerResourcePool } from './assignment-resources.ts';
-import type { AssignmentResource } from '../protocol/resources.ts';
 import { sessionResource } from '../protocol/resources.ts';
-import { operationIds, serviceOperationContext } from './operation-catalog.ts';
+import { operationIds } from './operation-catalog.ts';
 import type { WorkflowRoleResolver } from './workflow-roles.ts';
 import { projectRunAutonomy } from './autonomy-policy.ts';
 import { recordableRuntimeEvent } from './runtime-events.ts';
 import { applyRuntimeEvent } from './runtime-projection.ts';
-import { checkContext, changeContext, roleContext } from './agent-context.ts';
+import { checkContext, changeContext } from './agent-context.ts';
 import type { ExecutionEnvironmentPort } from './environment-ports.ts';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../protocol/domain.ts';
 import { materialInstructions } from '../protocol/context.ts';
-import { goalMaterials } from './context.ts';
-import type { Run, Role, Goal, DomainEvent, Snapshot } from '../protocol/domain.ts';
+import type { Run, Role, Goal, DomainEvent } from '../protocol/domain.ts';
 import {
   DomainError,
   type AgentRuntime,
@@ -34,19 +29,13 @@ import {
 import {
   writeAllowed,
   matchesPlannedPath,
-  resolveTeam,
   terminal,
   type ExecutionPolicy,
   type WorkspacePort,
   type CheckPort,
   type TeamPlan,
 } from './execution-ports.ts';
-import {
-  withEnvironmentRepair,
-  dependencyManifestPreserved,
-  environmentRepairInstructions,
-} from './environment-repair.ts';
-import { unchangedDependencyFailures } from './check-failures.ts';
+import { withEnvironmentRepair, dependencyManifestPreserved } from './environment-repair.ts';
 import { canAccept } from './services.ts';
 import { sameWorkspaceRevision, type WorkspaceRevision } from './workspace-revision.ts';
 import { canonicalOutputPaths, type VerificationView } from './verification-view.ts';
@@ -58,16 +47,10 @@ import {
   reconciliationIssue,
   retainRunReconciliation,
 } from './run-reconciliation.ts';
-import {
-  TeamPlanSchema,
-  EnvelopeSchema,
-  ReviewSchema,
-  teamOutputSchema,
-  envelopeOutputSchema,
-  reviewOutputSchema,
-} from '../protocol/execution.ts';
+import { EnvelopeSchema, ReviewSchema, reviewOutputSchema } from '../protocol/execution.ts';
 
 type Environment = {
+  actions: ExecutionActionCatalog;
   environments?: ExecutionEnvironmentPort;
   projects: ProjectRegistry;
   runtime: AgentRuntime;
@@ -80,6 +63,17 @@ type Environment = {
   id: () => string;
   onCompleted?: (projectId: string, runId: string) => void;
 };
+export type ExecutionContext = {
+  projectId: string;
+  runId: string;
+  workspace: { path: string; base: string };
+  policy: ExecutionPolicy;
+  signal: AbortSignal;
+  threads: string[];
+  attemptId?: string;
+};
+/** An issued check handle is valid only in the execution service that performed the checks. */
+export type CheckedRun = Awaited<ReturnType<ExecutionService['verify']>>;
 function runCommandResult(value: unknown): { runId: string } {
   if (
     !value ||
@@ -93,7 +87,7 @@ function runCommandResult(value: unknown): { runId: string } {
     throw new DomainError('INVALID_RUN_RECEIPT', 'The command receipt is not a run admission.');
   return { runId: (value as { runId: string }).runId };
 }
-/** Durable workflow. Adapters own processes, Git and checks; this class owns decisions. */
+/** The coordinator chooses work; this service bounds effects, ownership and acceptance. */
 export class ExecutionService {
   env: Environment;
   jobs = new Map<
@@ -106,7 +100,18 @@ export class ExecutionService {
   eventQueue: Promise<unknown> = Promise.resolve();
   seen = new Set<string>();
   private verificationViews = new Map<string, VerificationView>();
+  private checkedRuns = new WeakMap<
+    CheckedRun,
+    {
+      projectId: string;
+      runId: string;
+      attemptId?: string;
+      result: CheckedRun;
+      review?: { sessionId: string; result: ReturnType<typeof ReviewSchema.parse> };
+    }
+  >();
   constructor(env: Environment) {
+    env.actions.assertSealed();
     if (!env.workflowRoles || typeof env.workflowRoles.ensureRole !== 'function')
       throw new DomainError(
         'WORKFLOW_REQUIRED',
@@ -126,6 +131,13 @@ export class ExecutionService {
     if (!p)
       throw new DomainError('EXECUTION_DISABLED', 'Execution is not configured for this project.');
     return p;
+  }
+  assertActionCatalog(run: Run) {
+    if (run.workflow?.actionsRevision !== this.env.actions.revision)
+      throw new DomainError(
+        'EXECUTION_ACTIONS_CHANGED',
+        'The admitted action catalog is unavailable. Restore the configured contributions.',
+      );
   }
   private assertManagedBudgetOpen(run: Run) {
     if (run.managedBudget?.status === 'exceeded')
@@ -151,7 +163,27 @@ export class ExecutionService {
     expected: WorkspaceRevision,
     phase: string,
   ) {
-    const current = await this.env.workspaces.captureRevision(workspace.path, workspace.base);
+    let current: WorkspaceRevision;
+    try {
+      current = await this.env.workspaces.captureRevision(workspace.path, workspace.base);
+    } catch (error) {
+      if (error instanceof DomainError && error.code === 'VERIFICATION_REVISION_CHANGED')
+        throw new DomainError(
+          'WORKSPACE_IDENTITY_CHANGED',
+          'The original workspace identity cannot be verified. Reconcile its Git state before continuing.',
+        );
+      throw error;
+    }
+    if (
+      current.version !== expected.version ||
+      current.base !== expected.base ||
+      current.head !== expected.head ||
+      current.index !== expected.index
+    )
+      throw new DomainError(
+        'WORKSPACE_IDENTITY_CHANGED',
+        'The workspace Git identity or staged index changed after verification. Reconcile it before continuing.',
+      );
     if (sameWorkspaceRevision(expected, current)) return;
     const message = `The workspace revision changed during ${phase}. The changes are saved, but checks and review must be rerun before acceptance.`;
     await this.update(projectId, runId, (run) => {
@@ -221,7 +253,7 @@ export class ExecutionService {
       throw error;
     }
   }
-  private async closeVerificationView(projectId: string, runId: string) {
+  async closeVerificationView(projectId: string, runId: string) {
     const view = this.verificationViews.get(runId);
     if (!view) return;
     await this.env.checks.releaseVerificationView?.(view);
@@ -560,6 +592,7 @@ ${installation.output || installation.error || ''}`,
         'Execution requires a saved resource profile.',
       );
     if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
+    this.env.actions.outputSchema();
     const runId = 'R-' + this.env.id();
     const proposal = {
       runId,
@@ -571,7 +604,10 @@ ${installation.output || installation.error || ''}`,
       expectedProfileRevision: profile?.revision ?? null,
       policy,
       resources,
-      workflow: structuredClone(this.env.workflowRoles.workflow),
+      workflow: {
+        ...structuredClone(this.env.workflowRoles.workflow),
+        actionsRevision: this.env.actions.revision,
+      },
       ...(captured.checkIds ? { checkIds: captured.checkIds } : {}),
       repairCapabilities: {
         managedEnvironment: !!this.env.environments,
@@ -673,6 +709,7 @@ ${installation.output || installation.error || ''}`,
     await this.beginExecution(projectId, runId);
     const activated = this.get(projectId, runId);
     assertRunReconciled(activated);
+    this.assertActionCatalog(activated);
     if (signal.aborted || activated.cancelRequested)
       throw new DOMException('Interrupted', 'AbortError');
     const workspace = await this.env.workspaces.restore(
@@ -698,157 +735,28 @@ ${installation.output || installation.error || ''}`,
     assertRunReconciled(restored);
     if (signal.aborted || restored.cancelRequested)
       throw new DOMException('Interrupted', 'AbortError');
-    const initial = this.env.projects.get(projectId).snapshot();
-    if (this.env.environments && policy.profile)
-      await this.prepareEnvironment(projectId, runId, workspace, policy, signal);
-    const roles =
-      run.roleSnapshots?.filter((role) => !['coordinator', 'reviewer'].includes(role.id)) || [];
-    if (!roles.length && !run.planSavedAt) {
-      if (run.continuation?.mode === 'recheck')
-        throw new DomainError(
-          'NO_TEAM',
-          'No plan has been saved. Continue with repair to finish planning.',
-        );
-      await this.planAndImplement(projectId, runId, workspace, policy, signal, threads, true);
-      return;
-    }
-    const team = { roles, origins: run.roleOrigins || {} },
-      proposed = roles.filter(
-        (role) =>
-          team.origins[role.id] === 'created' && !initial.roles.some((r) => r.id === role.id),
-      );
-    const ask = (threadId: string, text: string, schema: unknown) =>
-      this.completedTurn(
-        projectId,
-        runId,
-        threadId,
-        text,
-        schema,
-        signal,
-        run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-      );
-    let root = { threadId: run.threadId },
-      envelope: ReturnType<typeof EnvelopeSchema.parse> = {
-        status: 'success',
-        summary: 'Rechecking the saved implementation: ' + run.title,
-        artifacts: run.changedFiles.map((c) => c.path),
-        notesForNextAgent: '',
-      };
-    if (run.continuation?.mode === 'repair') {
-      const instructions =
-        (run.roleSnapshots?.find((role) => role.id === 'coordinator')?.instructions || '') +
-        '\n' +
-        'Continue the existing goal in its saved workspace. Do not start agents: Buro dispatches workers. Do not commit or modify protected files. Project context: ' +
-        (policy.context || '') +
-        materialInstructions(run.contextMaterials || [], workspace.path, true) +
-        (run.repairEnvironment ? '\n' + environmentRepairInstructions : '');
-      if (
-        run.threadId &&
-        this.env.runtime.resume &&
-        run.roleResources?.coordinator?.resource.capabilities.resumeSessions
-      ) {
-        root = await this.env.runtime.resume({
-          projectId,
-          runId,
-          threadId: run.threadId,
-          roleId: 'coordinator',
-          purpose: 'coordination',
-          operationId: operationIds.coordination,
-          workspace: workspace.path,
-          instructions,
-        });
-        await this.update(projectId, runId, (r) =>
-          r.events.push({
-            at: this.env.now(),
-            type: 'runtime.resumed',
-            threadId: root.threadId,
-            text: 'Original coordinator session restored',
-          }),
-        );
-      } else {
-        await this.update(projectId, runId, (r) => {
-          r.coordinatorSession = {
-            id: 'S-' + this.env.id(),
-            roleId: 'coordinator',
-            roleVersion: r.roleSnapshots?.find((role) => role.id === 'coordinator')?.version || 1,
-            ...sessionResource(
-              r.resources,
-              'coordination',
-              this.env.runtime.id,
-              r.roleResources?.coordinator,
-            ),
-            parentId: r.planningSession?.id,
-          };
-        });
-        root = await this.startRuntime({
-          projectId,
-          runId,
-          purpose: 'coordination',
-          operationId: operationIds.coordination,
-          roleId: 'coordinator',
-          workspace: workspace.path,
-          instructions,
-        });
-        await this.update(projectId, runId, (r) => {
-          r.threadId = root.threadId;
-          r.events.push({
-            at: this.env.now(),
-            type: 'runtime.replaced',
-            threadId: root.threadId,
-            text: 'Opened a new session with the saved workspace and context',
-          });
-        });
-      }
-      threads.push(root.threadId);
-      await this.phase(
-        projectId,
-        runId,
-        'repair',
-        'Continuing the saved session with user clarification',
-      );
-      await this.update(projectId, runId, (r) => {
-        r.delegation = 'buro';
-      });
-      const pendingRoles = attempt.context.taskChanged ? roles : pendingWorkerRoles(run, roles);
-      await this.dispatchWorkers(
-        projectId,
-        runId,
-        pendingRoles,
-        workspace,
-        policy,
-        signal,
-        threads,
-        ask,
-      );
-      const observed = this.get(projectId, runId);
-      const workerResults = roles.map(
-        (role) =>
-          [...observed.agents].reverse().find((agent) => agent.session?.roleId === role.id)
-            ?.session,
-      );
-      envelope = EnvelopeSchema.parse(
-        await ask(
-          root.threadId,
-          `Continue without restarting the implementation. Goal: ${run.goalText}. Clarification: ${run.continuation.instructions}. Previous result: ${run.result}. Checks: ${JSON.stringify(checkContext(run.acceptance))}. File policy: ${JSON.stringify(policy.scope)}. Plan: ${JSON.stringify(run.plan)}. ${run.repairEnvironment ? environmentRepairInstructions : ''} Buro has dispatched the saved team. Worker results: ${JSON.stringify(workerResults)}. Integrate these changes; do not start agents. The service starts an independent reviewer.`,
-          envelopeOutputSchema,
-        ),
-      );
-    }
-    await this.validateAndAccept({
+    const ctx: ExecutionContext = {
       projectId,
       runId,
+      workspace,
+      policy,
       signal,
       threads,
-      workspace,
-      policy: run.continuation?.mode === 'recheck' ? { ...policy, maxRepairs: 0 } : policy,
-      run,
-      initial,
-      team,
-      proposed,
-      root,
-      envelope,
-      ask,
-    });
+      attemptId: attempt.attempt.id,
+    };
+    if (run.continuation?.mode === 'recheck') {
+      const envelope = {
+        status: 'success' as const,
+        summary: 'Rechecking the saved implementation: ' + run.title,
+        artifacts: run.changedFiles.map((file) => file.path),
+        notesForNextAgent: '',
+      };
+      const checked = await this.checkRun(ctx);
+      await this.reviewRun(ctx, checked, envelope);
+      await this.acceptRun(ctx, checked, envelope);
+      return;
+    }
+    await this.orchestrate(projectId, runId, workspace, policy, signal, threads, true);
   }
   schedule(projectId: string, runId: string) {
     if (this.jobs.has(runId) || this.closing) return;
@@ -1170,6 +1078,7 @@ ${installation.output || installation.error || ''}`,
       }
       await this.beginExecution(projectId, runId);
       abort();
+      this.assertActionCatalog(this.get(projectId, runId));
       let base = record.baseBranch;
       if (record.parentRunId) {
         const parent = this.env.projects
@@ -1191,7 +1100,7 @@ ${installation.output || installation.error || ''}`,
       acquiredWorkspace = workspace.path;
       await this.bindPreparedWorkspace(projectId, runId, workspace);
       abort();
-      await this.planAndImplement(projectId, runId, workspace, policy, signal, threads);
+      await this.orchestrate(projectId, runId, workspace, policy, signal, threads);
     } catch (error) {
       if (this.get(projectId, runId).attemptId !== owner)
         throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
@@ -1226,12 +1135,15 @@ ${installation.output || installation.error || ''}`,
                     'BASELINE_CHECKS_FAILED',
                     'ENVIRONMENT_FAILED',
                     'ENVIRONMENT_UNAVAILABLE',
+                    'EXECUTION_ACTIONS_CHANGED',
+                    'EXECUTION_ACTIONS_EMPTY',
                     'FIXED_RUNTIME_UNAVAILABLE',
                     'BACKEND_CAPABILITY_UNAVAILABLE',
                     'BACKEND_CAPABILITIES_CHANGED',
                     'SESSION_SCOPE_CHANGED',
                     'CHECK_DEFINITION_CHANGED',
                     'VERIFICATION_REVISION_CHANGED',
+                    'WORKSPACE_IDENTITY_CHANGED',
                     'VERIFICATION_UNAVAILABLE',
                     'VERIFICATION_VIEW_UNAVAILABLE',
                     'VERIFICATION_VIEW_CHANGED',
@@ -1255,6 +1167,7 @@ ${installation.output || installation.error || ''}`,
                   'BACKEND_CAPABILITIES_CHANGED',
                   'SESSION_SCOPE_CHANGED',
                   'VERIFICATION_REVISION_CHANGED',
+                  'WORKSPACE_IDENTITY_CHANGED',
                   'VERIFICATION_UNAVAILABLE',
                   'VERIFICATION_VIEW_UNAVAILABLE',
                   'VERIFICATION_VIEW_CHANGED',
@@ -1297,287 +1210,28 @@ ${installation.output || installation.error || ''}`,
       }
     }
   }
-  async planAndImplement(
+  async orchestrate(
     projectId: string,
     runId: string,
     workspace: { path: string; base: string },
     policy: ExecutionPolicy,
     signal: AbortSignal,
     threads: string[],
-    restoreThread = false,
+    restoreSession = false,
   ) {
-    const baseline = (await this.verify(projectId, runId, workspace, policy, signal)).checks;
-    await this.update(projectId, runId, (r) => {
-      r.baseline = baseline;
-    });
-    const initial = this.env.projects.get(projectId).snapshot(),
-      run = this.get(projectId, runId);
-    const coordinatorResource = run.roleResources?.coordinator?.resource;
-    if (!run.planningPolicy || !coordinatorResource)
-      throw new DomainError(
-        'INVALID_PLANNING_POLICY',
-        'This run has no saved planning strategy and coordinator decision. Start a new run.',
-      );
-    assertPlanningPolicy(run.planningPolicy, coordinatorResource);
-    const inspectionPlanning = run.planningPolicy.strategy === 'read-only-inspection';
-    await this.phase(projectId, runId, 'planning', 'Coordinator is planning and selecting roles');
-    const coordinator = run.roleSnapshots?.find((r) => r.id === 'coordinator');
-    if (!coordinator)
-      throw new DomainError('INVALID_ASSIGNMENT', 'The coordinator role snapshot is missing.');
-    const input = {
-      projectId,
-      runId,
-      purpose: 'coordination' as const,
-      operationId: operationIds.coordination,
-      roleId: 'coordinator',
-      ...(inspectionPlanning ? { readOnly: true } : {}),
-      workspace: workspace.path,
-      instructions:
-        (coordinator?.instructions || 'Coordinate work on the goal.') +
-        '\nDo not start agents: Buro dispatches workers. Do not run Git commit/reset/checkout. An external service accepts changes. Follow the saved file policy; planned paths are guidance unless strict mode is enabled. Do not touch .git. Network use is limited to preparing project tools and dependencies when a managed environment is provided.' +
-        (inspectionPlanning ? '\nProject context: ' + (policy.context || '') : '') +
-        materialInstructions(run.contextMaterials || [], workspace.path, true, {
-          deferPlanningReads: !inspectionPlanning,
-        }) +
-        (run.repairEnvironment ? '\n' + environmentRepairInstructions : ''),
-    };
-    await this.update(projectId, runId, (r) => {
-      r.delegation = 'buro';
-      if (restoreThread && !coordinatorResource.capabilities.resumeSessions)
-        r.coordinatorSession = undefined;
-      r.coordinatorSession ||= {
-        id: 'S-' + this.env.id(),
-        roleId: 'coordinator',
-        roleVersion: coordinator.version,
-        ...sessionResource(
-          r.resources,
-          'coordination',
-          this.env.runtime.id,
-          r.roleResources?.coordinator,
-        ),
-      };
-    });
-    let root =
-      restoreThread &&
-      run.threadId &&
-      this.env.runtime.resume &&
-      coordinatorResource.capabilities.resumeSessions
-        ? await this.env.runtime.resume({ ...input, threadId: run.threadId })
-        : await this.env.runtime.start(input);
-    if (restoreThread)
-      await this.update(projectId, runId, (r) =>
-        r.events.push({
-          at: this.env.now(),
-          type: 'runtime.resumed',
-          threadId: root.threadId,
-          text: 'Resumed planning in the saved workspace',
-        }),
-      );
-    threads.push(root.threadId);
-    await this.update(projectId, runId, (r) => {
-      r.threadId = root.threadId;
-      r.events.push({
-        at: this.env.now(),
-        type: 'planning.started',
-        threadId: root.threadId,
-        text: inspectionPlanning
-          ? 'Planning in a read-only session'
-          : 'Planning with tools disabled for this turn',
-      });
-    });
-    const ask = (threadId: string, text: string, schema: unknown) =>
-      this.completedTurn(
+    return runGoalOrchestration(
+      this,
+      {
         projectId,
         runId,
-        threadId,
-        text,
-        schema,
+        workspace,
+        policy,
         signal,
-        run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-      );
-    let plan: TeamPlan | undefined,
-      team: ReturnType<typeof resolveTeam> | undefined,
-      correction = '',
-      roleCatalogChanged = false,
-      planningRoles = initial.roles;
-    const planningSchema = planningOutputSchema(teamOutputSchema, policy.maxWorkers);
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const workerCatalog = planningRoles.filter(
-        (role) => !['local_preview', 'delivery_pr', 'production_delivery'].includes(role.id),
-      );
-      const pool = run.resources ? workerResourcePool(run.resources) : [];
-      const plannedTurn = planningTurn({
-        policy: run.planningPolicy,
-        reuseBrief: attempt > 0,
-        roleCatalogChanged,
-        title: run.title,
-        goalText: run.goalText,
-        scope: policy.scope,
-        projectContext: policy.context,
-        maxWorkers: policy.maxWorkers,
-        roles: workerCatalog,
-        pool,
-        baseline,
-        repairInstructions: run.repairEnvironment ? environmentRepairInstructions : undefined,
-        correction: correction.replace(/^Correct the previous plan: /, ''),
-        sessionInstructions: input.instructions,
-      });
-      const planningAuthority = await this.runCommands(projectId).planningInput(runId);
-      let answer: unknown;
-      let formatError: DomainError | undefined;
-      try {
-        answer = await this.completedTurn(
-          projectId,
-          runId,
-          root.threadId,
-          plannedTurn.text,
-          planningSchema,
-          signal,
-          run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-          plannedTurn.toolPolicy,
-        );
-      } catch (error) {
-        // Only an observed response with invalid JSON is eligible for format correction.
-        if (!(error instanceof DomainError) || error.code !== 'INVALID_AGENT_OUTPUT') throw error;
-        formatError = error;
-      }
-      try {
-        if (formatError) throw formatError;
-        const parsedPlan = TeamPlanSchema.safeParse(answer);
-        if (!parsedPlan.success)
-          throw new DomainError(
-            'INVALID_PLAN',
-            parsedPlan.error.issues
-              .slice(0, 8)
-              .map((issue) => `${issue.path.join('.')}: ${issue.message}`.slice(0, 500))
-              .join('; '),
-          );
-        const candidatePlan = parsedPlan.data;
-        const saved = await this.acceptPlan(
-          projectId,
-          runId,
-          candidatePlan,
-          Object.fromEntries(
-            candidatePlan.team.map((worker) => [
-              worker.roleId,
-              planningRoles.find((role) => role.id === worker.roleId)?.version ?? null,
-            ]),
-          ),
-          planningAuthority,
-          run.attemptId,
-        );
-        signal.throwIfAborted();
-        this.assertAttemptOwner(projectId, runId, run.attemptId);
-        const afterPlan = this.get(projectId, runId);
-        assertRunReconciled(afterPlan);
-        if (afterPlan.cancelRequested) throw new DOMException('Interrupted', 'AbortError');
-        const candidateTeam = {
-          roles: saved.assignments.map((assignment) => assignment.role),
-          origins: Object.fromEntries(
-            saved.assignments.map((assignment) => [assignment.role.id, assignment.origin]),
-          ),
-        };
-        plan = candidatePlan;
-        team = candidateTeam;
-        break;
-      } catch (e) {
-        if (
-          !(e instanceof DomainError) ||
-          ![
-            'INVALID_PLAN',
-            'INVALID_AGENT_OUTPUT',
-            'INVALID_ASSIGNMENT',
-            'INVALID_RUNTIME_REASON',
-            'RUNTIME_NOT_ALLOWED',
-            'ROLE_RUNTIME_FIXED',
-            'RUNTIME_REASON_REQUIRED',
-            'ROLE_CHANGED',
-          ].includes(e.code)
-        )
-          throw e;
-        if (e instanceof DomainError && e.code === 'ROLE_CHANGED') {
-          planningRoles = this.env.projects.get(projectId).snapshot().roles;
-          roleCatalogChanged = true;
-        }
-        correction = 'Correct the previous plan: ' + String(e);
-        await this.update(projectId, runId, (r) =>
-          r.events.push({ at: this.env.now(), type: 'plan.rejected', text: correction }),
-        );
-      }
-    }
-    if (!plan || !team) throw Error('The revised plan did not pass validation. ' + correction);
-    if (inspectionPlanning) {
-      await this.env.runtime.release?.(root.threadId);
-      await this.update(projectId, runId, (r) => {
-        r.coordinatorSession = {
-          id: 'S-' + this.env.id(),
-          roleId: 'coordinator',
-          roleVersion: coordinator.version,
-          ...sessionResource(
-            r.resources,
-            'coordination',
-            this.env.runtime.id,
-            r.roleResources?.coordinator,
-          ),
-          parentId: r.planningSession?.id,
-        };
-      });
-      signal.throwIfAborted();
-      this.assertAttemptOwner(projectId, runId, run.attemptId);
-      const writerGrant = this.get(projectId, runId);
-      assertRunReconciled(writerGrant);
-      if (writerGrant.cancelRequested) throw new DOMException('Interrupted', 'AbortError');
-      const writer = await this.startRuntime({ ...input, readOnly: false });
-      threads.push(writer.threadId);
-      root = writer;
-      await this.update(projectId, runId, (r) => {
-        r.threadId = writer.threadId;
-        r.events.push({
-          at: this.env.now(),
-          type: 'planning.writer-started',
-          threadId: writer.threadId,
-          text: 'Read-only planning completed; a separate implementation session received the accepted plan.',
-        });
-      });
-    }
-    const proposed = team.roles.filter((r) => team!.origins[r.id] === 'created');
-    await this.phase(projectId, runId, 'implementation', 'Workers are implementing the plan');
-    const workerResults = await this.dispatchWorkers(
-      projectId,
-      runId,
-      team.roles,
-      workspace,
-      policy,
-      signal,
-      threads,
-      ask,
+        threads,
+        attemptId: this.get(projectId, runId).attemptId,
+      },
+      restoreSession,
     );
-    const envelope = EnvelopeSchema.parse(
-      await ask(
-        root.threadId,
-        `Plan accepted. Buro has executed the assigned workers. If team is empty, implement directly. Integrate the current changes and repair inconsistencies. Do not start agents: worker dispatch and independent review belong to Buro. Do not commit. Prefer targeted local verification; the service runs the registered acceptance commands, so do not repeat a full successful suite without a reason.
-${inspectionPlanning ? `Goal: ${run.title}\n${run.goalText}\nProject context: ${policy.context || ''}\n` : ''}Plan: ${JSON.stringify(plan)}
-Worker results: ${JSON.stringify(workerResults)}
-Baseline checks: ${JSON.stringify(checkContext(baseline))}
-Use relevant user materials at their staged paths. Return the formal execution result.`,
-        envelopeOutputSchema,
-      ),
-    );
-    await this.validateAndAccept({
-      projectId,
-      runId,
-      signal,
-      threads,
-      workspace,
-      policy,
-      run,
-      initial,
-      team,
-      proposed,
-      root,
-      envelope,
-      ask,
-    });
   }
   async dispatchWorkers(
     projectId: string,
@@ -1589,366 +1243,349 @@ Use relevant user materials at their staged paths. Return the formal execution r
     threads: string[],
     ask: (threadId: string, text: string, schema: unknown) => Promise<unknown>,
   ) {
-    const dispatch = (selected: Role[]) => {
-      assertRunReconciled(this.get(projectId, runId));
-      return runWorkerAssignments({
-        projectId,
-        run: this.get(projectId, runId),
-        readAssignment: (roleId) => this.runCommands(projectId).assignment(runId, roleId),
-        roles: selected,
-        workspace,
-        policy,
-        runtime: this.env.runtime,
-        workspaces: this.env.workspaces,
-        signal,
-        now: this.env.now,
-        id: this.env.id,
-        update: (apply) => this.update(projectId, runId, apply),
-        track: (threadId) => threads.push(threadId),
-        flush: () => this.eventQueue,
-        ask,
-      });
-    };
-    try {
-      return await dispatch(roles);
-    } catch (error) {
-      signal.throwIfAborted();
-      const failedRun = this.get(projectId, runId);
-      const eligible = workerFailureForReplan(failedRun, roles, error);
-      if (!eligible) throw error;
-      // The worker call has fully unwound, including release, before any replacement can start.
-      await this.update(projectId, runId, (run) => {
-        if (!workerFailureForReplan(run, roles, error))
-          throw new DomainError('WORKER_REPLAN_UNAVAILABLE', 'The saved worker outcome changed.');
-        run.workerReplan = {
-          roleId: eligible.role.id,
-          failedSessionId: eligible.agent.session!.id,
-          failureCode: eligible.agent.assignment!.knownFailure!.code,
-          requestedAt: this.env.now(),
-          status: 'requested',
-        };
-        run.events.push({
-          at: this.env.now(),
-          type: 'agent.replan-requested',
-          threadId: eligible.agent.threadId,
-          text: `${eligible.role.id}: ${run.workerReplan.failureCode}. One bounded refinement requested.`,
-        });
-      });
-      const changes = await this.env.workspaces.changes(workspace.path, workspace.base);
-      const proposed = await ask(
-        failedRun.threadId,
-        `Refine the failed worker assignment once. Do not implement or start agents in this turn.
-The previous worker stopped with known ${eligible.agent.assignment!.knownFailure!.code}; its workspace scope was independently verified. Completed actions and current edits remain in the workspace. Never replay an unknown action or repeat completed external actions.
-Saved assignment: ${JSON.stringify(eligible.task)}.
-Observed changed files: ${JSON.stringify(changeContext(changes))}.
-Return a shorter complete objective and only needed inputs from the saved input list. The service retains the original expected result and every criterion. Do not change models, roles, write paths or checks. Make the next worker read current state and finish the remaining work with concise tool calls. This is the only automatic refinement for this run.`,
-        workerRefinementOutputSchema,
-      );
-      signal.throwIfAborted();
-      const task = refineWorkerTask(eligible.task, proposed);
-      await this.update(projectId, runId, (run) => {
-        if (
-          run.workerReplan?.status !== 'requested' ||
-          run.workerReplan.failedSessionId !== eligible.agent.session!.id
-        )
-          throw new DomainError(
-            'WORKER_REPLAN_UNAVAILABLE',
-            'The saved worker refinement changed.',
-          );
-        run.workerTasks = { ...run.workerTasks, [eligible.role.id]: task };
-        run.workerReplan = { ...run.workerReplan, status: 'ready', task };
-        run.events.push({ at: this.env.now(), type: 'agent.replan-saved', text: eligible.role.id });
-      });
-      await dispatch(pendingWorkerRoles(this.get(projectId, runId), roles));
-      const observed = this.get(projectId, runId);
-      this.assertManagedBudgetOpen(observed);
-      const results = roles.map((role) => {
-        const agent = [...observed.agents]
-          .reverse()
-          .find((agent) => agent.session?.roleId === role.id);
-        if (agent?.status !== 'completed' || agent.session?.result?.status !== 'success')
-          throw new DomainError(
-            'WORKER_FAILED',
-            `Worker ${role.id} did not complete its assignment.`,
-          );
-        return agent.session;
-      });
-      await this.update(projectId, runId, (run) => {
-        if (run.workerReplan?.status === 'ready')
-          run.workerReplan = { ...run.workerReplan, status: 'completed' };
-      });
-      return results;
-    }
-  }
-  async validateAndAccept(ctx: {
-    projectId: string;
-    runId: string;
-    signal: AbortSignal;
-    threads: string[];
-    workspace: { path: string; base: string };
-    policy: ExecutionPolicy;
-    run: Run;
-    initial: Snapshot;
-    team: ReturnType<typeof resolveTeam>;
-    proposed: Role[];
-    root: { threadId: string };
-    envelope: ReturnType<typeof EnvelopeSchema.parse>;
-    ask: (threadId: string, text: string, schema: unknown) => Promise<any>;
-  }) {
-    const {
+    assertRunReconciled(this.get(projectId, runId));
+    return runWorkerAssignments({
       projectId,
-      runId,
-      signal,
-      threads,
+      run: this.get(projectId, runId),
+      readAssignment: (roleId) => this.runCommands(projectId).assignment(runId, roleId),
+      roles,
       workspace,
       policy,
-      run,
-      initial,
-      team,
-      proposed,
-      root,
+      runtime: this.env.runtime,
+      workspaces: this.env.workspaces,
+      signal,
+      now: this.env.now,
+      id: this.env.id,
+      update: (apply) => this.update(projectId, runId, apply),
+      track: (threadId) => threads.push(threadId),
+      flush: () => this.eventQueue,
       ask,
-    } = ctx;
-    let envelope = ctx.envelope;
-    const abort = () => {
-      this.assertAttemptOwner(projectId, runId, run.attemptId);
-      assertRunReconciled(this.get(projectId, runId));
-      if (signal.aborted || this.get(projectId, runId).cancelRequested)
-        throw new DOMException('Interrupted', 'AbortError');
+    });
+  }
+  private assertExecutionContext(ctx: ExecutionContext) {
+    this.assertAttemptOwner(ctx.projectId, ctx.runId, ctx.attemptId);
+    const run = this.get(ctx.projectId, ctx.runId);
+    assertRunReconciled(run);
+    if (ctx.signal.aborted || run.cancelRequested)
+      throw new DOMException('Interrupted', 'AbortError');
+    if (run.status !== 'running')
+      throw new DomainError('INVALID_STATE', 'This run is no longer executing.');
+    this.assertManagedBudgetOpen(run);
+    return run;
+  }
+
+  /** Execute one requested check operation; no reviewer or repair is scheduled here. */
+  async checkRun(ctx: ExecutionContext): Promise<CheckedRun> {
+    const { projectId, runId, workspace, policy, signal } = ctx;
+    this.assertExecutionContext(ctx);
+    await this.closeVerificationView(projectId, runId);
+    await this.update(projectId, runId, (run) => {
+      run.review = undefined;
+      run.independentReviewer = false;
+      run.verificationEvidence = undefined;
+    });
+    await this.phase(projectId, runId, 'checking', 'Checking the requested source revision');
+    const result = await this.verify(projectId, runId, workspace, policy, signal, {
+      keepView: true,
+    });
+    this.assertExecutionContext(ctx);
+    await this.update(projectId, runId, (run) => {
+      run.changedFiles = result.changes;
+      run.scopePreserved = result.scope;
+      run.specsUnchanged = result.specsUnchanged;
+      run.scopeObservation = result.scopeObservation;
+      run.acceptance = result.checks;
+      run.events.push({
+        at: this.env.now(),
+        type: 'checks.completed',
+        text: `Checks: ${result.checks.passed}/${result.checks.total}; boundaries: ${result.scope ? 'respected' : 'violated'}${result.revision ? '; source tree: ' + result.revision.tree : ''}`,
+      });
+    });
+    const checked = structuredClone(result);
+    this.checkedRuns.set(checked, {
+      projectId,
+      runId,
+      attemptId: this.get(projectId, runId).attemptId,
+      result: structuredClone(result),
+    });
+    return checked;
+  }
+
+  /** Resolve host-issued evidence, never revision/check assertions supplied by an action. */
+  private async checkedRun(ctx: ExecutionContext, checked: CheckedRun, openView = false) {
+    const run = this.assertExecutionContext(ctx);
+    const issued = this.checkedRuns.get(checked);
+    if (!issued || issued.projectId !== ctx.projectId || issued.runId !== ctx.runId)
+      throw new DomainError('CHECKS_REQUIRED', 'Run fresh service checks before this action.');
+    if (issued.attemptId !== run.attemptId)
+      throw new DomainError('STALE_RUN_ATTEMPT', 'The checks belong to another execution attempt.');
+    const result = issued.result;
+    if (
+      !result.revision ||
+      !result.view ||
+      !result.scope ||
+      !result.specsUnchanged ||
+      !result.checks.total ||
+      result.checks.passed !== result.checks.total
+    )
+      throw new DomainError(
+        'CHECKS_REQUIRED',
+        'Passing service checks and preserved boundaries are required.',
+      );
+    const evidence = run.verificationEvidence;
+    if (
+      !evidence ||
+      evidence.viewId !== result.view.id ||
+      evidence.tree !== result.revision.tree ||
+      evidence.base !== result.revision.base ||
+      JSON.stringify(evidence.checkIds) !== JSON.stringify(run.checkIds || []) ||
+      evidence.profileRevision !== ctx.policy.profile?.revision ||
+      JSON.stringify(run.acceptance) !== JSON.stringify(result.checks) ||
+      (openView &&
+        (run.verificationView?.id !== result.view.id ||
+          this.verificationViews.get(ctx.runId)?.id !== result.view.id))
+    )
+      throw new DomainError(
+        'CHECKS_REQUIRED',
+        'The current check receipt is unavailable; run checks again.',
+      );
+    try {
+      await this.requireRevision(
+        ctx.projectId,
+        ctx.runId,
+        ctx.workspace,
+        result.revision,
+        'requested action',
+      );
+    } catch (error) {
+      if (error instanceof DomainError && error.code === 'VERIFICATION_REVISION_CHANGED') {
+        await this.closeVerificationView(ctx.projectId, ctx.runId);
+        await this.update(ctx.projectId, ctx.runId, (current) => {
+          current.verificationEvidence = undefined;
+        });
+      }
+      throw error;
+    }
+    this.assertExecutionContext(ctx);
+    return result as CheckedRun & { revision: WorkspaceRevision; view: VerificationView };
+  }
+
+  /** Obtain one fresh independent review of the exact checked revision. */
+  async reviewRun(
+    ctx: ExecutionContext,
+    checked: CheckedRun,
+    envelope: ReturnType<typeof EnvelopeSchema.parse>,
+  ) {
+    const { projectId, runId, workspace, policy, threads } = ctx;
+    const result = await this.checkedRun(ctx, checked, true);
+    const { revision, view, changes, checks } = result;
+    const run = this.get(projectId, runId);
+    await this.phase(
+      projectId,
+      runId,
+      'review',
+      'Independent reviewer is checking the requested revision',
+    );
+    const reviewerRole = run.roleSnapshots?.find((role) => role.id === 'reviewer');
+    if (!reviewerRole)
+      throw new DomainError('INVALID_ASSIGNMENT', 'The reviewer role snapshot is missing.');
+    const reviewerSession = {
+      id: 'S-' + this.env.id(),
+      roleId: reviewerRole.id,
+      roleVersion: reviewerRole.version,
+      ...sessionResource(run.resources, 'review', this.env.runtime.id, run.roleResources?.reviewer),
+      parentId: run.coordinatorSession?.id,
     };
-    let accepted = false,
-      finalText = '',
-      acceptedRoles: Role[] = [];
-    let acceptedRevision: WorkspaceRevision | undefined;
-    for (let iteration = 0; iteration <= policy.maxRepairs; iteration++) {
-      abort();
-      await this.closeVerificationView(projectId, runId);
-      await this.phase(
-        projectId,
-        runId,
-        'checking',
-        'The service is verifying changes and running independent checks',
-      );
-      const { changes, scope, specsUnchanged, scopeObservation, checks, revision, view } =
-        await this.verify(projectId, runId, workspace, policy, signal, { keepView: true });
-      await this.update(projectId, runId, (r) => {
-        r.changedFiles = changes;
-        r.scopePreserved = scope;
-        r.specsUnchanged = specsUnchanged;
-        r.scopeObservation = scopeObservation;
-        r.acceptance = checks;
-        r.events.push({
-          at: this.env.now(),
-          type: 'checks.completed',
-          text: `Checks: ${checks.passed}/${checks.total}; boundaries: ${scope ? 'respected' : 'violated'}${revision ? '; source tree: ' + revision.tree : ''}`,
-        });
+    await this.update(projectId, runId, (current) => {
+      current.review = undefined;
+      current.independentReviewer = false;
+      current.agents.push({
+        session: reviewerSession,
+        threadId: reviewerSession.id,
+        name: reviewerRole.id,
+        agentPath: '/root/' + reviewerRole.id,
+        startedAt: this.env.now(),
+        completedAt: '',
+        messages: [],
+        commands: 0,
+        status: 'starting',
       });
-      const environment = unchangedDependencyFailures(
-        this.get(projectId, runId).baseline.results,
-        checks.results,
-      );
-      if (environment.length && (!run.repairEnvironment || iteration === policy.maxRepairs)) {
-        const message =
-          'The source environment blocks acceptance: ' +
-          environment.join(', ') +
-          '. Dependency declaration errors match the baseline. The workspace is preserved; update check settings or repair dependencies and rerun checks.';
-        await this.update(projectId, runId, (r) => {
-          r.issue = { code: 'BASELINE_CHECKS_FAILED', message, checks: environment };
-        });
-        throw new DomainError('BASELINE_CHECKS_FAILED', message);
-      }
-      if (
-        !scope ||
-        !checks.total ||
-        checks.passed !== checks.total ||
-        envelope.status !== 'success'
-      ) {
-        await this.closeVerificationView(projectId, runId);
-        if (iteration === policy.maxRepairs)
-          throw Error(
-            `Acceptance failed: ${checks.passed}/${checks.total} checks; boundaries ${scope ? 'respected' : 'violated'}. ${envelope.summary}`,
-          );
-        await this.phase(
-          projectId,
-          runId,
-          'repair',
-          'Checks returned to the same coordinator session',
-        );
-        envelope = EnvelopeSchema.parse(
-          await ask(
-            root.threadId,
-            `Repair the result in this same workspace. Goal: ${run.goalText}. Boundaries respected: ${scope}. Checks: ${JSON.stringify(checkContext(checks))}. Do not start agents. Do not modify protected instructions or check commands. ${run.repairEnvironment ? environmentRepairInstructions : ''} Return the formal result.`,
-            envelopeOutputSchema,
-          ),
-        );
-        continue;
-      }
-      if (!revision || !view)
-        throw new DomainError(
-          'VERIFICATION_REVISION_REQUIRED',
-          'No verified source revision was captured.',
-        );
-      await this.phase(projectId, runId, 'review', 'Independent reviewer is checking the result');
-      const reviewerRole = this.get(projectId, runId).roleSnapshots?.find(
-        (r) => r.id === 'reviewer',
-      );
-      const reviewerSession = {
-        id: 'S-' + this.env.id(),
-        roleId: 'reviewer',
-        roleVersion: reviewerRole?.version || 0,
-        ...sessionResource(
-          this.get(projectId, runId).resources,
-          'review',
-          this.env.runtime.id,
-          this.get(projectId, runId).roleResources?.reviewer,
-        ),
-        parentId: this.get(projectId, runId).coordinatorSession?.id,
-      };
-      await this.update(projectId, runId, (r) => {
-        r.agents.push({
-          session: reviewerSession,
-          threadId: reviewerSession.id,
-          name: 'reviewer',
-          agentPath: '/root/reviewer',
-          startedAt: this.env.now(),
-          completedAt: '',
-          messages: [],
-          commands: 0,
-          status: 'starting',
-        });
-        r.events.push({
-          at: this.env.now(),
-          type: 'agent.dispatch-requested',
-          threadId: reviewerSession.id,
-          text: 'Independent reviewer',
-        });
+      current.events.push({
+        at: this.env.now(),
+        type: 'agent.dispatch-requested',
+        threadId: reviewerSession.id,
+        text: 'Independent reviewer',
       });
-      const reviewer = await this.startRuntime({
-        projectId,
-        runId,
-        workspace: view.readRoot,
-        readOnly: true,
-        purpose: 'review',
-        operationId: operationIds.review,
-        roleId: 'reviewer',
-        instructions:
-          (reviewerRole?.instructions ||
-            'Independently verify the goal and correctness of the changes.') +
-          '\nRead only. Do not modify files, start agents or use the network. You did not participate in implementation. Request changes for blocking issues.\nProject context: ' +
-          (policy.context || '') +
-          materialInstructions(run.contextMaterials || [], view.readRoot, true),
-      });
-      threads.push(reviewer.threadId);
-      await this.update(projectId, runId, (r) => {
-        const agent = r.agents.find((a) => a.session?.id === reviewerSession.id)!;
+    });
+    this.assertExecutionContext(ctx);
+    const reviewer = await this.startRuntime({
+      projectId,
+      runId,
+      workspace: view.readRoot,
+      readOnly: true,
+      purpose: 'review',
+      operationId: operationIds.review,
+      roleId: reviewerRole.id,
+      instructions:
+        reviewerRole.instructions +
+        '\nRead only. Do not modify files, start agents or use the network. You did not participate in implementation. Request changes for blocking issues.\nProject context: ' +
+        (policy.context || '') +
+        materialInstructions(run.contextMaterials || [], view.readRoot, true),
+    });
+    threads.push(reviewer.threadId);
+    let reviewed: ReturnType<typeof ReviewSchema.parse>;
+    try {
+      await this.update(projectId, runId, (current) => {
+        const agent = current.agents.find((item) => item.session?.id === reviewerSession.id)!;
         agent.threadId = reviewer.threadId;
         agent.status = 'running';
-        r.events.push({
+        current.events.push({
           at: this.env.now(),
           type: 'agent.started',
           threadId: reviewer.threadId,
           text: 'Independent reviewer',
         });
       });
-      const review = ReviewSchema.parse(
-        await ask(
-          reviewer.threadId,
-          `Review goal: ${run.title}
-${run.goalText}
-File policy: ${JSON.stringify(policy.scope)}.
-Executor result: ${JSON.stringify(envelope)}
-Independent checks: ${JSON.stringify(checkContext(checks))}
-Changed files: ${JSON.stringify(changeContext(changes))}. Read the actual diff against ${workspace.base} and relevant files in the workspace; the file list is not a substitute for inspecting changes.
-Read relevant sources and verify actual correctness, including preservation of existing behavior. Return approved only when there are no blocking findings.`,
-          reviewOutputSchema,
-        ),
+      const answer = await this.completedTurn(
+        projectId,
+        runId,
+        reviewer.threadId,
+        `Review goal: ${run.title}\n${run.goalText}\nFile policy: ${JSON.stringify(policy.scope)}.\nExecutor result: ${JSON.stringify(envelope)}\nIndependent checks: ${JSON.stringify(checkContext(checks))}\nChanged files: ${JSON.stringify(changeContext(changes))}. Read the actual diff against ${workspace.base} and relevant files in the workspace; the file list is not a substitute for inspecting changes.\nRead relevant sources and verify actual correctness, including preservation of existing behavior. Return approved only when there are no blocking findings.`,
+        reviewOutputSchema,
+        ctx.signal,
+        run.timePolicy?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       );
+      const parsed = ReviewSchema.safeParse(answer);
+      if (!parsed.success)
+        throw new DomainError(
+          'INVALID_AGENT_OUTPUT',
+          'The reviewer did not return a valid review result.',
+        );
+      const review = parsed.data;
       await this.eventQueue;
-      await this.update(projectId, runId, (r) => {
-        r.review = review;
-        r.independentReviewer = true;
+      this.assertExecutionContext(ctx);
+      await this.requireRevision(projectId, runId, workspace, revision, 'independent review');
+      await this.update(projectId, runId, (current) => {
         if (
-          !r.verificationEvidence ||
-          r.verificationEvidence.viewId !== view.id ||
-          r.verificationEvidence.tree !== revision.tree
+          !current.verificationEvidence ||
+          current.verificationEvidence.viewId !== view.id ||
+          current.verificationEvidence.tree !== revision.tree
         )
           throw new DomainError(
             'VERIFICATION_REVISION_CHANGED',
             'The reviewed verification input changed.',
           );
-        r.verificationEvidence.reviewedAt = this.env.now();
-        r.verificationEvidence.reviewerSessionId = reviewerSession.id;
-        const a = r.agents.find((a) => a.threadId === reviewer.threadId)!;
-        a.completedAt = this.env.now();
-        a.status = 'completed';
-        r.events.push({
+        current.review = review;
+        current.independentReviewer = true;
+        current.verificationEvidence.reviewedAt = this.env.now();
+        current.verificationEvidence.reviewerSessionId = reviewerSession.id;
+        const agent = current.agents.find((item) => item.session?.id === reviewerSession.id)!;
+        agent.completedAt = this.env.now();
+        agent.status = 'completed';
+        current.events.push({
           at: this.env.now(),
           type: 'agent.completed',
-          threadId: a.threadId,
+          threadId: reviewer.threadId,
           text: review.summary,
         });
-        r.events.push({
+        current.events.push({
           at: this.env.now(),
           type: 'review.completed',
           text: review.verdict + ': ' + review.summary,
         });
       });
+      reviewed = review;
+    } finally {
       await this.env.runtime.release?.(reviewer.threadId);
       await this.eventQueue;
-      await this.requireRevision(projectId, runId, workspace, revision, 'independent review');
       await this.closeVerificationView(projectId, runId);
-      const observed = this.get(projectId, runId);
-      this.assertManagedBudgetOpen(observed);
-      const workersReady = team.roles.every((role) => {
-        if (observed.delegation !== 'buro')
-          return observed.agents.some((a) => a.name === role.id && a.status === 'completed');
-        const assignment = [...observed.agents]
+    }
+    this.checkedRuns.get(checked)!.review = {
+      sessionId: reviewerSession.id,
+      result: structuredClone(reviewed),
+    };
+    return reviewed;
+  }
+
+  /** Finalize only independently checked/reviewed current bytes; the model cannot accept itself. */
+  async acceptRun(
+    ctx: ExecutionContext,
+    checked: CheckedRun,
+    proposedEnvelope: ReturnType<typeof EnvelopeSchema.parse>,
+  ) {
+    const { projectId, runId, workspace, policy } = ctx;
+    const envelope = EnvelopeSchema.parse(proposedEnvelope);
+    const result = await this.checkedRun(ctx, checked);
+    const acceptedRevision = result.revision;
+    const observed = this.get(projectId, runId);
+    const reviewed = this.checkedRuns.get(checked)?.review;
+    const assignments = await this.runCommands(projectId).assignments(runId);
+    const workersReady = (current: Run) => {
+      if (
+        JSON.stringify(Object.keys(current.roleAssignments || {}).sort()) !==
+        JSON.stringify(assignments.map((assignment) => assignment.role.id).sort())
+      )
+        return false;
+      return assignments.every((assignment) => {
+        const agent = [...current.agents]
           .reverse()
-          .find((a) => a.session?.roleId === role.id);
+          .find((item) => item.assignment?.grantId === assignment.id);
+        const session = agent?.session;
         return (
-          assignment?.status === 'completed' && assignment.session?.result?.status === 'success'
+          agent?.status === 'completed' &&
+          session?.result?.status === 'success' &&
+          session.roleId === assignment.role.id &&
+          session.roleVersion === assignment.role.version &&
+          session.runtimeId === assignment.resource.resource.id &&
+          session.providerId === assignment.resource.resource.providerId &&
+          session.model === assignment.resource.resource.model &&
+          session.configurationRevision === assignment.resource.resource.configurationRevision &&
+          JSON.stringify(agent.assignment?.paths || []) === JSON.stringify(assignment.paths) &&
+          JSON.stringify(current.roleAssignments?.[assignment.role.id]) ===
+            JSON.stringify(assignment.paths)
         );
       });
-      accepted =
-        workersReady &&
-        envelope.status === 'success' &&
-        canAccept({
-          testsPassed: checks.total > 0 && checks.passed === checks.total,
-          scopePreserved: scope,
-          specsUnchanged,
-          review: { verdict: review.verdict, blockingFindings: review.blockingFindings.length },
-        });
-      finalText = envelope.summary;
-      if (accepted) {
-        acceptedRevision = revision;
-        break;
-      }
-      if (iteration === policy.maxRepairs)
-        throw Error(
-          `Acceptance failed: ${checks.passed}/${checks.total} checks; scope=${scope}; workers=${workersReady}; ${review.blockingFindings.join('; ') || review.verdict}; ${envelope.summary}`,
-        );
-      await this.phase(
-        projectId,
-        runId,
-        'repair',
-        'Findings returned to the same coordinator session',
+    };
+    const acceptable = (current: Run) =>
+      workersReady(current) &&
+      envelope.status === 'success' &&
+      current.independentReviewer &&
+      reviewed !== undefined &&
+      current.verificationEvidence?.reviewerSessionId === reviewed.sessionId &&
+      JSON.stringify(current.review) === JSON.stringify(reviewed.result) &&
+      current.agents.some(
+        (agent) =>
+          agent.session?.id === reviewed.sessionId &&
+          agent.session.roleId === 'reviewer' &&
+          agent.status === 'completed',
+      ) &&
+      canAccept({
+        testsPassed:
+          current.acceptance.total > 0 && current.acceptance.passed === current.acceptance.total,
+        scopePreserved: current.scopePreserved,
+        specsUnchanged: current.specsUnchanged,
+        review: current.review
+          ? {
+              verdict: current.review.verdict,
+              blockingFindings: current.review.blockingFindings.length,
+            }
+          : undefined,
+      });
+    if (!reviewed || !observed.review || !observed.independentReviewer)
+      throw new DomainError(
+        'REVIEW_REQUIRED',
+        'Obtain a fresh independent review of the checked revision.',
       );
-      envelope = EnvelopeSchema.parse(
-        await ask(
-          root.threadId,
-          `Repair the result in this same session. Acceptance failed. Boundaries respected: ${scope}. All assigned workers actually started and finished: ${workersReady}.
-Checks: ${JSON.stringify(checkContext(checks))}
-Independent review: ${JSON.stringify(review)}
-Do not start agents. Do not modify checks or instructions, and do not commit. Return a new formal result.`,
-          envelopeOutputSchema,
-        ),
+    if (!acceptable(observed))
+      throw new DomainError(
+        'ACCEPTANCE_NOT_READY',
+        'Checks, review, assigned work and the execution result must all succeed.',
       );
-    }
-    abort();
-    // New project versions are future-only; this accepted work retains its captured version.
     const catalog = this.env.projects.get(projectId).snapshot().roles;
-    for (const role of proposed) {
-      const current = catalog.find((r) => r.id === role.id);
+    const acceptedRoles: Role[] = [];
+    for (const assignment of assignments.filter((item) => item.origin === 'created')) {
+      const role = assignment.role;
+      const current = catalog.find((item) => item.id === role.id);
       if (
         current &&
         (current.version < role.version ||
@@ -1956,88 +1593,95 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
             JSON.stringify({ ...validateProjectRole(current), createdAt: '', updatedAt: '' }) !==
               JSON.stringify({ ...validateProjectRole(role), createdAt: '', updatedAt: '' })))
       )
-        throw Error('Role catalog conflict: ' + role.id);
+        throw new DomainError('ROLE_CHANGED', 'Role catalog conflict: ' + role.id);
       if (!current) acceptedRoles.push(role);
     }
-    this.assertManagedBudgetOpen(this.get(projectId, runId));
-    assertRunReconciled(this.get(projectId, runId));
-    if (!acceptedRevision)
-      throw new DomainError(
-        'VERIFICATION_REVISION_REQUIRED',
-        'No verified source revision was accepted.',
-      );
+    this.assertExecutionContext(ctx);
     const commit = await this.measure(projectId, runId, 'workspace.checkpoint', () =>
       this.env.workspaces.checkpoint(workspace.path, runId, acceptedRevision),
     );
-    abort();
+    this.assertExecutionContext(ctx);
     await this.eventQueue;
     await this.update(
       projectId,
       runId,
-      (r, g, doc) => {
-        this.assertManagedBudgetOpen(r);
-        assertRunReconciled(r);
+      (current, goal, doc) => {
+        this.assertManagedBudgetOpen(current);
+        assertRunReconciled(current);
         if (
-          !r.verificationEvidence ||
-          r.verificationEvidence.tree !== acceptedRevision!.tree ||
-          r.verificationEvidence.base !== acceptedRevision!.base ||
-          !r.scopeObservation ||
-          r.scopeObservation.tree !== acceptedRevision!.tree ||
-          r.scopeObservation.mode !== policy.scope.mode ||
-          r.scopeObservation.violations.length > 0 ||
-          JSON.stringify(r.scopeObservation.additionalPaths) !==
+          !acceptable(current) ||
+          !current.verificationEvidence ||
+          current.verificationEvidence.tree !== acceptedRevision.tree ||
+          current.verificationEvidence.base !== acceptedRevision.base ||
+          current.verificationEvidence.viewId !== result.view.id ||
+          !current.scopeObservation ||
+          current.scopeObservation.tree !== acceptedRevision.tree ||
+          current.scopeObservation.mode !== policy.scope.mode ||
+          current.scopeObservation.violations.length > 0 ||
+          JSON.stringify(current.scopeObservation.additionalPaths) !==
             JSON.stringify(
               policy.scope.plannedPaths.length
-                ? acceptedRevision!.changes
+                ? acceptedRevision.changes
                     .filter((file) => !matchesPlannedPath(file.path, policy.scope.plannedPaths))
                     .map((file) => file.path)
                 : [],
             ) ||
-          !r.verificationEvidence.reviewedAt ||
-          !r.verificationEvidence.reviewerSessionId ||
-          JSON.stringify(r.verificationEvidence.checkIds) !== JSON.stringify(r.checkIds || [])
+          !current.verificationEvidence.reviewedAt ||
+          !current.verificationEvidence.reviewerSessionId ||
+          JSON.stringify(current.verificationEvidence.checkIds) !==
+            JSON.stringify(current.checkIds || [])
         )
           throw new DomainError(
             'VERIFICATION_REVISION_CHANGED',
             'The accepted revision no longer has matching check and review evidence.',
           );
         for (const role of acceptedRoles) {
-          if (doc.roleVersions.some((x) => x.id === role.id))
-            throw Error('Role catalog conflict: ' + role.id);
+          if (doc.roleVersions.some((item) => item.id === role.id))
+            throw new DomainError('ROLE_CHANGED', 'Role catalog conflict: ' + role.id);
           doc.roleVersions.push(role);
-          r.events.push({
+          current.events.push({
             at: this.env.now(),
             type: 'role.saved',
             text: role.id + ' v' + role.version,
           });
         }
-        if (r.cancelRequested) throw new DOMException('Interrupted', 'AbortError');
+        if (current.cancelRequested) throw new DOMException('Interrupted', 'AbortError');
         doc.executionHead = commit;
-        r.issue = undefined;
-        r.commit = commit;
-        r.status = 'completed';
-        r.phase = 'done';
-        r.completedAt = this.env.now();
-        r.result = finalText;
-        r.summary = finalText;
-        g.status = 'completed';
-        for (const a of r.agents)
-          if (!a.completedAt) {
-            a.completedAt = r.completedAt;
-            a.status = 'completed';
+        current.issue = undefined;
+        current.commit = commit;
+        current.status = 'completed';
+        current.phase = 'done';
+        current.completedAt = this.env.now();
+        current.result = envelope.summary;
+        current.summary = envelope.summary;
+        goal.status = 'completed';
+        for (const agent of current.agents)
+          if (!agent.completedAt) {
+            agent.completedAt = current.completedAt;
+            agent.status = 'completed';
           }
-        r.events.push({ at: r.completedAt, type: 'goal.completed', text: finalText });
+        current.events.push({
+          at: current.completedAt,
+          type: 'goal.completed',
+          text: envelope.summary,
+        });
       },
       acceptedRoles,
     );
     try {
       this.env.onCompleted?.(projectId, runId);
     } catch (error) {
-      await this.update(projectId, runId, (r) =>
-        r.events.push({ at: this.env.now(), type: 'delivery.start-failed', text: String(error) }),
+      await this.update(projectId, runId, (current) =>
+        current.events.push({
+          at: this.env.now(),
+          type: 'delivery.start-failed',
+          text: String(error),
+        }),
       );
     }
+    return { commit };
   }
+
   async observe(event: RuntimeEvent) {
     if (!recordableRuntimeEvent(event)) return;
     const project = this.env.projects.list().find((p) =>
