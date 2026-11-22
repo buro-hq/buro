@@ -5,6 +5,7 @@ const os = require('node:os');
 const { createHash, randomUUID } = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const { isIP } = require('node:net');
 const exec = promisify(execFile);
 
 const DEFAULT_LIVE_LIMITS = Object.freeze({
@@ -22,8 +23,6 @@ const knownTools = new Set([
   'run_command',
   'read_diff',
 ]);
-const RTX_EVALUATION_ENDPOINT = 'http://192.168.50.10:11434/';
-const RTX_EVALUATION_MODEL = 'qwen3.5:9b-q4_K_M';
 const finiteCount = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : undefined);
 const object = (value) =>
   value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -37,10 +36,12 @@ class LiveEvaluationError extends Error {
 
 /** Evaluation-only route selection; private-network trust requires an exact synthetic target. */
 function evaluationTargetContract(options = {}) {
+  const env = options.env || process.env;
   const target = options.target === undefined ? 'local' : options.target;
   if (!['local', 'rtx'].includes(target))
     throw new LiveEvaluationError('COMPARISON_INVALID_TARGET');
-  const endpoint = options.endpoints?.ollama;
+  const endpoint =
+    options.endpoints?.ollama ?? (target === 'rtx' ? env.BURO_RTX_ENDPOINT : undefined);
   let parsed;
   try {
     parsed = new URL(endpoint);
@@ -62,24 +63,36 @@ function evaluationTargetContract(options = {}) {
       throw new LiveEvaluationError('COMPARISON_LOCAL_OLLAMA_ONLY');
     return { target, endpoint: parsed.href };
   }
-  const env = options.env || process.env;
   if (env.BURO_RTX_MODEL_COMPARISON !== '1' || env.BURO_LIVE_OLLAMA !== '1')
     throw new LiveEvaluationError('LIVE_RTX_OPT_IN_REQUIRED');
+  const host = parsed.hostname.replace(/^\[|\]$/g, '');
+  const octets = host.split('.').map(Number);
+  const privateLan =
+    (isIP(host) === 4 &&
+      (octets[0] === 10 ||
+        (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+        (octets[0] === 192 && octets[1] === 168))) ||
+    (isIP(host) === 6 && /^(?:fc|fd)/i.test(host));
   if (
-    parsed.href !== RTX_EVALUATION_ENDPOINT ||
+    typeof endpoint !== 'string' ||
+    !/^http:\/\/(?:\[[a-f0-9:]+\]|[0-9.]+)(?::[0-9]+)?\/?$/i.test(endpoint) ||
+    parsed.protocol !== 'http:' ||
+    !privateLan ||
     parsed.username ||
     parsed.password ||
     parsed.search ||
-    parsed.hash
+    parsed.hash ||
+    parsed.pathname !== '/'
   )
     throw new LiveEvaluationError('LIVE_RTX_ENDPOINT_REQUIRED');
   if (options.mode !== undefined && !['ollama', 'mixed'].includes(options.mode))
     throw new LiveEvaluationError('LIVE_RTX_INVALID_MODE');
   if (options.sourceCase && options.sourceCase.synthetic !== true)
     throw new LiveEvaluationError('LIVE_RTX_SYNTHETIC_REQUIRED');
-  const model = options.models?.ollama || env.BURO_OLLAMA_MODEL || RTX_EVALUATION_MODEL;
-  if (model !== RTX_EVALUATION_MODEL) throw new LiveEvaluationError('LIVE_RTX_MODEL_REQUIRED');
-  return { target, endpoint: parsed.href, model, trust: 'private-network' };
+  const model = options.models?.ollama ?? env.BURO_OLLAMA_MODEL;
+  if (typeof model !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(model))
+    throw new LiveEvaluationError('LIVE_RTX_MODEL_REQUIRED');
+  return Object.freeze({ target, endpoint: parsed.href, model, trust: 'private-network' });
 }
 
 function normalizedLimits(input = {}) {
@@ -308,6 +321,12 @@ function preflight(options = {}) {
     ollama: options.models?.ollama || env.BURO_OLLAMA_MODEL,
     deepseek: options.models?.deepseek || env.BURO_DEEPSEEK_MODEL,
   };
+  let target;
+  try {
+    target = options.target === undefined ? undefined : evaluationTargetContract(options);
+  } catch (error) {
+    return { ok: false, code: error.code || 'LIVE_INVALID_CONFIGURATION' };
+  }
   try {
     if (usesDeepSeek && !(options.credentials?.('DEEPSEEK_API_KEY') || env.DEEPSEEK_API_KEY))
       return { ok: false, code: 'LIVE_DEEPSEEK_KEY_REQUIRED' };
@@ -324,7 +343,6 @@ function preflight(options = {}) {
     if (typeof model !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(model))
       return { ok: false, code: 'LIVE_INVALID_MODEL' };
   try {
-    const target = options.target === undefined ? undefined : evaluationTargetContract(options);
     const endpoints = {
       ...(usesOllama
         ? {
@@ -350,8 +368,8 @@ function preflight(options = {}) {
     return {
       ok: true,
       mode,
-      models,
-      endpoints,
+      models: Object.freeze(models),
+      endpoints: Object.freeze(endpoints),
       limits,
       ...(target?.trust ? { ollamaTrust: target.trust } : {}),
       contexts: contextBudgets(endpoints, limits, options.contextTokensByProvider),
@@ -488,10 +506,12 @@ function observedResponse(response, provider, ticket, budget, observations) {
 
 function createBudgetedFetch({
   endpoints,
+  models = {},
   budget = new EvaluationBudget(),
   fetch: actualFetch = globalThis.fetch,
   stage = () => 'coding',
 }) {
+  const selectedModels = Object.freeze({ ...models });
   const routes = new Map();
   for (const [provider, endpoint] of Object.entries(endpoints)) {
     const base = safeEndpoint(endpoint);
@@ -501,6 +521,7 @@ function createBudgetedFetch({
       routes.set(new URL(route, base).href, {
         provider,
         generation: route === 'api/chat' || route === 'chat/completions',
+        modelRequest: route === 'api/show',
       });
   }
   const requests = [],
@@ -514,10 +535,19 @@ function createBudgetedFetch({
     const route = routes.get(target.href);
     if (!route) throw new LiveEvaluationError('LIVE_ENDPOINT_NOT_ALLOWED');
     let ticket;
+    let body;
+    if (selectedModels[route.provider] && (route.generation || route.modelRequest)) {
+      try {
+        body = object(JSON.parse(String(init.body)));
+      } catch {
+        throw new LiveEvaluationError('LIVE_INVALID_GENERATION_BODY');
+      }
+      if (body.model !== selectedModels[route.provider])
+        throw new LiveEvaluationError('LIVE_MODEL_NOT_ALLOWED');
+    }
     if (route.generation) {
       if ((init.method || 'GET').toUpperCase() !== 'POST')
         throw new LiveEvaluationError('LIVE_INVALID_GENERATION_METHOD');
-      let body;
       try {
         body = object(JSON.parse(String(init.body)));
       } catch {
@@ -929,6 +959,7 @@ async function runLiveProviderEvaluation(options = {}) {
   report.contextTokensByProvider = checked.contexts;
   const observedFetch = createBudgetedFetch({
     endpoints: checked.endpoints,
+    models: checked.models,
     budget,
     fetch: options.fetch || globalThis.fetch,
     stage: () =>
@@ -1430,8 +1461,6 @@ async function runLiveProviderEvaluation(options = {}) {
 }
 
 module.exports = {
-  RTX_EVALUATION_ENDPOINT,
-  RTX_EVALUATION_MODEL,
   evaluationTargetContract,
   DEFAULT_LIVE_LIMITS,
   EVALUATION_LIMIT_OPTIONS,

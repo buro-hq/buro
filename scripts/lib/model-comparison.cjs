@@ -10,7 +10,6 @@ const {
   contextBudgets,
   runLiveProviderEvaluation,
   evaluationTargetContract,
-  RTX_EVALUATION_MODEL,
 } = require('./live-provider-runner.cjs');
 const exec = promisify(execFile);
 const { SAFE_JSON_SOURCE } = require('./oracle-serialization.cjs');
@@ -441,11 +440,18 @@ function validateComparison(options = {}) {
     codex: options.models?.codex || env.BURO_CODEX_MODEL || 'gpt-6.1-sol',
     deepseek: options.models?.deepseek || env.BURO_DEEPSEEK_MODEL || 'deepseek-flash',
     ollama:
-      options.models?.ollama ||
+      options.models?.ollama ??
       (target === 'rtx'
-        ? RTX_EVALUATION_MODEL
+        ? env.BURO_OLLAMA_MODEL
         : env.BURO_OLLAMA_MODEL || 'qwen3:4b-instruct-2507-q4_K_M'),
   };
+  const endpoints = {
+    deepseek: 'https://api.deepseek.com',
+    ollama: target === 'local' ? 'http://127.0.0.1:11434' : env.BURO_RTX_ENDPOINT,
+    ...options.endpoints,
+  };
+  const route = evaluationTargetContract({ ...options, target, env, endpoints, models });
+  endpoints.ollama = route.endpoint;
   const required = [
     native && 'codex',
     arms.some((arm) => ['deepseek-buro', 'mixed-buro'].includes(arm)) && 'deepseek',
@@ -463,13 +469,6 @@ function validateComparison(options = {}) {
   const reasoningEffort = options.reasoningEffort || env.BURO_CODEX_REASONING || 'high';
   if (!['low', 'medium', 'high', 'xhigh'].includes(reasoningEffort))
     throw codeError('COMPARISON_INVALID_REASONING');
-  const endpoints = {
-    deepseek: 'https://api.deepseek.com',
-    ...(target === 'local' ? { ollama: 'http://127.0.0.1:11434' } : {}),
-    ...options.endpoints,
-  };
-  const route = evaluationTargetContract({ ...options, target, env, endpoints, models });
-  endpoints.ollama = route.endpoint;
   if (new URL(endpoints.deepseek).href !== 'https://api.deepseek.com/')
     throw codeError('COMPARISON_DEEPSEEK_ENDPOINT_REQUIRED');
   const limits = normalizedLimits({
@@ -478,7 +477,15 @@ function validateComparison(options = {}) {
     ...options.budgets,
   });
   const contexts = contextBudgets(endpoints, limits, options.contextTokensByProvider);
-  return { target, arms: [...arms], models, reasoningEffort, endpoints, limits, contexts };
+  return {
+    target,
+    arms: [...arms],
+    models: Object.freeze(models),
+    reasoningEffort,
+    endpoints: Object.freeze(endpoints),
+    limits,
+    contexts,
+  };
 }
 
 /** Direct native execution: one adapter turn, no goal service, planning, Buro workers or reviewer. */

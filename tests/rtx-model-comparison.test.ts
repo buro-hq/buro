@@ -16,15 +16,18 @@ const {
 } = require('../scripts/lib/model-comparison.cjs');
 const {
   preflight,
-  RTX_EVALUATION_ENDPOINT,
-  RTX_EVALUATION_MODEL,
+  evaluationTargetContract,
+  createBudgetedFetch,
   runLiveProviderEvaluation,
 } = require('../scripts/lib/live-provider-runner.cjs');
+const RTX_EVALUATION_ENDPOINT = 'http://192.168.50.10:11434/';
+const RTX_EVALUATION_MODEL = 'fixture-tools:14b-q4_K_M';
 const env = {
   BURO_MODEL_COMPARISON: '1',
   BURO_RTX_MODEL_COMPARISON: '1',
   BURO_LIVE_OLLAMA: '1',
   BURO_LIVE_DEEPSEEK: '1',
+  BURO_OLLAMA_MODEL: RTX_EVALUATION_MODEL,
 };
 const rtx = { target: 'rtx', endpoints: { ollama: RTX_EVALUATION_ENDPOINT } };
 const models = { ollama: RTX_EVALUATION_MODEL };
@@ -68,7 +71,12 @@ test('unified CLI rejects obsolete controls and unsafe targets before opening cr
     [['ollama-buro', '--target=rtx'], {}, 'LIVE_RTX_ENDPOINT_REQUIRED'],
     [
       ['ollama-buro', '--target=rtx'],
-      { BURO_RTX_ENDPOINT: 'http://192.168.0.228:11434' },
+      { BURO_RTX_ENDPOINT: RTX_EVALUATION_ENDPOINT, BURO_OLLAMA_MODEL: undefined },
+      'LIVE_RTX_MODEL_REQUIRED',
+    ],
+    [
+      ['ollama-buro', '--target=rtx'],
+      { BURO_RTX_ENDPOINT: 'http://203.0.113.10:11434' },
       'LIVE_RTX_ENDPOINT_REQUIRED',
     ],
   ] as const) {
@@ -87,7 +95,7 @@ test('unified CLI rejects obsolete controls and unsafe targets before opening cr
   }
 });
 
-test('RTX comparison requires its own opt-in and exact target while ordinary comparison remains loopback-only', () => {
+test('RTX comparison requires explicit LAN configuration while ordinary comparison remains loopback-only', () => {
   assert.throws(
     () =>
       validateComparison({
@@ -116,12 +124,16 @@ test('RTX comparison requires its own opt-in and exact target while ordinary com
   );
   for (const endpoint of [
     undefined,
-    'http://192.168.0.228:11434',
-    'http://192.168.50.10:11435',
+    'http://203.0.113.10:11434',
+    'http://100.64.0.1:11434',
+    'http://169.254.1.1:11434',
     'https://192.168.50.10:11434',
     'http://user:secret@192.168.50.10:11434',
     'http://192.168.50.10:11434/?token=secret',
     'http://192.168.50.10:11434/#private',
+    'http://192.168.50.10:11434/?',
+    'http://192.168.50.10:11434/#',
+    'http://@192.168.50.10:11434/',
     'http://192.168.50.10:11434/elsewhere',
     'http://rtx.local:11434',
     'http://127.0.0.1:11434',
@@ -147,14 +159,21 @@ test('RTX comparison requires its own opt-in and exact target while ordinary com
     assert.throws(() => validateComparison({ env, arms, ...rtx }), {
       code: arms.length === 2 ? 'COMPARISON_INVALID_ARMS' : 'COMPARISON_RTX_INVALID_ARMS',
     });
-  assert.throws(() => validateComparison({ env, ...rtx, models: { ollama: 'different-model' } }), {
-    code: 'LIVE_RTX_MODEL_REQUIRED',
-  });
+  for (const model of [undefined, '', 'unsafe model', 'model?token=secret'])
+    assert.throws(
+      () =>
+        validateComparison({
+          env: { ...env, BURO_OLLAMA_MODEL: undefined },
+          ...rtx,
+          models: { ollama: model },
+        }),
+      { code: 'LIVE_RTX_MODEL_REQUIRED' },
+    );
   const config = validateComparison({
     env: {
       ...env,
       BURO_OLLAMA_ENDPOINT: 'http://elsewhere.invalid',
-      BURO_OLLAMA_MODEL: 'ambient-model',
+      BURO_OLLAMA_MODEL: RTX_EVALUATION_MODEL,
     },
     ...rtx,
   });
@@ -194,6 +213,96 @@ test('an explicit evaluation target is a strict enum and cannot grant general LA
   });
   assert.equal(local.ok, true);
   assert.equal(local.ollamaTrust, undefined);
+});
+
+test('explicit endpoint and model choices are canonicalized and frozen without a host or model default', () => {
+  for (const endpoint of [
+    'http://10.42.0.17:12500',
+    'http://172.24.0.12:11435/',
+    'http://[fd12:3456::10]:11434',
+  ]) {
+    const configured = {
+      ...env,
+      BURO_RTX_ENDPOINT: endpoint,
+      BURO_OLLAMA_MODEL: 'another-tools-model:32b',
+    };
+    const config = validateComparison({ env: configured, target: 'rtx', arms: ['ollama-buro'] });
+    assert.equal(config.endpoints.ollama, new URL(endpoint).href);
+    assert.equal(config.models.ollama, 'another-tools-model:32b');
+    assert.equal(Object.isFrozen(config.endpoints), true);
+    assert.equal(Object.isFrozen(config.models), true);
+    configured.BURO_RTX_ENDPOINT = 'http://10.42.0.99:11434';
+    configured.BURO_OLLAMA_MODEL = 'replacement:latest';
+    assert.equal(config.endpoints.ollama, new URL(endpoint).href);
+    assert.equal(config.models.ollama, 'another-tools-model:32b');
+  }
+  const route = evaluationTargetContract({ env, ...rtx, models });
+  assert.equal(Object.isFrozen(route), true);
+  const override = validateComparison({
+    env: { ...env, BURO_RTX_ENDPOINT: 'http://10.42.0.1:11434' },
+    ...rtx,
+    models: { ollama: 'explicit-tools:latest' },
+  });
+  assert.equal(override.endpoints.ollama, RTX_EVALUATION_ENDPOINT);
+  assert.equal(override.models.ollama, 'explicit-tools:latest');
+});
+
+test('unsafe or absent RTX configuration rejects before credential reads', () => {
+  let credentialReads = 0;
+  for (const configuration of [
+    { endpoints: { ollama: 'http://203.0.113.10:11434' }, models },
+    { endpoints: {}, models },
+    { endpoints: rtx.endpoints, models: {} },
+    { endpoints: rtx.endpoints, models: { ollama: 'invalid model' } },
+  ]) {
+    const result = preflight({
+      mode: 'mixed',
+      target: 'rtx',
+      env: { ...env, BURO_OLLAMA_MODEL: undefined, BURO_DEEPSEEK_MODEL: 'fixture-cloud' },
+      credentials() {
+        credentialReads++;
+        return 'fixture-only-key';
+      },
+      ...configuration,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.code, /^LIVE_RTX_(?:ENDPOINT|MODEL)_REQUIRED$/);
+  }
+  assert.equal(credentialReads, 0);
+});
+
+test('transport stays bound to the selected endpoint and model after configuration changes', async () => {
+  const endpoints = { ollama: RTX_EVALUATION_ENDPOINT };
+  const selected = { ...models };
+  let calls = 0;
+  const transport = createBudgetedFetch({
+    endpoints,
+    models: selected,
+    fetch: async () => {
+      calls++;
+      return new Response('{}');
+    },
+  });
+  endpoints.ollama = 'http://10.42.0.99:11434/';
+  selected.ollama = 'replacement:latest';
+  for (const route of ['api/chat', 'api/show']) {
+    await assert.rejects(
+      transport(new URL(route, RTX_EVALUATION_ENDPOINT), {
+        method: 'POST',
+        body: JSON.stringify({ model: selected.ollama, options: { num_predict: 128 } }),
+      }),
+      { code: 'LIVE_MODEL_NOT_ALLOWED' },
+    );
+  }
+  await assert.rejects(transport(new URL('api/tags', endpoints.ollama)), {
+    code: 'LIVE_ENDPOINT_NOT_ALLOWED',
+  });
+  assert.equal(calls, 0);
+  await transport(new URL('api/show', RTX_EVALUATION_ENDPOINT), {
+    method: 'POST',
+    body: JSON.stringify({ model: models.ollama }),
+  });
+  assert.equal(calls, 1);
 });
 
 test('invalid RTX request rejects before preparing a fixture, reading credentials or invoking a transport', async () => {

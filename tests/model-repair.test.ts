@@ -188,7 +188,7 @@ test('repair invocation refuses missing opt-in and existing reports before fixtu
   assert.equal(calls, 0);
 });
 
-test('RTX repair route rejects a different endpoint or model before report creation or provider calls', async (t) => {
+test('RTX repair requires an explicit model and rejects unsafe configuration before report creation or provider calls', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-repair-target-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const env = { BURO_MODEL_REPAIR: '1', BURO_LIVE_OLLAMA: '1', BURO_RTX_MODEL_COMPARISON: '1' };
@@ -201,7 +201,8 @@ test('RTX repair route rejects a different endpoint or model before report creat
     runModelRepair({
       env,
       target: 'rtx',
-      endpoint: 'http://192.168.0.228:11434',
+      endpoint: 'http://203.0.113.10:11434',
+      model: 'fixture-tools:14b',
       reportPath,
       runProvider,
     }),
@@ -212,14 +213,40 @@ test('RTX repair route rejects a different endpoint or model before report creat
       env,
       target: 'rtx',
       endpoint: 'http://192.168.50.10:11434',
-      model: 'other:4b',
       reportPath,
       runProvider,
     }),
-    { code: 'LIVE_RTX_MODEL_REQUIRED' },
+    { code: 'REPAIR_INVALID_MODEL' },
+  );
+  await assert.rejects(
+    runModelRepair({
+      env,
+      target: 'rtx',
+      endpoint: 'http://192.168.50.10:11434',
+      model: 'invalid model',
+      reportPath,
+      runProvider,
+    }),
+    { code: 'REPAIR_INVALID_MODEL' },
   );
   assert.equal(calls, 0);
   await assert.rejects(fs.stat(reportPath), { code: 'ENOENT' });
+  await fs.writeFile(reportPath, 'existing report');
+  await assert.rejects(
+    runModelRepair({
+      env: {
+        ...env,
+        BURO_RTX_ENDPOINT: 'http://10.42.0.12:12500',
+        BURO_OLLAMA_MODEL: 'another-tools-model:32b',
+      },
+      target: 'rtx',
+      reportPath,
+      runProvider,
+    }),
+    { code: 'REPAIR_REPORT_EXISTS' },
+  );
+  assert.equal(calls, 0);
+  assert.equal(await fs.readFile(reportPath, 'utf8'), 'existing report');
 });
 
 test('a correct accepted candidate that skipped initial review is explicitly repair-not-covered', async (t) => {

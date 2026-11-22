@@ -15,7 +15,6 @@ const {
   normalizedLimits,
   contextBudgets,
   evaluationTargetContract,
-  RTX_EVALUATION_MODEL,
 } = require('./live-provider-runner.cjs');
 const exec = promisify(execFile);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -175,9 +174,9 @@ async function runModelRepair(options = {}) {
     throw codeError('REPAIR_OPT_IN_REQUIRED');
   const target = options.target === undefined ? 'local' : options.target;
   const model =
-    options.model ||
-    env.BURO_OLLAMA_MODEL ||
-    (target === 'rtx' ? RTX_EVALUATION_MODEL : 'qwen3:4b-instruct-2507-q4_K_M');
+    options.model ??
+    env.BURO_OLLAMA_MODEL ??
+    (target === 'rtx' ? undefined : 'qwen3:4b-instruct-2507-q4_K_M');
   if (typeof model !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(model))
     throw codeError('REPAIR_INVALID_MODEL');
   const endpoints = {
