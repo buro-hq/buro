@@ -2,7 +2,13 @@ import type { ExecutionPolicyView, ProjectProfile, Role, Run } from '../protocol
 import type { EffectivePolicy, RunStop, RunStopAction } from '../protocol/autonomy.ts';
 import type { RuntimeResource, ResourceSnapshot } from '../protocol/resources.ts';
 import { DEFAULT_MANAGED_RUN_BUDGET_POLICY } from '../protocol/run-budget.ts';
-import { resolveRoleResource, roleResourceContext } from './role-routing.ts';
+import { resolveRoleResource } from './role-routing.ts';
+import {
+  operationIds,
+  projectOperationCatalog,
+  savedOperationContext,
+  type ServiceOperation,
+} from './operation-catalog.ts';
 import { DomainError } from './ports.ts';
 import { withEnvironmentRepair } from './environment-repair.ts';
 
@@ -19,8 +25,10 @@ const resourcesOf = (resources?: ResourceSnapshot) =>
 const assignment = (
   roleId: string,
   resource: RuntimeResource,
+  operation?: ServiceOperation,
 ): EffectivePolicy['routing']['assignments'][number] => ({
   roleId,
+  ...(operation ? { operationId: operation.id, operationLabel: operation.label } : {}),
   runtimeId: resource.id,
   ...(resource.providerId ? { providerId: resource.providerId } : {}),
   ...(resource.model ? { model: resource.model } : {}),
@@ -33,54 +41,70 @@ const assignment = (
 function effectivePolicy(input: PolicyInput, run?: Run): EffectivePolicy {
   const { policy, profile, resources } = input;
   const assignments = new Map<string, EffectivePolicy['routing']['assignments'][number]>();
+  const boundProfile =
+    profile && run?.delivery?.config ? { ...profile, delivery: run.delivery.config } : profile;
+  const operations = projectOperationCatalog(boundProfile, policy.scope.mode === 'strict');
+  const key = (operationId: string, roleId: string) => JSON.stringify([operationId, roleId]);
+  const add = (operationId: string, roleId: string, resource: RuntimeResource) => {
+    const operation = savedOperationContext(run, operationId) || operations.get(operationId);
+    assignments.set(key(operationId, roleId), assignment(roleId, resource, operation));
+  };
   if (resources) {
-    assignments.set('coordinator', assignment('coordinator', resources.coordinator));
-    assignments.set('worker', assignment('worker', resources.worker));
-    assignments.set('reviewer', assignment('reviewer', resources.reviewer));
+    add(operationIds.coordination, 'coordinator', resources.coordinator);
+    add(operationIds.implementation, 'worker', resources.worker);
+    add(operationIds.review, 'reviewer', resources.reviewer);
   }
   const unavailable: NonNullable<EffectivePolicy['routing']['unavailable']> = [];
   if (resources && !run) {
-    for (const role of (input.roles || []).filter((role) =>
-      ['coordinator', 'reviewer'].includes(role.id),
-    )) {
+    for (const operation of operations.list()) {
+      if (operation.roles.kind !== 'fixed') continue;
+      const roleId = operation.roles.roleId;
+      const role = input.roles?.find((role) => role.id === roleId);
+      if (!role) continue;
       try {
-        const decision = resolveRoleResource(
-          resources,
-          role,
-          roleResourceContext(role.id, policy.scope.mode === 'strict'),
-        );
-        assignments.set(role.id, assignment(role.id, decision.resource));
+        const decision = resolveRoleResource(resources, role, operation);
+        add(operation.id, role.id, decision.resource);
       } catch (error) {
-        assignments.delete(role.id);
+        assignments.delete(key(operation.id, role.id));
         unavailable.push({
           roleId: role.id,
+          operationId: operation.id,
+          operationLabel: operation.label,
           code: error instanceof DomainError ? error.code : 'POLICY_PROJECTION_UNAVAILABLE',
           message:
             error instanceof DomainError
               ? error.message
-              : 'The service could not resolve this role’s model selection.',
+              : 'The service could not resolve this operation’s model selection.',
         });
       }
     }
   }
   for (const [roleId, decision] of Object.entries(run?.assignmentResources || {}))
-    assignments.set(roleId, assignment(roleId, decision.resource));
-  for (const [roleId, decision] of Object.entries(run?.roleResources || {}))
-    assignments.set(roleId, assignment(roleId, decision.resource));
-  // Actual session decisions take precedence over a profile's proposed defaults.
+    add(operationIds.implementation, roleId, decision.resource);
+  for (const [roleId, operationId] of [
+    ['coordinator', operationIds.coordination],
+    ['reviewer', operationIds.review],
+  ]) {
+    const decision = run?.roleResources?.[roleId];
+    if (decision) add(operationId, roleId, decision.resource);
+  }
+  for (const [operationId, roles] of Object.entries(run?.operationResources || {}))
+    for (const [roleId, decision] of Object.entries(roles))
+      add(operationId, roleId, decision.resource);
   for (const session of [
     run?.coordinatorSession,
     ...(run?.agents || []).map((agent) => agent.session),
   ]) {
     if (!session) continue;
-    if (run?.roleResources?.[session.roleId] || run?.assignmentResources?.[session.roleId])
-      continue;
+    const operationId =
+      session === run?.coordinatorSession ? operationIds.coordination : operationIds.implementation;
+    if (assignments.has(key(operationId, session.roleId))) continue;
     const resource = resourcesOf(resources).find(
       (item) =>
         item.id === session.runtimeId &&
         item.configurationRevision === session.configurationRevision,
     );
-    if (resource) assignments.set(session.roleId, assignment(session.roleId, resource));
+    if (resource) add(operationId, session.roleId, resource);
   }
   const all = [...assignments.values()];
   const observed = run?.managedBudget;

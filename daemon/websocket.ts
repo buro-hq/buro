@@ -1,9 +1,21 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Context, Plugin } from 'cordis';
-import { RequestSchema, type ServerMessage, type Request } from '../protocol/schema.ts';
+import {
+  RequestSchema,
+  ResourceConfigurationChangeSchema,
+  type ServerMessage,
+  type Request,
+} from '../protocol/schema.ts';
+import type { ResourceConfigurationChange } from '../protocol/domain.ts';
 import { DomainError } from '../core/ports.ts';
 import { capabilities } from '../core/defaults.ts';
 import { fingerprint } from './fingerprint.ts';
+
+declare module 'cordis' {
+  interface Events {
+    'service/change'(change: ResourceConfigurationChange): void;
+  }
+}
 
 export type TransportOptions = {
   port: number;
@@ -45,6 +57,12 @@ export const websocketPlugin: Plugin.Object<TransportOptions> = {
       throw e;
     }
     const address = server.address();
+    ctx.on('service/change', (change) => {
+      const parsed = ResourceConfigurationChangeSchema.safeParse(change);
+      if (!parsed.success) return;
+      for (const client of server.clients)
+        send(client, { version: 1, type: 'service.change', change: parsed.data });
+    });
     if (address && typeof address === 'object') options.onListen?.(address.port);
     server.on('connection', (ws) => {
       let unsubscribe = () => {};

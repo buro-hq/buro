@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Accordion, Badge, Button, Group, Paper, Select, Stack, Text } from '@mantine/core';
 import type {
   ResourceCatalog,
@@ -25,6 +25,9 @@ export function ExecutionResources() {
   );
   const [saved, setSaved] = useState(false);
   const [catalogStale, setCatalogStale] = useState(false);
+  useEffect(() => {
+    if (catalog && !loading && !error) setCatalogStale(false);
+  }, [catalog, loading, error]);
   const [setup, setSetup] = useState<{
     catalog: ResourceCatalog;
     connectionId?: string;

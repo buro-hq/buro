@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BackendCapabilitiesSchema } from './backend-capabilities.ts';
+import { BackendCapabilitiesSchema, BackendRequirementsSchema } from './backend-capabilities.ts';
 import type { BackendRequirements } from '../agent/contracts/capabilities.ts';
 export const ResourceIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 function canonicalJSON<T>(value: T): T {
@@ -142,7 +142,23 @@ export type RuntimePurpose =
   | 'research'
   | 'environment'
   | 'delivery';
+/** Captured by the result service before its first role/model dispatch. */
+export const SavedOperationContextSchema = z.strictObject({
+  id: z.string().regex(/^result\.(?:preview|pull-request|deploy\.[a-z][a-z0-9_-]{0,63})$/),
+  label: z.string().min(1),
+  purpose: z.literal('delivery'),
+  requirements: BackendRequirementsSchema.refine(
+    (requirements) =>
+      requirements.structuredTurns === true && requirements.readOnlySessions === true,
+    'Result preparation requires structured read-only inspection.',
+  ),
+  roles: z.strictObject({ kind: z.literal('fixed'), roleId: ResourceIdSchema }),
+  readOnly: z.literal(true),
+});
+export type SavedOperationContext = z.infer<typeof SavedOperationContextSchema>;
 export type RoleResourceChoices = {
+  operationId: string;
+  operationLabel: string;
   /** '*' is the server-authored template for newly created worker roles. */
   roleId: string;
   roleVersion?: number;

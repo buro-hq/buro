@@ -1205,6 +1205,7 @@ test('environment and result preparation keep the accepted local-only run route 
   const prepared = await results.prepare(
     'p',
     run,
+    'result.preview',
     'local_preview',
     { components: [] },
     new AbortController().signal,

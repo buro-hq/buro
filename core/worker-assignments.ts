@@ -1,3 +1,4 @@
+import { operationIds } from './operation-catalog.ts';
 import type { AgentSession, FileChange, Role, Run } from '../protocol/domain.ts';
 import { EnvelopeSchema, envelopeOutputSchema } from '../protocol/execution.ts';
 import { DomainError, type AgentRuntime } from './ports.ts';
@@ -159,6 +160,7 @@ export async function runWorkerAssignments(options: {
         projectId,
         runId: run.id,
         purpose: 'implementation',
+        operationId: operationIds.implementation,
         workspace: workspace.path,
         assignment: {
           sessionId: session.id,

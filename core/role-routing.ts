@@ -227,32 +227,3 @@ export function validateRoleResource(
     );
   return decision;
 }
-
-/** Built-in host entry points, never inferred from a role's descriptive kind. */
-export function roleResourceContext(
-  roleId: string,
-  strict: boolean,
-): Omit<RoleResourceContext, 'proposal'> {
-  if (roleId === 'reviewer')
-    return {
-      purpose: 'review',
-      requirements: { structuredTurns: true, readOnlySessions: true, immutableReview: true },
-    };
-  if (['local_preview', 'delivery_pr', 'production_delivery'].includes(roleId))
-    return { purpose: 'delivery', requirements: { structuredTurns: true, readOnlySessions: true } };
-  if (roleId === 'coordinator')
-    return {
-      purpose: 'coordination',
-      requirements: {
-        structuredTurns: true,
-        ...(strict ? { strictPlannedWrites: true as const } : {}),
-      },
-    };
-  return {
-    purpose: 'implementation',
-    requirements: {
-      structuredTurns: true,
-      ...(strict ? { strictPlannedWrites: true as const } : {}),
-    },
-  };
-}

@@ -17,6 +17,7 @@ import { parseSnapshot } from '../../protocol/schema.ts';
 type DataContext = {
   snapshot: Snapshot | null;
   service: ServiceInfo | null;
+  resourceGeneration: number;
   client: ProjectClient | null;
   mode: 'service' | 'replay';
   connection: Connection;
@@ -68,6 +69,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [error, setError] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [service, setService] = useState<ServiceInfo | null>(null);
+  const [resourceGeneration, setResourceGeneration] = useState(0);
   const selected = useRef(
     new URLSearchParams(location.search).get('project') ||
       localStorage.getItem('project-panel-last-project') ||
@@ -119,6 +121,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         current.current?.close();
         current.current = candidate;
         setClient(candidate);
+        setResourceGeneration(candidate.getResourceGeneration?.() || 0);
         setSnapshot(value);
         const discovered = candidate instanceof SocketProjectClient ? candidate.service : null;
         setService(discovered);
@@ -132,7 +135,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
         unsubscribers.current = [
           candidate.onChange(setSnapshot),
-          candidate.onConnection(setConnection),
+          candidate.onConnection((state) => {
+            setConnection(state);
+            setResourceGeneration(candidate!.getResourceGeneration?.() || 0);
+          }),
+          ...(candidate.onServiceInvalidation
+            ? [
+                candidate.onServiceInvalidation(() =>
+                  setResourceGeneration(candidate!.getResourceGeneration?.() || 0),
+                ),
+              ]
+            : []),
           ...(candidate instanceof SocketProjectClient
             ? [
                 candidate.onServiceChange((info) => {
@@ -200,6 +213,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       value={{
         snapshot,
         service,
+        resourceGeneration,
         client,
         mode,
         connection,

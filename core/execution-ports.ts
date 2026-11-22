@@ -1,5 +1,11 @@
 import { PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
 import { roleIdPattern } from '../protocol/domain.ts';
+/** Shared admission policy for roles that the workflow may allocate as workers. */
+export const isWorkerRoleId = (roleId: string) =>
+  roleIdPattern.test(roleId) &&
+  !['reviewer', 'coordinator', 'local_preview', 'delivery_pr', 'production_delivery'].includes(
+    roleId,
+  );
 import type { TeamPlan } from '../protocol/execution.ts';
 import type { WorkScope } from '../protocol/work-scope.ts';
 import type { WorkspaceRevision } from './workspace-revision.ts';
@@ -136,11 +142,7 @@ export function resolveTeam(
       throw Error(
         `Invalid roleId ${JSON.stringify(worker.roleId)}: provide a nonempty ID, for example react_developer or react-developer. Use lowercase Latin letters, digits, underscores and hyphens, up to 64 characters, starting with a letter.`,
       );
-    if (
-      ['reviewer', 'coordinator', 'local_preview', 'delivery_pr', 'production_delivery'].includes(
-        worker.roleId,
-      )
-    )
+    if (!isWorkerRoleId(worker.roleId))
       throw Error(`roleId ${worker.roleId} is reserved by the service. Choose a worker ID.`);
     if (ids.has(worker.roleId))
       throw Error(`Duplicate roleId ${worker.roleId}. Every worker needs a separate ID.`);

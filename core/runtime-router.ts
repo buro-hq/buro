@@ -1,3 +1,10 @@
+import {
+  operationIds,
+  serviceOperationContext,
+  savedOperationContext,
+  type ServiceOperation,
+} from './operation-catalog.ts';
+import type { Run, Snapshot } from '../protocol/domain.ts';
 import type { RuntimeResource, AssignmentResource } from '../protocol/resources.ts';
 import { validateRoleResource } from './role-routing.ts';
 import { resourceForPurpose } from '../protocol/resources.ts';
@@ -30,6 +37,7 @@ export type RuntimeRoute = {
   readOnly?: boolean;
   purpose?: RuntimePurpose;
   roleId?: string;
+  operationId?: string;
   roleDecision?: AssignmentResource;
   verificationViewId?: string;
   externalThreadId?: string;
@@ -78,6 +86,67 @@ export class RuntimeRouter implements AgentRuntime {
     if (route.externalThreadId)
       this.native.set(this.key(route.resource.id, route.externalThreadId), route.id);
   }
+  private operationContext(
+    input: { operationId?: string; purpose?: RuntimePurpose; readOnly?: boolean; roleId?: string },
+    snapshot: Snapshot,
+    owner?: Run,
+  ): ServiceOperation | undefined {
+    const defaultIds: Partial<Record<RuntimePurpose, string>> = {
+      coordination: operationIds.coordination,
+      implementation: operationIds.implementation,
+      review: operationIds.review,
+      research: operationIds.research,
+      environment: operationIds.environment,
+    };
+    const id = input.operationId || (input.purpose ? defaultIds[input.purpose] : undefined);
+    if (!id) {
+      if (input.purpose === 'delivery')
+        throw new DomainError(
+          'OPERATION_REQUIRED',
+          'Result preparation requires its explicit service operation.',
+        );
+      return undefined;
+    }
+    const profile = owner?.executionPolicySnapshot?.profile || snapshot.profile;
+    const boundProfile =
+      profile && owner?.delivery?.config
+        ? { ...profile, delivery: owner.delivery.config }
+        : profile;
+    const scope =
+      owner?.executionPolicySnapshot?.scope ||
+      snapshot.profile?.scope ||
+      snapshot.executionPolicy?.scope;
+    const operation =
+      savedOperationContext(owner, id) ||
+      serviceOperationContext(id, boundProfile, scope?.mode === 'strict');
+    if (operation.purpose === 'delivery' && !input.roleId)
+      throw new DomainError(
+        'INVALID_ASSIGNMENT',
+        'Result preparation requires its explicit saved role identity.',
+      );
+    if (
+      input.purpose !== operation.purpose ||
+      (operation.readOnly && !input.readOnly) ||
+      (input.roleId && operation.roles.kind === 'fixed' && input.roleId !== operation.roles.roleId)
+    )
+      throw new DomainError(
+        'INVALID_ASSIGNMENT',
+        'The requested session does not match its service operation.',
+      );
+    return operation;
+  }
+  private serviceDecision(
+    owner: Run | undefined,
+    operation: ServiceOperation | undefined,
+    roleId: string,
+  ) {
+    if (!owner || !operation) return undefined;
+    const explicit = owner.operationResources?.[operation.id]?.[roleId];
+    if (explicit) return explicit;
+    if (operation.id === operationIds.coordination || operation.id === operationIds.review)
+      return owner.roleResources?.[roleId];
+    return undefined;
+  }
   private adapter(route: RuntimeRoute) {
     if (!route.requirements)
       throw new DomainError(
@@ -110,26 +179,36 @@ export class RuntimeRouter implements AgentRuntime {
       snapshot.executionPolicy?.scope;
     if (!route.readOnly && scope?.mode === 'strict')
       requireBackendCapabilities(runtime.capabilities, { strictPlannedWrites: true });
+    const operation = this.operationContext(route, snapshot, owner);
+    if (
+      operation &&
+      Object.entries(operation.requirements).some(
+        ([key, value]) => value && !route.requirements[key as keyof BackendRequirements],
+      )
+    )
+      throw new DomainError(
+        'INVALID_ASSIGNMENT',
+        'The saved route lost its operation requirements.',
+      );
     const serviceRoleId =
-      route.roleId ||
-      (route.purpose === 'coordination'
-        ? 'coordinator'
-        : route.purpose === 'review'
-          ? 'reviewer'
-          : undefined);
-    if (serviceRoleId && (route.roleDecision || owner?.roleResources?.[serviceRoleId])) {
-      const decision = owner?.roleResources?.[serviceRoleId];
+      route.roleId || (operation?.roles.kind === 'fixed' ? operation.roles.roleId : undefined);
+    const decision = serviceRoleId
+      ? this.serviceDecision(owner, operation, serviceRoleId)
+      : undefined;
+    if (
+      serviceRoleId &&
+      (route.roleDecision || decision || (owner && operation?.roles.kind === 'fixed'))
+    ) {
       const role = owner?.roleSnapshots?.find(
         (item) => item.id === serviceRoleId && item.version === decision?.roleVersion,
       );
-      if (!decision || !route.roleDecision || !role || !owner?.resources || !route.purpose)
+      if (!decision || !route.roleDecision || !role || !owner?.resources || !operation)
         throw new DomainError(
           'INVALID_ASSIGNMENT',
-          'The saved service role resource grant is unavailable.',
+          'The saved service operation resource grant is unavailable.',
         );
-      const context = { purpose: route.purpose, requirements: route.requirements };
-      const saved = validateRoleResource(owner.resources, role, route.roleDecision, context);
-      const current = validateRoleResource(owner.resources, role, decision, context);
+      const saved = validateRoleResource(owner.resources, role, route.roleDecision, operation);
+      const current = validateRoleResource(owner.resources, role, decision, operation);
       const identity = (value: AssignmentResource) =>
         JSON.stringify([value.resource, value.roleVersion, value.preference, value.source]);
       if (
@@ -138,7 +217,7 @@ export class RuntimeRouter implements AgentRuntime {
       )
         throw new DomainError(
           'INVALID_ASSIGNMENT',
-          'The service role resource grant changed after this session started.',
+          'The service operation grant changed after this session started.',
         );
     }
     if (route.requirements.immutableReview) {
@@ -245,11 +324,6 @@ export class RuntimeRouter implements AgentRuntime {
         'BACKEND_CAPABILITY_UNAVAILABLE',
         'Review requires a read-only session.',
       );
-    if (input.purpose === 'delivery' && !input.roleId)
-      throw new DomainError(
-        'INVALID_ASSIGNMENT',
-        'Result preparation requires its saved role identity.',
-      );
     if (input.assignment && input.roleId && input.roleId !== input.assignment.roleId)
       throw new DomainError(
         'INVALID_ASSIGNMENT',
@@ -270,37 +344,27 @@ export class RuntimeRouter implements AgentRuntime {
       run?.executionPolicySnapshot?.scope ||
       snapshot.profile?.scope ||
       snapshot.executionPolicy?.scope;
+    const operation = this.operationContext(input, snapshot, run);
     const serviceRoleId = !input.assignment
-      ? input.roleId ||
-        (input.purpose === 'coordination'
-          ? 'coordinator'
-          : input.purpose === 'review'
-            ? 'reviewer'
-            : undefined)
+      ? input.roleId || (operation?.roles.kind === 'fixed' ? operation.roles.roleId : undefined)
       : undefined;
     let serviceDecision: AssignmentResource | undefined;
-    if (serviceRoleId && (input.roleId || run?.roleResources)) {
-      const decision = run?.roleResources?.[serviceRoleId];
+    if (
+      serviceRoleId &&
+      (input.roleId ||
+        this.serviceDecision(run, operation, serviceRoleId) ||
+        (run && operation?.roles.kind === 'fixed'))
+    ) {
+      const decision = this.serviceDecision(run, operation, serviceRoleId);
       const role = run?.roleSnapshots?.find(
         (item) => item.id === serviceRoleId && item.version === decision?.roleVersion,
       );
-      if (!run?.resources || !decision || !role || !input.purpose)
+      if (!run?.resources || !decision || !role || !operation)
         throw new DomainError(
           'INVALID_ASSIGNMENT',
-          'Service role dispatch requires its frozen role and resource decision.',
+          'Service operation dispatch requires its frozen role and resource decision.',
         );
-      const requirements: BackendRequirements = {
-        structuredTurns: true,
-        ...(input.readOnly ? { readOnlySessions: true } : {}),
-        ...(input.purpose === 'review' ? { readOnlySessions: true, immutableReview: true } : {}),
-        ...(policyScope?.mode === 'strict' && (!input.readOnly || serviceRoleId === 'coordinator')
-          ? { strictPlannedWrites: true }
-          : {}),
-      };
-      serviceDecision = validateRoleResource(run.resources, role, decision, {
-        purpose: input.purpose,
-        requirements,
-      });
+      serviceDecision = validateRoleResource(run.resources, role, decision, operation);
       resource = serviceDecision.resource;
     }
     if (
@@ -388,13 +452,7 @@ export class RuntimeRouter implements AgentRuntime {
       workspace: input.workspace || snapshot.project.root,
       resource: structuredClone(resource),
       requirements: {
-        ...(serviceDecision ? { structuredTurns: true as const } : {}),
-        ...(serviceDecision && input.purpose === 'review'
-          ? { immutableReview: true as const, readOnlySessions: true as const }
-          : {}),
-        ...(serviceDecision && serviceRoleId === 'coordinator' && policyScope?.mode === 'strict'
-          ? { strictPlannedWrites: true as const }
-          : {}),
+        ...operation?.requirements,
         ...(input.readOnly ? { readOnlySessions: true } : {}),
         ...(immutableReview ? { immutableReview: true } : {}),
         ...(!input.readOnly &&
@@ -408,6 +466,7 @@ export class RuntimeRouter implements AgentRuntime {
       },
       ...(input.readOnly !== undefined ? { readOnly: input.readOnly } : {}),
       ...(input.purpose ? { purpose: input.purpose } : {}),
+      ...(operation ? { operationId: operation.id } : {}),
       ...(serviceDecision
         ? { roleId: serviceRoleId, roleDecision: structuredClone(serviceDecision) }
         : {}),
@@ -430,6 +489,7 @@ export class RuntimeRouter implements AgentRuntime {
       readOnly: saved.readOnly,
       purpose: saved.purpose,
       roleId: saved.roleId,
+      operationId: saved.operationId,
     });
     if (this.closed) {
       await adapter.release?.(resumed.threadId);
@@ -451,7 +511,8 @@ export class RuntimeRouter implements AgentRuntime {
       saved.runId !== input.runId ||
       saved.workspace !== input.workspace ||
       saved.ownerRunId !== input.ownerRunId ||
-      (input.roleId !== undefined && saved.roleId !== input.roleId)
+      (input.roleId !== undefined && saved.roleId !== input.roleId) ||
+      (input.operationId !== undefined && saved.operationId !== input.operationId)
     )
       throw new DomainError(
         'SESSION_MISMATCH',

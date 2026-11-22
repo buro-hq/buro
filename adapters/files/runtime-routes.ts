@@ -15,6 +15,7 @@ const schema = z.object({
   requirements: BackendRequirementsSchema,
   readOnly: z.boolean().optional(),
   roleId: z.string().optional(),
+  operationId: z.string().optional(),
   roleDecision: AssignmentResourceSchema.optional(),
   purpose: z
     .enum(['coordination', 'implementation', 'review', 'research', 'environment', 'delivery'])

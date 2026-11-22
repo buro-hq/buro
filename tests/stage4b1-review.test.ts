@@ -251,7 +251,8 @@ test('registered third-party factories with familiar IDs gain no backend privile
   const started = await runtime.start({
     projectId: 'p',
     runId: 'research-fixture',
-    purpose: 'research',
+    purpose: 'implementation',
+    operationId: 'goal.implementation',
     workspace: f.directory,
     instructions: 'Explicit supported operation.',
   });

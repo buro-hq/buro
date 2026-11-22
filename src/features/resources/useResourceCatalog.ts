@@ -3,7 +3,7 @@ import type { ResourceCatalog } from '../../../protocol/resources.ts';
 import { useProject } from '../../data/provider';
 
 export function useResourceCatalog(projectId?: string) {
-  const { client, snapshot, service, connection } = useProject();
+  const { client, snapshot, service, connection, resourceGeneration } = useProject();
   const supported =
     !!client &&
     connection === 'connected' &&
@@ -26,24 +26,34 @@ export function useResourceCatalog(projectId?: string) {
   const refresh = useCallback(async () => {
     if (!supported || !client) return;
     const version = ++generation.current;
+    const sourceGeneration = client.getResourceGeneration?.() || 0;
     setLoading(true);
     try {
       const result = await client.command<ResourceCatalog>({
         method: 'resources.list',
         params: projectId ? { projectId } : {},
       });
-      if (version === generation.current) {
+      if (
+        version === generation.current &&
+        sourceGeneration === (client.getResourceGeneration?.() || 0)
+      ) {
         setCatalog(result);
         setError('');
       }
-      return result;
+      return version === generation.current &&
+        sourceGeneration === (client.getResourceGeneration?.() || 0)
+        ? result
+        : undefined;
     } catch (error) {
-      if (version === generation.current)
+      if (
+        version === generation.current &&
+        sourceGeneration === (client.getResourceGeneration?.() || 0)
+      )
         setError(error instanceof Error ? error.message : String(error));
     } finally {
       if (version === generation.current) setLoading(false);
     }
-  }, [client, supported, projectId, roleRevision, profileRevision]);
+  }, [client, supported, projectId, roleRevision, profileRevision, resourceGeneration]);
   useEffect(() => {
     setCatalog(null);
     setError('');

@@ -1154,5 +1154,14 @@
   "Configure an installed model provider or execution backend.": "Настрой установленный провайдер моделей или исполнитель.",
   "Model listing is unavailable for this provider. Configure a backend directly.": "Провайдер не поддерживает список моделей. Настрой исполнителя вручную.",
   "No models were returned by this provider.": "Провайдер не вернул моделей.",
-  "The service validates configuration and data locality before saving.": "Перед сохранением сервис проверит настройки и расположение данных."
+  "The service validates configuration and data locality before saving.": "Перед сохранением сервис проверит настройки и расположение данных.",
+  "Used for": "Используется для",
+  "This preference applies to every use of the role. Availability depends on the selected operation.": "Настройка действует во всех задачах роли. Доступность модели зависит от операции.",
+  "Plan and coordinate": "Планирование и координация",
+  "Implement changes": "Изменение кода",
+  "Review accepted changes": "Независимое ревью",
+  "Inspect environment setup": "Исследование окружения",
+  "Prepare local preview": "Подготовка локального запуска",
+  "Prepare pull request": "Подготовка пул-реквеста",
+  "Prepare deployment: {p0}": "Подготовка деплоя: {p0}"
 }

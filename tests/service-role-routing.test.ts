@@ -1,3 +1,4 @@
+import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ProjectRegistry, RegisteredRuntime, RuntimeEvent } from '../core/ports.ts';
@@ -5,7 +6,7 @@ import type { Role, Run } from '../protocol/domain.ts';
 import type { ResourceSnapshot, RuntimeResource } from '../protocol/resources.ts';
 import { RuntimeCatalog } from '../core/runtimes.ts';
 import { RuntimeRouter, type RuntimeRoute } from '../core/runtime-router.ts';
-import { resolveRoleResource, roleResourceContext } from '../core/role-routing.ts';
+import { resolveRoleResource } from '../core/role-routing.ts';
 import { ResultService } from '../core/results.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 
@@ -109,7 +110,9 @@ function fixture(t: any) {
       async start(input) {
         if (input.roleId)
           assert.ok(
-            state.runs[0].roleResources?.[input.roleId],
+            input.operationId && input.purpose === 'delivery'
+              ? state.runs[0].operationResources?.[input.operationId]?.[input.roleId]
+              : state.runs[0].roleResources?.[input.roleId],
             'Role choice must persist before dispatch',
           );
         counter.starts.push(structuredClone(input));
@@ -176,12 +179,12 @@ test('service coordinator and fresh reviewer use frozen role choices rather than
     coordinator: resolveRoleResource(
       f.resources,
       run.roleSnapshots[0],
-      roleResourceContext('coordinator', false),
+      serviceOperationContext(operationIds.coordination, undefined, false),
     ),
     reviewer: resolveRoleResource(
       f.resources,
       run.roleSnapshots[1],
-      roleResourceContext('reviewer', false),
+      serviceOperationContext(operationIds.review, undefined, false),
     ),
   };
   const coordinator = await f.router.start({
@@ -231,7 +234,7 @@ test('a changed frozen role grant blocks new dispatch but descriptive reason cha
     coordinator: resolveRoleResource(
       f.resources,
       selected,
-      roleResourceContext('coordinator', false),
+      serviceOperationContext(operationIds.coordination, undefined, false),
     ),
   };
   const session = await f.router.start({
@@ -252,7 +255,7 @@ test('a changed frozen role grant blocks new dispatch but descriptive reason cha
   run.roleResources.coordinator = resolveRoleResource(
     f.resources,
     updated,
-    roleResourceContext('coordinator', false),
+    serviceOperationContext(operationIds.coordination, undefined, false),
   );
   await assert.rejects(
     f.router.turn(session.threadId, 'Continue', {
@@ -270,27 +273,45 @@ test('a changed frozen role grant blocks new dispatch but descriptive reason cha
 test('operational preparation persists its actual role and choice before start and reports selected metadata', async (t) => {
   const f = fixture(t);
   const original = structuredClone(f.resources);
-  await f.results.prepare('p', f.run(), 'delivery_pr', {}, new AbortController().signal);
+  await f.results.prepare(
+    'p',
+    f.run(),
+    operationIds.pullRequest,
+    'delivery_pr',
+    {},
+    new AbortController().signal,
+  );
   assert.equal(f.calls.get('second')!.starts.length, 1);
   assert.equal(f.calls.get('first')!.starts.length, 0);
   assert.equal(f.calls.get('second')!.starts[0].roleId, 'delivery_pr');
   const saved = f.run();
-  assert.equal(saved.roleResources?.delivery_pr.resource.id, 'second');
+  assert.equal(
+    saved.operationResources?.[operationIds.pullRequest]?.delivery_pr.resource.id,
+    'second',
+  );
   assert.equal(saved.roleSnapshots?.find((item) => item.id === 'delivery_pr')?.version, 1);
   assert.equal(saved.resultAgents?.[0].session?.runtimeId, 'second');
   assert.equal(saved.resultAgents?.[0].session?.selection?.source, 'fixed');
   assert.equal(
-    saved.effectivePolicy?.routing.assignments.find((item) => item.roleId === 'delivery_pr')
-      ?.runtimeId,
+    saved.effectivePolicy?.routing.assignments.find(
+      (item) => item.roleId === 'delivery_pr' && item.operationId === operationIds.pullRequest,
+    )?.runtimeId,
     'second',
   );
   assert.deepEqual(saved.resources, original);
   f.state.roles = f.state.roles.map((item) =>
     item.id === 'delivery_pr' ? role('delivery_pr', 'first', 2) : item,
   );
-  await f.results.prepare('p', f.run(), 'delivery_pr', {}, new AbortController().signal);
+  await f.results.prepare(
+    'p',
+    f.run(),
+    operationIds.pullRequest,
+    'delivery_pr',
+    {},
+    new AbortController().signal,
+  );
   assert.equal(f.calls.get('second')!.starts.length, 2);
-  assert.equal(f.run().roleResources!.delivery_pr.roleVersion, 1);
+  assert.equal(f.run().operationResources![operationIds.pullRequest].delivery_pr.roleVersion, 1);
 });
 
 test('an unavailable fixed operational choice never starts the profile default or writes a partial decision', async (t) => {
@@ -299,11 +320,18 @@ test('an unavailable fixed operational choice never starts the profile default o
     item.id === 'local_preview' ? role('local_preview', 'outside') : item,
   );
   await assert.rejects(
-    f.results.prepare('p', f.run(), 'local_preview', {}, new AbortController().signal),
+    f.results.prepare(
+      'p',
+      f.run(),
+      operationIds.preview,
+      'local_preview',
+      {},
+      new AbortController().signal,
+    ),
     { code: 'FIXED_RUNTIME_UNAVAILABLE' },
   );
   assert.equal(f.calls.get('first')!.starts.length + f.calls.get('second')!.starts.length, 0);
-  assert.equal(f.run().roleResources?.local_preview, undefined);
+  assert.equal(f.run().operationResources?.[operationIds.preview]?.local_preview, undefined);
   await assert.rejects(
     f.router.start({
       projectId: 'p',
@@ -311,6 +339,7 @@ test('an unavailable fixed operational choice never starts the profile default o
       ownerRunId: 'R',
       workspace: '/writer',
       purpose: 'delivery',
+      operationId: operationIds.preview,
       readOnly: true,
       instructions: 'Missing role',
     }),
@@ -334,7 +363,14 @@ test('a failed result session metadata write releases the already started backen
     };
   };
   await assert.rejects(
-    f.results.prepare('p', f.run(), 'delivery_pr', {}, new AbortController().signal),
+    f.results.prepare(
+      'p',
+      f.run(),
+      operationIds.pullRequest,
+      'delivery_pr',
+      {},
+      new AbortController().signal,
+    ),
     /Metadata storage failed/,
   );
   assert.equal(f.calls.get('second')!.starts.length, 1);

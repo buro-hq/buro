@@ -1,5 +1,6 @@
 import { roleLabels } from '../../ui/role-labels';
 import { t } from '../../i18n/index.ts';
+import { operationLabel } from '../../ui/operation-label.ts';
 import { roleIdPattern } from '../../../protocol/domain.ts';
 import {
   Badge,
@@ -168,15 +169,29 @@ function RoleForm({
       ? initial.runtimePreference.runtimeId
       : '',
   );
+  const [operationId, setOperationId] = useState('');
+  const exactOperations =
+    resources.catalog?.roleChoices?.filter((item) => item.roleId === id) || [];
+  const roleOperations = exactOperations.length
+    ? exactOperations
+    : resources.catalog?.roleChoices?.filter((item) => item.roleId === '*') || [];
   const roleChoices =
-    resources.catalog?.roleChoices?.find((item) => item.roleId === id) ||
-    resources.catalog?.roleChoices?.find((item) => item.roleId === '*');
+    roleOperations.find((item) => item.operationId === operationId) || roleOperations[0];
   const modelOptions = (roleChoices?.choices || []).map(({ resource: runtime, eligible }) => ({
     value: runtime.id,
     label: `${runtime.model || runtime.id} · ${runtime.id}${eligible ? '' : ' · ' + t('Unavailable')}`,
     disabled: !eligible,
   }));
   const selectedChoice = roleChoices?.choices.find((item) => item.resource.id === runtimeId);
+  const eligibleForAnyOperation = roleOperations.some((operation) =>
+    operation.choices.some((choice) => choice.resource.id === runtimeId && choice.eligible),
+  );
+  const otherUnavailable = roleOperations
+    .filter((operation) => operation !== roleChoices)
+    .flatMap((operation) => {
+      const choice = operation.choices.find((item) => item.resource.id === runtimeId);
+      return choice && !choice.eligible ? [{ operation, reason: choice.reason }] : [];
+    });
   if (runtimeId && !modelOptions.some((item) => item.value === runtimeId))
     modelOptions.push({
       value: runtimeId,
@@ -261,6 +276,25 @@ function RoleForm({
           {t('Specialist model')}
         </Text>
         <>
+          {roleOperations.length > 1 ? (
+            <Select
+              label={t('Used for')}
+              value={roleChoices?.operationId || null}
+              data={roleOperations.map((operation) => ({
+                value: operation.operationId,
+                label: operationLabel(operation.operationLabel),
+              }))}
+              onChange={(value) => setOperationId(value || '')}
+              allowDeselect={false}
+              disabled={resources.loading}
+            />
+          ) : (
+            roleChoices && (
+              <Text size="xs" c="dimmed">
+                {operationLabel(roleChoices.operationLabel)}
+              </Text>
+            )
+          )}
           <SegmentedControl
             aria-label={t('Model selection')}
             size="xs"
@@ -302,7 +336,20 @@ function RoleForm({
           )}
           {preferenceMode !== 'auto' && selectedChoice && !selectedChoice.eligible && (
             <Text size="xs" c="orange">
-              {t(selectedChoice.reason)}
+              {operationLabel(roleChoices!.operationLabel)}: {t(selectedChoice.reason)}
+            </Text>
+          )}
+          {preferenceMode !== 'auto' &&
+            otherUnavailable.map(({ operation, reason }) => (
+              <Text key={operation.operationId} size="xs" c="orange">
+                {operationLabel(operation.operationLabel)}: {t(reason)}
+              </Text>
+            ))}
+          {roleOperations.length > 1 && (
+            <Text size="xs" c="dimmed">
+              {t(
+                'This preference applies to every use of the role. Availability depends on the selected operation.',
+              )}
             </Text>
           )}
           {resources.supported && (!resources.catalog || resources.error) && (
@@ -344,7 +391,7 @@ function RoleForm({
             !description.trim() ||
             !instructions.trim() ||
             (preferenceMode !== 'auto' &&
-              (!runtimeId || !resources.catalog || resources.loading || !selectedChoice?.eligible))
+              (!runtimeId || !resources.catalog || resources.loading || !eligibleForAnyOperation))
           }
         >
           {t('Save')} {initial ? t('version {p0}', { p0: initial.version + 1 }) : t('role')}

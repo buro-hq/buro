@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { RegisteredRuntime, RuntimeSelection } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
 import { ResourceSelection } from '../../core/resource-selection.ts';
-import { roleResourceContext, roleResourceEligibility } from '../../core/role-routing.ts';
+import { projectRoleResourceChoices } from '../../core/operation-catalog.ts';
 import { freezeBackendCapabilities } from '../../core/backend-capabilities.ts';
 import {
   CapabilityProbeService,
@@ -21,6 +21,7 @@ import type {
   RuntimeResource,
   RoleResourceChoices,
 } from '../../protocol/resources.ts';
+import type { ResourceConfigurationChange } from '../../protocol/domain.ts';
 import { RequestGate } from '../models/http.ts';
 import {
   FileResourceConfiguration,
@@ -36,6 +37,7 @@ export type RuntimeResourcesOptions = RuntimeHostOptions & {
   contributions?: ResourceContributionCatalog;
   /** Hosts may install only their own factories, without first-party backend requirements. */
   builtins?: boolean;
+  onConfigurationChange?: (change: ResourceConfigurationChange) => void;
 };
 const canonical = (value: unknown): unknown =>
   Array.isArray(value)
@@ -295,33 +297,23 @@ export async function createRuntimeResources(options: RuntimeResourcesOptions) {
     };
     const projectRoleChoices = (projectId: string): RoleResourceChoices[] => {
       const snapshot = options.projects.get(projectId).snapshot();
-      const selected = activeSelection.forProject(projectId);
-      const strict = snapshot.profile?.scope?.mode === 'strict';
-      return [
-        ...(snapshot.roles || []).map((role) => ({ id: role.id, version: role.version })),
-        ...['coordinator', 'reviewer', 'local_preview', 'delivery_pr', 'production_delivery']
-          .filter((id) => !(snapshot.roles || []).some((role) => role.id === id))
-          .map((id) => ({ id, version: undefined })),
-        { id: '*', version: undefined },
-      ].map((role) => {
-        const context = roleResourceContext(role.id, strict);
-        return {
-          roleId: role.id,
-          ...(role.version !== undefined ? { roleVersion: role.version } : {}),
-          purpose: context.purpose,
-          requirements: context.requirements || {},
-          choices: roleResourceEligibility(selected, context.requirements, context.purpose).map(
-            (choice) =>
-              pendingRuntime(choice.resource.id)
-                ? {
-                    ...choice,
-                    eligible: false,
-                    reason: 'Restart the service to activate this runtime configuration.',
-                  }
-                : choice,
-          ),
-        };
-      });
+      return projectRoleResourceChoices({
+        profile: snapshot.profile,
+        roles: snapshot.roles || [],
+        resources: activeSelection.forProject(projectId),
+        strict: snapshot.profile?.scope?.mode === 'strict',
+      }).map((entry) => ({
+        ...entry,
+        choices: entry.choices.map((choice) =>
+          pendingRuntime(choice.resource.id)
+            ? {
+                ...choice,
+                eligible: false,
+                reason: 'Restart the service to activate this runtime configuration.',
+              }
+            : choice,
+        ),
+      }));
     };
     const list = async (projectId?: string) => ({
       defaultProfile: configuration.snapshot().defaultProfile,
@@ -448,8 +440,25 @@ export async function createRuntimeResources(options: RuntimeResourcesOptions) {
     // Serialize public mutations so lifecycle guards observe all earlier acknowledged writes,
     // including before an idempotent selection receipt is replayed. File persistence stays authoritative.
     let mutationTail: Promise<unknown> = Promise.resolve();
-    const mutate = <T>(action: () => Promise<T>) => {
-      const next = mutationTail.then(action);
+    const mutate = <T>(
+      action: () => Promise<T>,
+      appliesTo: ResourceConfigurationChange['appliesTo'],
+    ) => {
+      const next = mutationTail.then(async () => {
+        const before = resourceConfigurationRevision(configuration.snapshot());
+        const result = await action();
+        const revision = resourceConfigurationRevision(configuration.snapshot());
+        if (revision !== before) {
+          try {
+            void Promise.resolve(
+              options.onConfigurationChange?.({ topic: 'resources', revision, appliesTo }),
+            ).catch(() => {});
+          } catch {
+            // Notification failures never invalidate an already persisted command receipt.
+          }
+        }
+        return result;
+      });
       mutationTail = next.catch(() => {});
       return next;
     };
@@ -460,19 +469,22 @@ export async function createRuntimeResources(options: RuntimeResourcesOptions) {
     ) => {
       const definition = structuredClone(connection),
         { id, fingerprint } = meta;
-      return mutate(() => configuration.save(id, fingerprint, definition, expectedRevision));
+      return mutate(
+        () => configuration.save(id, fingerprint, definition, expectedRevision),
+        'service-restart',
+      );
     };
     const saveSetup = (input: ResourceSetupInput, meta: { id: string; fingerprint: string }) => {
       const setup = structuredClone(input),
         { id, fingerprint } = meta;
-      return mutate(() => configuration.saveSetup(id, fingerprint, setup));
+      return mutate(() => configuration.saveSetup(id, fingerprint, setup), 'service-restart');
     };
     const useProfile = (profileId: string, meta: { id: string; fingerprint: string }) => {
       const { id, fingerprint } = meta;
       return mutate(() => {
         assertActiveProfile(profileId);
         return configuration.use(id, fingerprint, profileId);
-      });
+      }, 'new-runs');
     };
     return {
       configuration,

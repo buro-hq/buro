@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { VerificationViewSchema, VerificationEvidenceSchema } from './verification.ts';
 import { ManagedRunBudgetSummarySchema, ManagedBudgetErrorCodeSchema } from './run-budget.ts';
-import { roleIdPattern, type DomainEvent, type Snapshot, type ServiceInfo } from './domain.ts';
+import {
+  roleIdPattern,
+  type DomainEvent,
+  type Snapshot,
+  type ServiceInfo,
+  type ResourceConfigurationChange,
+} from './domain.ts';
 import { ConnectionInputSchema, ProjectProfileSchema } from './projects.ts';
 import { DeliverySchema, PreviewSchema, ResearchSchema, GoalOutcomeSchema } from './operations.ts';
 import { ContextMaterialSchema } from './context.ts';
@@ -24,6 +30,7 @@ import {
   AssignmentSelectionSchema,
   ResourceConnectionSchema,
   ResourceSetupInputSchema,
+  SavedOperationContextSchema,
 } from './resources.ts';
 
 const id = z
@@ -242,8 +249,15 @@ export type Response =
     };
 export type ServerMessage =
   | Response
+  | { version: 1; type: 'service.change'; change: ResourceConfigurationChange }
   | { version: 1; type: 'event'; event: DomainEvent }
   | { version: 1; type: 'hello'; capabilities: string[] };
+
+export const ResourceConfigurationChangeSchema = z.strictObject({
+  topic: z.literal('resources'),
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
+  appliesTo: z.enum(['new-runs', 'service-restart']),
+});
 
 const role = z.object({
   id: z.string(),
@@ -331,6 +345,16 @@ const run = z
     resources: ResourceSnapshotSchema.optional(),
     assignmentResources: z.record(z.string(), AssignmentResourceSchema).optional(),
     roleResources: z.record(z.string(), AssignmentResourceSchema).optional(),
+    operationContexts: z
+      .record(z.string(), SavedOperationContextSchema)
+      .refine(
+        (contexts) => Object.entries(contexts).every(([id, context]) => id === context.id),
+        'Operation context keys must match their captured identity.',
+      )
+      .optional(),
+    operationResources: z
+      .record(z.string(), z.record(z.string(), AssignmentResourceSchema))
+      .optional(),
     delegation: z.literal('buro').optional(),
     coordinatorSession: agentSession.optional(),
     planningSession: agentSession.optional(),

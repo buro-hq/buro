@@ -20,6 +20,9 @@ import type { ResourceProfile, ResourceSnapshot, RuntimeResource } from '../prot
 import type { VerificationView } from '../protocol/verification.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import { FileRuntimeRoutes } from '../adapters/files/runtime-routes.ts';
+import { operationIds, serviceOperationContext } from '../core/operation-catalog.ts';
+import { resolveRoleResource } from '../core/role-routing.ts';
+import type { Role } from '../protocol/domain.ts';
 
 class MemoryRoutes implements RuntimeRouteStore {
   readonly saved = new Map<string, RuntimeRoute>();
@@ -562,6 +565,17 @@ test('undeclared native children cannot move activity to another run through the
 test('closing a review view does not block idempotent cleanup or replay released child events', async (t) => {
   const f = fixture(t, true),
     router = f.create();
+  const resources = f.selection.forProject('p');
+  const reviewer: Role = {
+    id: 'reviewer',
+    version: 1,
+    title: 'Reviewer',
+    description: 'Independently review the accepted source snapshot.',
+    instructions: 'Review without editing files.',
+    kind: 'general',
+    createdAt: '2026-11-22T00:00:00Z',
+    updatedAt: '2026-11-22T00:00:00Z',
+  };
   const view: VerificationView = {
     version: 1,
     id: 'issued',
@@ -580,6 +594,15 @@ test('closing a review view does not block idempotent cleanup or replay released
     workspace: view.sourceWorkspace,
     baseCommit: view.base,
     verificationView: view,
+    resources,
+    roleSnapshots: [reviewer],
+    roleResources: {
+      reviewer: resolveRoleResource(
+        resources,
+        reviewer,
+        serviceOperationContext(operationIds.review),
+      ),
+    },
   };
   f.state.runs.push(run);
   const session = await router.start({
@@ -587,6 +610,8 @@ test('closing a review view does not block idempotent cleanup or replay released
     runId: run.id,
     workspace: view.readRoot,
     purpose: 'review',
+    operationId: operationIds.review,
+    roleId: 'reviewer',
     readOnly: true,
     instructions: 'Review',
   });

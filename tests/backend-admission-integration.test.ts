@@ -365,7 +365,7 @@ test('strict project scope still permits an eligible read-only inspection sessio
     {
       id: 'inspector',
       backendId: 'codex',
-      capabilities: fixtureCapabilities({ readOnlySessions: true }),
+      capabilities: fixtureCapabilities({ structuredTurns: true, readOnlySessions: true }),
     },
   ]);
   f.state.runs.push({

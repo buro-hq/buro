@@ -13,7 +13,8 @@ import { workerRefinementOutputSchema } from '../protocol/worker-tasks.ts';
 import { resolveWorkerResource, workerResourcePool } from './assignment-resources.ts';
 import type { AssignmentResource } from '../protocol/resources.ts';
 import { sessionResource } from '../protocol/resources.ts';
-import { resolveRoleResource, roleResourceContext } from './role-routing.ts';
+import { resolveRoleResource } from './role-routing.ts';
+import { operationIds, serviceOperationContext } from './operation-catalog.ts';
 import { defaultRoles } from './defaults.ts';
 import { projectRunAutonomy } from './autonomy-policy.ts';
 import { recordableRuntimeEvent } from './runtime-events.ts';
@@ -548,7 +549,11 @@ ${installation.output || installation.error || ''}`,
             resolveRoleResource(
               run.resources!,
               role,
-              roleResourceContext(role.id, policy.scope.mode === 'strict'),
+              serviceOperationContext(
+                role.id === 'coordinator' ? operationIds.coordination : operationIds.review,
+                policy.profile,
+                policy.scope.mode === 'strict',
+              ),
             ),
           ]),
         );
@@ -790,6 +795,7 @@ ${installation.output || installation.error || ''}`,
           threadId: run.threadId,
           roleId: 'coordinator',
           purpose: 'coordination',
+          operationId: operationIds.coordination,
           workspace: workspace.path,
           instructions,
         });
@@ -820,6 +826,7 @@ ${installation.output || installation.error || ''}`,
           projectId,
           runId,
           purpose: 'coordination',
+          operationId: operationIds.coordination,
           roleId: 'coordinator',
           workspace: workspace.path,
           instructions,
@@ -1219,6 +1226,7 @@ ${installation.output || installation.error || ''}`,
       projectId,
       runId,
       purpose: 'coordination' as const,
+      operationId: operationIds.coordination,
       roleId: 'coordinator',
       ...(inspectionPlanning ? { readOnly: true } : {}),
       workspace: workspace.path,
@@ -1744,6 +1752,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
         workspace: view.readRoot,
         readOnly: true,
         purpose: 'review',
+        operationId: operationIds.review,
         roleId: 'reviewer',
         instructions:
           (reviewerRole?.instructions ||

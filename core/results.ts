@@ -6,9 +6,18 @@ import {
   type RunPreview,
   type Role,
 } from '../protocol/domain.ts';
+import {
+  operationIds,
+  serviceOperationContext,
+  savedOperationContext,
+} from './operation-catalog.ts';
 import { effectiveRunPolicy } from './autonomy-policy.ts';
 import { resolveRoleResource, validateRoleResource } from './role-routing.ts';
-import { sessionResource, type AssignmentResource } from '../protocol/resources.ts';
+import {
+  sessionResource,
+  SavedOperationContextSchema,
+  type AssignmentResource,
+} from '../protocol/resources.ts';
 import type { DeliveryConfig } from '../protocol/operations.ts';
 import {
   DomainError,
@@ -110,6 +119,7 @@ export class ResultService {
   async prepare(
     projectId: string,
     run: Run,
+    operationId: string,
     roleId: string,
     context: unknown,
     signal: AbortSignal,
@@ -128,7 +138,23 @@ export class ResultService {
           'RESOURCE_PROFILE_UNAVAILABLE',
           'The accepted run has no frozen execution resource profile.',
         );
-      const existing = saved.roleResources?.[roleId];
+      const operation =
+        savedOperationContext(saved, operationId) ||
+        serviceOperationContext(
+          operationId,
+          { ...doc.profile!, delivery: saved.delivery?.config || doc.profile?.delivery },
+          saved.executionPolicySnapshot?.scope.mode === 'strict',
+        );
+      if (
+        operation.purpose !== 'delivery' ||
+        operation.roles.kind !== 'fixed' ||
+        operation.roles.roleId !== roleId
+      )
+        throw new DomainError(
+          'INVALID_ASSIGNMENT',
+          'The role does not belong to this result operation.',
+        );
+      const existing = saved.operationResources?.[operationId]?.[roleId];
       role = existing
         ? saved.roleSnapshots?.find(
             (item) => item.id === roleId && item.version === existing.roleVersion,
@@ -139,14 +165,20 @@ export class ResultService {
           'ROLE_MISSING',
           `Create or select role ${roleId} in the project team.`,
         );
-      const context = {
-        purpose: 'delivery' as const,
-        requirements: { structuredTurns: true as const, readOnlySessions: true as const },
-      };
       decision = existing
-        ? validateRoleResource(saved.resources, role, existing, context)
-        : resolveRoleResource(saved.resources, role, context);
-      saved.roleResources = { ...saved.roleResources, [roleId]: structuredClone(decision) };
+        ? validateRoleResource(saved.resources, role, existing, operation)
+        : resolveRoleResource(saved.resources, role, operation);
+      saved.operationResources = {
+        ...saved.operationResources,
+        [operationId]: {
+          ...saved.operationResources?.[operationId],
+          [roleId]: structuredClone(decision),
+        },
+      };
+      saved.operationContexts = {
+        ...saved.operationContexts,
+        [operationId]: SavedOperationContextSchema.parse(operation),
+      };
       if (
         !saved.roleSnapshots?.some((item) => item.id === role!.id && item.version === role!.version)
       )
@@ -161,13 +193,14 @@ export class ResultService {
       workspace: run.workspace,
       readOnly: true,
       purpose: 'delivery',
+      operationId,
       roleId,
       runId: 'result-' + run.id,
       ownerRunId: run.id,
       instructions:
         preparedRole.instructions +
         '\nThis prepares a result after acceptance. Read only. Do not run delivery/launch commands, mutate Git, use the network, install packages or run migrations. The service performs these operations. Do not read secrets or local/. Verify the saved commit and configuration; do not invent settings.' +
-        (roleId === 'local_preview'
+        (operationId === operationIds.preview
           ? ' The service passes env from source project/component .env/.env.local files and then .buro/local/. A missing workspace .env does not mean variables are unavailable: they are passed to the process without copying files. Do not read their values.'
           : ''),
     });
@@ -361,6 +394,9 @@ export class ResultService {
         const prepared = await this.prepare(
           projectId,
           run,
+          outcome.kind === 'pull-request'
+            ? operationIds.pullRequest
+            : operationIds.deploy(environment!.id),
           roleId,
           environment || config,
           controller.signal,
@@ -478,7 +514,14 @@ export class ResultService {
     };
     const promise = Promise.resolve().then(async () => {
       try {
-        await this.prepare(projectId, run, 'local_preview', components, controller.signal);
+        await this.prepare(
+          projectId,
+          run,
+          operationIds.preview,
+          'local_preview',
+          components,
+          controller.signal,
+        );
         const preview = await this.operations.preview({
           root: snapshot.project.root,
           run,

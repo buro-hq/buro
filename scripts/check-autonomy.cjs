@@ -11,7 +11,7 @@ const { chromium, expect } = require('@playwright/test');
   const { sampleRun } = await import('../tests/fixtures/sample-run.ts');
   const { fixtureCapabilities } = await import('../tests/fixtures/backend-capabilities.ts');
   const { effectiveProjectPolicy, projectRunAutonomy } = await import('../core/autonomy-policy.ts');
-  const { roleResourceContext, roleResourceEligibility } = await import('../core/role-routing.ts');
+  const { projectRoleResourceChoices } = await import('../core/operation-catalog.ts');
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'buro-autonomy-ui-')));
   let host, vite, browser;
   const errors = [],
@@ -146,15 +146,7 @@ const { chromium, expect } = require('@playwright/test');
         probes: [],
         selected: resources,
         probeRuntimeIds: [],
-        roleChoices: [...roles, { id: '*' }].map((role) => ({
-          roleId: role.id,
-          ...(role.version ? { roleVersion: role.version } : {}),
-          ...roleResourceContext(role.id, false),
-          choices: roleResourceEligibility(
-            resources,
-            roleResourceContext(role.id, false).requirements,
-          ),
-        })),
+        roleChoices: projectRoleResourceChoices({ profile, roles, resources }),
       };
     });
     host.ctx.commands.bus.register('run.resume', (params) => {

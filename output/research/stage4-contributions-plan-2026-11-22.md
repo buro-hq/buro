@@ -1,6 +1,6 @@
 # Stage 4: trusted contributions
 
-Status: 4A is committed (`60c3959`). Resource contribution registries and descriptor-based UI/CLI in 4B1 are implemented and undergoing final validation. Sections 4B2 and 4C remain the implementation plan. Historical barriers below describe the starting point before 4B1. No live model or external endpoint was used.
+Status: 4A is committed (`60c3959`). Resource contribution registries and descriptor-based UI/CLI are committed in 4B1 (`a7f3838`). Cross-client invalidation and operation-aware roles in 4B2 are implemented and validated. Section 4C remains the implementation plan. Historical barriers below describe the starting point before 4B1. No live model or external endpoint was used.
 
 ## Current extension barriers
 

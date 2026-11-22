@@ -18,6 +18,8 @@ export const EffectivePolicySchema = z
       assignments: z.array(
         z.strictObject({
           roleId: z.string().min(1),
+          operationId: z.string().min(1).optional(),
+          operationLabel: z.string().min(1).optional(),
           runtimeId: z.string().min(1),
           providerId: z.string().optional(),
           model: z.string().optional(),
@@ -31,6 +33,8 @@ export const EffectivePolicySchema = z
         .array(
           z.strictObject({
             roleId: z.string().min(1),
+            operationId: z.string().min(1).optional(),
+            operationLabel: z.string().min(1).optional(),
             code: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
             message: z.string().min(1),
           }),

@@ -41,6 +41,7 @@ export const resourcesPlugin: Plugin.Object<{
       ...options,
       projects: ctx.projects.registry,
       contributions: ctx.resourceContributions.catalog,
+      onConfigurationChange: (change) => ctx.emit('service/change', change),
     });
     let drainBackends: (() => Promise<void>) | undefined;
     ctx.effect(() => async () => {

@@ -6,11 +6,13 @@ import type {
   SaveRole,
   Snapshot,
   ServiceInfo,
+  ResourceConfigurationChange,
 } from '../protocol/domain.ts';
 import {
   parseDomainEvent,
   parseSnapshot,
   parseServiceInfo,
+  ResourceConfigurationChangeSchema,
   type ClientCommand,
   type Request,
 } from '../protocol/schema.ts';
@@ -71,6 +73,9 @@ export class SocketProjectClient implements ProjectClient {
   private serviceMode = false;
   private initialService?: { resolve: (s: ServiceInfo) => void; reject: (e: Error) => void };
   private serviceListeners = new Set<(s: ServiceInfo) => void>();
+  private invalidationListeners = new Set<(change: ResourceConfigurationChange) => void>();
+  private resourceGeneration = 0;
+  private resourceRevision?: string;
   private selectionRevision = 0;
   ws: WebSocket | null = null;
   state: Snapshot | null = null;
@@ -121,13 +126,44 @@ export class SocketProjectClient implements ProjectClient {
     this.serviceListeners.add(listener);
     return () => this.serviceListeners.delete(listener);
   }
+  onServiceInvalidation(listener: (change: ResourceConfigurationChange) => void) {
+    this.invalidationListeners.add(listener);
+    return () => this.invalidationListeners.delete(listener);
+  }
+  getResourceGeneration() {
+    return this.resourceGeneration;
+  }
+  getResourceRevision() {
+    return this.resourceRevision;
+  }
+  private observeConfiguration(change: ResourceConfigurationChange) {
+    if (change.revision === this.resourceRevision) return;
+    this.resourceRevision = change.revision;
+    this.resourceGeneration++;
+    this.invalidateProjection();
+    for (const listener of this.invalidationListeners)
+      try {
+        void Promise.resolve(listener({ ...change })).catch(() => {});
+      } catch {
+        // Consumer notifications cannot break a healthy transport.
+      }
+  }
+  private async readProjectSnapshot(projectId: string, handshake = false): Promise<Snapshot> {
+    const socket = this.ws;
+    for (;;) {
+      const generation = this.resourceGeneration;
+      const snapshot = parseSnapshot(
+        await this.request({ method: 'project.snapshot', params: { projectId } }, handshake),
+      );
+      if (this.closed || this.ws !== socket) throw Error('Project refresh was superseded.');
+      if (generation === this.resourceGeneration) return snapshot;
+    }
+  }
   async selectProject(id: string): Promise<Snapshot> {
     if (!this.ready) throw Error('Connect to the service before selecting a project.');
     const selection = ++this.selectionRevision;
     const socket = this.ws;
-    const snapshot = parseSnapshot(
-      await this.request({ method: 'project.snapshot', params: { projectId: id } }),
-    );
+    const snapshot = await this.readProjectSnapshot(id);
     if (this.closed || this.ws !== socket || selection !== this.selectionRevision)
       throw Error('Project selection was superseded.');
     if (snapshot.project.id !== id) throw Error('The service returned another project.');
@@ -149,11 +185,14 @@ export class SocketProjectClient implements ProjectClient {
   }
   open() {
     if (this.closed) return;
+    this.resourceRevision = undefined;
     this.status(this.state ? 'reconnecting' : 'connecting');
     this.ready = false;
     const ws = new WebSocket(this.url);
     this.ws = ws;
     ws.onopen = () => {
+      if (this.ws !== ws || this.closed) return;
+      this.resourceGeneration++;
       void this.handshake().catch((error) => {
         this.initialService?.reject(error);
         this.initialService = undefined;
@@ -163,6 +202,7 @@ export class SocketProjectClient implements ProjectClient {
       });
     };
     ws.onmessage = (event) => {
+      if (this.ws !== ws || this.closed) return;
       try {
         const message = JSON.parse(String(event.data));
         if (message.version !== 1) throw Error('Unsupported protocol version.');
@@ -176,6 +216,8 @@ export class SocketProjectClient implements ProjectClient {
             pending.reject(
               Object.assign(Error(message.error.message), { code: message.error.code }),
             );
+        } else if (message.type === 'service.change') {
+          this.observeConfiguration(ResourceConfigurationChangeSchema.parse(message.change));
         } else if (message.type === 'event' && this.state) {
           try {
             const event = parseDomainEvent(message.event);
@@ -200,6 +242,7 @@ export class SocketProjectClient implements ProjectClient {
     };
     ws.onerror = () => {};
     ws.onclose = () => {
+      if (this.ws !== ws) return;
       this.ready = false;
       this.status(this.closed ? 'offline' : 'reconnecting');
       // Handshake reads can be retried with fresh ids. Mutations retain their original id.
@@ -232,12 +275,7 @@ export class SocketProjectClient implements ProjectClient {
       return;
     }
     if (!this.projectId) throw Error('Select a project before connecting.');
-    const snapshot = parseSnapshot(
-      await this.request(
-        { method: 'project.snapshot', params: { projectId: this.projectId } },
-        true,
-      ),
-    );
+    const snapshot = await this.readProjectSnapshot(this.projectId, true);
     this.state = snapshot;
     this.notify();
     await this.request(
@@ -409,6 +447,7 @@ export class SocketProjectClient implements ProjectClient {
     this.initial?.reject(Error('The client is closed.'));
     this.initial = undefined;
     this.serviceListeners.clear();
+    this.invalidationListeners.clear();
     this.listeners.clear();
     this.connections.clear();
   }

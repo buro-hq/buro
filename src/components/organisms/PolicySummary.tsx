@@ -1,6 +1,7 @@
 import { Group, Stack, Text } from '@mantine/core';
 import type { EffectivePolicy } from '../../../protocol/autonomy.ts';
 import { t } from '../../i18n/index.ts';
+import { operationLabel } from '../../ui/operation-label.ts';
 
 /** The service resolves policy; this component only formats its public projection. */
 export function PolicySummary({ policy }: { policy?: EffectivePolicy }) {
@@ -73,12 +74,23 @@ export function PolicySummary({ policy }: { policy?: EffectivePolicy }) {
             </Text>
           )}
           {policy.routing.assignments.map((item) => (
-            <Text key={item.roleId} size="xs" style={{ overflowWrap: 'anywhere' }}>
+            <Text
+              key={`${item.operationId || ''}:${item.roleId}`}
+              size="xs"
+              style={{ overflowWrap: 'anywhere' }}
+            >
+              {item.operationLabel ? operationLabel(item.operationLabel) + ' · ' : ''}
               {item.roleId}: {item.model || item.runtimeId} · {item.runtimeId}
             </Text>
           ))}
           {policy.routing.unavailable?.map((item) => (
-            <Text key={item.roleId} size="xs" c="orange" style={{ overflowWrap: 'anywhere' }}>
+            <Text
+              key={`${item.operationId || ''}:${item.roleId}`}
+              size="xs"
+              c="orange"
+              style={{ overflowWrap: 'anywhere' }}
+            >
+              {item.operationLabel ? operationLabel(item.operationLabel) + ' · ' : ''}
               {item.roleId}: {t(item.message)}
             </Text>
           ))}

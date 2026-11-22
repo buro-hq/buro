@@ -1,3 +1,4 @@
+import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import {
   virtualWorkspaceRevision,
@@ -18,7 +19,7 @@ import { parseSnapshot } from '../protocol/schema.ts';
 import { sampleRun } from './fixtures/sample-run.ts';
 import { selectPlanningPolicy } from '../core/planning-policy.ts';
 import { defaultRoles } from '../core/defaults.ts';
-import { resolveRoleResource, roleResourceContext } from '../core/role-routing.ts';
+import { resolveRoleResource } from '../core/role-routing.ts';
 
 const configured = {
   id: 'local-qwen',
@@ -232,7 +233,7 @@ test('the selected coordinator decision owns planning even when the profile defa
     coordinator: resolveRoleResource(
       run.resources,
       role,
-      roleResourceContext('coordinator', false),
+      serviceOperationContext(operationIds.coordination, undefined, false),
     ),
   };
   const snapshot = f.store.snapshot();

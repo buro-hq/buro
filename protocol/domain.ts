@@ -1,7 +1,12 @@
 /** Public data contracts. This module has no Node, Cordis, React or transport imports. */
 import type { EnvironmentConfig } from './environment.ts';
 import type { ContextMaterial } from './context.ts';
-import type { AssignmentResource, AssignmentSelection, RuntimePreference } from './resources.ts';
+import type {
+  AssignmentResource,
+  AssignmentSelection,
+  RuntimePreference,
+  SavedOperationContext,
+} from './resources.ts';
 import type { WorkScope, ScopeObservation } from './work-scope.ts';
 export type { ContextMaterial } from './context.ts';
 import type {
@@ -28,6 +33,11 @@ export type Project = {
 };
 /** Service discovery is valid before the first project is connected. */
 export type ServiceInfo = { version: 1; projects: Project[]; capabilities: string[] };
+export type ResourceConfigurationChange = {
+  topic: 'resources';
+  revision: string;
+  appliesTo: 'new-runs' | 'service-restart';
+};
 export type ProjectCommand = {
   id: string;
   title: string;
@@ -199,6 +209,8 @@ export type Run = {
   resources?: import('./resources.ts').ResourceSnapshot;
   assignmentResources?: Record<string, AssignmentResource>;
   roleResources?: Record<string, AssignmentResource>;
+  operationResources?: Record<string, Record<string, AssignmentResource>>;
+  operationContexts?: Record<string, SavedOperationContext>;
   delegation?: 'buro';
   coordinatorSession?: AgentSession;
   planningSession?: AgentSession;

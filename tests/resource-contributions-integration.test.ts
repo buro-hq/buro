@@ -266,6 +266,8 @@ test('third-party factories registered through Cordis own configured execution, 
   const session = await runtime.start({
     projectId: 'p',
     purpose: 'research',
+    operationId: 'project.research',
+    readOnly: true,
     instructions: 'Synthetic',
     workspace: directory,
     runId: 'synthetic',
@@ -289,6 +291,8 @@ test('third-party factories registered through Cordis own configured execution, 
     workspace: directory,
     runId: 'synthetic',
     purpose: 'research',
+    operationId: 'project.research',
+    readOnly: true,
   });
   await runtime.release!(session.threadId);
   assert.throws(() => registrations(host.ctx.resourceContributions.catalog), {
@@ -393,6 +397,8 @@ test('contribution revision changes freeze a new backend identity and stop histo
   const session = await originalRouter.start({
     projectId: 'p',
     purpose: 'research',
+    operationId: 'project.research',
+    readOnly: true,
     instructions: 'Synthetic',
     workspace: directory,
     runId: 'synthetic',
@@ -406,6 +412,8 @@ test('contribution revision changes freeze a new backend identity and stop histo
       workspace: directory,
       runId: 'synthetic',
       purpose: 'research',
+      operationId: 'project.research',
+      readOnly: true,
     }),
     { code: 'RUNTIME_CONFIG_CHANGED' },
   );

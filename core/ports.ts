@@ -86,6 +86,7 @@ export interface AgentRuntime {
     runId?: string;
     ownerRunId?: string;
     purpose?: RuntimePurpose;
+    operationId?: string;
     roleId?: string;
     assignment?: {
       sessionId: string;
@@ -102,6 +103,7 @@ export interface AgentRuntime {
     ownerRunId?: string;
     readOnly?: boolean;
     purpose?: RuntimePurpose;
+    operationId?: string;
     roleId?: string;
   }): Promise<{ threadId: string }>;
   submit(threadId: string, text: string): Promise<{ turnId: string }>;

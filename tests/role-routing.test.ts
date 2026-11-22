@@ -1,3 +1,4 @@
+import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Role } from '../protocol/domain.ts';
@@ -8,7 +9,6 @@ import {
   resolveRoleResource,
   validateRoleResource,
   roleResourceEligibility,
-  roleResourceContext,
 } from '../core/role-routing.ts';
 import { resolveWorkerResource } from '../core/assignment-resources.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
@@ -162,21 +162,21 @@ test('coordinator and reviewer preferences route independently by actual operati
   const coordinator = resolveRoleResource(
     saved,
     role('coordinator', { mode: 'fixed', runtimeId: strong.id }),
-    roleResourceContext('coordinator', true),
+    serviceOperationContext(operationIds.coordination, undefined, true),
   );
   const review = resolveRoleResource(
     saved,
     role('reviewer', { mode: 'fixed', runtimeId: reviewer.id }),
-    roleResourceContext('reviewer', true),
+    serviceOperationContext(operationIds.review, undefined, true),
   );
   assert.equal(coordinator.resource.id, strong.id);
   assert.equal(review.resource.id, reviewer.id);
-  assert.equal(roleResourceContext('custom-review-description', false).purpose, 'implementation');
-  for (const id of ['local_preview', 'delivery_pr', 'production_delivery'])
-    assert.deepEqual(roleResourceContext(id, true), {
-      purpose: 'delivery',
-      requirements: { structuredTurns: true, readOnlySessions: true },
-    });
+  assert.equal(serviceOperationContext(operationIds.implementation).purpose, 'implementation');
+  for (const id of [operationIds.preview, operationIds.pullRequest]) {
+    const context = serviceOperationContext(id);
+    assert.equal(context.purpose, 'delivery');
+    assert.deepEqual(context.requirements, { structuredTurns: true, readOnlySessions: true });
+  }
   assert.equal(
     sessionResource(saved, 'coordination', 'fallback', coordinator).runtimeId,
     strong.id,
@@ -228,7 +228,7 @@ test('coordination supports either tools-free planning or read-only inspection w
   const selected = resolveRoleResource(
     saved,
     role('coordinator'),
-    roleResourceContext('coordinator', false),
+    serviceOperationContext(operationIds.coordination, undefined, false),
   );
   assert.equal(selected.resource.id, toolsFree.id);
   const unsupported = runtime('unsupported');
@@ -244,7 +244,7 @@ test('coordination supports either tools-free planning or read-only inspection w
       resolveRoleResource(
         saved,
         role('coordinator', { mode: 'fixed', runtimeId: unsupported.id }),
-        roleResourceContext('coordinator', false),
+        serviceOperationContext(operationIds.coordination, undefined, false),
       ),
     { code: 'FIXED_RUNTIME_UNAVAILABLE' },
   );

@@ -1,3 +1,6 @@
+import { defaultRoles } from '../core/defaults.ts';
+import { resolveRoleResource } from '../core/role-routing.ts';
+import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -309,12 +312,28 @@ test('adding a setup leaves existing owned routes and their model identity usabl
     active = await f.create();
   await active.useProfile('local', meta('select-local'));
   const frozen = active.selection.forProject('p');
-  f.state.runs.push({ id: 'owned', workspace: f.directory, resources: frozen });
+  const coordinator = structuredClone(defaultRoles.find((role) => role.id === 'coordinator')!);
+  const owned = {
+    id: 'owned',
+    workspace: f.directory,
+    resources: frozen,
+    roleSnapshots: [coordinator],
+    roleResources: {
+      coordinator: resolveRoleResource(
+        frozen,
+        coordinator,
+        serviceOperationContext(operationIds.coordination),
+      ),
+    },
+  };
+  f.state.runs.push(owned);
   const router = f.router(active);
   const input = {
     projectId: 'p',
     runId: 'owned',
     purpose: 'coordination' as const,
+    operationId: operationIds.coordination,
+    roleId: 'coordinator',
     instructions: 'Keep the original task and model',
   };
   const original = await router.start(input);

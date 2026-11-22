@@ -1,3 +1,6 @@
+import { defaultRoles } from '../core/defaults.ts';
+import { resolveRoleResource } from '../core/role-routing.ts';
+import { operationIds, serviceOperationContext } from '../core/operation-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -271,7 +274,21 @@ test('editing a connection preserves frozen run routes and blocks fresh research
     active = await f.create();
   await active.configuration.use('local', 'local', 'local');
   const frozen = active.selection.forProject('p');
-  f.state.runs.push({ id: 'running', workspace: f.directory, resources: frozen });
+  const coordinator = structuredClone(defaultRoles.find((role) => role.id === 'coordinator')!);
+  const owned = {
+    id: 'running',
+    workspace: f.directory,
+    resources: frozen,
+    roleSnapshots: [coordinator],
+    roleResources: {
+      coordinator: resolveRoleResource(
+        frozen,
+        coordinator,
+        serviceOperationContext(operationIds.coordination),
+      ),
+    },
+  };
+  f.state.runs.push(owned);
   const registry = new RuntimeCatalog();
   for (const runtime of active.runtimes) registry.register(runtime);
   let sequence = 0;
@@ -288,6 +305,8 @@ test('editing a connection preserves frozen run routes and blocks fresh research
     projectId: 'p',
     runId: 'running',
     purpose: 'coordination',
+    operationId: operationIds.coordination,
+    roleId: 'coordinator',
     instructions: 'Original run',
   });
   await update(active, direct());
@@ -300,6 +319,8 @@ test('editing a connection preserves frozen run routes and blocks fresh research
       projectId: 'p',
       runId: 'fresh',
       purpose: 'research',
+      operationId: 'project.research',
+      readOnly: true,
       instructions: 'New research',
     }),
     { code: 'CONNECTION_RESTART_REQUIRED' },
@@ -313,6 +334,8 @@ test('editing a connection preserves frozen run routes and blocks fresh research
     projectId: 'p',
     runId: 'running',
     purpose: 'coordination',
+    operationId: operationIds.coordination,
+    roleId: 'coordinator',
     instructions: 'Continue frozen run',
   });
   for (const session of [original, continuation]) {
@@ -348,6 +371,8 @@ test('editing a connection preserves frozen run routes and blocks fresh research
       projectId: 'p',
       runId: 'running',
       purpose: 'coordination',
+      operationId: operationIds.coordination,
+      roleId: 'coordinator',
       instructions: 'Old configuration',
     }),
     { code: 'RUNTIME_CONFIG_CHANGED' },
@@ -360,6 +385,8 @@ test('editing a connection preserves frozen run routes and blocks fresh research
   const fresh = await afterRestart.start({
     projectId: 'p',
     purpose: 'research',
+    operationId: 'project.research',
+    readOnly: true,
     instructions: 'New research',
   });
   await afterRestart.turn(fresh.threadId, 'Return ready', {
@@ -460,7 +487,7 @@ test('role choices expose server eligibility for the selected profile and actual
   const reviewer = choices.find((entry) => entry.roleId === 'reviewer')!;
   assert.equal(reviewer.requirements.immutableReview, true);
   assert.equal(reviewer.requirements.readOnlySessions, true);
-  for (const id of ['local_preview', 'delivery_pr', 'production_delivery']) {
+  for (const id of ['local_preview', 'delivery_pr']) {
     const operational = choices.find((entry) => entry.roleId === id)!;
     assert.equal(operational.purpose, 'delivery');
     assert.equal(operational.requirements.readOnlySessions, true);

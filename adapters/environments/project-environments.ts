@@ -1,3 +1,4 @@
+import { operationIds } from '../../core/operation-catalog.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -252,6 +253,7 @@ export class ProjectEnvironments implements ExecutionEnvironmentPort {
         : undefined,
       readOnly: true,
       purpose: 'environment',
+      operationId: operationIds.environment,
       instructions:
         'Inspect the project and return an environment recipe. Read only: do not execute setup, edit files, start child agents, access secrets, or change acceptance commands. Use existing documentation, CI, manifests and toolchain configuration as evidence. The service executes setup separately in the selected environment.',
     });

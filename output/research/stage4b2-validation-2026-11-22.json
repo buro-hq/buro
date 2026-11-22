@@ -1,0 +1,61 @@
+{
+  "stage": "4B2",
+  "date": "2026-11-22",
+  "parentCommit": "a7f3838",
+  "tests": {
+    "total": 944,
+    "passed": 944,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 65477.848958,
+    "log": "/private/tmp/buro-stage4b2-verified-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage4b2-build.log"
+  },
+  "format": {
+    "passed": true,
+    "logs": [
+      "/private/tmp/buro-stage4b2-format.log",
+      "/private/tmp/buro-stage4b2-server-format.log"
+    ]
+  },
+  "browser": {
+    "productionDesktopMobile": true,
+    "emptyServiceOnboarding": true,
+    "twoProjectLiveDefaults": true,
+    "staleCatalogDiscarded": true,
+    "customDeliveryOperation": true,
+    "operationEligibilityVisible": true,
+    "globalRolePreferencePreserved": true,
+    "liveConnectionSave": true,
+    "projectSequencesPreserved": true,
+    "externalNetworkRequests": 0,
+    "modelRequests": 0,
+    "pageErrors": 0,
+    "logs": [
+      "/private/tmp/buro-stage4b2-production.log",
+      "/private/tmp/buro-stage4b2-live-controls-browser.log",
+      "/private/tmp/buro-stage4b2-bootstrap-browser.log"
+    ]
+  },
+  "independentReviews": [
+    "stage4b2-architecture-review-2026-11-22.md",
+    "stage4b2-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementation": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Connected notifications and rereads do not implement durable client event replay.",
+    "Operation catalog describes actual builtin host entrypoints and configured delivery roles; full workflow contributions remain subsequent.",
+    "Operational preparation unknown outcomes still need a dedicated durable receipt owner.",
+    "Finite quotas, file persistence and reusable backend packages are unchanged in this stage."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}
