@@ -1,0 +1,47 @@
+{
+  "stage": "5A1",
+  "date": "2026-11-22",
+  "parentCommit": "e145893",
+  "tests": {
+    "total": 1071,
+    "passed": 1071,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 68129.689125,
+    "log": "/private/tmp/buro-stage5a1-final-tests.log"
+  },
+  "accountingTests": {
+    "passed": 44,
+    "failed": 0,
+    "log": "/private/tmp/buro-stage5a1-all-accounting-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a1-build.log"
+  },
+  "format": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a1-server-format-check.log"
+  },
+  "independentReviews": [
+    "stage5a1-architecture-review-2026-11-22.md",
+    "stage5a1-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Pure new accounting foundation only; the actual runtime and existing file authority are unchanged.",
+    "Simulated indexed lookup/state-oracle tests are not SQLite, latency or crash-durability proof.",
+    "Historical allowances are data, not permission to dispatch an effect.",
+    "The next store must atomically commit account/operation/public state and preserve poisoned observations before raising errors.",
+    "Saturated account revision settlement requires operation-status CAS, not account revision alone.",
+    "No default-none policy, old-data migration, complete artifact retention or portable package adoption is claimed."
+  ],
+  "productionRuntimeChanged": false,
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}
