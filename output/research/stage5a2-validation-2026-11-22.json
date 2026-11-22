@@ -1,0 +1,53 @@
+{
+  "stage": "5A2",
+  "date": "2026-11-22",
+  "parentCommit": "5534809",
+  "tests": {
+    "total": 1101,
+    "passed": 1101,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 68679.712166,
+    "log": "/private/tmp/buro-stage5a2-final-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a2-build.log"
+  },
+  "format": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a2-server-format-check.log"
+  },
+  "actualSqliteEvidence": {
+    "atomicAccountOperationEventReceipt": true,
+    "preAndPostCommitProcessKill": true,
+    "identicalAndConflictingCommandProcesses": true,
+    "pagedWatermark": true,
+    "saturatedRevisionOperationCas": true,
+    "operationsCrossed": 17409,
+    "privateHardlinkAndSymlinkRejection": true,
+    "jsonPartialUsageReplay": true,
+    "foreignDatabasePreserved": true,
+    "log": "/private/tmp/buro-stage5a2-atomicity-tests.log"
+  },
+  "independentReviews": [
+    "stage5a2-architecture-review-2026-11-22.md",
+    "stage5a2-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Standalone SQLite kernel only; no active sidecar beside the JSON ProjectStore and no production runtime cutover.",
+    "Returned/changed-row traces are not VM scan or throughput metrics.",
+    "A command receipt is not external-effect dispatch permission or a daemon ownership lease.",
+    "Full project/Run entity admission, private model packets, session journals, machine configuration and history paging remain later work.",
+    "Existing finite policies/defaults are unchanged; no old user state was migrated."
+  ],
+  "productionRuntimeChanged": false,
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

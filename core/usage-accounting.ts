@@ -631,3 +631,19 @@ function validOperation(operation: UsageOperation, account: UsageAccount): boole
     })
   );
 }
+
+/** Detached closed-record validation for indexed authority adapters; never scans operation history. */
+export function validateUsageAccount(value: unknown): UsageAccount {
+  return accountCopy(value as UsageAccount);
+}
+export function validateUsageOperation(value: unknown, account: UsageAccount): UsageOperation {
+  const validatedAccount = accountCopy(account);
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    !validOperation(value as UsageOperation, validatedAccount)
+  )
+    throw new DomainError('INVALID_USAGE_OPERATION', 'The saved usage operation is invalid.');
+  return structuredClone(value as UsageOperation);
+}

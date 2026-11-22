@@ -1,0 +1,15 @@
+# Stage 5A2 SQLite adapter verification
+
+Date: 2026-11-22. Standalone kernel only: `adapters/sqlite/project-usage-authority.ts` consumes the finite Core accounting/transaction facade. No existing FileProjectStore, runtime, machine configuration or user state is wired to this database. It is not a live JSON sidecar, a dispatch lease, a full ProjectAuthority migration or a default-none release.
+
+`SqliteProjectUsageAuthority.open({directory,projectId,onEvent?,onQuery?})` owns one private `authority.sqlite` with project/format metadata, uniquely owner-bound accounts, indexed per-account operations, command receipts and paged public usage events. `BEGIN IMMEDIATE` commits touched account/operation state, receipt and events together. SQL CAS compares original account JSON and the specific operation identity/status/JSON, including settlement when the Core revision is saturated. Core owns all arithmetic and sanitized summary construction.
+
+Callbacks are synchronous. Async/thenable results roll back; retained transaction methods reject after callback completion/error. Undefined top-level results have replayable void receipts. Optional undefined object fields are canonically omitted, negative zero becomes JSON zero, and first/replayed return values agree. Arrays with undefined entries, non-JSON values and getters are rejected without evaluating those getters. Applied poison remains a committed result carrying a typed error rather than an exception that would erase the observation.
+
+Private directory mode 0700 and database/WAL/SHM modes 0600 were checked on actual files. Existing symlink ancestors, database targets and SQLite companions are rejected before opening. Unsupported foreign databases and wrong project identities reject; failed open closes its connection. Captured project/directory identities use private state and nonconfigurable getters, so assignment or defineProperty cannot retarget later validation/publication.
+
+Adapter-focused tests: **9 passed, 0 failed/skipped** in `tests/sqlite-usage-authority.test.ts`. Combined with the root's two contract regressions: **11/11 passed**, log `/private/tmp/buro-stage5a2-sql-units.log`. Cases include private paths/metadata, void replay, detached reads, async rollback and late capability rejection, JSON/thenable failures, durable poison/public privacy, broken observer isolation, queue-draining idempotent close and identity mutation negatives. Server typecheck, formatter and diff checks passed.
+
+The independent atomicity agent separately reports **11/11** passing real multi-process/crash/paging/17,409-row tests in `tests/sqlite-usage-atomicity.test.ts`; this adapter receipt does not replace that agent's report or the final architecture/code reviews. Query instrumentation exposes only operation labels and returned/changed row counts, never SQL parameters or private payloads. Physical durability under power loss and exactly-once external effects are not claimed.
+
+No model call, network endpoint, credential, RTX host or original user repository was accessed. Existing finite production quotas remain unchanged.
