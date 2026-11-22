@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { RelativePathSchema } from './projects-paths.ts';
+import { ContextMaterialSchema, type ContextMaterial } from './context.ts';
+import { ResourceSnapshotSchema, type ResourceSnapshot } from './resources.ts';
 
 export const ComponentSchema = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
@@ -47,6 +49,9 @@ export const GoalOutcomeSchema = z.strictObject({
 });
 export type GoalOutcome = z.infer<typeof GoalOutcomeSchema>;
 export type ProjectResearch = {
+  analysis: { id: string; revision: string };
+  contextMaterials: ContextMaterial[];
+  resources: ResourceSnapshot;
   id: string;
   status: 'running' | 'ready' | 'failed' | 'interrupted';
   startedAt: string;
@@ -81,6 +86,12 @@ export const ResearchResultSchema = z.object({
   questions: z.array(z.string().max(2000)).max(12),
 });
 export const ResearchSchema = z.object({
+  contextMaterials: z.array(ContextMaterialSchema),
+  resources: ResourceSnapshotSchema,
+  analysis: z.strictObject({
+    id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
+    revision: z.string().min(1),
+  }),
   id: z.string(),
   status: z.enum(['running', 'ready', 'failed', 'interrupted']),
   startedAt: z.string(),

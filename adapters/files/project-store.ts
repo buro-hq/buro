@@ -21,6 +21,7 @@ import { validateProjectPlanningPolicies } from './project-planning-policy.ts';
 import { validateResultApplyIntents } from '../../core/result-apply.ts';
 import { validateRunReconciliationTransitions } from '../../core/reconciliation-transitions.ts';
 import { validateProjectOperationContexts } from '../../core/operation-transitions.ts';
+import { validateProjectResearchTransitions } from '../../core/project-analysis.ts';
 type StoredDocument = ProjectDocument & { events: StoredEvent[]; eventEncoding?: 'run-delta-v1' };
 type Options = {
   directory: string;
@@ -174,6 +175,7 @@ export class FileProjectStore implements ProjectStore {
       validateProjectRunBudgets(draft, this.doc);
       validateProjectPlanningPolicies(draft, this.doc);
       validateProjectOperationContexts(draft, this.doc);
+      validateProjectResearchTransitions(this.doc.research, draft.research);
       validateResultApplyIntents(draft, this.doc);
       validateRunReconciliationTransitions(this.doc.runs, draft.runs);
       draft.revision++;

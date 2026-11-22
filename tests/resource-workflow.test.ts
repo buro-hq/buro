@@ -1,3 +1,5 @@
+import { createBuiltinProjectAnalyses } from '../adapters/analysis/project-setup.ts';
+import { readAuthorizedMaterialText } from '../adapters/files/context-material-text.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -1059,6 +1061,10 @@ test('a DeepSeek goal with no credential preserves work and never falls back to 
 test('project research and environment discovery use the selected managed coordinator with read-only tools', async (t) => {
   const f = await fixture(t, 'mixed');
   const research = new ProjectResearchService({
+    selection: f.host.ctx.agentRuntime.selection!,
+    analysis: createBuiltinProjectAnalyses().get('project-setup'),
+    materials: (projectId, selected, signal) =>
+      readAuthorizedMaterialText(f.host.ctx.projects.registry, projectId, selected, signal),
     projects: f.host.ctx.projects.registry,
     runtime: f.host.ctx.agentRuntime.adapter,
     head: async () => f.originalHead,

@@ -318,9 +318,9 @@ test('bounded material references preserve scope and staged paths while deferrin
   assert.ok(instructions.includes('/workspace/.buro/context/' + '0'.repeat(64) + '.txt'));
   assert.match(instructions, /explicit discovery step during implementation/);
   assert.match(instructions, /use assignment null/);
-  assert.doesNotMatch(instructions, /Read relevant materials before planning/);
+  assert.doesNotMatch(instructions, /Read relevant text materials before planning/);
   assert.match(
     materialInstructions(materials, '/workspace', true),
-    /Read relevant materials before planning/,
+    /Read relevant text materials before planning/,
   );
 });

@@ -31,14 +31,15 @@ export const projectManagementPlugin: Plugin.Object<{
   checks: CheckPort;
 }> = {
   name: 'project-management',
-  inject: ['projects', 'commands'],
+  inject: ['projects', 'commands', 'projectContributions'],
   async apply(ctx, options) {
     if (!options.catalog && !options.catalogFile) throw Error('A project catalog is required.');
     const api = new ProjectApplication({
       registry: ctx.projects.registry,
       stores: ctx.projects.stores,
       policies: options.policies,
-      repository: options.repository || new FileProjectRepository(),
+      repository:
+        options.repository || new FileProjectRepository(ctx.projectContributions.checkRecipes),
       catalog: options.catalog || new FileProjectCatalog(options.catalogFile!),
       environments: options.environments,
       id: randomUUID,

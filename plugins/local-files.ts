@@ -9,10 +9,13 @@ const capabilities = [
 ] as const;
 export const localFilesPlugin: Plugin.Object = {
   name: 'local-files',
-  inject: ['projects', 'commands'],
+  inject: ['projects', 'commands', 'projectContributions'],
   apply(ctx) {
     const browser = new LocalBrowser(ctx.projects.registry),
-      materials = new ContextMaterials(ctx.projects.registry);
+      materials = new ContextMaterials(
+        ctx.projects.registry,
+        ctx.projectContributions.contextLoaders,
+      );
     ctx.effect(() => () => materials.dispose());
     ctx.effect(() => ctx.commands.bus.register('filesystem.list', (p) => browser.list(p)));
     ctx.effect(() =>

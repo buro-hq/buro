@@ -172,6 +172,20 @@ export class RuntimeRouter implements AgentRuntime {
     assertBackendAdmission(current, runtime, route.requirements);
     assertBackendAdmission(route.resource, runtime, route.requirements);
     const snapshot = this.options.projects.get(route.projectId).snapshot();
+    const research =
+      route.purpose === 'research' && snapshot.research?.id === route.runId
+        ? snapshot.research
+        : undefined;
+    if (
+      research &&
+      (!research.resources ||
+        JSON.stringify(resourceForPurpose(research.resources, 'research')) !==
+          JSON.stringify(route.resource))
+    )
+      throw new DomainError(
+        'INVALID_ASSIGNMENT',
+        'The research route does not match its admitted resource profile.',
+      );
     const owner = snapshot.runs.find((run) => run.id === (route.ownerRunId || route.runId));
     const scope =
       owner?.executionPolicySnapshot?.scope ||
@@ -338,7 +352,17 @@ export class RuntimeRouter implements AgentRuntime {
       );
     if (input.ownerRunId && !run)
       throw new DomainError('NOT_FOUND', 'The owning run is unavailable.');
-    const selection = run?.resources || this.options.selection.forProject(input.projectId);
+    const research =
+      input.purpose === 'research' && snapshot.research?.id === input.runId
+        ? snapshot.research
+        : undefined;
+    if (research && !research.resources)
+      throw new DomainError(
+        'RESOURCE_PROFILE_UNAVAILABLE',
+        'The admitted research has no frozen resource profile.',
+      );
+    const selection =
+      research?.resources || run?.resources || this.options.selection.forProject(input.projectId);
     let resource = resourceForPurpose(selection, input.purpose);
     const policyScope =
       run?.executionPolicySnapshot?.scope ||

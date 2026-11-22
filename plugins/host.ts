@@ -14,6 +14,7 @@ import type {
 import { localFilesPlugin } from './local-files.ts';
 import { resourceContributionsPlugin } from './resource-contributions.ts';
 import { toolContributionsPlugin } from './tool-contributions.ts';
+import { projectContributionsPlugin } from './project-contributions.ts';
 
 declare module 'cordis' {
   interface Events {
@@ -175,12 +176,14 @@ export async function createHost(options: HostOptions = {}) {
     await ctx.plugin(Commands);
     await ctx.plugin(resourceContributionsPlugin);
     await ctx.plugin(toolContributionsPlugin);
+    await ctx.plugin(projectContributionsPlugin);
     await ctx.plugin(storagePlugin, {
       projects: options.projects || [],
       factory: options.storeFactory || new FileProjectStoreFactory(),
     });
     await options.configure?.(ctx);
     ctx.toolContributions.catalog.seal();
+    ctx.projectContributions.seal();
     await ctx.plugin(projectsPlugin);
     await ctx.plugin(localFilesPlugin);
     await ctx.plugin(goalsPlugin);

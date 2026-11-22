@@ -55,9 +55,20 @@ export function prepareManagedSession(
   const workspace = input.workspace || snapshot.project.root;
   const verificationView =
     run?.verificationView?.readRoot === workspace ? run.verificationView : undefined;
+  const research =
+    input.purpose === 'research' && snapshot.research?.id === input.runId
+      ? snapshot.research
+      : undefined;
+  if (research && (!research.contextMaterials || !input.readOnly))
+    throw new DomainError(
+      'SESSION_MISMATCH',
+      'Admitted research requires its frozen material selection and read-only session.',
+    );
   const materials = run
     ? run.contextMaterials || []
-    : (snapshot.contextMaterials || []).filter((m) => m.active && m.scope === 'project');
+    : research
+      ? research.contextMaterials
+      : (snapshot.contextMaterials || []).filter((m) => m.active && m.scope === 'project');
   const policy = run?.executionPolicySnapshot
     ? withEnvironmentRepair(run.executionPolicySnapshot, !!run.repairEnvironment)
     : undefined;
@@ -182,19 +193,31 @@ export function prepareManagedResume(
     scope.writeScope = revised;
     scope.commands = structuredClone(policy.profile?.checks || []);
   }
+  const research =
+    session.purpose === 'research' && snapshot.research?.id === input.runId
+      ? snapshot.research
+      : undefined;
+  if (research && !research.contextMaterials)
+    throw new DomainError(
+      'SESSION_MISMATCH',
+      'The admitted research has no frozen material selection.',
+    );
   const materials = run
     ? run.contextMaterials || []
-    : (snapshot.contextMaterials || []).filter((m) => m.active && m.scope === 'project');
-  scope.materials = materials
-    .flatMap((material) => [
-      material.relativePath,
-      ...(material.textPath ? [material.textPath] : []),
-    ])
-    .map(
-      (file) =>
-        '.buro/' +
-        (scope.workspace === snapshot.project.root ? file : file.replace(/^local\//, '')),
-    );
+    : session.purpose === 'research'
+      ? research?.contextMaterials
+      : (snapshot.contextMaterials || []).filter((m) => m.active && m.scope === 'project');
+  if (materials !== undefined)
+    scope.materials = materials
+      .flatMap((material) => [
+        material.relativePath,
+        ...(material.textPath ? [material.textPath] : []),
+      ])
+      .map(
+        (file) =>
+          '.buro/' +
+          (scope.workspace === snapshot.project.root ? file : file.replace(/^local\//, '')),
+      );
   scope.ownerRunId = run?.id || session.scope.ownerRunId;
   scope.baseCommit = run?.baseCommit || session.scope.baseCommit;
   next.scopeRevisions ||= [

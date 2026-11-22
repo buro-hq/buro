@@ -21,6 +21,9 @@ import {
 } from '../../core/project-application.ts';
 import { FileProjectStoreFactory } from './project-store-factory.ts';
 import { findProjectDirectory, migrateProjectDirectory } from './project-directory.ts';
+import type { CheckRecipeCatalog, CheckRecipeDiscovery } from '../../core/check-recipes.ts';
+import { createBuiltinCheckRecipes } from '../discovery/check-recipes/builtins.ts';
+import { captureCheckRecipeFacts } from '../discovery/check-recipes/manifest-facts.ts';
 export { executionPolicy, policyView } from '../../core/project-application.ts';
 const ignoredMetadata = ['.', ':(exclude).buro', ':(exclude)' + LEGACY_PROJECT_DIRECTORY];
 async function atomic(file: string, data: unknown) {
@@ -64,6 +67,10 @@ async function safeMetadata(root: string) {
   return directory;
 }
 export class FileProjectRepository implements ProjectRepositoryPort {
+  readonly checkRecipes: CheckRecipeCatalog;
+  constructor(checkRecipes: CheckRecipeCatalog = createBuiltinCheckRecipes()) {
+    this.checkRecipes = checkRecipes;
+  }
   async inspect(input: string): Promise<RepositoryInfo> {
     let root: string;
     try {
@@ -110,35 +117,10 @@ export class FileProjectRepository implements ProjectRepositoryPort {
           'Could not read .buro/project.json. Check the profile format.',
         );
     }
-    let pkg: {
-      name?: string;
-      packageManager?: string;
-      scripts?: Record<string, string>;
-      workspaces?: unknown;
-    } = {};
-    try {
-      pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
-    } catch {}
-    const exists = async (name: string) =>
-      !!(await fs.stat(path.join(root, name)).catch(() => null));
-    const manager =
-      pkg.packageManager?.split('@')[0] ||
-      ((await exists('yarn.lock')) ? 'yarn' : (await exists('pnpm-lock.yaml')) ? 'pnpm' : 'npm');
-    const checks = ['test', 'typecheck', 'check', 'lint']
-      .filter((id) => typeof pkg.scripts?.[id] === 'string')
-      .map((id) => ({
-        id,
-        title: (
-          {
-            test: 'Tests',
-            typecheck: 'Type check',
-            check: 'Project check',
-            lint: 'Lint',
-          } as Record<string, string>
-        )[id],
-        command: `${manager} run ${id}`,
-        timeoutMs: 180000,
-      }));
+    const discovery: CheckRecipeDiscovery = stored
+      ? { checks: [], defaultCheckIds: [], setup: [], warnings: [], sources: [] }
+      : this.checkRecipes.discover(await captureCheckRecipeFacts(root, head, this.checkRecipes));
+    const checks = discovery.checks;
     const profile: ProjectProfile = stored?.profile || {
       version: 1,
       revision: 0,
@@ -146,10 +128,12 @@ export class FileProjectRepository implements ProjectRepositoryPort {
         'Follow AGENTS.md and project documentation. Modify only the files required for the current goal.',
       scope: { mode: 'advisory', plannedPaths: [], protectedPaths: ['AGENTS.md'] },
       checks,
-      defaultCheckIds: checks.length ? [checks[0].id] : [],
-      setup: [],
-      dependencies:
-        !pkg.workspaces && (await exists('node_modules')) ? 'link-node-modules' : 'none',
+      defaultCheckIds: discovery.defaultCheckIds,
+      setup: discovery.setup,
+      dependencies: discovery.dependencies || 'none',
+      ...(discovery.environmentRecipe
+        ? { environment: { provider: 'native' as const, recipe: discovery.environmentRecipe } }
+        : {}),
       maxWorkers: 2,
       maxRepairs: 2,
       turnTimeoutMs: 360000,
@@ -166,11 +150,7 @@ export class FileProjectRepository implements ProjectRepositoryPort {
           .replace(/^origin\//, '');
       } catch {}
     }
-    const warnings = [];
-    if (pkg.workspaces && !stored)
-      warnings.push(
-        'This is a monorepo. Configure workspace dependency setup to verify changed packages; shared node_modules may point to the source checkout.',
-      );
+    const warnings = [...discovery.warnings];
     if (status.trim())
       warnings.push(
         'The source directory has uncommitted changes. Execution uses the selected commit without those changes.',
@@ -181,12 +161,18 @@ export class FileProjectRepository implements ProjectRepositoryPort {
       );
     if (!checks.length && !stored)
       warnings.push('No check commands were found. Add at least one before starting a goal.');
+    if ((await safeGit(['rev-parse', '--verify', 'HEAD'], { cwd: root })).stdout.trim() !== head)
+      throw new DomainError(
+        'REPOSITORY_CHANGED',
+        'The repository changed during inspection. Inspect it again.',
+      );
     return {
       root,
-      name: stored?.name || pkg.name || path.basename(root),
+      name: stored?.name || discovery.projectName || path.basename(root),
       branch,
       head,
       dirty: !!status.trim(),
+      checkRecipes: discovery.sources,
       dirtyFiles: status.trimEnd().split('\n').filter(Boolean),
       profile,
       warnings,

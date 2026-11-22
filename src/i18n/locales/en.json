@@ -1159,9 +1159,9 @@
   "This preference applies to every use of the role. Availability depends on the selected operation.": "This preference applies to every use of the role. Availability depends on the selected operation.",
   "Plan and coordinate": "Plan and coordinate",
   "Implement changes": "Implement changes",
-  "Review accepted changes": "Review accepted changes",
   "Inspect environment setup": "Inspect environment setup",
   "Prepare local preview": "Prepare local preview",
   "Prepare pull request": "Prepare pull request",
-  "Prepare deployment: {p0}": "Prepare deployment: {p0}"
+  "Prepare deployment: {p0}": "Prepare deployment: {p0}",
+  "Review changes": "Review changes"
 }

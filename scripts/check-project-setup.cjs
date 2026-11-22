@@ -8,6 +8,9 @@ const { promisify } = require('node:util'),
 const exec = promisify(execFile);
 (async () => {
   const { Service } = await import('cordis');
+  const { fixtureExecutionSelection, fixtureExecutionCapabilities } = await import(
+    '../tests/fixtures/execution-resources.ts'
+  );
   const { createHost } = await import('../plugins/host.ts');
   const { projectManagementPlugin } = await import('../plugins/project-management.ts');
   const { projectOperationsPlugin } = await import('../plugins/project-operations.ts');
@@ -99,6 +102,7 @@ const exec = promisify(execFile);
       constructor(ctx) {
         super(ctx, 'agentRuntime');
         this.adapter = runtime;
+        this.selection = fixtureExecutionSelection('fixture', fixtureExecutionCapabilities());
       }
     }
     await host.ctx.plugin(Runtime);
@@ -274,6 +278,7 @@ const exec = promisify(execFile);
       goalText: 'Show API',
       result: 'API ready',
       sourceHash: '',
+      resources: host.ctx.agentRuntime.selection.forProject(project.id),
     };
     await store.transact('seed-run', 'seed-run', (doc) => {
       doc.runs.unshift(run);

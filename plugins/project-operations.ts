@@ -1,19 +1,27 @@
 import type { Plugin } from 'cordis';
 import { ProjectResearchService } from '../core/project-research.ts';
 import { ResultService, type ResultOperations } from '../core/results.ts';
+import { readAuthorizedMaterialText } from '../adapters/files/context-material-text.ts';
 declare module 'cordis' {
   interface Events {
     'run/completed'(projectId: string, runId: string): void;
   }
 }
-export const projectOperationsPlugin: Plugin.Object<{ operations: ResultOperations }> = {
+export const projectOperationsPlugin: Plugin.Object<{
+  operations: ResultOperations;
+  analysisId?: string;
+}> = {
   name: 'project-operations',
-  inject: ['projects', 'commands', 'agentRuntime', 'projectManagement'],
-  async apply(ctx, { operations }) {
+  inject: ['projects', 'commands', 'agentRuntime', 'projectManagement', 'projectContributions'],
+  async apply(ctx, { operations, analysisId = 'project-setup' }) {
     const research = new ProjectResearchService({
       projects: ctx.projects.registry,
       runtime: ctx.agentRuntime.adapter,
       head: async (root) => (await ctx.projectManagement.api.inspect(root)).head,
+      analysis: ctx.projectContributions.analyses.get(analysisId),
+      materials: (projectId, selected, signal) =>
+        readAuthorizedMaterialText(ctx.projects.registry, projectId, selected, signal),
+      selection: ctx.agentRuntime.selection!,
     });
     const results = new ResultService({
       projects: ctx.projects.registry,

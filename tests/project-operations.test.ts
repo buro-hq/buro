@@ -1,3 +1,5 @@
+import { createBuiltinProjectAnalyses } from '../adapters/analysis/project-setup.ts';
+import { readAuthorizedMaterialText } from '../adapters/files/context-material-text.ts';
 import test from 'node:test';
 import {
   fixtureExecutionSelection,
@@ -93,7 +95,9 @@ function record(): Run {
   };
 }
 async function fixture(t: any) {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'project-operations-'));
+  const directory = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), 'project-operations-')),
+  );
   const store = await FileProjectStore.open({
     directory,
     project: { id: 'p', name: 'Fixture', root: directory, managed: true },
@@ -295,6 +299,10 @@ test('project research proposes components and checks without changing the exist
     }),
   });
   const research = new ProjectResearchService({
+    selection: fixtureExecutionSelection('fixture', fixtureExecutionCapabilities()),
+    analysis: createBuiltinProjectAnalyses().get('project-setup'),
+    materials: (projectId, selected, signal) =>
+      readAuthorizedMaterialText(f.projects, projectId, selected, signal),
     projects: f.projects,
     runtime: f.runtime,
     head: async () => commit,
@@ -303,7 +311,7 @@ test('project research proposes components and checks without changing the exist
   await research.start('research', 'research', 'p');
   await research.jobs.get('p')?.promise;
   const snapshot = f.store.snapshot();
-  assert.equal(snapshot.research?.status, 'ready');
+  assert.equal(snapshot.research?.status, 'ready', snapshot.research?.error);
   assert.equal(snapshot.research?.components?.[0].kind, 'api');
   assert.equal(snapshot.profile?.context, 'Manual context');
   assert.equal(f.starts[0].readOnly, true);

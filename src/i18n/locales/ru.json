@@ -1159,9 +1159,9 @@
   "This preference applies to every use of the role. Availability depends on the selected operation.": "Настройка действует во всех задачах роли. Доступность модели зависит от операции.",
   "Plan and coordinate": "Планирование и координация",
   "Implement changes": "Изменение кода",
-  "Review accepted changes": "Независимое ревью",
   "Inspect environment setup": "Исследование окружения",
   "Prepare local preview": "Подготовка локального запуска",
   "Prepare pull request": "Подготовка пул-реквеста",
-  "Prepare deployment: {p0}": "Подготовка деплоя: {p0}"
+  "Prepare deployment: {p0}": "Подготовка деплоя: {p0}",
+  "Review changes": "Ревью изменений"
 }

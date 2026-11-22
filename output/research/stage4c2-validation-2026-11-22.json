@@ -1,0 +1,57 @@
+{
+  "stage": "4C2",
+  "date": "2026-11-22",
+  "parentCommit": "e98b597",
+  "tests": {
+    "total": 995,
+    "passed": 995,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 67465.291958,
+    "log": "/private/tmp/buro-stage4c2-final-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage4c2-build.log"
+  },
+  "format": {
+    "passed": true,
+    "logs": [
+      "/private/tmp/buro-stage4c2-format.log",
+      "/private/tmp/buro-stage4c2-server-format.log"
+    ]
+  },
+  "browser": {
+    "productionDesktopMobile": true,
+    "emptyServiceOnboarding": true,
+    "fullProjectResearchSettingsAndResult": true,
+    "localPreviewProcessAndRestart": true,
+    "deliveryConfirmationAndRedeploy": true,
+    "originalTemporaryBranchPreserved": true,
+    "liveModelRequests": 0,
+    "pageErrors": 0,
+    "logs": [
+      "/private/tmp/buro-stage4c2-production.log",
+      "/private/tmp/buro-stage4c2-setup-browser.log",
+      "/private/tmp/buro-stage4c2-bootstrap-browser.log"
+    ]
+  },
+  "independentReviews": [
+    "stage4c2-architecture-review-2026-11-22.md",
+    "stage4c2-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementation": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Trusted in-process extensions do not isolate hostile plugin code.",
+    "Reference-only images are retained but not provided as vision input to text-only model transports.",
+    "HEAD consistency is not immutable dirty-worktree inspection.",
+    "Workflow role templates, empty model startup, storage/paging, quota removal, operational preparation receipts, reusable package consumers and concurrency remain subsequent work."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

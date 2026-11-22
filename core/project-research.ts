@@ -1,28 +1,104 @@
-import { z } from 'zod';
 import { DEFAULT_IDLE_TIMEOUT_MS } from '../protocol/domain.ts';
 import type { ProjectResearch } from '../protocol/domain.ts';
-import { ResearchResultSchema } from '../protocol/operations.ts';
 import { materialInstructions } from '../protocol/context.ts';
-import { DomainError, type AgentRuntime, type ProjectRegistry } from './ports.ts';
+import {
+  DomainError,
+  type AgentRuntime,
+  type ProjectRegistry,
+  type RuntimeSelection,
+} from './ports.ts';
+import { ResourceSnapshotSchema } from '../protocol/resources.ts';
+import { roleResourcePool } from './role-routing.ts';
 import { operationIds } from './operation-catalog.ts';
+import type { ContextMaterial } from '../protocol/context.ts';
+import type {
+  ResolvedProjectAnalysis,
+  ProjectAnalysisInput,
+  AuthorizedMaterialTextReader,
+} from './project-analysis.ts';
 import { terminal } from './execution-ports.ts';
+
+type ResearchAdmission = {
+  analysis: ResolvedProjectAnalysis;
+  input: Omit<ProjectAnalysisInput, 'materials'>;
+  selected: ContextMaterial[];
+  root: string;
+};
 
 export class ProjectResearchService {
   projects: ProjectRegistry;
   runtime: AgentRuntime;
   head: (root: string) => Promise<string>;
+  #analysis: ResolvedProjectAnalysis;
+  #materials: AuthorizedMaterialTextReader;
+  #selection: RuntimeSelection;
+  closing = false;
+  #admissions = new Set<{
+    projectId: string;
+    controller: AbortController;
+    promise: Promise<unknown>;
+  }>();
   jobs = new Map<string, { controller: AbortController; promise: Promise<void> }>();
   constructor(options: {
     projects: ProjectRegistry;
     runtime: AgentRuntime;
     head: (root: string) => Promise<string>;
+    analysis: ResolvedProjectAnalysis;
+    materials: AuthorizedMaterialTextReader;
+    selection: RuntimeSelection;
   }) {
-    Object.assign(this, options);
     this.projects = options.projects;
     this.runtime = options.runtime;
     this.head = options.head;
+    if (!options.selection || typeof options.selection.forProject !== 'function')
+      throw new DomainError(
+        'RESOURCE_PROFILE_REQUIRED',
+        'Research requires an explicit execution resource selection.',
+      );
+    this.#selection = options.selection;
+    if (
+      !options.analysis ||
+      options.analysis.purpose !== 'project-setup' ||
+      !options.analysis.id ||
+      !options.analysis.revision ||
+      typeof options.analysis.build !== 'function' ||
+      typeof options.analysis.parse !== 'function' ||
+      typeof options.materials !== 'function'
+    )
+      throw new DomainError(
+        'INVALID_PROJECT_ANALYSIS',
+        'Configure a resolved project analysis and authorized material reader.',
+      );
+    const { id, revision, purpose, build, parse } = options.analysis;
+    this.#analysis = Object.freeze({
+      id,
+      revision,
+      purpose,
+      build: (input: ProjectAnalysisInput) => structuredClone(build(structuredClone(input))),
+      parse: (text: string) => structuredClone(parse(text)),
+    });
+    this.#materials = options.materials;
   }
-  async start(id: string, fingerprint: string, projectId: string) {
+  start(id: string, fingerprint: string, projectId: string): Promise<unknown> {
+    if (this.closing)
+      return Promise.reject(new DomainError('STOPPING', 'The service is stopping.'));
+    const controller = new AbortController();
+    const promise = this.admit(id, fingerprint, projectId, controller);
+    const admission = { projectId, controller, promise };
+    this.#admissions.add(admission);
+    void promise.then(
+      () => this.#admissions.delete(admission),
+      () => this.#admissions.delete(admission),
+    );
+    return promise;
+  }
+  private async admit(
+    id: string,
+    fingerprint: string,
+    projectId: string,
+    controller: AbortController,
+  ) {
+    if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
     const store = this.projects.get(projectId);
     const existing = store.receipt(id, fingerprint);
     if (existing !== undefined) return existing;
@@ -31,9 +107,32 @@ export class ProjectResearchService {
       throw new DomainError('UNMANAGED_PROJECT', 'Connect a repository.');
     if (this.jobs.has(projectId) || snapshot.runs.some((r) => !terminal(r)))
       throw new DomainError('PROJECT_BUSY', 'Wait for current work to finish.');
+    if (!snapshot.profile)
+      throw new DomainError('INVALID_PROFILE', 'Configure the project before researching it.');
+    const analysis = this.#analysis;
+    const resources = ResourceSnapshotSchema.parse(
+      structuredClone(this.#selection.forProject(projectId)),
+    );
+    roleResourcePool(resources);
+    controller.signal.throwIfAborted();
     const sourceHead = await this.head(snapshot.project.root);
+    if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
+    controller.signal.throwIfAborted();
+    const admission: ResearchAdmission = {
+      analysis,
+      input: {
+        project: { id: snapshot.project.id, name: snapshot.project.name },
+        sourceHead,
+        profile: structuredClone(snapshot.profile),
+      },
+      selected: [],
+      root: snapshot.project.root,
+    };
     const research: ProjectResearch = {
       id: 'setup-' + crypto.randomUUID(),
+      analysis: { id: analysis.id, revision: analysis.revision },
+      resources,
+      contextMaterials: [],
       status: 'running',
       startedAt: new Date().toISOString(),
       sourceHead,
@@ -46,21 +145,51 @@ export class ProjectResearchService {
         },
       ],
     };
-    await store.transact(id, fingerprint, (doc) => {
-      if (doc.research?.status === 'running')
+    const admitted = await store.transact(id, fingerprint, (doc) => {
+      if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
+      controller.signal.throwIfAborted();
+      if (
+        doc.profile?.revision !== admission.input.profile.revision ||
+        doc.project.root !== admission.root
+      )
+        throw new DomainError(
+          'RESEARCH_STALE',
+          'Project settings changed before research was admitted.',
+        );
+      if (doc.runs.some((run) => !terminal(run)))
+        throw new DomainError('PROJECT_BUSY', 'Wait for current work to finish.');
+      if (this.jobs.has(projectId) || doc.research?.status === 'running')
         throw new DomainError('PROJECT_BUSY', 'Research is already running.');
+      admission.selected = structuredClone(
+        (doc.contextMaterials || []).filter(
+          (material) => material.active && material.scope === 'project',
+        ),
+      );
+      research.contextMaterials = structuredClone(admission.selected);
       doc.research = research;
       return {
         result: { researchId: research.id },
         change: { type: 'project.research.changed', research },
       };
     });
-    const controller = new AbortController();
+    if (admitted.researchId !== research.id) return admitted;
+    if (this.closing || controller.signal.aborted) {
+      await this.update(projectId, research.id, (saved) => {
+        saved.status = 'interrupted';
+        saved.completedAt = new Date().toISOString();
+        saved.error = 'Research was stopped before model dispatch.';
+      });
+      return admitted;
+    }
     const promise = Promise.resolve().then(() =>
-      this.execute(projectId, research.id, controller.signal),
+      this.execute(projectId, research.id, admission, controller.signal),
     );
     this.jobs.set(projectId, { controller, promise });
-    void promise.finally(() => this.jobs.delete(projectId)).catch(() => {});
+    void promise
+      .finally(() => {
+        if (this.jobs.get(projectId)?.promise === promise) this.jobs.delete(projectId);
+      })
+      .catch(() => {});
     return { researchId: research.id };
   }
   async update(projectId: string, researchId: string, change: (r: ProjectResearch) => void) {
@@ -75,7 +204,12 @@ export class ProjectResearchService {
         };
       });
   }
-  async execute(projectId: string, researchId: string, signal: AbortSignal) {
+  private async execute(
+    projectId: string,
+    researchId: string,
+    admission: ResearchAdmission,
+    signal: AbortSignal,
+  ) {
     let threadId: string | undefined;
     let events = Promise.resolve();
     const unsubscribe = this.runtime.subscribe?.((event) => {
@@ -92,45 +226,53 @@ export class ProjectResearchService {
         .catch(() => {});
     });
     try {
+      signal.throwIfAborted();
+      const materials = await this.#materials(projectId, admission.selected, signal);
+      signal.throwIfAborted();
+      const request = admission.analysis.build({ ...admission.input, materials });
       const snapshot = this.projects.get(projectId).snapshot();
+      if (
+        snapshot.profile?.revision !== admission.input.profile.revision ||
+        snapshot.research?.id !== researchId ||
+        snapshot.research.analysis.id !== admission.analysis.id ||
+        snapshot.research.analysis.revision !== admission.analysis.revision ||
+        (await this.head(admission.root)) !== admission.input.sourceHead
+      )
+        throw new DomainError(
+          'RESEARCH_STALE',
+          'Project settings or source changed before analysis dispatch.',
+        );
+      signal.throwIfAborted();
       const thread = await this.runtime.start({
         projectId,
-        workspace: snapshot.project.root,
+        workspace: admission.root,
         readOnly: true,
         purpose: 'research',
         operationId: operationIds.research,
         runId: researchId,
         instructions:
-          'You are the project setup engineer. Inspect the repository only. Do not edit files, start servers, install dependencies, run migrations, mutate Git or deploy. Do not use the network. Do not traverse .buro/, .git/, node_modules/, dist/, build/ or caches, including nested directories. The current profile is supplied in the request. Do not open secrets (.env, keys, local/); .env.example without secret values is allowed. Follow AGENTS.md. Suggest launch commands only, with evidence from actual files; never invent them. Do not start child agents.' +
-          materialInstructions(
-            (snapshot.contextMaterials || []).filter((m) => m.active && m.scope === 'project'),
-            snapshot.project.root,
-          ),
+          'This is a read-only project research operation. Returned commands are suggestions; only the application may apply settings or execute operations.\n' +
+          request.instructions +
+          materialInstructions(admission.selected, admission.root),
       });
       threadId = thread.threadId;
+      signal.throwIfAborted();
       await this.update(projectId, researchId, (r) => {
         r.threadId = threadId;
       });
+      signal.throwIfAborted();
       if (!this.runtime.turn) throw Error('The runtime does not support research.');
-      const answer = await this.runtime.turn(
-        threadId,
-        `Inspect the project and existing settings. Identify web/api/worker/cli/library/other components, their relative working directories (./ for the root), long-running local launch commands (empty when not applicable), HTTP ports (0 when unknown or non-HTTP), readyPath (empty for non-HTTP), result verification instructions, startup dependencies in instructions, and evidence files. Order components by startup dependency. HTTP commands must accept PORT/HOST or {port}: the service allocates free ports. Each HTTP component address is available as PROJECT_COMPONENT_<UPPERCASE_ID>_URL; use it in commands when a frontend requires an API address. Do not suggest migrations, package installation, production commands or shared database changes. Suggest test/typecheck/lint commands only from existing configuration. Ask about missing variables and infrastructure without including secret values. Describe discovered environments and CI in summary; do not enable delivery automatically. Current profile: preserve manual values during repeated research:
-${JSON.stringify(snapshot.profile)}
-Return the structured result.`,
-        {
-          schema: z.toJSONSchema(ResearchResultSchema, { target: 'draft-7' }),
-          signal,
-          timeoutMs: DEFAULT_IDLE_TIMEOUT_MS,
-        },
-      );
-      const result = ResearchResultSchema.parse(JSON.parse(answer.text));
-      if (
-        new Set(result.components.map((c) => c.id)).size !== result.components.length ||
-        new Set(result.checks.map((c) => c.id)).size !== result.checks.length
-      )
-        throw Error('The agent returned duplicate IDs.');
+      const answer = await this.runtime.turn(threadId, request.prompt, {
+        schema: structuredClone(request.schema),
+        signal,
+        timeoutMs: DEFAULT_IDLE_TIMEOUT_MS,
+      });
+      const result = admission.analysis.parse(answer.text);
+      signal.throwIfAborted();
       await events;
+      signal.throwIfAborted();
       await this.update(projectId, researchId, (r) => {
+        signal.throwIfAborted();
         Object.assign(r, result, { status: 'ready', completedAt: new Date().toISOString() });
         r.events.push({
           at: new Date().toISOString(),
@@ -146,10 +288,13 @@ Return the structured result.`,
       }).catch(() => {});
     } finally {
       unsubscribe?.();
+      await events;
       if (threadId) await this.runtime.release?.(threadId);
     }
   }
   cancel(projectId: string) {
+    for (const admission of this.#admissions)
+      if (admission.projectId === projectId) admission.controller.abort();
     this.jobs.get(projectId)?.controller.abort();
     return { requested: true };
   }
@@ -164,7 +309,10 @@ Return the structured result.`,
     }
   }
   async dispose() {
+    this.closing = true;
+    for (const admission of this.#admissions) admission.controller.abort();
     for (const job of this.jobs.values()) job.controller.abort();
+    await Promise.allSettled([...this.#admissions].map((admission) => admission.promise));
     await Promise.allSettled([...this.jobs.values()].map((j) => j.promise));
   }
 }

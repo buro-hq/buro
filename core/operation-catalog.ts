@@ -83,7 +83,7 @@ export function projectOperationCatalog(
     },
     {
       id: operationIds.review,
-      label: 'Review accepted changes',
+      label: 'Review changes',
       purpose: 'review',
       requirements: { ...inspection, immutableReview: true },
       roles: { kind: 'fixed', roleId: 'reviewer' },

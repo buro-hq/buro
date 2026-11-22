@@ -1,3 +1,7 @@
+import {
+  fixtureExecutionSelection,
+  fixtureExecutionCapabilities,
+} from './fixtures/execution-resources.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -501,6 +505,12 @@ test('research proposals cannot overwrite a profile after repository or profile 
     project = await f.connect(),
     store = f.registry.get(project.id);
   const research = {
+    analysis: { id: 'project-setup', revision: 'fixture-analysis-v1' },
+    resources: fixtureExecutionSelection(
+      'fixture-research',
+      fixtureExecutionCapabilities(),
+    ).forProject(project.id),
+    contextMaterials: [],
     id: 'research-fixture',
     status: 'ready' as const,
     startedAt: new Date().toISOString(),
@@ -523,14 +533,14 @@ test('research proposals cannot overwrite a profile after repository or profile 
     { code: 'RESEARCH_STALE' },
   );
   await store.transact('current-research', 'current-research', (doc) => {
-    doc.research!.sourceHead = f.info.head;
+    doc.research = { ...doc.research!, id: 'current-research-fixture', sourceHead: f.info.head };
     return { result: null, change: { type: 'project.research.changed', research: doc.research! } };
   });
   await f.manager.configure('apply-research', 'apply-research', {
     projectId: project.id,
     profile: store.snapshot().profile!,
     expectedRevision: 1,
-    researchId: research.id,
+    researchId: 'current-research-fixture',
   });
   assert.equal(store.snapshot().research?.appliedProfileRevision, 2);
 });
@@ -540,6 +550,12 @@ test('manual save acknowledges ready research and later proposal acceptance uses
     project = await f.connect(),
     store = f.registry.get(project.id);
   const research = {
+    analysis: { id: 'project-setup', revision: 'fixture-analysis-v1' },
+    resources: fixtureExecutionSelection(
+      'fixture-research',
+      fixtureExecutionCapabilities(),
+    ).forProject(project.id),
+    contextMaterials: [],
     id: 'research-manual',
     status: 'ready' as const,
     startedAt: new Date().toISOString(),
@@ -598,6 +614,12 @@ test('quick research application adds missing launch settings and preserves manu
     evidence: 'server.mjs',
   };
   const research = {
+    analysis: { id: 'project-setup', revision: 'fixture-analysis-v1' },
+    resources: fixtureExecutionSelection(
+      'fixture-research',
+      fixtureExecutionCapabilities(),
+    ).forProject(project.id),
+    contextMaterials: [],
     id: 'research-quick',
     status: 'ready' as const,
     startedAt: new Date().toISOString(),

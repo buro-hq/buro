@@ -1,11 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { DomainError, type ProjectRegistry } from '../../core/ports.ts';
 import type { ContextMaterial } from '../../protocol/context.ts';
-const exec = promisify(execFile);
+import { ContextLoaderCatalog, type ResolvedContextLoader } from '../../core/context-loaders.ts';
+import { createBuiltinContextLoaders } from '../context/loaders/builtins.ts';
 const digest = (data: Buffer | string) => createHash('sha256').update(data).digest('hex');
 const maxFile = 8 * 1024 * 1024,
   maxBatch = 48 * 1024 * 1024;
@@ -22,30 +21,9 @@ const skipped = new Set([
   'venv',
   'target',
 ]);
-const images: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-};
 const denied = (name: string) =>
   (/^\.env(?:$|\.)/.test(name) && name !== '.env.example') ||
   /\.(pem|key|p12|pfx|keystore|exe|dmg|zip|gz|sqlite|db)$/i.test(name);
-function materialMime(name: string, data: Buffer): string | undefined {
-  const extension = path.extname(name).toLowerCase();
-  if (images[extension]) return images[extension];
-  if (extension === '.pdf') return 'application/pdf';
-  if (extension === '.docx')
-    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  try {
-    new TextDecoder('utf-8', { fatal: true }).decode(data);
-    if (data.includes(0)) return;
-    return extension === '.md' ? 'text/markdown' : 'text/plain';
-  } catch {
-    return;
-  }
-}
 async function materialDirectory(root: string) {
   let directory = await fs.realpath(root);
   for (const part of ['.buro', 'local', 'context']) {
@@ -82,37 +60,14 @@ async function putBlob(directory: string, data: Buffer, extension: string) {
   }
   return { hash, relativePath: 'local/context/' + path.basename(file), file };
 }
-async function extractedText(file: string, extension: string) {
-  if (extension === '.pdf') {
-    if (process.platform === 'darwin')
-      return (
-        await exec(
-          '/usr/bin/osascript',
-          [
-            '-l',
-            'JavaScript',
-            '-e',
-            'ObjC.import("PDFKit"); function run(argv) { const doc = $.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(argv[0])); return doc ? ObjC.unwrap(doc.string) || "" : ""; }',
-            file,
-          ],
-          { timeout: 30000, maxBuffer: 1024 * 1024 },
-        )
-      ).stdout;
-    return (await exec('pdftotext', [file, '-'], { timeout: 30000, maxBuffer: 1024 * 1024 }))
-      .stdout;
-  }
-  return (
-    await exec('/usr/bin/textutil', ['-convert', 'txt', '-stdout', file], {
-      timeout: 30000,
-      maxBuffer: 1024 * 1024,
-    })
-  ).stdout;
-}
 export class ContextMaterials {
   projects: ProjectRegistry;
   queues = new Map<string, Promise<unknown>>();
-  constructor(projects: ProjectRegistry) {
+  loaders: ContextLoaderCatalog;
+  constructor(projects: ProjectRegistry, loaders = createBuiltinContextLoaders()) {
+    loaders.assertSealed();
     this.projects = projects;
+    this.loaders = loaders;
   }
   import(
     id: string,
@@ -149,15 +104,23 @@ export class ContextMaterials {
       cached = store.receipt(id, fingerprint);
     if (cached !== undefined) return cached as ContextMaterial[];
     const snapshot = store.snapshot(),
-      files: { name: string; data: Buffer }[] = [];
+      files: { name: string; data: Buffer; loader: ResolvedContextLoader }[] = [];
     let bytes = 0;
-    const add = (name: string, data: Buffer) => {
+    const add = (name: string, data: Buffer, nested = false) => {
       if (data.length > maxFile)
         throw new DomainError('CONTEXT_LIMIT', 'A material must not exceed 8 MB.');
-      bytes += data.length;
-      if (bytes > maxBatch || files.length >= 64)
+      const label = name.replace(/[\x00-\x1f]/g, '_').slice(-240);
+      let loader: ResolvedContextLoader;
+      try {
+        loader = this.loaders.select({ name: label, bytes: data });
+      } catch (error) {
+        if (nested && error instanceof DomainError && error.code === 'UNSUPPORTED_CONTEXT') return;
+        throw error;
+      }
+      if (bytes + data.length > maxBatch || files.length >= 64)
         throw new DomainError('CONTEXT_LIMIT', 'Import up to 64 files totaling 48 MB at a time.');
-      files.push({ name: name.replace(/[\x00-\x1f]/g, '_').slice(-240), data });
+      bytes += data.length;
+      files.push({ name: label, data, loader });
     };
     if (input.upload) {
       if (input.paths?.length)
@@ -195,8 +158,7 @@ export class ContextMaterials {
         if (stat.size > maxFile)
           throw new DomainError('CONTEXT_LIMIT', 'A material must not exceed 8 MB.');
         const data = await fs.readFile(file);
-        if (depth > 0 && !materialMime(label, data)) return;
-        add(label, data);
+        add(label, data, depth > 0);
       }
     };
     for (const source of input.paths || []) {
@@ -215,28 +177,32 @@ export class ContextMaterials {
     const directory = await materialDirectory(snapshot.project.root),
       materials: ContextMaterial[] = [],
       fresh: ContextMaterial[] = [];
-    for (const { name, data } of files) {
+    for (const { name, data, loader } of files) {
       const hash = digest(data);
       const existing = [...(snapshot.contextMaterials || []), ...fresh].find(
-        (m) => m.active && m.scope === input.scope && m.hash === hash && m.name === name,
+        (m) =>
+          m.active &&
+          m.scope === input.scope &&
+          m.hash === hash &&
+          m.name === name &&
+          m.loader?.id === loader.id &&
+          m.loader.revision === loader.revision,
       );
       if (existing) {
         materials.push(existing);
         continue;
       }
       const extension = path.extname(name).toLowerCase();
-      const mimeType = materialMime(name, data);
-      if (!mimeType)
-        throw new DomainError(
-          'UNSUPPORTED_CONTEXT',
-          `Unsupported file format: ${name}. Use text, code, an image, PDF or DOCX.`,
-        );
+      const loaded = await loader.load(new AbortController().signal);
       const safeExtension = /^\.[a-z0-9]{1,12}$/.test(extension) ? extension : '.txt',
         blob = await putBlob(directory, data, safeExtension);
       const material: ContextMaterial = {
         id: 'M-' + randomUUID(),
         name,
-        mimeType,
+        mimeType: loaded.mimeType,
+        representation: loaded.representation,
+        loader: { id: loader.id, revision: loader.revision },
+        ...(loaded.note ? { note: loaded.note } : {}),
         size: data.length,
         hash,
         relativePath: blob.relativePath,
@@ -244,17 +210,12 @@ export class ContextMaterials {
         active: true,
         createdAt: new Date().toISOString(),
       };
-      if (extension === '.pdf' || extension === '.docx') {
-        try {
-          const text = (await extractedText(blob.file, extension)).trim();
-          if (text) {
-            const extracted = await putBlob(directory, Buffer.from(text), '.txt');
-            material.textPath = extracted.relativePath;
-            material.textHash = extracted.hash;
-          } else material.note = 'No text was extracted; the original file is available.';
-        } catch {
-          material.note =
-            'Automatic text extraction is unavailable; the original file is available.';
+      if (loaded.text !== undefined) {
+        const text = Buffer.from(loaded.text);
+        if (!text.equals(data)) {
+          const extracted = await putBlob(directory, text, '.txt');
+          material.textPath = extracted.relativePath;
+          material.textHash = extracted.hash;
         }
       }
       fresh.push(material);

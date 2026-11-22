@@ -66,6 +66,7 @@ export type ProjectProfile = {
   delivery?: DeliveryConfig;
 };
 export type RepositoryInfo = {
+  checkRecipes?: import('./check-recipes.ts').CheckRecipeSource[];
   root: string;
   name: string;
   branch: string;
