@@ -65,7 +65,7 @@ export async function seedNoncurrentPlanRows(directory: string, planId: string, 
       ),
     ];
     const assignment = db.prepare(`INSERT INTO run_assignments
-      SELECT ? || ':' || role_id,?,run_id,admission_id,attempt_id,role_id,role_version,role_json,origin,task_json,resource_json
+      SELECT ? || ':' || role_id,?,run_id,admission_id,attempt_id,ordinal,role_id,role_version,role_json,origin,task_json,resource_json
       FROM run_assignments WHERE plan_id=?`);
     const paths = db.prepare(`INSERT INTO run_assignment_paths
       SELECT ? || ':' || a.role_id,p.ordinal,p.path FROM run_assignment_paths p JOIN run_assignments a ON a.assignment_id=p.assignment_id WHERE a.plan_id=?`);

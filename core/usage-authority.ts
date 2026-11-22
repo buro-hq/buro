@@ -417,7 +417,9 @@ export function validateProjectAuthorityChange(
     change.type === 'run.cancel-requested' ||
     change.type === 'run.lifecycle-changed' ||
     change.type === 'run.workspace-bound' ||
-    change.type === 'run.plan-accepted'
+    change.type === 'run.plan-accepted' ||
+    change.type === 'run.attempt-stopped' ||
+    change.type === 'run.attempt-continued'
   )
     return { ...validateProjectRunChange(change, projectId), projectId };
   if (change.type === 'project.configured' || change.type === 'project.verified')

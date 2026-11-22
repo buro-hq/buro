@@ -21,19 +21,26 @@ import type {
   RunTimelineQuery,
   RunWorkspaceBinding,
 } from '../../protocol/run-state.ts';
-import { initialRunView, mergeRunCurrent } from '../../protocol/run-view.ts';
+import { initialRunView } from '../../protocol/run-view.ts';
 import { validateProjectGoal } from '../../core/project-entities.ts';
 import { createManagedRunBudget, managedBudgetSummary } from '../../core/run-budget.ts';
 import { projectRunAutonomy } from '../../core/autonomy-policy.ts';
 import { commandCopy } from '../state/transaction-values.ts';
 import { createDocumentFacet, type DocumentFacetHost } from './document-facet.ts';
 import { createDocumentRunPlanRows, validateDocumentRunPlans } from './project-run-plans.ts';
+import {
+  createDocumentRunAttemptRows,
+  projectDocumentAttemptState,
+  validateDocumentRunAttempts,
+} from './project-run-attempts.ts';
+import type { RunAttemptStop } from '../../protocol/run-attempt.ts';
 
 type RunDocument = ProjectDocument & {
   runAdmissions?: Record<string, RunAdmission>;
   runInitialAttempts?: Record<string, RunAttempt>;
   runHeads?: Record<string, RunCurrent>;
   runWorkspaces?: Record<string, RunWorkspaceBinding>;
+  runAttemptStops?: Record<string, RunAttemptStop>;
 };
 const conflict = () =>
   new DomainError('CONFLICT', 'Run state changed. Refresh before trying again.');
@@ -63,7 +70,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
         phase: run.phase,
         updatedAt: run.updatedAt,
         cancelRequested: !!run.cancelRequested,
-        ...(run.completedAt !== undefined ? { completedAt: run.completedAt } : {}),
+        completedAt: run.completedAt,
       });
       // Unmigrated executor writes still belong to this sole document. Their lifecycle is a read projection.
       if (!isDeepStrictEqual(next, head)) {
@@ -74,6 +81,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
       return next;
     };
     const rows: RunTransactionStorage = {
+      ...createDocumentRunAttemptRows(doc, access),
       ...createDocumentRunPlanRows(doc, access),
       current,
       workspace: (id) => {
@@ -251,8 +259,8 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
           if (!isDeepStrictEqual(current(previous.id), previous)) throw conflict();
           const run = legacy(previous.id)!;
           doc.runHeads![previous.id] = validateRunCurrent(next);
-          const updated = mergeRunCurrent(run, next);
-          if (!next.cancelRequested)
+          const updated = projectDocumentAttemptState(doc, previous, next, run);
+          if (!next.cancelRequested || next.phase === 'done')
             Object.assign(
               updated,
               projectRunAutonomy(updated, {
@@ -272,6 +280,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
                 resumeSupported: true,
                 startSupported: true,
                 settingsSupported: !!updated.executionPolicySnapshot?.profile,
+                lastErrorCode: doc.runAttemptStops?.[next.attemptId]?.errorCode,
               }),
             );
           doc.runs[doc.runs.indexOf(run)] = updated;
@@ -302,7 +311,9 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
           change.type !== 'run.admitted' &&
           change.type !== 'run.lifecycle-changed' &&
           change.type !== 'run.workspace-bound' &&
-          change.type !== 'run.plan-accepted'
+          change.type !== 'run.plan-accepted' &&
+          change.type !== 'run.attempt-stopped' &&
+          change.type !== 'run.attempt-continued'
         ) {
           access.appendChange(change);
           return;
@@ -323,6 +334,9 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
     projectId,
     transaction: facet.transaction,
     current: (id: string) => facet.query((tx) => tx.current(id)),
+    currentAttempt: (id: string) => facet.query((tx) => tx.currentAttempt(id)),
+    attempt: (id: string) => facet.query((tx) => tx.attempt(id)),
+    attemptStop: (id: string) => facet.query((tx) => tx.attemptStop(id)),
     planningInput: (id: string) => facet.query((tx) => tx.planningInput(id)),
     plan: (id: string) => facet.query((tx) => tx.plan(id)),
     assignment: (id: string, roleId: string) => facet.query((tx) => tx.assignment(id, roleId)),
@@ -351,6 +365,7 @@ export function validateDocumentRunAdmissions(
   next: ProjectDocument,
 ): void {
   validateDocumentRunPlans(previous, next);
+  validateDocumentRunAttempts(previous, next);
   const before = previous as RunDocument,
     after = next as RunDocument;
   const invalid = () =>
@@ -385,12 +400,15 @@ export function validateDocumentRunAdmissions(
   for (const [id, value] of Object.entries(after.runWorkspaces ?? {})) {
     const binding = validateRunWorkspaceBinding(value),
       head = after.runHeads?.[id],
+      origin = after.runInitialAttempts?.[binding.attemptId],
       run = after.runs.find((value) => value.id === id);
     if (
       binding.runId !== id ||
       !head ||
+      !origin ||
+      origin.runId !== id ||
+      origin.admissionId !== binding.admissionId ||
       head.admissionId !== binding.admissionId ||
-      head.attemptId !== binding.attemptId ||
       !run ||
       run.workspace !== binding.path ||
       run.baseCommit !== binding.baseCommit
@@ -401,7 +419,7 @@ export function validateDocumentRunAdmissions(
     const saved = after.runHeads?.[id];
     if (
       !saved ||
-      ['id', 'goalId', 'admissionId', 'attemptId', 'createdAt'].some(
+      ['id', 'goalId', 'admissionId', 'createdAt'].some(
         (field) => value[field as keyof RunCurrent] !== saved[field as keyof RunCurrent],
       )
     )
@@ -415,13 +433,7 @@ export function validateDocumentRunAdmissions(
   for (const [id, value] of Object.entries(after.runInitialAttempts ?? {})) {
     const attempt = validateRunAttempt(value),
       head = after.runHeads?.[attempt.runId];
-    if (
-      attempt.id !== id ||
-      !head ||
-      head.attemptId !== id ||
-      head.admissionId !== attempt.admissionId
-    )
-      throw invalid();
+    if (attempt.id !== id || !head || head.admissionId !== attempt.admissionId) throw invalid();
   }
   for (const [id, raw] of Object.entries(after.runHeads ?? {})) {
     const head = validateRunCurrent(raw),
@@ -435,7 +447,6 @@ export function validateDocumentRunAdmissions(
       !run ||
       admission.id !== head.admissionId ||
       admission.runId !== id ||
-      admission.attemptId !== head.attemptId ||
       admission.goal.id !== head.goalId ||
       attempt.id !== head.attemptId ||
       attempt.runId !== id ||

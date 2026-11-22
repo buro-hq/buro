@@ -3,6 +3,7 @@ import { DomainError } from '../../core/ports.ts';
 import type { RunTransactionStorage } from '../../core/project-runs.ts';
 import { validateRunAdmission } from '../../core/project-runs.ts';
 import { validateRunPlan, validateRunWorkerAssignment } from '../../core/project-run-plans.ts';
+import { createSqliteRunAttemptRows } from './project-run-attempt-rows.ts';
 
 /** Immutable decision packets are separate from the mutable current-plan pointer and Run state. */
 export const projectRunPlanSchema = `
@@ -13,7 +14,7 @@ export const projectRunPlanSchema = `
     attempt_id TEXT NOT NULL REFERENCES run_attempts(attempt_id),
     created_at TEXT NOT NULL CHECK(length(created_at)>0),
     summary TEXT NOT NULL,
-    context_source TEXT NOT NULL CHECK(context_source IN ('initial-admission','legacy-continuation')),
+    context_source TEXT NOT NULL CHECK(context_source IN ('initial-admission','legacy-continuation','continuation-attempt')),
     title TEXT NOT NULL,
     goal_text TEXT NOT NULL,
     policy_json TEXT NOT NULL CHECK(json_valid(policy_json)),
@@ -55,6 +56,7 @@ export const projectRunPlanSchema = `
     run_id TEXT NOT NULL REFERENCES run_current(run_id),
     admission_id TEXT NOT NULL REFERENCES run_admissions(admission_id),
     attempt_id TEXT NOT NULL REFERENCES run_attempts(attempt_id),
+    ordinal INTEGER NOT NULL CHECK(ordinal>=0),
     role_id TEXT NOT NULL,
     role_version INTEGER NOT NULL,
     role_json TEXT NOT NULL CHECK(json_valid(role_json)),
@@ -62,7 +64,8 @@ export const projectRunPlanSchema = `
     task_json TEXT CHECK(task_json IS NULL OR json_valid(task_json)),
     resource_json TEXT NOT NULL CHECK(json_valid(resource_json)),
     FOREIGN KEY(role_id,role_version) REFERENCES role_versions(role_id,version),
-    UNIQUE(plan_id,role_id)
+    UNIQUE(plan_id,role_id),
+    UNIQUE(plan_id,ordinal)
   );
   CREATE TABLE IF NOT EXISTS run_assignment_paths (
     assignment_id TEXT NOT NULL REFERENCES run_assignments(assignment_id),
@@ -107,7 +110,7 @@ export function createSqliteRunPlanRows(
   database: PlanDatabase,
 ): Pick<
   RunTransactionStorage,
-  'planningInput' | 'plan' | 'assignment' | 'insertPlan' | 'sealPlanningSession'
+  'planningInput' | 'plan' | 'assignment' | 'planAssignments' | 'insertPlan' | 'sealPlanningSession'
 > {
   const plan: RunTransactionStorage['plan'] = (runId) => {
     const row = database.get(
@@ -177,11 +180,19 @@ export function createSqliteRunPlanRows(
       ...readOnlyPlanner,
     });
   };
-  return {
+  const rows: Pick<
+    RunTransactionStorage,
+    | 'planningInput'
+    | 'plan'
+    | 'assignment'
+    | 'planAssignments'
+    | 'insertPlan'
+    | 'sealPlanningSession'
+  > = {
     planningInput: (runId) => {
       const row = database.get(
         'run.planning-input',
-        'SELECT a.admission_json FROM run_current c JOIN run_admissions a ON a.admission_id=c.admission_id WHERE c.run_id=?',
+        'SELECT c.attempt_id,a.admission_json FROM run_current c JOIN run_admissions a ON a.admission_id=c.admission_id WHERE c.run_id=?',
         runId,
       );
       if (!row) throw invalid();
@@ -190,6 +201,27 @@ export function createSqliteRunPlanRows(
         database.projectId,
       );
       if (admission.runId !== runId) throw invalid();
+      if (row.attempt_id !== admission.attemptId) {
+        const context = createSqliteRunAttemptRows(database).attemptContext(String(row.attempt_id));
+        if (!context || context.runId !== runId || context.admissionId !== admission.id)
+          throw invalid();
+        return {
+          contextSource: 'continuation-attempt',
+          title: context.goal.title,
+          goalText: context.goalText,
+          contextMaterials: context.contextMaterials,
+          checkIds: context.checkIds,
+          policy: context.policy,
+          resources: context.resources,
+          coordinator: {
+            role: context.roleSnapshots.find((role) => role.id === 'coordinator')!,
+            resource: context.roleResources.coordinator,
+          },
+          workflow: context.workflow,
+          planningPolicy: context.planningPolicy,
+          repairEnvironment: context.repairEnvironment,
+        };
+      }
       const coordinatorRole = admission.roleSnapshots.find((role) => role.id === 'coordinator');
       const coordinatorResource = admission.roleResources.coordinator;
       if (!coordinatorRole || !coordinatorResource) throw invalid();
@@ -208,6 +240,19 @@ export function createSqliteRunPlanRows(
       };
     },
     plan,
+    planAssignments: (runId) =>
+      database
+        .all(
+          'run.assignments.current',
+          'SELECT a.role_id,a.ordinal FROM run_plan_heads h JOIN run_assignments a ON a.plan_id=h.plan_id WHERE h.run_id=? ORDER BY a.ordinal',
+          runId,
+        )
+        .map((row, index) => {
+          if (row.ordinal !== index) throw invalid();
+          const value = rows.assignment(runId, String(row.role_id));
+          if (!value) throw invalid();
+          return value;
+        }),
     assignment: (runId, roleId) => {
       const row = database.get(
         'run.assignment',
@@ -291,7 +336,7 @@ export function createSqliteRunPlanRows(
             step.step,
             step.owner,
           );
-        for (const candidate of candidates) {
+        for (const [ordinal, candidate] of candidates.entries()) {
           const assignment = validateRunWorkerAssignment(candidate);
           if (
             assignment.planId !== saved.id ||
@@ -302,12 +347,13 @@ export function createSqliteRunPlanRows(
             throw invalid();
           database.run(
             'run.assignment.insert',
-            'INSERT INTO run_assignments(assignment_id,plan_id,run_id,admission_id,attempt_id,role_id,role_version,role_json,origin,task_json,resource_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO run_assignments(assignment_id,plan_id,run_id,admission_id,attempt_id,ordinal,role_id,role_version,role_json,origin,task_json,resource_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
             assignment.id,
             saved.id,
             saved.runId,
             saved.admissionId,
             saved.attemptId,
+            ordinal,
             assignment.role.id,
             assignment.role.version,
             database.json(assignment.role),
@@ -339,4 +385,5 @@ export function createSqliteRunPlanRows(
       );
     },
   };
+  return rows;
 }

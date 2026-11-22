@@ -11,6 +11,8 @@ import {
 import type { RunPlan, RunWorkerAssignment } from '../../protocol/run-plan.ts';
 import type { RunCurrent, RunAdmission } from '../../protocol/run-state.ts';
 import { validateProjectRole } from '../../core/project-entities.ts';
+import { documentAttemptContext } from './project-run-attempts.ts';
+import type { RunAttemptContext } from '../../protocol/run-attempt.ts';
 
 type PlanningDocument = ProjectDocument & {
   runPlans?: Record<string, RunPlan>;
@@ -40,21 +42,41 @@ const initialPlanningInput = (admission: RunAdmission) =>
     planningPolicy: admission.planningPolicy,
     repairEnvironment: admission.repairEnvironment,
   });
+const attemptPlanningInput = (context: RunAttemptContext) =>
+  validateRunPlanningInput({
+    contextSource: 'continuation-attempt',
+    title: context.goal.title,
+    goalText: context.goalText,
+    contextMaterials: context.contextMaterials,
+    checkIds: context.checkIds,
+    policy: context.policy,
+    resources: context.resources,
+    coordinator: {
+      role: context.roleSnapshots.find((role) => role.id === 'coordinator'),
+      resource: context.roleResources.coordinator,
+    },
+    workflow: context.workflow,
+    planningPolicy: context.planningPolicy,
+    repairEnvironment: context.repairEnvironment,
+  });
 
 export function createDocumentRunPlanRows(
   source: ProjectDocument,
   access: Access,
 ): Pick<
   RunTransactionStorage,
-  'planningInput' | 'plan' | 'assignment' | 'insertPlan' | 'sealPlanningSession'
+  'planningInput' | 'plan' | 'assignment' | 'planAssignments' | 'insertPlan' | 'sealPlanningSession'
 > {
   const doc = source as PlanningDocument;
   return {
     planningInput: (runId) => {
       const run = doc.runs.find((run) => run.id === runId);
       if (!run) throw new DomainError('NOT_FOUND', 'Run not found.');
+      const head = doc.runHeads?.[runId];
+      if (!head) throw invalid();
+      const context = documentAttemptContext(doc, head.attemptId);
       const input = validateRunPlanningInput({
-        contextSource: run.continuation ? 'legacy-continuation' : 'initial-admission',
+        contextSource: context.continuation ? 'continuation-attempt' : 'initial-admission',
         title: run.title,
         goalText: run.goalText,
         contextMaterials: run.contextMaterials ?? [],
@@ -80,13 +102,16 @@ export function createDocumentRunPlanRows(
             }
           : {}),
       });
-      if (!run.continuation) {
+      if (!context.continuation) {
         const admissionId = doc.runHeads?.[runId]?.admissionId;
         const admission = admissionId ? doc.runAdmissions?.[admissionId] : undefined;
         if (!admission || admission.runId !== runId) throw invalid();
         const expected = initialPlanningInput(admission);
         const { readOnlyPlanner: _planner, ...actual } = input;
         if (!isDeepStrictEqual(actual, expected)) throw invalid();
+      } else {
+        const { readOnlyPlanner: _planner, ...actual } = input;
+        if (!isDeepStrictEqual(actual, attemptPlanningInput(context))) throw invalid();
       }
       return input;
     },
@@ -102,6 +127,12 @@ export function createDocumentRunPlanRows(
       if (planId === undefined) return undefined;
       const saved = doc.runAssignments?.[planId]?.[roleId];
       return saved === undefined ? undefined : validateRunWorkerAssignment(saved);
+    },
+    planAssignments: (runId) => {
+      const id = doc.runPlanHeads?.[runId];
+      return id === undefined
+        ? []
+        : Object.values(doc.runAssignments?.[id] ?? {}).map(validateRunWorkerAssignment);
     },
     insertPlan: (candidate, candidates) =>
       access.write(() => {
@@ -223,7 +254,9 @@ export function validateDocumentRunPlans(previous: ProjectDocument, next: Projec
       !after.runAssignments?.[id] ||
       !head ||
       head.admissionId !== plan.admissionId ||
-      head.attemptId !== plan.attemptId ||
+      (head.attemptId !== plan.attemptId &&
+        (documentAttemptContext(after, head.attemptId).inheritedPlanId !== id ||
+          documentAttemptContext(after, head.attemptId).planOriginAttemptId !== plan.attemptId)) ||
       !isDeepStrictEqual(run.plan, plan.steps) ||
       run.planSavedAt !== plan.createdAt
     )
@@ -235,6 +268,15 @@ export function validateDocumentRunPlans(previous: ProjectDocument, next: Projec
         !admission ||
         admission.runId !== plan.runId ||
         !isDeepStrictEqual(captured, initialPlanningInput(admission))
+      )
+        throw invalid();
+    } else if (plan.context.contextSource === 'continuation-attempt') {
+      const { readOnlyPlanner: _planner, ...captured } = plan.context;
+      if (
+        !isDeepStrictEqual(
+          captured,
+          attemptPlanningInput(documentAttemptContext(after, plan.attemptId)),
+        )
       )
         throw invalid();
     } else if (!run.continuation) throw invalid();

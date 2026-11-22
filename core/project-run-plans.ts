@@ -60,6 +60,7 @@ export type AcceptRunPlan = {
   plan: TeamPlan;
   expectedRoleVersions: Record<string, number | null>;
   expectedInput: RunPlanningInput;
+  expectedAttemptId?: string;
 };
 export function validateRunPlanningInput(value: unknown): RunPlanningInput {
   const parsed = RunPlanningInputSchema.safeParse(value);
@@ -133,7 +134,7 @@ export function acceptRunPlan(
     typeof input !== 'object' ||
     Array.isArray(input) ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(input)) ||
-    Reflect.ownKeys(input).length !== 6 ||
+    (Reflect.ownKeys(input).length !== 6 && Reflect.ownKeys(input).length !== 7) ||
     Reflect.ownKeys(input).some(
       (key) =>
         typeof key !== 'string' || !('value' in Object.getOwnPropertyDescriptor(input, key)!),
@@ -147,6 +148,16 @@ export function acceptRunPlan(
     typeof input.now !== 'string'
   )
     throw invalid();
+  if (input.expectedAttemptId !== undefined && input.expectedAttemptId !== current.attemptId)
+    throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
+  if (
+    input.expectedAttemptId === undefined &&
+    storage.attempt(current.attemptId)?.reason !== 'initial'
+  )
+    throw new DomainError(
+      'ATTEMPT_OWNERSHIP_REQUIRED',
+      'This continuation requires its exact attempt owner.',
+    );
   if (current.cancelRequested || current.status === 'canceling')
     throw new DOMException('Interrupted', 'AbortError');
   if (

@@ -1,3 +1,20 @@
+import {
+  readRunAttempt,
+  stopRunAttempt,
+  prepareRunContinuation,
+  validateRunAttemptContext,
+  validateRunAttemptStop,
+  type FinishRunAttempt,
+  type ContinueRunAttempt,
+} from './project-run-attempts.ts';
+import {
+  runAttemptStopTimeline,
+  runAttemptContinuationTimeline,
+  type RunAttemptContext,
+  type RunAttemptStop,
+  type CurrentRunAttempt,
+} from '../protocol/run-attempt.ts';
+import type { RunIssue } from '../protocol/domain.ts';
 import { withEnvironmentRepair } from './environment-repair.ts';
 import { runPlanTimeline } from '../protocol/run-plan.ts';
 import { planPathAllowed } from './execution-ports.ts';
@@ -66,7 +83,9 @@ export type ProjectRunChange = Extract<
       | 'run.cancel-requested'
       | 'run.lifecycle-changed'
       | 'run.workspace-bound'
-      | 'run.plan-accepted';
+      | 'run.plan-accepted'
+      | 'run.attempt-stopped'
+      | 'run.attempt-continued';
   }
 >;
 export type ExecutionPhase = Exclude<RunCurrent['phase'], 'queued' | 'done'>;
@@ -86,9 +105,19 @@ export type RunAdmissionProposal = {
 };
 export interface RunTransaction {
   admit(proposal: RunAdmissionProposal, workflowRoles: WorkflowRoleResolver): { runId: string };
-  requestCancel(input: { runId: string; now: string }): { runId: string };
-  beginExecution(input: { runId: string; now: string }): { runId: string };
-  advancePhase(input: { runId: string; now: string; phase: ExecutionPhase; text: string }): {
+  requestCancel(input: { runId: string; now: string; expectedAttemptId?: string }): {
+    runId: string;
+  };
+  beginExecution(input: { runId: string; now: string; expectedAttemptId?: string }): {
+    runId: string;
+  };
+  advancePhase(input: {
+    runId: string;
+    now: string;
+    phase: ExecutionPhase;
+    text: string;
+    expectedAttemptId?: string;
+  }): {
     runId: string;
   };
   bindPreparedWorkspace(input: {
@@ -96,6 +125,7 @@ export interface RunTransaction {
     path: string;
     baseCommit: string;
     now: string;
+    expectedAttemptId?: string;
   }): RunWorkspaceBinding;
   acceptPlan(input: AcceptRunPlan): { plan: RunPlan; assignments: RunWorkerAssignment[] };
   planningInput(runId: string): RunPlanningInput;
@@ -103,12 +133,20 @@ export interface RunTransaction {
   assignment(runId: string, roleId: string): RunWorkerAssignment | undefined;
   workspace(runId: string): RunWorkspaceBinding | undefined;
   current(id: string): RunCurrent | undefined;
+  currentAttempt(runId: string): CurrentRunAttempt;
+  attempt(id: string): CurrentRunAttempt | undefined;
+  attemptStop(id: string): RunAttemptStop | undefined;
+  finishStopped(input: FinishRunAttempt): { runId: string };
+  continueAttempt(input: ContinueRunAttempt): { runId: string };
   timeline(query: RunTimelineQuery): RunTimelinePage;
 }
 export interface ProjectRuns {
   readonly projectId: string;
   transaction<T>(command: RunCommand, apply: (tx: RunTransaction) => T): Promise<T>;
   current(id: string): Promise<RunCurrent | undefined>;
+  currentAttempt(runId: string): Promise<CurrentRunAttempt>;
+  attempt(id: string): Promise<CurrentRunAttempt | undefined>;
+  attemptStop(id: string): Promise<RunAttemptStop | undefined>;
   planningInput(runId: string): Promise<RunPlanningInput>;
   plan(runId: string): Promise<RunPlan | undefined>;
   assignment(runId: string, roleId: string): Promise<RunWorkerAssignment | undefined>;
@@ -118,6 +156,16 @@ export interface ProjectRuns {
 }
 /** Indexed adapter rows inside the existing authority transaction; never exposed to application callbacks. */
 export interface RunTransactionStorage {
+  admission(id: string): RunAdmission | undefined;
+  attempt(id: string): RunAttempt | undefined;
+  attemptContext(id: string): RunAttemptContext | undefined;
+  attemptStop(id: string): RunAttemptStop | undefined;
+  insertAttemptContext(context: RunAttemptContext): void;
+  insertStop(stop: RunAttemptStop): void;
+  budgetBlocked(runId: string): boolean;
+  runIssue(runId: string): RunIssue | undefined;
+  unresolvedForRun(runId: string): boolean;
+  planAssignments(runId: string): RunWorkerAssignment[];
   current(id: string): RunCurrent | undefined;
   workspace(runId: string): RunWorkspaceBinding | undefined;
   insertWorkspace(binding: RunWorkspaceBinding): void;
@@ -239,6 +287,22 @@ export function validateProjectRunChange(value: unknown, projectId?: string): Pr
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
   const input = value as Record<string, unknown>,
     keys = Reflect.ownKeys(input);
+  if (input.type === 'run.attempt-stopped' || input.type === 'run.attempt-continued') {
+    const parsed = DomainEventSchema.safeParse({
+      version: 1,
+      id: 'validation',
+      projectId: projectId || 'validation',
+      seq: 1,
+      at: 'validation',
+      change: input,
+    });
+    if (!parsed.success) throw invalid();
+    const value = parsed.data.change;
+    if (value.type === 'run.attempt-stopped') validateRunAttemptStop(value.stop);
+    else if (value.type === 'run.attempt-continued') validateRunAttemptContext(value.context);
+    else throw invalid();
+    return canonical(value);
+  }
   if (input.type === 'run.plan-accepted') {
     const parsed = DomainEventSchema.safeParse({
       version: 1,
@@ -468,7 +532,10 @@ export function createRunTransaction(options: {
     if (
       binding.runId !== run.id ||
       binding.admissionId !== run.admissionId ||
-      binding.attemptId !== run.attemptId
+      binding.attemptId !==
+        (run.attemptId === binding.attemptId
+          ? run.attemptId
+          : readRunAttempt(storage, run.attemptId)?.context.workspaceOriginAttemptId)
     )
       throw invalid();
     return binding;
@@ -482,16 +549,107 @@ export function createRunTransaction(options: {
     if (
       value.runId !== runId ||
       value.admissionId !== run.admissionId ||
-      value.attemptId !== run.attemptId
+      (value.attemptId !== run.attemptId &&
+        (readRunAttempt(storage, run.attemptId)?.context.inheritedPlanId !== value.id ||
+          readRunAttempt(storage, run.attemptId)?.context.planOriginAttemptId !== value.attemptId))
+    )
+      throw invalid();
+    return value;
+  };
+  const currentAttempt = (runId: string): CurrentRunAttempt => {
+    const run = current(runId);
+    if (!run) throw new DomainError('NOT_FOUND', 'Run not found.');
+    const value = readRunAttempt(storage, run.attemptId);
+    if (
+      !value ||
+      value.attempt.runId !== runId ||
+      value.attempt.admissionId !== run.admissionId ||
+      value.context.goal.id !== run.goalId
     )
       throw invalid();
     return value;
   };
   return Object.freeze({
     current,
+    currentAttempt,
+    attempt(id: string) {
+      assertActive();
+      if (!identity(id)) throw invalid();
+      return readRunAttempt(storage, id);
+    },
+    attemptStop(id: string) {
+      assertActive();
+      if (!identity(id)) throw invalid();
+      const value = storage.attemptStop(id);
+      if (value === undefined) return undefined;
+      const parsed = validateRunAttemptStop(value);
+      const header = storage.attempt(id);
+      if (parsed.attemptId !== id || !header || parsed.runId !== header.runId) throw invalid();
+      return parsed;
+    },
+    finishStopped(input: FinishRunAttempt) {
+      assertActive();
+      const previous = current(input.runId);
+      if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      const { stop, replayed } = stopRunAttempt(input, previous, storage);
+      if (replayed) return { runId: previous.id };
+      const savedGoal = storage.goal(previous.goalId);
+      if (!savedGoal) throw new DomainError('NOT_FOUND', 'Run or goal was deleted.');
+      const linked = validateProjectGoal(
+        { ...savedGoal, status: 'failed', runId: previous.id },
+        projectId,
+      );
+      const next = validateRunCurrent({
+        ...previous,
+        revision: previous.revision + 1,
+        status: stop.status,
+        phase: 'done',
+        summary: stop.text,
+        updatedAt: stop.createdAt,
+        completedAt: stop.createdAt,
+      });
+      const entries = runAttemptStopTimeline(stop);
+      const change = validateProjectRunChange(
+        { type: 'run.attempt-stopped', current: next, stop, goal: linked, entries },
+        projectId,
+      );
+      storage.insertStop(stop);
+      storage.replaceCurrent(previous, next);
+      storage.linkGoal(savedGoal, linked);
+      for (const entry of entries) storage.appendTimeline(entry);
+      storage.appendChange(change);
+      return { runId: previous.id };
+    },
+    continueAttempt(input: ContinueRunAttempt) {
+      assertActive();
+      const previous = current(input.runId);
+      if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      const prepared = prepareRunContinuation(input, previous, storage, projectId);
+      const entries = runAttemptContinuationTimeline(prepared.context);
+      const change = validateProjectRunChange(
+        {
+          type: 'run.attempt-continued',
+          current: prepared.next,
+          attempt: prepared.attempt,
+          context: prepared.context,
+          goal: prepared.goal,
+          entries,
+        },
+        projectId,
+      );
+      const previousGoal = storage.goal(previous.goalId)!;
+      storage.insertAttempt(prepared.attempt);
+      storage.insertAttemptContext(prepared.context);
+      storage.replaceCurrent(previous, prepared.next);
+      storage.linkGoal(previousGoal, prepared.goal);
+      for (const entry of entries) storage.appendTimeline(entry);
+      storage.appendChange(change);
+      return { runId: previous.id };
+    },
     workspace,
     planningInput(runId: string) {
       if (!current(runId)) throw new DomainError('NOT_FOUND', 'Run not found.');
+      currentAttempt(runId);
       return validateRunPlanningInput(storage.planningInput(runId));
     },
     plan,
@@ -515,11 +673,22 @@ export function createRunTransaction(options: {
     acceptPlan(input: AcceptRunPlan) {
       assertActive();
       if (
-        !closed(input, ['runId', 'planId', 'now', 'plan', 'expectedRoleVersions', 'expectedInput'])
+        !closed(
+          input,
+          ['runId', 'planId', 'now', 'plan', 'expectedRoleVersions', 'expectedInput'],
+          ['expectedAttemptId'],
+        )
       )
         throw invalid();
       const previous = current(input.runId);
       if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      currentAttempt(input.runId);
+      if (
+        'expectedAttemptId' in input &&
+        input.expectedAttemptId !== undefined &&
+        input.expectedAttemptId !== previous.attemptId
+      )
+        throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
       validateRunCurrent({ ...previous, revision: previous.revision + 1, updatedAt: input.now });
       const accepted = acceptRunPlan(input, previous, storage);
       const next = validateRunCurrent({
@@ -534,15 +703,35 @@ export function createRunTransaction(options: {
       storage.appendChange({ type: 'run.plan-accepted', current: next, ...accepted, entries });
       return accepted;
     },
-    bindPreparedWorkspace(input: { runId: string; path: string; baseCommit: string; now: string }) {
+    bindPreparedWorkspace(input: {
+      runId: string;
+      path: string;
+      baseCommit: string;
+      now: string;
+      expectedAttemptId?: string;
+    }) {
       assertActive();
       if (
-        !closed(input, ['runId', 'path', 'baseCommit', 'now']) ||
+        !closed(input, ['runId', 'path', 'baseCommit', 'now'], ['expectedAttemptId']) ||
         ![input.path, input.baseCommit, input.now].every(identity)
       )
         throw invalid();
       const previous = current(input.runId);
       if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      if (
+        input.expectedAttemptId === undefined &&
+        storage.attempt(previous.attemptId)?.reason !== 'initial'
+      )
+        throw new DomainError(
+          'ATTEMPT_OWNERSHIP_REQUIRED',
+          'This continuation requires its exact attempt owner.',
+        );
+      if (
+        'expectedAttemptId' in input &&
+        input.expectedAttemptId !== undefined &&
+        input.expectedAttemptId !== previous.attemptId
+      )
+        throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
       const retained = workspace(input.runId);
       if (retained) {
         if (retained.path !== input.path || retained.baseCommit !== input.baseCommit)
@@ -859,11 +1048,17 @@ export function createRunTransaction(options: {
       );
       return { runId: created.id };
     },
-    requestCancel(input: { runId: string; now: string }) {
+    requestCancel(input: { runId: string; now: string; expectedAttemptId?: string }) {
       assertActive();
       if (!identity(input?.now)) throw invalid();
       const previous = current(input.runId);
       if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      if (
+        'expectedAttemptId' in input &&
+        input.expectedAttemptId !== undefined &&
+        input.expectedAttemptId !== previous.attemptId
+      )
+        throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
       if (!['queued', 'running', 'canceling'].includes(previous.status) || previous.cancelRequested)
         return { runId: previous.id };
       if (!Number.isSafeInteger(previous.revision + 1)) throw invalid();
@@ -884,11 +1079,26 @@ export function createRunTransaction(options: {
       storage.appendChange({ type: 'run.cancel-requested', current: next });
       return { runId: next.id };
     },
-    beginExecution(input: { runId: string; now: string }) {
+    beginExecution(input: { runId: string; now: string; expectedAttemptId?: string }) {
       assertActive();
-      if (!closed(input, ['runId', 'now']) || !identity(input.now)) throw invalid();
+      if (!closed(input, ['runId', 'now'], ['expectedAttemptId']) || !identity(input.now))
+        throw invalid();
       const previous = current(input.runId);
       if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      if (
+        input.expectedAttemptId === undefined &&
+        storage.attempt(previous.attemptId)?.reason !== 'initial'
+      )
+        throw new DomainError(
+          'ATTEMPT_OWNERSHIP_REQUIRED',
+          'This continuation requires its exact attempt owner.',
+        );
+      if (
+        'expectedAttemptId' in input &&
+        input.expectedAttemptId !== undefined &&
+        input.expectedAttemptId !== previous.attemptId
+      )
+        throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
       if (previous.cancelRequested || previous.status === 'canceling')
         throw new DOMException('Interrupted', 'AbortError');
       if (
@@ -912,10 +1122,16 @@ export function createRunTransaction(options: {
       storage.appendChange({ type: 'run.lifecycle-changed', current: next });
       return { runId: next.id };
     },
-    advancePhase(input: { runId: string; now: string; phase: ExecutionPhase; text: string }) {
+    advancePhase(input: {
+      runId: string;
+      now: string;
+      phase: ExecutionPhase;
+      text: string;
+      expectedAttemptId?: string;
+    }) {
       assertActive();
       if (
-        !closed(input, ['runId', 'now', 'phase', 'text']) ||
+        !closed(input, ['runId', 'now', 'phase', 'text'], ['expectedAttemptId']) ||
         !identity(input.now) ||
         typeof input.text !== 'string' ||
         !['preparing', 'planning', 'implementation', 'checking', 'review', 'repair'].includes(
@@ -925,6 +1141,20 @@ export function createRunTransaction(options: {
         throw invalid();
       const previous = current(input.runId);
       if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      if (
+        input.expectedAttemptId === undefined &&
+        storage.attempt(previous.attemptId)?.reason !== 'initial'
+      )
+        throw new DomainError(
+          'ATTEMPT_OWNERSHIP_REQUIRED',
+          'This continuation requires its exact attempt owner.',
+        );
+      if (
+        'expectedAttemptId' in input &&
+        input.expectedAttemptId !== undefined &&
+        input.expectedAttemptId !== previous.attemptId
+      )
+        throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
       if (previous.cancelRequested || previous.status === 'canceling')
         throw new DOMException('Interrupted', 'AbortError');
       if (

@@ -36,6 +36,7 @@ async function fixture(
     malformedPlans?: number;
     planningFailure?: string;
     resumeSupported?: boolean;
+    rejectReviews?: number;
   } = {},
 ) {
   const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'buro-planning-')));
@@ -46,7 +47,8 @@ async function fixture(
   const projects = new ProjectStoreRegistry([store]);
   let sequence = 0,
     plans = 0,
-    malformedPlans = 0;
+    malformedPlans = 0,
+    reviews = 0;
   const turns: { text: string; toolPolicy?: 'none'; threadId: string; schema?: unknown }[] = [];
   const providerCalls: Parameters<ModelProvider['complete']>[0][] = [];
   const sessions = new FileManagedSessions(path.join(directory, 'private-sessions'));
@@ -140,7 +142,13 @@ async function fixture(
             team: [],
           }
         : text.startsWith('Review goal')
-          ? { verdict: 'approved', blockingFindings: [], summary: 'Verified' }
+          ? ++reviews <= (options.rejectReviews ?? 0)
+            ? {
+                verdict: 'changes_requested',
+                blockingFindings: ['One controlled rejection'],
+                summary: 'Repair needed',
+              }
+            : { verdict: 'approved', blockingFindings: [], summary: 'Verified' }
           : {
               status: 'success',
               summary: 'Done',
@@ -481,6 +489,7 @@ test('historical missing planning policy cannot silently acquire a new strategy'
       status: 'running' as const,
       commit: undefined,
       planningPolicy: undefined,
+      attemptId: undefined,
       managedBudget: undefined,
     };
     doc.runs.push(historical);
@@ -555,19 +564,11 @@ test('an unknown writer start cannot repeat planning, continue or launch another
 });
 
 test('repair starts a new session with the frozen role and saved work when the selected backend cannot resume', async (t) => {
-  const f = await fixture(t, { resumeSupported: false });
+  const f = await fixture(t, { resumeSupported: false, rejectReviews: 1 });
   const original = await f.run();
-  assert.equal(original.status, 'completed', original.result);
+  assert.equal(original.status, 'failed', original.result);
   const savedRole = original.roleSnapshots!.find((role) => role.id === 'coordinator')!;
   const previousSession = original.coordinatorSession!.id;
-  await f.store.transact('stopped', 'stopped', (doc) => {
-    const run = doc.runs.find((item) => item.id === original.id)!;
-    run.status = 'interrupted';
-    run.result = 'Stopped after implementation';
-    run.completedAt = undefined;
-    doc.goals[0].status = 'failed';
-    return { result: null, change: { type: 'run.changed', run, goal: doc.goals[0] } };
-  });
   const startsBefore = f.starts.length;
   const turnsBefore = f.turns.length;
   await f.engine.resume('resume-without-native-resume', 'resume-without-native-resume', {
@@ -610,30 +611,26 @@ test('repair starts a new session with the frozen role and saved work when the s
 });
 
 test('a settled older run cannot bypass another unresolved run of the same goal through repair', async (t) => {
-  const f = await fixture(t, { resumeSupported: false });
+  const f = await fixture(t, { resumeSupported: false, rejectReviews: 1 });
   const original = await f.run();
-  await f.store.transact('two-stopped-runs', 'two-stopped-runs', (doc) => {
-    const run = doc.runs.find((item) => item.id === original.id)!;
-    run.status = 'interrupted';
-    run.completedAt = undefined;
-    const unknown = {
-      ...structuredClone(run),
-      id: 'R-unresolved-other',
-      status: 'needs-attention' as const,
-      commit: undefined,
-      workspace: path.join(f.directory, 'other-workspace'),
-      reconciliation: {
-        version: 1 as const,
-        status: 'required' as const,
-        code: 'SESSION_RECONCILIATION_REQUIRED' as const,
-        detectedAt: 'now',
-        operationId: 'unknown-start',
-      },
-    };
-    doc.runs.push(unknown);
-    doc.goals[0].status = 'failed';
-    return { result: null, change: { type: 'run.changed', run: unknown, goal: doc.goals[0] } };
+  assert.equal(original.status, 'failed', original.result);
+  const originalStart = f.environment.runtime.start.bind(f.environment.runtime);
+  let unknownStarts = 0;
+  f.environment.runtime.start = async () => {
+    unknownStarts++;
+    throw new UnresolvedEffectError('SESSION_RECONCILIATION_REQUIRED', {
+      runtimeId: 'fake',
+      operationId: 'unknown-start',
+    });
+  };
+  const sibling = await f.engine.start('unresolved-sibling', 'unresolved-sibling', {
+    projectId: 'p',
+    goalId: f.goal.id,
   });
+  await f.engine.jobs.get(sibling.runId)?.promise;
+  f.environment.runtime.start = originalStart;
+  assert.equal(f.engine.get('p', sibling.runId).status, 'needs-attention');
+  assert.equal(unknownStarts, 1);
   const before = f.store.snapshot();
   const startsBefore = f.starts.length;
   const turnsBefore = f.turns.length;

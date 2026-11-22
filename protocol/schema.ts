@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { runAttemptStopTimeline, runAttemptContinuationTimeline } from './run-attempt.ts';
 import { runPlanTimeline } from './run-plan.ts';
 import { RoleSchema as role, WorkflowIdentitySchema } from './workflow-roles.ts';
 import { VerificationViewSchema, VerificationEvidenceSchema } from './verification.ts';
@@ -378,7 +379,7 @@ export const RunPlannerHandoffSchema = z.strictObject({
   sessionGrant: RunPlannerSessionGrantSchema,
 });
 export const RunPlanningInputSchema = z.strictObject({
-  contextSource: z.enum(['initial-admission', 'legacy-continuation']),
+  contextSource: z.enum(['initial-admission', 'legacy-continuation', 'continuation-attempt']),
   title: z.string(),
   goalText: z.string(),
   contextMaterials: z.array(ContextMaterialSchema.strict()),
@@ -435,14 +436,98 @@ export const RunWorkerAssignmentSchema = z.strictObject({
   task: WorkerTaskSchema.optional(),
   resource: AssignmentResourceSchema,
 });
-export const RunAttemptSchema = z.strictObject({
+export const RunAttemptSchema = z
+  .strictObject({
+    version: z.literal(1),
+    id: z.string().min(1),
+    runId: z.string().min(1),
+    admissionId: z.string().min(1),
+    ordinal: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    reason: z.enum(['initial', 'repair', 'recheck']),
+    createdAt: z.string().min(1),
+    priorAttemptId: z.string().min(1).optional(),
+  })
+  .superRefine((attempt, ctx) => {
+    if (
+      (attempt.reason === 'initial') !== (attempt.ordinal === 1) ||
+      (attempt.reason === 'initial') !== (attempt.priorAttemptId === undefined)
+    )
+      ctx.addIssue({ code: 'custom', message: 'Attempt ancestry is invalid.' });
+  });
+export const RunIssueSchema = z
+  .strictObject({
+    code: z.enum([
+      'BASELINE_CHECKS_FAILED',
+      'EXECUTION_FAILED',
+      'MANAGED_BUDGET_BLOCKED',
+      'RECONCILIATION_REQUIRED',
+    ]),
+    budgetCode: ManagedBudgetErrorCodeSchema.optional(),
+    message: z.string(),
+    checks: z.array(z.string()),
+  })
+  .superRefine((issue, ctx) => {
+    if ((issue.code === 'MANAGED_BUDGET_BLOCKED') !== (issue.budgetCode !== undefined))
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A managed budget issue requires its typed budget code.',
+      });
+  });
+export const RunAttemptContextSchema = z
+  .strictObject({
+    version: z.literal(1),
+    attemptId: z.string().min(1),
+    runId: z.string().min(1),
+    admissionId: z.string().min(1),
+    goal: GoalSchema.strict(),
+    goalText: z.string(),
+    policy: RunAdmissionSchema.shape.policy,
+    policySource: z.enum(['admission', 'retained-attempt', 'project-profile', 'configured-host']),
+    resources: ResourceSnapshotSchema,
+    workflow: WorkflowIdentitySchema,
+    planningPolicy: PlanningPolicySchema,
+    roleSnapshots: z.array(role.strict()),
+    roleResources: z.record(z.string(), AssignmentResourceSchema),
+    contextMaterials: z.array(ContextMaterialSchema.strict()),
+    checkIds: z.array(z.string().min(1)),
+    repairEnvironment: z.boolean(),
+    timePolicy: RunAdmissionSchema.shape.timePolicy,
+    continuation: z
+      .strictObject({
+        mode: z.enum(['repair', 'recheck']),
+        instructions: z.string(),
+        requestedAt: z.string().min(1),
+        useCurrentProfile: z.boolean(),
+      })
+      .optional(),
+    workspaceOriginAttemptId: z.string().min(1).optional(),
+    inheritedPlanId: z.string().min(1).optional(),
+    planOriginAttemptId: z.string().min(1).optional(),
+    taskMode: z.enum(['original', 'full-goal']),
+    taskChanged: z.boolean(),
+  })
+  .superRefine((context, ctx) => {
+    if ((context.inheritedPlanId === undefined) !== (context.planOriginAttemptId === undefined))
+      ctx.addIssue({ code: 'custom', message: 'Inherited plan origin is required.' });
+    if (
+      (context.policySource === 'admission') !== (context.continuation === undefined) ||
+      (context.continuation &&
+        context.continuation.useCurrentProfile !==
+          ['project-profile', 'configured-host'].includes(context.policySource)) ||
+      (context.policySource === 'project-profile' && context.policy.profile === undefined)
+    )
+      ctx.addIssue({ code: 'custom', message: 'The policy source must match its captured owner.' });
+  });
+export const RunAttemptStopSchema = z.strictObject({
   version: z.literal(1),
   id: z.string().min(1),
   runId: z.string().min(1),
-  admissionId: z.string().min(1),
-  ordinal: z.literal(1),
-  reason: z.literal('initial'),
+  attemptId: z.string().min(1),
   createdAt: z.string().min(1),
+  status: z.enum(['failed', 'interrupted', 'needs-attention']),
+  text: z.string(),
+  issue: RunIssueSchema.optional(),
+  errorCode: z.string().optional(),
 });
 export const RunTimelineEntrySchema = z.strictObject({
   runId: z.string().min(1),
@@ -552,6 +637,7 @@ const run = z
     coordinatorSession: agentSession.optional(),
     planningSession: agentSession.optional(),
     contextMaterials: z.array(ContextMaterialSchema).optional(),
+    attemptId: z.string().min(1).optional(),
     id: z.string(),
     key: z.string(),
     title: z.string(),
@@ -840,10 +926,74 @@ export const DomainEventSchema = z
         entries: z.array(RunTimelineEntrySchema.omit({ sequence: true })),
         view: RunAdmissionViewSchema.optional(),
       }),
+      z.strictObject({
+        type: z.literal('run.attempt-stopped'),
+        current: RunCurrentSchema,
+        stop: RunAttemptStopSchema,
+        goal,
+        entries: z.array(RunTimelineEntrySchema.omit({ sequence: true })),
+        view: RunAdmissionViewSchema.optional(),
+      }),
+      z.strictObject({
+        type: z.literal('run.attempt-continued'),
+        current: RunCurrentSchema,
+        attempt: RunAttemptSchema,
+        context: RunAttemptContextSchema,
+        goal,
+        entries: z.array(RunTimelineEntrySchema.omit({ sequence: true })),
+        view: RunAdmissionViewSchema.optional(),
+      }),
       z.object({ type: z.literal('run.changed'), run, goal, roles: z.array(role).optional() }),
     ]),
   })
   .superRefine((event, ctx) => {
+    if (event.change.type === 'run.attempt-stopped') {
+      const { current, stop, goal: linked, entries } = event.change;
+      if (
+        current.id !== stop.runId ||
+        current.attemptId !== stop.attemptId ||
+        current.phase !== 'done' ||
+        current.status !== stop.status ||
+        current.completedAt !== stop.createdAt ||
+        current.updatedAt !== stop.createdAt ||
+        current.summary !== stop.text ||
+        linked.projectId !== event.projectId ||
+        linked.id !== current.goalId ||
+        linked.runId !== current.id ||
+        linked.status !== 'failed' ||
+        JSON.stringify(entries) !== JSON.stringify(runAttemptStopTimeline(stop))
+      )
+        ctx.addIssue({ code: 'custom', message: 'Stopped attempt identities differ.' });
+    }
+    if (event.change.type === 'run.attempt-continued') {
+      const { current, attempt, context, goal: linked, entries } = event.change;
+      if (
+        current.id !== attempt.runId ||
+        current.attemptId !== attempt.id ||
+        current.admissionId !== attempt.admissionId ||
+        context.attemptId !== attempt.id ||
+        context.runId !== current.id ||
+        context.admissionId !== current.admissionId ||
+        context.goal.id !== current.goalId ||
+        context.goal.projectId !== event.projectId ||
+        current.status !== 'queued' ||
+        current.phase !== 'queued' ||
+        current.cancelRequested ||
+        current.completedAt !== undefined ||
+        attempt.reason === 'initial' ||
+        attempt.reason !== context.continuation?.mode ||
+        current.updatedAt !== attempt.createdAt ||
+        context.continuation?.requestedAt !== attempt.createdAt ||
+        current.title !== context.goal.title ||
+        linked.id !== current.goalId ||
+        linked.runId !== current.id ||
+        linked.status !== 'running' ||
+        JSON.stringify(linked) !==
+          JSON.stringify({ ...context.goal, status: 'running', runId: current.id }) ||
+        JSON.stringify(entries) !== JSON.stringify(runAttemptContinuationTimeline(context))
+      )
+        ctx.addIssue({ code: 'custom', message: 'Continued attempt identities differ.' });
+    }
     if (event.change.type === 'run.plan-accepted') {
       const { current, plan, assignments, entries } = event.change;
       if (

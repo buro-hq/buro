@@ -5,6 +5,8 @@ import {
   mergeRunLifecycle,
   mergeRunWorkspace,
   mergeRunPlan,
+  mergeRunStopped,
+  mergeRunContinued,
 } from '../../protocol/run-view.ts';
 type Update<T> = { upsert: T[]; remove: string[] };
 type RunDelta = {
@@ -74,6 +76,24 @@ export function expandEvent(event: StoredEvent, runs: Map<string, Run>): DomainE
   const change = event.change;
   if (change.type === 'run.admitted') {
     runs.set(change.current.id, initialRunView(change.current, change.admission, change.view));
+    return event as DomainEvent;
+  }
+  if (change.type === 'run.attempt-stopped' || change.type === 'run.attempt-continued') {
+    const previous = runs.get(change.current.id);
+    if (!previous) throw Error('Missing run checkpoint in event log: ' + change.current.id);
+    runs.set(
+      change.current.id,
+      change.type === 'run.attempt-stopped'
+        ? mergeRunStopped(previous, change.current, change.stop, change.entries, change.view)
+        : mergeRunContinued(
+            previous,
+            change.current,
+            change.attempt,
+            change.context,
+            change.entries,
+            change.view,
+          ),
+    );
     return event as DomainEvent;
   }
   if (change.type === 'run.plan-accepted') {

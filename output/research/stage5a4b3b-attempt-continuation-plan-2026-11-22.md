@@ -1,6 +1,6 @@
 # Next Run slice: stopped attempts and continuation
 
-Date: 2026-11-22. Read-only follow-up to 5A4b3a. This is a contract proposal, not implemented stop/continuation persistence, production SQL activation or release readiness. File remains the sole production authority; finite limits and the existing ledger are unchanged.
+Date: 2026-11-22. Implemented contract checkpoint following `1cc24d1` (5A4b3a). Genuine nonaccepted stop/continuation persistence and local attempt scheduling are implemented and reviewed within the boundary below; production SQL activation and release readiness remain pending. File remains the sole production authority; finite limits and the existing ledger are unchanged. [Validation](stage5a4b3b-validation-2026-11-22.json), [architecture review](stage5a4b3b-architecture-review-2026-11-22.md), [boundary review](stage5a4b3b-boundary-review-2026-11-22.md), [contract evidence](stage5a4b3b-tests-evidence-2026-11-22.md). The following text preserves the implementation contract; it is not a claim that later runtime/session/effect owners have migrated.
 
 ## Coherent writer boundary
 

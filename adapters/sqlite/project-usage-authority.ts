@@ -68,7 +68,7 @@ export type SqliteProjectUsageOptions = {
   /** Counts returned/changed rows without exposing SQL parameters or private payloads. */
   onQuery?: (observation: UsageQueryObservation) => void;
 };
-const format = 'buro-project-authority-v7';
+const format = 'buro-project-authority-v8';
 const failure = (code: string, message: string) => new DomainError(code, message);
 const stateConflict = () =>
   failure('USAGE_STATE_CONFLICT', 'The stored usage state changed. Refresh before trying again.');
@@ -127,6 +127,9 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         this.transaction(command, (tx) => apply(tx.runs)),
       receipt: (command: UsageCommand) => this.#commandReceipt(command),
       current: (id: string) => this.#readRun((tx) => tx.current(id)),
+      currentAttempt: (id: string) => this.#readRun((tx) => tx.currentAttempt(id)),
+      attempt: (id: string) => this.#readRun((tx) => tx.attempt(id)),
+      attemptStop: (id: string) => this.#readRun((tx) => tx.attemptStop(id)),
       planningInput: (id: string) => this.#readRun((tx) => tx.planningInput(id)),
       plan: (id: string) => this.#readRun((tx) => tx.plan(id)),
       assignment: (id: string, roleId: string) => this.#readRun((tx) => tx.assignment(id, roleId)),
@@ -226,6 +229,11 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         'run_assignments',
         'run_assignment_paths',
         'run_plan_heads',
+        'run_attempt_contexts',
+        'run_attempt_materials',
+        'run_attempt_checks',
+        'run_attempt_roles',
+        'run_attempt_stops',
       ];
       if (
         tables.length &&
@@ -233,8 +241,22 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       )
         throw failure('USAGE_AUTHORITY_FORMAT', 'The project authority schema is incomplete.');
       if (tables.length) {
-        const planColumns = database.prepare('PRAGMA table_info(run_plans)').all();
+        const attemptColumns = database.prepare('PRAGMA table_info(run_attempts)').all();
+        const contextColumns = database.prepare('PRAGMA table_info(run_attempt_contexts)').all();
         if (
+          !attemptColumns.some((column) => column.name === 'prior_attempt_id') ||
+          ['task_changed', 'policy_source'].some(
+            (name) => !contextColumns.some((column) => column.name === name),
+          )
+        )
+          throw failure(
+            'USAGE_AUTHORITY_FORMAT',
+            'The saved attempt authority schema is incomplete.',
+          );
+        const planColumns = database.prepare('PRAGMA table_info(run_plans)').all();
+        const assignmentColumns = database.prepare('PRAGMA table_info(run_assignments)').all();
+        if (
+          !assignmentColumns.some((column) => column.name === 'ordinal') ||
           ['coordinator_role_json', 'coordinator_resource_json'].some(
             (name) => !planColumns.some((column) => column.name === name),
           )

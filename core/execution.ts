@@ -1,3 +1,4 @@
+import type { RunAttemptStop } from '../protocol/run-attempt.ts';
 import { validateProjectRole } from './project-entities.ts';
 import type { RunPlanningInput } from '../protocol/run-plan.ts';
 import { executionPolicy as savedExecutionPolicy } from './project-settings.ts';
@@ -95,7 +96,11 @@ function runCommandResult(value: unknown): { runId: string } {
 /** Durable workflow. Adapters own processes, Git and checks; this class owns decisions. */
 export class ExecutionService {
   env: Environment;
-  jobs = new Map<string, { controller: AbortController; promise: Promise<void> }>();
+  jobs = new Map<
+    string,
+    { controller: AbortController; promise: Promise<void>; attemptId?: string }
+  >();
+  private executionOwners = new Map<string, string>();
   closing = false;
   unsubscribe: () => void;
   eventQueue: Promise<unknown> = Promise.resolve();
@@ -391,6 +396,12 @@ ${installation.output || installation.error || ''}`,
         preparation.error || 'Project environment is not ready.',
       );
   }
+  private assertAttemptOwner(projectId: string, runId: string, expectedAttemptId?: string) {
+    const owner = expectedAttemptId ?? this.executionOwners.get(runId);
+    if (owner !== undefined && this.get(projectId, runId).attemptId !== owner)
+      throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
+    return owner;
+  }
   async startRuntime(input: Parameters<AgentRuntime['start']>[0]) {
     return this.measure(input.projectId, input.runId!, 'agent.start', () =>
       this.env.runtime.start(input),
@@ -406,6 +417,7 @@ ${installation.output || installation.error || ''}`,
     timeoutMs: number,
     toolPolicy?: 'none',
   ) {
+    const owner = this.assertAttemptOwner(projectId, runId);
     if (signal.aborted) throw new DOMException('Interrupted', 'AbortError');
     if (!this.env.runtime.turn) throw Error('The runtime does not support completed phases.');
     const pending = {
@@ -415,10 +427,16 @@ ${installation.output || installation.error || ''}`,
       runtimeId: this.env.runtime.id,
       startedAt: this.env.now(),
     };
-    await this.update(projectId, runId, (run) => {
-      assertRunReconciled(run);
-      run.pendingTurn = pending;
-    });
+    await this.update(
+      projectId,
+      runId,
+      (run) => {
+        assertRunReconciled(run);
+        run.pendingTurn = pending;
+      },
+      undefined,
+      owner,
+    );
     let answer: Awaited<ReturnType<NonNullable<AgentRuntime['turn']>>>;
     try {
       answer = await this.measure(projectId, runId, 'agent.turn', () =>
@@ -430,29 +448,41 @@ ${installation.output || installation.error || ''}`,
         }),
       );
     } catch (error) {
-      await this.update(projectId, runId, (run) => {
-        const unknown =
-          reconciliationForError(error, { detectedAt: this.env.now(), threadId }) ||
-          (!isKnownTurnRejection(error)
-            ? reconciliationForPendingTurn(pending, this.env.now())
-            : undefined);
-        run.reconciliation = retainRunReconciliation(run.reconciliation, unknown);
-        if (run.reconciliation) run.issue = reconciliationIssue(run.reconciliation);
-        else run.pendingTurn = undefined;
-      });
+      await this.update(
+        projectId,
+        runId,
+        (run) => {
+          const unknown =
+            reconciliationForError(error, { detectedAt: this.env.now(), threadId }) ||
+            (!isKnownTurnRejection(error)
+              ? reconciliationForPendingTurn(pending, this.env.now())
+              : undefined);
+          run.reconciliation = retainRunReconciliation(run.reconciliation, unknown);
+          if (run.reconciliation) run.issue = reconciliationIssue(run.reconciliation);
+          else run.pendingTurn = undefined;
+        },
+        undefined,
+        owner,
+      );
       throw error;
     }
-    await this.update(projectId, runId, (r) => {
-      if (r.pendingTurn?.id !== pending.id)
-        throw new DomainError('RUN_RECONCILIATION_REQUIRED', 'The saved turn identity changed.');
-      r.pendingTurn = undefined;
-      if (answer.model) {
-        if (r.threadId === threadId && r.coordinatorSession)
-          r.coordinatorSession.reportedModel = answer.model;
-        const session = r.agents.find((agent) => agent.threadId === threadId)?.session;
-        if (session) session.reportedModel = answer.model;
-      }
-    });
+    await this.update(
+      projectId,
+      runId,
+      (r) => {
+        if (r.pendingTurn?.id !== pending.id)
+          throw new DomainError('RUN_RECONCILIATION_REQUIRED', 'The saved turn identity changed.');
+        r.pendingTurn = undefined;
+        if (answer.model) {
+          if (r.threadId === threadId && r.coordinatorSession)
+            r.coordinatorSession.reportedModel = answer.model;
+          const session = r.agents.find((agent) => agent.threadId === threadId)?.session;
+          if (session) session.reportedModel = answer.model;
+        }
+      },
+      undefined,
+      owner,
+    );
     try {
       return JSON.parse(answer.text);
     } catch (error) {
@@ -469,17 +499,23 @@ ${installation.output || installation.error || ''}`,
     stage: string,
     action: () => Promise<T>,
   ): Promise<T> {
+    const owner = this.assertAttemptOwner(projectId, runId);
     const started = performance.now();
     try {
       return await action();
     } finally {
-      await this.update(projectId, runId, (r) =>
-        r.events.push({
-          at: this.env.now(),
-          type: 'performance.measured',
-          text: stage,
-          durationMs: performance.now() - started,
-        }),
+      await this.update(
+        projectId,
+        runId,
+        (r) =>
+          r.events.push({
+            at: this.env.now(),
+            type: 'performance.measured',
+            text: stage,
+            durationMs: performance.now() - started,
+          }),
+        undefined,
+        owner,
       );
     }
   }
@@ -560,119 +596,60 @@ ${installation.output || installation.error || ''}`,
       useCurrentProfile: boolean;
     },
   ) {
+    const captured = structuredClone(input);
     if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
-    const result = await this.env.projects
-      .get(input.projectId)
-      .transact(requestId, fingerprint, (doc) => {
-        const run = doc.runs.find((r) => r.id === input.runId),
-          goal = doc.goals.find((g) => g.id === run?.goalId);
-        if (!run || !goal) throw new DomainError('NOT_FOUND', 'Run or goal not found.');
-        assertRunReconciled(run);
-        if (
-          doc.runs.some(
-            (other) =>
-              other.id !== run.id &&
-              other.goalId === run.goalId &&
-              (other.reconciliation || other.pendingTurn),
-          )
-        )
-          throw new DomainError(
-            'RUN_RECONCILIATION_REQUIRED',
-            'Another run of this goal has an unknown operation. Reconcile it before continuing.',
-          );
-        this.assertManagedBudgetOpen(run);
-        if (
-          input.mode === 'recheck' &&
-          !run.planSavedAt &&
-          !run.roleSnapshots?.some((role) => !['coordinator', 'reviewer'].includes(role.id))
-        )
-          throw new DomainError(
-            'REPLAN_REQUIRED',
-            'No plan has been saved. Choose Continue to finish planning.',
-          );
-        if (!terminal(run) || run.status === 'completed')
-          throw new DomainError(
-            'INVALID_STATE',
-            'Only stopped or unsuccessful runs can be continued.',
-          );
-        if (doc.runs.some((r) => !terminal(r)))
-          throw new DomainError('PROJECT_BUSY', 'A goal is already running in this project.');
-        if (!run.workspace || !run.baseCommit)
-          throw new DomainError(
-            'NO_WORKSPACE',
-            'This run has no saved workspace. Start the goal again.',
-          );
-        const policy = input.useCurrentProfile
-            ? this.policy(input.projectId)
-            : run.executionPolicySnapshot || this.policy(input.projectId),
-          checkIds = [...new Set(input.checkIds || run.checkIds || policy.defaultCheckIds)];
-        this.assertEnvironmentRepair(goal, policy);
-        if (!checkIds.length || checkIds.some((id) => !policy.checks.some((c) => c.id === id)))
-          throw new DomainError('INVALID_CHECK', 'Select registered checks.');
-        const now = this.env.now();
-        run.attempts ??= [];
-        run.attempts.push({
-          at: now,
-          status: run.status || 'failed',
-          result: run.result,
-          goalText: run.goalText,
-          contextMaterials: run.contextMaterials,
-          repairEnvironment: run.repairEnvironment,
-          timePolicy: run.timePolicy,
-          planningPolicy: run.planningPolicy,
-          policy: run.executionPolicySnapshot,
-        });
-        if (input.mode === 'repair') {
-          const updated = goalMaterials(doc, goal);
-          const shared = input.useCurrentProfile
-            ? updated.filter((m) => m.scope === 'project')
-            : (run.contextMaterials || []).filter((m) => m.scope === 'project');
-          const selected = new Set(goal.materialIds || []);
-          run.contextMaterials = [
-            ...new Map(
-              [...shared, ...updated.filter((m) => selected.has(m.id))].map((m) => [m.id, m]),
-            ).values(),
-          ];
-        }
-        run.repairEnvironment = !!goal.repairEnvironment;
-        run.timePolicy = { kind: 'inactivity', idleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS };
-        run.continuation = { mode: input.mode, instructions: input.instructions, requestedAt: now };
-        run.executionPolicySnapshot = structuredClone(policy);
-        run.checkIds = checkIds;
-        run.status = 'queued';
-        run.phase = 'queued';
-        run.cancelRequested = false;
-        run.completedAt = undefined;
-        run.review = undefined;
-        run.independentReviewer = false;
-        run.issue = undefined;
-        run.stop = undefined;
-        run.title = goal.title;
-        const goalText = goal.body + '\n\nAcceptance criteria:\n' + goal.criteria;
-        if (run.goalText !== goalText) {
-          // A compact task belongs to the planned goal revision, never a later edited goal.
-          run.workerTasks = undefined;
-          run.events.push({
-            at: now,
-            type: 'agent.tasks-invalidated',
-            text: 'The goal changed; workers receive the complete updated goal.',
-          });
-        }
-        run.goalText = goalText;
-        run.agents = run.agents.filter((a) => a.threadId !== run.threadId);
-        run.events.push({
-          at: now,
-          type: 'run.resume-requested',
-          text: `${input.mode === 'recheck' ? 'Rechecking' : 'Continuing with repair'} in the saved workspace. ${input.useCurrentProfile ? 'Using the current profile.' : 'Keeping the original profile.'} ${input.instructions}`,
-        });
-        Object.assign(run, projectRunAutonomy(run, this.autonomyContext(doc, run)));
-        goal.status = 'running';
-        goal.runId = run.id;
-        return { result: { runId: run.id }, change: { type: 'run.changed', run, goal } };
-      });
-    this.schedule(input.projectId, result.runId);
+    const runs = this.runCommands(captured.projectId),
+      command = { id: requestId, fingerprint };
+    const cached = await runs.receipt(command);
+    if (cached) {
+      const result = runCommandResult(cached.result);
+      this.schedule(captured.projectId, result.runId);
+      return result;
+    }
+    const owner = await runs.currentAttempt(captured.runId);
+    const store = this.env.projects.get(captured.projectId);
+    if (
+      store.entities.projectId !== captured.projectId ||
+      store.settings.projectId !== captured.projectId
+    )
+      throw new DomainError(
+        'PROJECT_STORAGE_MISMATCH',
+        'The run store belongs to another project.',
+      );
+    const [goal, profile] = await Promise.all([
+      store.entities.goal(owner.context.goal.id),
+      store.settings.profile(),
+    ]);
+    if (!goal) throw new DomainError('NOT_FOUND', 'Run or goal not found.');
+    const policy = captured.useCurrentProfile
+      ? profile
+        ? savedExecutionPolicy(profile)
+        : structuredClone(this.policy(captured.projectId))
+      : owner.context.policy;
+    if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
+    const result = await runs.transaction(command, (tx) =>
+      tx.continueAttempt({
+        runId: captured.runId,
+        attemptId: 'attempt-' + this.env.id(),
+        expectedAttemptId: owner.attempt.id,
+        expectedGoalRevision: goal.revision ?? 1,
+        expectedProfileRevision: profile?.revision ?? null,
+        mode: captured.mode,
+        instructions: captured.instructions,
+        checkIds: captured.checkIds,
+        useCurrentProfile: captured.useCurrentProfile,
+        now: this.env.now(),
+        policy,
+        repairCapabilities: {
+          managedEnvironment: !!this.env.environments,
+          synchronizeDependencies: !!this.env.workspaces.synchronizeDependencies,
+        },
+      }),
+    );
+    this.schedule(captured.projectId, result.runId);
     return result;
   }
+
   async continueRun(
     projectId: string,
     runId: string,
@@ -680,6 +657,7 @@ ${installation.output || installation.error || ''}`,
     threads: string[],
     onWorkspaceAcquired?: (path: string) => void,
   ) {
+    const attempt = await this.runCommands(projectId).currentAttempt(runId);
     const run = this.get(projectId, runId),
       policy = withEnvironmentRepair(
         run.executionPolicySnapshot || this.policy(projectId),
@@ -715,6 +693,7 @@ ${installation.output || installation.error || ''}`,
         'WORKSPACE_BINDING_CONFLICT',
         'The restored workspace differs from its saved preparation binding.',
       );
+    this.assertAttemptOwner(projectId, runId, attempt.attempt.id);
     const restored = this.get(projectId, runId);
     assertRunReconciled(restored);
     if (signal.aborted || restored.cancelRequested)
@@ -830,8 +809,7 @@ ${installation.output || installation.error || ''}`,
       await this.update(projectId, runId, (r) => {
         r.delegation = 'buro';
       });
-      const previousGoal = run.attempts?.at(-1)?.goalText;
-      const pendingRoles = previousGoal !== run.goalText ? roles : pendingWorkerRoles(run, roles);
+      const pendingRoles = attempt.context.taskChanged ? roles : pendingWorkerRoles(run, roles);
       await this.dispatchWorkers(
         projectId,
         runId,
@@ -877,11 +855,54 @@ ${installation.output || installation.error || ''}`,
     const run = this.get(projectId, runId);
     if (terminal(run)) return;
     const controller = new AbortController();
-    const promise = Promise.resolve()
-      .then(() => this.execute(projectId, runId, controller.signal))
-      .finally(() => this.jobs.delete(runId));
-    this.jobs.set(runId, { controller, promise });
+    const job: { controller: AbortController; promise: Promise<void>; attemptId?: string } = {
+      controller,
+      promise: Promise.resolve(),
+      attemptId: run.attemptId,
+    };
+    job.promise = Promise.resolve()
+      .then(async () => {
+        const current = await this.runCommands(projectId).current(runId);
+        if (!current || !['queued', 'running', 'canceling'].includes(current.status)) return;
+        if (job.attemptId !== undefined && current.attemptId !== job.attemptId) return;
+        job.attemptId = current.attemptId;
+        await this.execute(projectId, runId, controller.signal, current.attemptId);
+      })
+      .finally(async () => {
+        if (this.jobs.get(runId) !== job) return;
+        this.jobs.delete(runId);
+        if (this.closing || !job.attemptId) return;
+        const current = await this.runCommands(projectId).current(runId);
+        if (
+          current?.status === 'canceling' &&
+          current.cancelRequested &&
+          current.attemptId !== job.attemptId
+        ) {
+          await this.finish(
+            projectId,
+            runId,
+            'interrupted',
+            'Interrupted before the continued attempt started.',
+            undefined,
+            undefined,
+            current.attemptId,
+          );
+          return;
+        }
+        if (
+          current?.status === 'queued' &&
+          !current.cancelRequested &&
+          current.attemptId !== job.attemptId
+        ) {
+          const saved = this.get(projectId, runId);
+          if (!saved.reconciliation && !saved.pendingTurn) this.schedule(projectId, runId);
+        }
+      });
+    this.jobs.set(runId, job);
+    // Keep the original rejection available to lifecycle awaiters without crashing detached jobs.
+    void job.promise.catch(() => {});
   }
+
   get(projectId: string, runId: string) {
     const run = this.env.projects
       .get(projectId)
@@ -910,13 +931,17 @@ ${installation.output || installation.error || ''}`,
     runId: string,
     apply: (run: Run, goal: Goal, doc: ProjectDocument) => void,
     roles?: Role[],
+    expectedAttemptId?: string,
   ) {
+    const owner = expectedAttemptId ?? this.executionOwners.get(runId);
     return this.env.projects
       .get(projectId)
       .transact('internal-' + this.env.id(), 'internal', (doc) => {
         const run = doc.runs.find((r) => r.id === runId),
           goal = doc.goals.find((g) => g.id === run?.goalId);
         if (!run || !goal) throw new DomainError('NOT_FOUND', 'Run or goal was deleted.');
+        if (owner !== undefined && run.attemptId !== owner)
+          throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
         apply(run, goal, doc);
         Object.assign(run, projectRunAutonomy(run, this.autonomyContext(doc, run)));
         run.updatedAt = this.env.now();
@@ -942,9 +967,11 @@ ${installation.output || installation.error || ''}`,
     return runs;
   }
   async beginExecution(projectId: string, runId: string) {
-    return this.runCommands(projectId).transaction(
+    const runs = this.runCommands(projectId),
+      expectedAttemptId = this.executionOwners.get(runId) ?? (await runs.current(runId))?.attemptId;
+    return runs.transaction(
       { id: 'internal-' + this.env.id(), fingerprint: 'run.begin-execution' },
-      (tx) => tx.beginExecution({ runId, now: this.env.now() }),
+      (tx) => tx.beginExecution({ runId, now: this.env.now(), expectedAttemptId }),
     );
   }
   async acceptPlan(
@@ -953,8 +980,13 @@ ${installation.output || installation.error || ''}`,
     plan: TeamPlan,
     expectedRoleVersions: Record<string, number | null>,
     expectedInput?: RunPlanningInput,
+    expectedAttemptId?: string,
   ) {
     const runs = this.runCommands(projectId);
+    const owner =
+      expectedAttemptId ??
+      this.executionOwners.get(runId) ??
+      (await runs.current(runId))?.attemptId;
     const captured = structuredClone({
       plan,
       expectedRoleVersions,
@@ -962,8 +994,17 @@ ${installation.output || installation.error || ''}`,
     });
     return runs.transaction(
       { id: 'internal-' + this.env.id(), fingerprint: 'run.accept-plan' },
-      (tx) =>
-        tx.acceptPlan({ runId, planId: 'plan-' + this.env.id(), now: this.env.now(), ...captured }),
+      (tx) => {
+        if (owner !== undefined && tx.current(runId)?.attemptId !== owner)
+          throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
+        return tx.acceptPlan({
+          runId,
+          planId: 'plan-' + this.env.id(),
+          now: this.env.now(),
+          ...captured,
+          expectedAttemptId: owner,
+        });
+      },
     );
   }
   async bindPreparedWorkspace(
@@ -972,7 +1013,9 @@ ${installation.output || installation.error || ''}`,
     workspace: { path: string; base: string },
   ) {
     const captured = structuredClone(workspace);
-    return this.runCommands(projectId).transaction(
+    const runs = this.runCommands(projectId),
+      expectedAttemptId = this.executionOwners.get(runId) ?? (await runs.current(runId))?.attemptId;
+    return runs.transaction(
       { id: 'internal-' + this.env.id(), fingerprint: 'run.bind-workspace' },
       (tx) =>
         tx.bindPreparedWorkspace({
@@ -980,17 +1023,22 @@ ${installation.output || installation.error || ''}`,
           path: captured.path,
           baseCommit: captured.base,
           now: this.env.now(),
+          expectedAttemptId,
         }),
     );
   }
   async phase(projectId: string, runId: string, phase: ExecutionPhase, text: string) {
     const runs = this.runCommands(projectId);
+    const expectedAttemptId =
+      this.executionOwners.get(runId) ?? (await runs.current(runId))?.attemptId;
     const result = await runs.transaction(
       { id: 'internal-' + this.env.id(), fingerprint: 'run.advance-phase' },
-      (tx) => tx.advancePhase({ runId, now: this.env.now(), phase, text }),
+      (tx) => tx.advancePhase({ runId, now: this.env.now(), phase, text, expectedAttemptId }),
     );
     // Cancellation can commit after the phase transaction while its result is being delivered.
     const current = await runs.current(runId);
+    if (current?.attemptId !== expectedAttemptId)
+      throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
     if (current?.cancelRequested || current?.status === 'canceling')
       throw new DOMException('Interrupted', 'AbortError');
     if (!current || current.status !== 'running')
@@ -1013,7 +1061,15 @@ ${installation.output || installation.error || ''}`,
     const result = await runs.transaction({ id: requestId, fingerprint }, (tx) =>
       tx.requestCancel({ runId: captured.runId, now: this.env.now() }),
     );
-    this.jobs.get(captured.runId)?.controller.abort();
+    const current = await runs.current(captured.runId);
+    const job = this.jobs.get(captured.runId);
+    if (
+      current?.status === 'canceling' &&
+      current.cancelRequested &&
+      job &&
+      (job.attemptId === undefined || job.attemptId === current.attemptId)
+    )
+      job.controller.abort();
     return result;
   }
   async recover() {
@@ -1048,37 +1104,47 @@ ${installation.output || installation.error || ''}`,
   async finish(
     projectId: string,
     runId: string,
-    status: Run['status'],
+    status: RunAttemptStop['status'],
     text: string,
     issue?: Run['issue'],
     errorCode?: string,
+    expectedAttemptId?: string,
   ) {
+    const runs = this.runCommands(projectId);
+    const owner =
+      expectedAttemptId ??
+      this.executionOwners.get(runId) ??
+      (await runs.current(runId))?.attemptId;
     await this.eventQueue;
-    await this.update(projectId, runId, (r, g, doc) => {
-      r.status = status;
-      r.phase = 'done';
-      r.completedAt = this.env.now();
-      r.result = text;
-      r.summary = text;
-      if (issue) r.issue = issue;
-      Object.assign(
-        r,
-        projectRunAutonomy(r, { ...this.autonomyContext(doc, r), lastErrorCode: errorCode }),
+    if (!['failed', 'interrupted', 'needs-attention'].includes(status))
+      throw new DomainError(
+        'ACCEPTANCE_REQUIRED',
+        'Completion requires the verified acceptance writer.',
       );
-      g.status = status === 'completed' ? 'completed' : 'failed';
-      for (const a of r.agents)
-        if (!a.completedAt) {
-          a.completedAt = r.completedAt;
-          a.status = status === 'completed' ? 'completed' : 'interrupted';
-        }
-      r.events.push({
-        at: r.completedAt,
-        type: status === 'completed' ? 'goal.completed' : 'run.' + status,
-        text,
-      });
-    });
+    if (!owner) throw new DomainError('NOT_FOUND', 'Run not found.');
+    return runs.transaction(
+      { id: 'internal-' + this.env.id(), fingerprint: 'run.finish-stopped' },
+      (tx) =>
+        tx.finishStopped({
+          runId,
+          attemptId: owner,
+          now: this.env.now(),
+          status,
+          text,
+          ...(issue ? { issue } : {}),
+          ...(errorCode !== undefined ? { errorCode } : {}),
+        }),
+    );
   }
-  async execute(projectId: string, runId: string, signal: AbortSignal) {
+
+  async execute(projectId: string, runId: string, signal: AbortSignal, expectedAttemptId?: string) {
+    const current = await this.runCommands(projectId).current(runId);
+    if (!current) throw new DomainError('NOT_FOUND', 'Run not found.');
+    const owner = expectedAttemptId ?? current.attemptId;
+    if (current.attemptId !== owner)
+      throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
+    if (this.executionOwners.has(runId))
+      throw new DomainError('RUN_ALREADY_EXECUTING', 'This run already has an acquired execution.');
     const record = this.get(projectId, runId),
       policy = withEnvironmentRepair(
         record.executionPolicySnapshot || this.policy(projectId),
@@ -1086,7 +1152,10 @@ ${installation.output || installation.error || ''}`,
       ),
       threads: string[] = [];
     let acquiredWorkspace: string | undefined;
+    this.executionOwners.set(runId, owner);
     const abort = () => {
+      if (this.get(projectId, runId).attemptId !== owner)
+        throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
       assertRunReconciled(this.get(projectId, runId));
       if (signal.aborted || this.get(projectId, runId).cancelRequested)
         throw new DOMException('Interrupted', 'AbortError');
@@ -1124,6 +1193,8 @@ ${installation.output || installation.error || ''}`,
       abort();
       await this.planAndImplement(projectId, runId, workspace, policy, signal, threads);
     } catch (error) {
+      if (this.get(projectId, runId).attemptId !== owner)
+        throw new DomainError('STALE_RUN_ATTEMPT', 'This attempt no longer owns the run.');
       const run = this.get(projectId, runId);
       const unknown = reconciliationForError(error, { detectedAt: this.env.now() });
       if (unknown || (!run.reconciliation && run.pendingTurn))
@@ -1191,33 +1262,38 @@ ${installation.output || installation.error || ''}`,
               ? { code: 'EXECUTION_FAILED', message: error.message, checks: [] }
               : undefined,
         error instanceof DomainError ? error.code : undefined,
+        owner,
       );
     } finally {
-      await Promise.allSettled(threads.map((id) => this.env.runtime.release?.(id)));
       try {
-        await this.closeVerificationView(projectId, runId);
-      } catch (error) {
-        await this.update(projectId, runId, (run) =>
-          run.events.push({
-            at: this.env.now(),
-            type: 'verification.cleanup-failed',
-            text: String(error),
-          }),
-        ).catch(() => {});
-      }
-      const workspace = acquiredWorkspace ?? this.get(projectId, runId).workspace;
-      if (workspace) {
+        await Promise.allSettled(threads.map((id) => this.env.runtime.release?.(id)));
         try {
-          await this.env.environments?.release(workspace);
+          await this.closeVerificationView(projectId, runId);
         } catch (error) {
-          await this.update(projectId, runId, (r) =>
-            r.events.push({
+          await this.update(projectId, runId, (run) =>
+            run.events.push({
               at: this.env.now(),
-              type: 'environment.stop-failed',
+              type: 'verification.cleanup-failed',
               text: String(error),
             }),
-          );
+          ).catch(() => {});
         }
+        const workspace = acquiredWorkspace;
+        if (workspace) {
+          try {
+            await this.env.environments?.release(workspace);
+          } catch (error) {
+            await this.update(projectId, runId, (r) =>
+              r.events.push({
+                at: this.env.now(),
+                type: 'environment.stop-failed',
+                text: String(error),
+              }),
+            );
+          }
+        }
+      } finally {
+        if (this.executionOwners.get(runId) === owner) this.executionOwners.delete(runId);
       }
     }
   }
@@ -1388,8 +1464,10 @@ ${installation.output || installation.error || ''}`,
             ]),
           ),
           planningAuthority,
+          run.attemptId,
         );
         signal.throwIfAborted();
+        this.assertAttemptOwner(projectId, runId, run.attemptId);
         const afterPlan = this.get(projectId, runId);
         assertRunReconciled(afterPlan);
         if (afterPlan.cancelRequested) throw new DOMException('Interrupted', 'AbortError');
@@ -1445,6 +1523,7 @@ ${installation.output || installation.error || ''}`,
         };
       });
       signal.throwIfAborted();
+      this.assertAttemptOwner(projectId, runId, run.attemptId);
       const writerGrant = this.get(projectId, runId);
       assertRunReconciled(writerGrant);
       if (writerGrant.cancelRequested) throw new DOMException('Interrupted', 'AbortError');
@@ -1632,6 +1711,7 @@ Return a shorter complete objective and only needed inputs from the saved input 
     } = ctx;
     let envelope = ctx.envelope;
     const abort = () => {
+      this.assertAttemptOwner(projectId, runId, run.attemptId);
       assertRunReconciled(this.get(projectId, runId));
       if (signal.aborted || this.get(projectId, runId).cancelRequested)
         throw new DOMException('Interrupted', 'AbortError');

@@ -14,6 +14,7 @@ import path from 'node:path';
 import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { ExecutionService } from '../core/execution.ts';
+import { GoalService } from '../core/services.ts';
 import type { AgentRuntime } from '../core/ports.ts';
 import type { Goal, Run } from '../protocol/domain.ts';
 import { parseSnapshot } from '../protocol/schema.ts';
@@ -283,10 +284,32 @@ test('resume archives the frozen planning strategy and rejects attempt-history r
       async interrupt() {},
       async dispose() {},
     };
+    let sequence = 0;
     const engine = new ExecutionService({
       workflowRoles: createBuiltinWorkflowRoles(),
       projects,
       runtime,
+      selection: {
+        forProject: () => {
+          const resource = {
+            ...savedRun(original).resources!.coordinator,
+            capabilities: fixtureCapabilities({
+              revision: original.capabilitiesRevision,
+              structuredTurns: true,
+              toolsFreeTurns: original.strategy === 'tools-free-structured',
+              readOnlySessions: true,
+              immutableReview: true,
+            }),
+          };
+          return {
+            profileId: 'real-attempt-proof',
+            policy: 'hybrid' as const,
+            coordinator: resource,
+            worker: resource,
+            reviewer: resource,
+          };
+        },
+      },
       policies: {
         p: {
           scope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: [] },
@@ -318,21 +341,43 @@ test('resume archives the frozen planning strategy and rejects attempt-history r
         },
       },
       now: () => '2026-11-21T10:00:00.000Z',
-      id: () => 'unused',
+      id: () => 'authority-' + ++sequence,
     });
     const scheduled: string[] = [];
     engine.schedule = (_projectId, runId) => {
       scheduled.push(runId);
     };
+    const goal = await new GoalService({
+      projects,
+      id: () => 'new-goal',
+      now: () => '2026-11-21T09:00:00.000Z',
+    }).create('real-goal', 'real-goal', {
+      projectId: 'p',
+      title: 'Preserve planning policy',
+      body: 'Continue the complete task.',
+      criteria: 'Keep original strategy.',
+    });
+    const admitted = await engine.start('real-admission', 'real-admission', {
+      projectId: 'p',
+      goalId: goal.id,
+    });
+    await engine.beginExecution('p', admitted.runId);
+    await engine.phase('p', admitted.runId, 'preparing', 'Preparing synthetic saved work');
+    await engine.bindPreparedWorkspace('p', admitted.runId, {
+      path: '/fixture/workspace',
+      base: VIRTUAL_BASE_COMMIT,
+    });
+    await engine.finish('p', admitted.runId, 'failed', 'Planning stopped before completion.');
+    scheduled.length = 0;
     await engine.resume('resume', 'resume', {
       projectId: 'p',
-      runId: 'R-example',
+      runId: admitted.runId,
       mode: 'repair',
       instructions: 'Continue.',
       useCurrentProfile: true,
     });
     await engine.dispose();
-    assert.deepEqual(scheduled, ['R-example']);
+    assert.deepEqual(scheduled, [admitted.runId]);
     const resumed = f.store.snapshot().runs[0];
     assert.equal(resumed.status, 'queued');
     assert.deepEqual(resumed.planningPolicy, original);
@@ -344,19 +389,19 @@ test('resume archives the frozen planning strategy and rejects attempt-history r
         run.attempts![0].planningPolicy =
           original.strategy === 'tools-free-structured' ? inspection : toolsFree;
       }),
-      { code: 'INVALID_PLANNING_POLICY' },
+      { code: 'IMMUTABLE_RUN_ATTEMPT' },
     );
     await assert.rejects(
       f.mutate('remove-attempts', (run) => {
         delete run.attempts;
       }),
-      { code: 'INVALID_PLANNING_POLICY' },
+      { code: 'IMMUTABLE_RUN_ATTEMPT' },
     );
     await assert.rejects(
       f.mutate('truncate-attempts', (run) => {
         run.attempts = [];
       }),
-      { code: 'INVALID_PLANNING_POLICY' },
+      { code: 'IMMUTABLE_RUN_ATTEMPT' },
     );
     await assert.rejects(
       f.mutate('append-different-policy', (run) => {
@@ -365,7 +410,7 @@ test('resume archives the frozen planning strategy and rejects attempt-history r
           planningPolicy: original.strategy === 'tools-free-structured' ? inspection : toolsFree,
         });
       }),
-      { code: 'INVALID_PLANNING_POLICY' },
+      { code: 'IMMUTABLE_RUN_ATTEMPT' },
     );
     await f.reopen();
     assert.equal(f.store.snapshot().runs[0].attempts?.length, 1);

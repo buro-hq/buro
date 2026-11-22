@@ -660,14 +660,20 @@ test('restart marks in-flight work interrupted without replaying side effects', 
     first = await f.start();
   while (!f.turns.length) await new Promise((r) => setTimeout(r, 5));
   await f.engine.dispose();
-  await f.store.transact('crash', 'crash', (doc) => {
-    const run = doc.runs[0];
-    run.status = 'running';
-    return { result: null, change: { type: 'run.changed', run, goal: doc.goals[0] } };
+  const restarted = new ExecutionService(f.engine.env);
+  restarted.schedule = () => {};
+  t.after(() => restarted.dispose());
+  await restarted.resume('recoverable-next', 'recoverable-next', {
+    projectId: 'p',
+    runId: first.runId,
+    mode: 'repair',
+    instructions: 'Continue in saved work.',
+    useCurrentProfile: false,
   });
+  await restarted.beginExecution('p', first.runId);
   const calls = f.turns.length;
-  await f.engine.recover();
-  assert.equal(f.engine.get('p', first.runId).status, 'interrupted');
+  await restarted.recover();
+  assert.equal(restarted.get('p', first.runId).status, 'interrupted');
   assert.equal(f.turns.length, calls);
 });
 test('team validation rejects overlapping ownership, missing reuse and escaping paths', () => {

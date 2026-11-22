@@ -1,3 +1,5 @@
+import type { RunAttemptContext, RunAttemptStop } from './run-attempt.ts';
+import type { RunAttempt } from './run-state.ts';
 import type { RunPlan, RunWorkerAssignment } from './run-plan.ts';
 import type { Run } from './domain.ts';
 import type {
@@ -23,6 +25,7 @@ export function initialRunView(
     ...(view?.stop === undefined ? {} : { stop: structuredClone(view.stop) }),
     ...(view?.issue === undefined ? {} : { issue: structuredClone(view.issue) }),
     id: current.id,
+    attemptId: current.attemptId,
     key: current.goalId,
     goalId: current.goalId,
     title: current.title,
@@ -72,13 +75,14 @@ export function mergeRunCurrent(run: Run, current: RunCurrent): Run {
     throw Error('Run current identity mismatch.');
   return {
     ...run,
+    attemptId: current.attemptId,
     title: current.title,
     summary: current.summary,
     status: current.status,
     phase: current.phase,
     updatedAt: current.updatedAt,
     cancelRequested: current.cancelRequested,
-    ...(current.completedAt === undefined ? {} : { completedAt: current.completedAt }),
+    completedAt: current.completedAt,
     events:
       current.cancelRequested && !run.cancelRequested
         ? [
@@ -189,5 +193,93 @@ export function mergeRunPlan(
       ...next.events,
       ...entries.map(({ runId: _runId, ...entry }) => structuredClone(entry)),
     ],
+  };
+}
+
+/** The actual nonaccepted result; it grants no accepted commit or result application. */
+export function mergeRunStopped(
+  run: Run,
+  current: RunCurrent,
+  stop: RunAttemptStop,
+  entries: Omit<RunTimelineEntry, 'sequence'>[],
+  view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>,
+): Run {
+  if (
+    stop.runId !== run.id ||
+    stop.attemptId !== current.attemptId ||
+    run.attemptId !== stop.attemptId
+  )
+    throw Error('Run stop identity mismatch.');
+  return {
+    ...mergeRunCurrent(run, current),
+    result: stop.text,
+    summary: stop.text,
+    ...(stop.issue ? { issue: structuredClone(stop.issue) } : {}),
+    agents: run.agents.map((agent) =>
+      agent.completedAt
+        ? agent
+        : { ...agent, completedAt: stop.createdAt, status: 'interrupted' as const },
+    ),
+    events: [...run.events, ...entries.map(({ runId: _runId, ...entry }) => entry)],
+    ...view,
+  };
+}
+/** UI-only previous-attempt projection; authority is the immutable named context/header. */
+export function mergeRunContinued(
+  run: Run,
+  current: RunCurrent,
+  attempt: RunAttempt,
+  context: RunAttemptContext,
+  entries: Omit<RunTimelineEntry, 'sequence'>[],
+  view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>,
+): Run {
+  if (
+    attempt.runId !== run.id ||
+    attempt.id !== current.attemptId ||
+    run.attemptId !== attempt.priorAttemptId ||
+    context.attemptId !== attempt.id ||
+    !context.continuation
+  )
+    throw Error('Run continuation identity mismatch.');
+  const previous: NonNullable<Run['attempts']>[number] = {
+    at: attempt.createdAt,
+    status: run.status || 'failed',
+    result: run.result,
+    goalText: run.goalText,
+    contextMaterials: run.contextMaterials,
+    repairEnvironment: run.repairEnvironment,
+    timePolicy: run.timePolicy,
+    planningPolicy: run.planningPolicy,
+    policy: run.executionPolicySnapshot,
+  };
+  return {
+    ...mergeRunCurrent(run, current),
+    attempts: [...(run.attempts ?? []), previous],
+    title: context.goal.title,
+    goalText: context.goalText,
+    contextMaterials: structuredClone(context.contextMaterials),
+    repairEnvironment: context.repairEnvironment,
+    timePolicy: structuredClone(context.timePolicy),
+    planningPolicy: structuredClone(context.planningPolicy),
+    executionPolicySnapshot: structuredClone(context.policy),
+    resources: structuredClone(context.resources),
+    roleResources: structuredClone(context.roleResources),
+    roleSnapshots: structuredClone(context.roleSnapshots),
+    checkIds: [...context.checkIds],
+    continuation: {
+      mode: context.continuation.mode,
+      instructions: context.continuation.instructions,
+      requestedAt: context.continuation.requestedAt,
+    },
+    cancelRequested: false,
+    completedAt: undefined,
+    review: undefined,
+    independentReviewer: false,
+    issue: undefined,
+    stop: undefined,
+    workerTasks: context.taskMode === 'full-goal' ? undefined : run.workerTasks,
+    agents: run.agents.filter((agent) => agent.threadId !== run.threadId),
+    events: [...run.events, ...entries.map(({ runId: _runId, ...entry }) => entry)],
+    ...view,
   };
 }

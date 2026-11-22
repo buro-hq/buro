@@ -1,4 +1,4 @@
-const { chromium } = require('@playwright/test');
+const { chromium, expect } = require('@playwright/test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises'),
   path = require('node:path'),
@@ -456,7 +456,7 @@ async function expectRoleSources(page) {
     passed.push('project settings fit desktop and mobile');
     await page.setViewportSize({ width: 1512, height: 1080 });
     await page.getByRole('button', { name: 'Projects', exact: true }).click();
-    assert.equal(await page.locator('.connected-project').count(), 2);
+    await expect(page.locator('.connected-project')).toHaveCount(2);
     await page.locator('.connected-project').filter({ hasText: 'Control project' }).click();
     await page.getByRole('heading', { name: 'Control project', exact: true }).waitFor();
     passed.push('project picker switches back to an independent project');

@@ -4,6 +4,8 @@ import {
   mergeRunLifecycle,
   mergeRunWorkspace,
   mergeRunPlan,
+  mergeRunStopped,
+  mergeRunContinued,
 } from '../protocol/run-view.ts';
 import type {
   CreateGoal,
@@ -125,6 +127,18 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
       ...snapshot.roles.filter((role) => !created.some((candidate) => candidate.id === role.id)),
       ...created,
     ];
+  }
+  if (c.type === 'run.attempt-stopped' || c.type === 'run.attempt-continued') {
+    if (!snapshot.runs.some((run) => run.id === c.current.id))
+      throw Error('Run attempt change needs a current projection.');
+    next.runs = snapshot.runs.map((run) =>
+      run.id !== c.current.id
+        ? run
+        : c.type === 'run.attempt-stopped'
+          ? mergeRunStopped(run, c.current, c.stop, c.entries, c.view)
+          : mergeRunContinued(run, c.current, c.attempt, c.context, c.entries, c.view),
+    );
+    next.goals = [...snapshot.goals.filter((goal) => goal.id !== c.goal.id), c.goal];
   }
   if (c.type === 'run.changed') {
     next.runs = [c.run, ...snapshot.runs.filter((r) => r.id !== c.run.id)];
@@ -313,6 +327,8 @@ export class SocketProjectClient implements ProjectClient {
                 'run.lifecycle-changed',
                 'run.workspace-bound',
                 'run.plan-accepted',
+                'run.attempt-stopped',
+                'run.attempt-continued',
               ].includes(event.change.type) &&
                 busyBefore !== hasActiveRun(this.state))
             )

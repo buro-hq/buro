@@ -48,9 +48,10 @@ export type RunAttempt = {
   id: string;
   runId: string;
   admissionId: string;
-  ordinal: 1;
-  reason: 'initial';
+  ordinal: number;
+  reason: 'initial' | 'repair' | 'recheck';
   createdAt: string;
+  priorAttemptId?: string;
 };
 /** The observed workspace returned by preparation. Immutable identity, never a dispatch grant. */
 export type RunWorkspaceBinding = {

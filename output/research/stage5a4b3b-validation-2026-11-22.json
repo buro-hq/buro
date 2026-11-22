@@ -1,0 +1,84 @@
+{
+  "stage": "5A4b3b",
+  "date": "2026-11-22",
+  "parentCommit": "1cc24d1",
+  "tests": {
+    "total": 1368,
+    "passed": 1368,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 95487.789,
+    "log": "/private/tmp/buro-5a4b3b-final-stable-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-5a4b3b-final-build.log"
+  },
+  "format": {
+    "passed": true,
+    "logs": [
+      "/private/tmp/buro-5a4b3b-format.log",
+      "/private/tmp/buro-5a4b3b-server-format.log",
+      "/private/tmp/buro-5a4b3b-final-docs-format.log"
+    ]
+  },
+  "browser": {
+    "firstProfileScenarios": 6,
+    "firstProfileLog": "/private/tmp/buro-5a4b3b-first-profile.log",
+    "projectScenarios": 17,
+    "projectLog": "/private/tmp/buro-5a4b3b-projects-final-repeat.log",
+    "priorProjectPassLog": "/private/tmp/buro-5a4b3b-projects-diagnostic.log",
+    "researchResultScenarios": 14,
+    "researchResultLog": "/private/tmp/buro-5a4b3b-project-setup.log",
+    "productionDesktopMobile": true,
+    "productionLog": "/private/tmp/buro-5a4b3b-production.log",
+    "syntheticRequests": 26,
+    "nativeStarts": [],
+    "realModelRequests": 0,
+    "errors": [],
+    "earlierFailures": [
+      {
+        "log": "/private/tmp/buro-5a4b3b-projects.log",
+        "cause": "Immediate count before asynchronous project picker rendering; exact-count assertion now waits."
+      },
+      {
+        "log": "/private/tmp/buro-5a4b3b-projects-final.log",
+        "cause": "30-second first-run timeout after environment.ready. Root cause not reproduced; two subsequent isolated full project passes observed no execution rejection. No production fix claimed."
+      }
+    ]
+  },
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "independentReviewEvidence": {
+    "architectureFocusedPassed": 80,
+    "architectureReport": "stage5a4b3b-architecture-review-2026-11-22.md",
+    "boundaryFocusedPassed": 96,
+    "boundaryReport": "stage5a4b3b-boundary-review-2026-11-22.md",
+    "contractFocusedPassed": 27,
+    "contractReport": "stage5a4b3b-tests-evidence-2026-11-22.md",
+    "newAttemptContractCases": 27,
+    "newArchitectureCases": 21,
+    "newBoundaryCases": 3,
+    "newAssignmentOrderCases": 2,
+    "newPolicySourceCases": 4,
+    "countsOverlapFullSuite": true,
+    "lineageAndCancelReplayCorrectionsIndependentlyVerified": true,
+    "configuredHostPolicySourceIndependentlyVerified": true,
+    "pickerWaitIndependentlyInspected": true
+  },
+  "scopeLimits": [
+    "Actual nonaccepted stop/continuation commands and local attempt ownership; completed acceptance cannot be manufactured through a stop.",
+    "File remains the sole production authority and ledger; standalone SQL v8 holds scheduling and does not run a fabricated whole-Run executor.",
+    "Immediate named predecessor/origin validation is bounded; File public history still retains its aggregate.",
+    "Current task refinements, runtime observation durable dedup/indexed ownership and native/managed session/effect/accounting journals remain pending.",
+    "External dispatch leases/crash cleanup, complete private artifacts and paged history/context, acceptance/result/apply migration and default-none remain pending.",
+    "Synthetic browser/model replies are not live-model quality or clean-machine installation evidence; reduced beta scope and publication remain unapproved."
+  ],
+  "originalUserProjectsModified": false,
+  "outputUxPreserved": true,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

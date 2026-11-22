@@ -16,6 +16,7 @@ import { validateProjectMaterial } from '../../core/project-materials.ts';
 import type { SettingsTransactionStorage } from '../../core/project-settings.ts';
 import type { RunCurrent } from '../../protocol/run-state.ts';
 import { createSqliteRunPlanRows, projectRunPlanSchema } from './project-run-plan-rows.ts';
+import { createSqliteRunAttemptRows, projectRunAttemptSchema } from './project-run-attempt-rows.ts';
 
 export const projectRunSchema = `
   CREATE TABLE IF NOT EXISTS run_current (
@@ -43,9 +44,12 @@ export const projectRunSchema = `
     attempt_id TEXT PRIMARY KEY NOT NULL,
     run_id TEXT NOT NULL REFERENCES run_current(run_id) DEFERRABLE INITIALLY DEFERRED,
     admission_id TEXT NOT NULL REFERENCES run_admissions(admission_id) DEFERRABLE INITIALLY DEFERRED,
-    ordinal INTEGER NOT NULL CHECK(ordinal=1),
-    reason TEXT NOT NULL CHECK(reason='initial'),
+    ordinal INTEGER NOT NULL CHECK(ordinal>=1),
+    reason TEXT NOT NULL CHECK(reason IN ('initial','repair','recheck')),
     created_at TEXT NOT NULL,
+    prior_attempt_id TEXT REFERENCES run_attempts(attempt_id),
+    CHECK((ordinal=1 AND reason='initial' AND prior_attempt_id IS NULL) OR
+      (ordinal>1 AND reason IN ('repair','recheck') AND prior_attempt_id IS NOT NULL)),
     UNIQUE(run_id,ordinal)
   );
   CREATE TABLE IF NOT EXISTS run_timeline (
@@ -86,6 +90,7 @@ export const projectRunSchema = `
   CREATE INDEX IF NOT EXISTS project_runs_unresolved ON project_run_index(goal_id,run_id) WHERE unresolved=1;
   CREATE INDEX IF NOT EXISTS active_project_material_grants ON project_materials(material_id) WHERE scope='project' AND active=1;
   ${projectRunPlanSchema}
+  ${projectRunAttemptSchema}
 `;
 
 type Row = Record<string, unknown>;
@@ -129,6 +134,7 @@ function fromRow(row: Row): RunCurrent {
 /** Semantic queue/cancel/lifecycle storage; no full Run replacement or accepted-result method. */
 export function createSqliteRunRows(database: RunDatabase): RunTransactionStorage {
   return {
+    ...createSqliteRunAttemptRows(database),
     ...createSqliteRunPlanRows(database),
     current: (id) => {
       const row = database.get(
@@ -257,13 +263,14 @@ export function createSqliteRunRows(database: RunDatabase): RunTransactionStorag
         const attempt = validateRunAttempt(candidate);
         database.run(
           'run.attempt.insert',
-          'INSERT INTO run_attempts(attempt_id,run_id,admission_id,ordinal,reason,created_at) VALUES (?,?,?,?,?,?)',
+          'INSERT INTO run_attempts(attempt_id,run_id,admission_id,ordinal,reason,created_at,prior_attempt_id) VALUES (?,?,?,?,?,?,?)',
           attempt.id,
           attempt.runId,
           attempt.admissionId,
           attempt.ordinal,
           attempt.reason,
           attempt.createdAt,
+          attempt.priorAttemptId ?? null,
         );
       }),
     insertCurrent: (candidate) =>
@@ -317,14 +324,38 @@ export function createSqliteRunRows(database: RunDatabase): RunTransactionStorag
           before.id !== after.id ||
           before.goalId !== after.goalId ||
           before.admissionId !== after.admissionId ||
-          before.attemptId !== after.attemptId ||
           before.createdAt !== after.createdAt ||
-          before.title !== after.title
+          (before.attemptId === after.attemptId && before.title !== after.title)
         )
           throw conflict();
+        if (before.attemptId !== after.attemptId) {
+          const attempt = database.get(
+            'run.attempt-transition',
+            'SELECT run_id,admission_id,prior_attempt_id FROM run_attempts WHERE attempt_id=?',
+            after.attemptId,
+          );
+          const context = database.get(
+            'run.attempt-transition.context',
+            'SELECT run_id,admission_id FROM run_attempt_contexts WHERE attempt_id=?',
+            after.attemptId,
+          );
+          if (
+            attempt?.run_id !== before.id ||
+            attempt.admission_id !== before.admissionId ||
+            attempt.prior_attempt_id !== before.attemptId ||
+            context?.run_id !== before.id ||
+            context.admission_id !== before.admissionId ||
+            after.status !== 'queued' ||
+            after.phase !== 'queued' ||
+            !['failed', 'interrupted', 'needs-attention'].includes(before.status)
+          )
+            throw conflict();
+        }
         const changed = database.run(
           'run.current.update',
-          'UPDATE run_current SET revision=?,summary=?,status=?,phase=?,updated_at=?,completed_at=?,cancel_requested=? WHERE run_id=? AND revision=? AND goal_id=? AND admission_id=? AND attempt_id=? AND title=? AND summary=? AND status=? AND phase=? AND created_at=? AND updated_at=? AND completed_at IS ? AND cancel_requested=?',
+          'UPDATE run_current SET attempt_id=?,title=?,revision=?,summary=?,status=?,phase=?,updated_at=?,completed_at=?,cancel_requested=? WHERE run_id=? AND revision=? AND goal_id=? AND admission_id=? AND attempt_id=? AND title=? AND summary=? AND status=? AND phase=? AND created_at=? AND updated_at=? AND completed_at IS ? AND cancel_requested=?',
+          after.attemptId,
+          after.title,
           after.revision,
           after.summary,
           after.status,

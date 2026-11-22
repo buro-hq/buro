@@ -210,6 +210,7 @@ export type RunIssue = {
   checks: string[];
 };
 export type Run = {
+  attemptId?: string;
   workflow?: WorkflowIdentity;
   verificationView?: import('./verification.ts').VerificationView;
   verificationEvidence?: import('./verification.ts').VerificationEvidence;
@@ -367,6 +368,23 @@ export type DomainEvent = {
         current: RunCurrent;
         plan: import('./run-plan.ts').RunPlan;
         assignments: import('./run-plan.ts').RunWorkerAssignment[];
+        entries: Omit<RunTimelineEntry, 'sequence'>[];
+        view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
+      }
+    | {
+        type: 'run.attempt-stopped';
+        current: RunCurrent;
+        stop: import('./run-attempt.ts').RunAttemptStop;
+        goal: Goal;
+        entries: Omit<RunTimelineEntry, 'sequence'>[];
+        view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
+      }
+    | {
+        type: 'run.attempt-continued';
+        current: RunCurrent;
+        attempt: import('./run-state.ts').RunAttempt;
+        context: import('./run-attempt.ts').RunAttemptContext;
+        goal: Goal;
         entries: Omit<RunTimelineEntry, 'sequence'>[];
         view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
       }
