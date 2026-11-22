@@ -1,5 +1,10 @@
 import type { DomainEvent, Run, Agent, Command } from '../../protocol/domain.ts';
-import { initialRunView, mergeRunCurrent, mergeRunLifecycle } from '../../protocol/run-view.ts';
+import {
+  initialRunView,
+  mergeRunCurrent,
+  mergeRunLifecycle,
+  mergeRunWorkspace,
+} from '../../protocol/run-view.ts';
 type Update<T> = { upsert: T[]; remove: string[] };
 type RunDelta = {
   type: 'run.delta';
@@ -68,6 +73,15 @@ export function expandEvent(event: StoredEvent, runs: Map<string, Run>): DomainE
   const change = event.change;
   if (change.type === 'run.admitted') {
     runs.set(change.current.id, initialRunView(change.current, change.admission, change.view));
+    return event as DomainEvent;
+  }
+  if (change.type === 'run.workspace-bound') {
+    const previous = runs.get(change.current.id);
+    if (!previous) throw Error('Missing run checkpoint in event log: ' + change.current.id);
+    runs.set(
+      change.current.id,
+      mergeRunWorkspace(previous, change.current, change.binding, change.entry, change.view),
+    );
     return event as DomainEvent;
   }
   if (change.type === 'run.cancel-requested' || change.type === 'run.lifecycle-changed') {

@@ -1,0 +1,58 @@
+{
+  "stage": "5A4b2",
+  "date": "2026-11-22",
+  "parentCommit": "de0e71f",
+  "tests": {
+    "total": 1271,
+    "passed": 1271,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 78480.19625,
+    "log": "/private/tmp/buro-5a4b2-final-tests.log"
+  },
+  "buildTypecheck": { "passed": true, "log": "/private/tmp/buro-5a4b2-build.log" },
+  "format": {
+    "passed": true,
+    "logs": ["/private/tmp/buro-5a4b2-format.log", "/private/tmp/buro-5a4b2-server-format.log"]
+  },
+  "browser": {
+    "firstProfileScenarios": 6,
+    "firstProfileLog": "/private/tmp/buro-5a4b2-first-profile.log",
+    "projectScenarios": 17,
+    "projectLog": "/private/tmp/buro-5a4b2-projects.log",
+    "productionDesktopMobile": true,
+    "productionLog": "/private/tmp/buro-5a4b2-production.log",
+    "syntheticRequests": 26,
+    "nativeStarts": [],
+    "realModelRequests": 0,
+    "errors": []
+  },
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves; same five agents reused after 5A4b1"
+  },
+  "independentReviewEvidence": {
+    "architectureFocusedPassed": 43,
+    "architectureReport": "stage5a4b2-architecture-review-2026-11-22.md",
+    "boundaryFocusedPassed": 43,
+    "boundaryReport": "stage5a4b2-boundary-review-2026-11-22.md",
+    "contractFocusedPassed": 37,
+    "contractReport": "stage5a4b2-tests-evidence-2026-11-22.md",
+    "newWorkspaceContractCases": 17,
+    "fileMissingBindingOpenAndCommitCorrectionIndependentlyVerified": true,
+    "mixedWorkspaceLegacyDeltaReplayIndependentlyVerified": true,
+    "countsOverlapFullSuite": true
+  },
+  "scopeLimits": [
+    "File remains the sole production authority and existing ledger; fresh standalone SQL v6 does not run the complete executor.",
+    "Observed path/base binding is not acceptance evidence or external dispatch permission.",
+    "No durable pre-dispatch preparation owner, partial-prepare-throw cleanup, crash-orphan cleanup or descendant-process lease is claimed.",
+    "Remaining executor state, session/effect/accounting journals, private artifacts, complete paged history and default-none are pending.",
+    "Reduced beta scope and publication remain unapproved; synthetic browser replies are not live-model quality evidence."
+  ],
+  "originalUserProjectsModified": false,
+  "outputUxPreserved": true,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

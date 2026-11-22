@@ -14,6 +14,7 @@ import type {
   RunTimelineEntry,
   RunTimelinePage,
   RunTimelineQuery,
+  RunWorkspaceBinding,
 } from '../protocol/run-state.ts';
 import {
   RunAdmissionSchema,
@@ -21,6 +22,7 @@ import {
   RunAttemptSchema,
   RunCurrentSchema,
   RunTimelineEntrySchema,
+  RunWorkspaceBindingSchema,
 } from '../protocol/schema.ts';
 import { ResourceSnapshotSchema, type ResourceSnapshot } from '../protocol/resources.ts';
 import { WorkflowIdentitySchema, type WorkflowIdentity } from '../protocol/workflow-roles.ts';
@@ -40,7 +42,9 @@ import type { WorkflowRoleResolver } from './workflow-roles.ts';
 export type RunCommand = { id: string; fingerprint: string };
 export type ProjectRunChange = Extract<
   DomainEvent['change'],
-  { type: 'run.admitted' | 'run.cancel-requested' | 'run.lifecycle-changed' }
+  {
+    type: 'run.admitted' | 'run.cancel-requested' | 'run.lifecycle-changed' | 'run.workspace-bound';
+  }
 >;
 export type ExecutionPhase = Exclude<RunCurrent['phase'], 'queued' | 'done'>;
 export type RunAdmissionProposal = {
@@ -64,6 +68,13 @@ export interface RunTransaction {
   advancePhase(input: { runId: string; now: string; phase: ExecutionPhase; text: string }): {
     runId: string;
   };
+  bindPreparedWorkspace(input: {
+    runId: string;
+    path: string;
+    baseCommit: string;
+    now: string;
+  }): RunWorkspaceBinding;
+  workspace(runId: string): RunWorkspaceBinding | undefined;
   current(id: string): RunCurrent | undefined;
   timeline(query: RunTimelineQuery): RunTimelinePage;
 }
@@ -71,12 +82,15 @@ export interface ProjectRuns {
   readonly projectId: string;
   transaction<T>(command: RunCommand, apply: (tx: RunTransaction) => T): Promise<T>;
   current(id: string): Promise<RunCurrent | undefined>;
+  workspace(runId: string): Promise<RunWorkspaceBinding | undefined>;
   timeline(query: RunTimelineQuery): Promise<RunTimelinePage>;
   receipt(command: RunCommand): Promise<{ result: unknown } | undefined>;
 }
 /** Indexed adapter rows inside the existing authority transaction; never exposed to application callbacks. */
 export interface RunTransactionStorage {
   current(id: string): RunCurrent | undefined;
+  workspace(runId: string): RunWorkspaceBinding | undefined;
+  insertWorkspace(binding: RunWorkspaceBinding): void;
   goal(id: string): Goal | undefined;
   profile(): ProjectProfile | undefined;
   role(id: string): Role | undefined;
@@ -122,6 +136,11 @@ const defaultOutcome = (goal: Goal, policy: RunAdmissionPolicy) =>
   goal.outcome ?? { kind: policy.profile ? ('pull-request' as const) : ('local' as const) };
 export function validateRunCurrent(value: unknown): RunCurrent {
   const parsed = RunCurrentSchema.safeParse(value);
+  if (!parsed.success) throw invalid();
+  return canonical(parsed.data);
+}
+export function validateRunWorkspaceBinding(value: unknown): RunWorkspaceBinding {
+  const parsed = RunWorkspaceBindingSchema.safeParse(value);
   if (!parsed.success) throw invalid();
   return canonical(parsed.data);
 }
@@ -185,6 +204,44 @@ export function validateProjectRunChange(value: unknown, projectId?: string): Pr
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
   const input = value as Record<string, unknown>,
     keys = Reflect.ownKeys(input);
+  if (input.type === 'run.workspace-bound') {
+    if (!closed(input, ['type', 'current', 'binding', 'entry'], ['view'])) throw invalid();
+    const current = validateRunCurrent(input.current),
+      binding = validateRunWorkspaceBinding(input.binding);
+    if (!closed(input.entry, ['runId', 'at', 'type', 'text'])) throw invalid();
+    const entry = input.entry as {
+      runId: string;
+      at: string;
+      type: 'workspace.prepared';
+      text: 'Workspace prepared';
+    };
+    if (
+      current.phase !== 'preparing' ||
+      !['running', 'canceling'].includes(current.status) ||
+      (current.status === 'running' && current.cancelRequested) ||
+      (current.status === 'canceling' && !current.cancelRequested) ||
+      current.completedAt !== undefined ||
+      binding.runId !== current.id ||
+      binding.admissionId !== current.admissionId ||
+      binding.attemptId !== current.attemptId ||
+      entry.runId !== current.id ||
+      entry.at !== current.updatedAt ||
+      entry.at !== binding.createdAt ||
+      entry.type !== 'workspace.prepared' ||
+      entry.text !== 'Workspace prepared'
+    )
+      throw invalid();
+    const view =
+      input.view === undefined ? undefined : RunAdmissionViewSchema.safeParse(input.view);
+    if (view && !view.success) throw invalid();
+    return {
+      type: 'run.workspace-bound',
+      current,
+      binding,
+      entry: canonical(entry),
+      ...(view?.success ? { view: canonical(view.data) } : {}),
+    };
+  }
   if (input.type === 'run.lifecycle-changed') {
     if (!closed(input, ['type', 'current'], ['entry', 'view'])) throw invalid();
     const current = validateRunCurrent(input.current);
@@ -335,8 +392,78 @@ export function createRunTransaction(options: {
     if (parsed && parsed.id !== id) throw invalid();
     return parsed;
   };
+  const workspace = (runId: string) => {
+    const run = current(runId);
+    if (!run) throw new DomainError('NOT_FOUND', 'Run not found.');
+    const stored = storage.workspace(runId);
+    if (stored === undefined) return undefined;
+    const binding = validateRunWorkspaceBinding(stored);
+    if (
+      binding.runId !== run.id ||
+      binding.admissionId !== run.admissionId ||
+      binding.attemptId !== run.attemptId
+    )
+      throw invalid();
+    return binding;
+  };
   return Object.freeze({
     current,
+    workspace,
+    bindPreparedWorkspace(input: { runId: string; path: string; baseCommit: string; now: string }) {
+      assertActive();
+      if (
+        !closed(input, ['runId', 'path', 'baseCommit', 'now']) ||
+        ![input.path, input.baseCommit, input.now].every(identity)
+      )
+        throw invalid();
+      const previous = current(input.runId);
+      if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      const retained = workspace(input.runId);
+      if (retained) {
+        if (retained.path !== input.path || retained.baseCommit !== input.baseCommit)
+          throw new DomainError(
+            'WORKSPACE_BINDING_CONFLICT',
+            'This run already has another prepared workspace.',
+          );
+        return retained;
+      }
+      if (
+        previous.phase !== 'preparing' ||
+        !['running', 'canceling'].includes(previous.status) ||
+        previous.completedAt !== undefined ||
+        (previous.status === 'running' && previous.cancelRequested) ||
+        (previous.status === 'canceling' && !previous.cancelRequested)
+      )
+        throw new DomainError(
+          'INVALID_STATE',
+          'Only a preparing run can retain its observed workspace.',
+        );
+      const binding = validateRunWorkspaceBinding({
+        version: 1,
+        runId: previous.id,
+        admissionId: previous.admissionId,
+        attemptId: previous.attemptId,
+        path: input.path,
+        baseCommit: input.baseCommit,
+        createdAt: input.now,
+      });
+      const next = validateRunCurrent({
+        ...previous,
+        revision: previous.revision + 1,
+        updatedAt: input.now,
+      });
+      const entry = {
+        runId: previous.id,
+        at: input.now,
+        type: 'workspace.prepared' as const,
+        text: 'Workspace prepared' as const,
+      };
+      storage.insertWorkspace(binding);
+      storage.replaceCurrent(structuredClone(previous), structuredClone(next));
+      storage.appendTimeline(entry);
+      storage.appendChange({ type: 'run.workspace-bound', current: next, binding, entry });
+      return structuredClone(binding);
+    },
     timeline(query: RunTimelineQuery) {
       assertActive();
       const selected = validateRunTimelineQuery(query, projectId);

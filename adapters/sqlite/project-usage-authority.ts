@@ -68,7 +68,7 @@ export type SqliteProjectUsageOptions = {
   /** Counts returned/changed rows without exposing SQL parameters or private payloads. */
   onQuery?: (observation: UsageQueryObservation) => void;
 };
-const format = 'buro-project-authority-v5';
+const format = 'buro-project-authority-v6';
 const failure = (code: string, message: string) => new DomainError(code, message);
 const stateConflict = () =>
   failure('USAGE_STATE_CONFLICT', 'The stored usage state changed. Refresh before trying again.');
@@ -127,6 +127,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         this.transaction(command, (tx) => apply(tx.runs)),
       receipt: (command: UsageCommand) => this.#commandReceipt(command),
       current: (id: string) => this.#readRun((tx) => tx.current(id)),
+      workspace: (id: string) => this.#readRun((tx) => tx.workspace(id)),
       timeline: (query: RunTimelineQuery) => {
         let captured: RunTimelineQuery;
         try {
@@ -214,6 +215,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         'run_admissions',
         'run_attempts',
         'run_timeline',
+        'run_workspaces',
       ];
       if (
         tables.length &&

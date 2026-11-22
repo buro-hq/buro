@@ -5,6 +5,7 @@ import {
   validateRunAdmission,
   validateRunAttempt,
   validateRunTimelineEntry,
+  validateRunWorkspaceBinding,
   RUN_TIMELINE_PAGE_MAX,
   type RunTransactionStorage,
   type ProjectRunChange,
@@ -57,6 +58,14 @@ export const projectRunSchema = `
     duration_ms REAL CHECK(duration_ms IS NULL OR duration_ms>=0),
     PRIMARY KEY(run_id,sequence)
   );
+  CREATE TABLE IF NOT EXISTS run_workspaces (
+    run_id TEXT PRIMARY KEY NOT NULL REFERENCES run_current(run_id),
+    admission_id TEXT NOT NULL UNIQUE REFERENCES run_admissions(admission_id),
+    attempt_id TEXT NOT NULL REFERENCES run_attempts(attempt_id),
+    workspace_path TEXT NOT NULL CHECK(length(workspace_path)>0),
+    base_commit TEXT NOT NULL CHECK(length(base_commit)>0),
+    created_at TEXT NOT NULL CHECK(length(created_at)>0)
+  );
   CREATE TRIGGER IF NOT EXISTS immutable_run_admission_update
     BEFORE UPDATE ON run_admissions BEGIN SELECT RAISE(ABORT,'Run admissions are immutable'); END;
   CREATE TRIGGER IF NOT EXISTS immutable_run_admission_delete
@@ -69,6 +78,10 @@ export const projectRunSchema = `
     BEFORE UPDATE ON run_timeline BEGIN SELECT RAISE(ABORT,'Run timeline entries are immutable'); END;
   CREATE TRIGGER IF NOT EXISTS immutable_run_timeline_delete
     BEFORE DELETE ON run_timeline BEGIN SELECT RAISE(ABORT,'Run timeline entries are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS immutable_run_workspace_update
+    BEFORE UPDATE ON run_workspaces BEGIN SELECT RAISE(ABORT,'Run workspace bindings are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS immutable_run_workspace_delete
+    BEFORE DELETE ON run_workspaces BEGIN SELECT RAISE(ABORT,'Run workspace bindings are immutable'); END;
   CREATE INDEX IF NOT EXISTS project_runs_unresolved ON project_run_index(goal_id,run_id) WHERE unresolved=1;
   CREATE INDEX IF NOT EXISTS active_project_material_grants ON project_materials(material_id) WHERE scope='project' AND active=1;
 `;
@@ -121,6 +134,24 @@ export function createSqliteRunRows(database: RunDatabase): RunTransactionStorag
         id,
       );
       return row ? fromRow(row) : undefined;
+    },
+    workspace: (id) => {
+      const row = database.get(
+        'run.workspace',
+        'SELECT run_id,admission_id,attempt_id,workspace_path,base_commit,created_at FROM run_workspaces WHERE run_id=?',
+        id,
+      );
+      return row
+        ? validateRunWorkspaceBinding({
+            version: 1,
+            runId: row.run_id,
+            admissionId: row.admission_id,
+            attemptId: row.attempt_id,
+            path: row.workspace_path,
+            baseCommit: row.base_commit,
+            createdAt: row.created_at,
+          })
+        : undefined;
     },
     goal: (id) => database.entities.goal(id),
     profile: () => database.settings.profile(),
@@ -259,6 +290,21 @@ export function createSqliteRunRows(database: RunDatabase): RunTransactionStorag
           current.goalId,
           current.status,
         );
+      }),
+    insertWorkspace: (candidate) =>
+      database.mutate(() => {
+        const binding = validateRunWorkspaceBinding(candidate);
+        const inserted = database.run(
+          'run.workspace.insert',
+          'INSERT INTO run_workspaces(run_id,admission_id,attempt_id,workspace_path,base_commit,created_at) SELECT run_id,admission_id,attempt_id,?,?,? FROM run_current WHERE run_id=? AND admission_id=? AND attempt_id=?',
+          binding.path,
+          binding.baseCommit,
+          binding.createdAt,
+          binding.runId,
+          binding.admissionId,
+          binding.attemptId,
+        );
+        if (Number(inserted.changes) !== 1) throw conflict();
       }),
     replaceCurrent: (previous, candidate) =>
       database.mutate(() => {

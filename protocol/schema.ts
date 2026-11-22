@@ -323,6 +323,15 @@ export const RunCurrentSchema = z.strictObject({
   completedAt: z.string().optional(),
   cancelRequested: z.boolean(),
 });
+export const RunWorkspaceBindingSchema = z.strictObject({
+  version: z.literal(1),
+  runId: z.string().min(1),
+  admissionId: z.string().min(1),
+  attemptId: z.string().min(1),
+  path: z.string().min(1),
+  baseCommit: z.string().min(1),
+  createdAt: z.string().min(1),
+});
 export const RunAdmissionSchema = z.strictObject({
   version: z.literal(1),
   id: z.string().min(1),
@@ -724,6 +733,18 @@ export const DomainEventSchema = z
       }),
       z.strictObject({ type: z.literal('run.cancel-requested'), current: RunCurrentSchema }),
       z.strictObject({
+        type: z.literal('run.workspace-bound'),
+        current: RunCurrentSchema,
+        binding: RunWorkspaceBindingSchema,
+        entry: z.strictObject({
+          runId: z.string().min(1),
+          at: z.string().min(1),
+          type: z.literal('workspace.prepared'),
+          text: z.literal('Workspace prepared'),
+        }),
+        view: RunAdmissionViewSchema.optional(),
+      }),
+      z.strictObject({
         type: z.literal('run.lifecycle-changed'),
         current: RunCurrentSchema,
         entry: z
@@ -740,6 +761,27 @@ export const DomainEventSchema = z
     ]),
   })
   .superRefine((event, ctx) => {
+    if (event.change.type === 'run.workspace-bound') {
+      const { current, binding, entry } = event.change;
+      if (
+        current.phase !== 'preparing' ||
+        !['running', 'canceling'].includes(current.status) ||
+        (current.status === 'running' && current.cancelRequested) ||
+        (current.status === 'canceling' && !current.cancelRequested) ||
+        current.completedAt !== undefined ||
+        binding.runId !== current.id ||
+        binding.admissionId !== current.admissionId ||
+        binding.attemptId !== current.attemptId ||
+        entry.runId !== current.id ||
+        entry.at !== binding.createdAt ||
+        entry.at !== current.updatedAt
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['change'],
+          message: 'A prepared workspace must retain its exact run and admission identity.',
+        });
+    }
     if (event.change.type === 'run.lifecycle-changed') {
       const { current, entry } = event.change;
       if (

@@ -1,4 +1,9 @@
-import { initialRunView, mergeRunCurrent, mergeRunLifecycle } from '../protocol/run-view.ts';
+import {
+  initialRunView,
+  mergeRunCurrent,
+  mergeRunLifecycle,
+  mergeRunWorkspace,
+} from '../protocol/run-view.ts';
 import type {
   CreateGoal,
   DomainEvent,
@@ -92,6 +97,15 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
     next.runs = snapshot.runs.map((previous) =>
       previous.id === c.current.id
         ? mergeRunLifecycle(previous, c.current, c.entry, c.view)
+        : previous,
+    );
+  }
+  if (c.type === 'run.workspace-bound') {
+    if (!snapshot.runs.some((previous) => previous.id === c.current.id))
+      throw Error('Run workspace binding needs a current run projection.');
+    next.runs = snapshot.runs.map((previous) =>
+      previous.id === c.current.id
+        ? mergeRunWorkspace(previous, c.current, c.binding, c.entry, c.view)
         : previous,
     );
   }
@@ -278,6 +292,7 @@ export class SocketProjectClient implements ProjectClient {
                 'run.admitted',
                 'run.cancel-requested',
                 'run.lifecycle-changed',
+                'run.workspace-bound',
               ].includes(event.change.type) &&
                 busyBefore !== hasActiveRun(this.state))
             )

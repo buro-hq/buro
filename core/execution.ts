@@ -671,14 +671,21 @@ ${installation.output || installation.error || ''}`,
     this.schedule(input.projectId, result.runId);
     return result;
   }
-  async continueRun(projectId: string, runId: string, signal: AbortSignal, threads: string[]) {
+  async continueRun(
+    projectId: string,
+    runId: string,
+    signal: AbortSignal,
+    threads: string[],
+    onWorkspaceAcquired?: (path: string) => void,
+  ) {
     const run = this.get(projectId, runId),
       policy = withEnvironmentRepair(
         run.executionPolicySnapshot || this.policy(projectId),
         !!run.repairEnvironment,
       );
     assertRunReconciled(run);
-    if (!run.workspace || !run.baseCommit || !this.env.workspaces.restore)
+    const binding = await this.runCommands(projectId).workspace(runId);
+    if (!binding || !this.env.workspaces.restore)
       throw new DomainError(
         'NO_WORKSPACE',
         'The adapter does not support restoring this workspace.',
@@ -689,18 +696,28 @@ ${installation.output || installation.error || ''}`,
     if (signal.aborted || activated.cancelRequested)
       throw new DOMException('Interrupted', 'AbortError');
     const workspace = await this.env.workspaces.restore(
-        projectId,
-        runId,
-        run.workspace,
-        run.baseCommit,
-        {
-          profile: policy.profile,
-          repairEnvironment: !!run.repairEnvironment,
-          managedEnvironment: !!this.env.environments && !!policy.profile,
-          materials: run.contextMaterials,
-        },
-      ),
-      initial = this.env.projects.get(projectId).snapshot();
+      projectId,
+      runId,
+      binding.path,
+      binding.baseCommit,
+      {
+        profile: policy.profile,
+        repairEnvironment: !!run.repairEnvironment,
+        managedEnvironment: !!this.env.environments && !!policy.profile,
+        materials: run.contextMaterials,
+      },
+    );
+    onWorkspaceAcquired?.(workspace.path);
+    if (workspace.path !== binding.path || workspace.base !== binding.baseCommit)
+      throw new DomainError(
+        'WORKSPACE_BINDING_CONFLICT',
+        'The restored workspace differs from its saved preparation binding.',
+      );
+    const restored = this.get(projectId, runId);
+    assertRunReconciled(restored);
+    if (signal.aborted || restored.cancelRequested)
+      throw new DOMException('Interrupted', 'AbortError');
+    const initial = this.env.projects.get(projectId).snapshot();
     if (this.env.environments && policy.profile)
       await this.prepareEnvironment(projectId, runId, workspace, policy, signal);
     const roles =
@@ -928,6 +945,23 @@ ${installation.output || installation.error || ''}`,
       (tx) => tx.beginExecution({ runId, now: this.env.now() }),
     );
   }
+  async bindPreparedWorkspace(
+    projectId: string,
+    runId: string,
+    workspace: { path: string; base: string },
+  ) {
+    const captured = structuredClone(workspace);
+    return this.runCommands(projectId).transaction(
+      { id: 'internal-' + this.env.id(), fingerprint: 'run.bind-workspace' },
+      (tx) =>
+        tx.bindPreparedWorkspace({
+          runId,
+          path: captured.path,
+          baseCommit: captured.base,
+          now: this.env.now(),
+        }),
+    );
+  }
   async phase(projectId: string, runId: string, phase: ExecutionPhase, text: string) {
     const runs = this.runCommands(projectId);
     const result = await runs.transaction(
@@ -1030,6 +1064,7 @@ ${installation.output || installation.error || ''}`,
         !!record.repairEnvironment,
       ),
       threads: string[] = [];
+    let acquiredWorkspace: string | undefined;
     const abort = () => {
       assertRunReconciled(this.get(projectId, runId));
       if (signal.aborted || this.get(projectId, runId).cancelRequested)
@@ -1038,7 +1073,9 @@ ${installation.output || installation.error || ''}`,
     try {
       abort();
       if (this.get(projectId, runId).continuation) {
-        await this.continueRun(projectId, runId, signal, threads);
+        await this.continueRun(projectId, runId, signal, threads, (path) => {
+          acquiredWorkspace = path;
+        });
         return;
       }
       await this.beginExecution(projectId, runId);
@@ -1061,17 +1098,9 @@ ${installation.output || installation.error || ''}`,
         materials: record.contextMaterials,
         signal,
       });
+      acquiredWorkspace = workspace.path;
+      await this.bindPreparedWorkspace(projectId, runId, workspace);
       abort();
-      await this.update(projectId, runId, (r) => {
-        r.workspace = workspace.path;
-        r.baseCommit = workspace.base;
-        if (r.repairEnvironment)
-          r.events.push({
-            at: this.env.now(),
-            type: 'environment.isolated',
-            text: 'Environment repair is allowed for this goal. Dependencies and caches are isolated from the source project.',
-          });
-      });
       await this.planAndImplement(projectId, runId, workspace, policy, signal, threads);
     } catch (error) {
       const run = this.get(projectId, runId);
@@ -1155,7 +1184,7 @@ ${installation.output || installation.error || ''}`,
           }),
         ).catch(() => {});
       }
-      const workspace = this.get(projectId, runId).workspace;
+      const workspace = acquiredWorkspace ?? this.get(projectId, runId).workspace;
       if (workspace) {
         try {
           await this.env.environments?.release(workspace);

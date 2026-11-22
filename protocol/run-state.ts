@@ -52,6 +52,16 @@ export type RunAttempt = {
   reason: 'initial';
   createdAt: string;
 };
+/** The observed workspace returned by preparation. Immutable identity, never a dispatch grant. */
+export type RunWorkspaceBinding = {
+  version: 1;
+  runId: string;
+  admissionId: string;
+  attemptId: string;
+  path: string;
+  baseCommit: string;
+  createdAt: string;
+};
 export type RunTimelineEntry = {
   runId: string;
   sequence: number;

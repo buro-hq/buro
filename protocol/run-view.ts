@@ -1,5 +1,10 @@
 import type { Run } from './domain.ts';
-import type { RunAdmission, RunCurrent, RunTimelineEntry } from './run-state.ts';
+import type {
+  RunAdmission,
+  RunCurrent,
+  RunTimelineEntry,
+  RunWorkspaceBinding,
+} from './run-state.ts';
 
 /** Temporary legacy read projection for File/UI consumers; never a SQL execution authority. */
 export function initialRunView(
@@ -96,4 +101,20 @@ export function mergeRunLifecycle(
     next.events = [...next.events, item];
   }
   return { ...next, ...view };
+}
+
+/** A prepared workspace is an observed identity, not an accepted revision or execution permission. */
+export function mergeRunWorkspace(
+  run: Run,
+  current: RunCurrent,
+  binding: RunWorkspaceBinding,
+  entry: Omit<RunTimelineEntry, 'sequence'>,
+  view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>,
+): Run {
+  if (binding.runId !== run.id) throw Error('Run workspace identity mismatch.');
+  return {
+    ...mergeRunLifecycle(run, current, entry, view),
+    workspace: binding.path,
+    baseCommit: binding.baseCommit,
+  };
 }

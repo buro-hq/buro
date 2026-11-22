@@ -8,6 +8,7 @@ import {
   validateRunAdmission,
   validateRunAttempt,
   validateRunTimelineEntry,
+  validateRunWorkspaceBinding,
   type ProjectRuns,
   type ProjectRunChange,
   type RunCommand,
@@ -18,6 +19,7 @@ import type {
   RunAttempt,
   RunCurrent,
   RunTimelineQuery,
+  RunWorkspaceBinding,
 } from '../../protocol/run-state.ts';
 import { initialRunView, mergeRunCurrent } from '../../protocol/run-view.ts';
 import { validateProjectGoal } from '../../core/project-entities.ts';
@@ -30,6 +32,7 @@ type RunDocument = ProjectDocument & {
   runAdmissions?: Record<string, RunAdmission>;
   runInitialAttempts?: Record<string, RunAttempt>;
   runHeads?: Record<string, RunCurrent>;
+  runWorkspaces?: Record<string, RunWorkspaceBinding>;
 };
 const conflict = () =>
   new DomainError('CONFLICT', 'Run state changed. Refresh before trying again.');
@@ -71,6 +74,10 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
     };
     const rows: RunTransactionStorage = {
       current,
+      workspace: (id) => {
+        const value = doc.runWorkspaces?.[id];
+        return value === undefined ? undefined : validateRunWorkspaceBinding(value);
+      },
       goal: (id) => doc.goals.find((goal) => goal.id === id),
       profile: () => doc.profile,
       role: (id) => doc.roleVersions.filter((role) => role.id === id).at(-1),
@@ -192,6 +199,31 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
           });
           doc.runs.unshift(run);
         }),
+      insertWorkspace: (value) =>
+        access.write(() => {
+          const binding = validateRunWorkspaceBinding(value),
+            head = current(binding.runId),
+            run = legacy(binding.runId);
+          if (
+            !head ||
+            !run ||
+            head.admissionId !== binding.admissionId ||
+            head.attemptId !== binding.attemptId ||
+            Object.hasOwn(doc.runWorkspaces ?? {}, binding.runId) ||
+            run.workspace !== undefined ||
+            run.baseCommit !== undefined
+          )
+            throw conflict();
+          doc.runWorkspaces ??= {};
+          Object.defineProperty(doc.runWorkspaces, binding.runId, {
+            value: binding,
+            enumerable: true,
+            writable: false,
+            configurable: false,
+          });
+          run.workspace = binding.path;
+          run.baseCommit = binding.baseCommit;
+        }),
       linkGoal: (previous: Goal, next: Goal) =>
         access.write(() => {
           const index = doc.goals.findIndex((goal) => goal.id === previous.id);
@@ -264,7 +296,11 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
           }
         }),
       appendChange: (change) => {
-        if (change.type !== 'run.admitted' && change.type !== 'run.lifecycle-changed') {
+        if (
+          change.type !== 'run.admitted' &&
+          change.type !== 'run.lifecycle-changed' &&
+          change.type !== 'run.workspace-bound'
+        ) {
           access.appendChange(change);
           return;
         }
@@ -284,6 +320,7 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
     projectId,
     transaction: facet.transaction,
     current: (id: string) => facet.query((tx) => tx.current(id)),
+    workspace: (id: string) => facet.query((tx) => tx.workspace(id)),
     timeline: (query: RunTimelineQuery) => {
       const captured = structuredClone(query);
       return facet.query((tx) => tx.timeline(captured));
@@ -330,6 +367,29 @@ export function validateDocumentRunAdmissions(
     if (!saved || !isDeepStrictEqual(validateRunAttempt(value), validateRunAttempt(saved)))
       throw invalid();
   }
+  for (const [id, value] of Object.entries(before.runWorkspaces ?? {})) {
+    const saved = after.runWorkspaces?.[id];
+    if (
+      !saved ||
+      !isDeepStrictEqual(validateRunWorkspaceBinding(value), validateRunWorkspaceBinding(saved))
+    )
+      throw invalid();
+  }
+  for (const [id, value] of Object.entries(after.runWorkspaces ?? {})) {
+    const binding = validateRunWorkspaceBinding(value),
+      head = after.runHeads?.[id],
+      run = after.runs.find((value) => value.id === id);
+    if (
+      binding.runId !== id ||
+      !head ||
+      head.admissionId !== binding.admissionId ||
+      head.attemptId !== binding.attemptId ||
+      !run ||
+      run.workspace !== binding.path ||
+      run.baseCommit !== binding.baseCommit
+    )
+      throw invalid();
+  }
   for (const [id, value] of Object.entries(before.runHeads ?? {})) {
     const saved = after.runHeads?.[id];
     if (
@@ -373,7 +433,8 @@ export function validateDocumentRunAdmissions(
       attempt.id !== head.attemptId ||
       attempt.runId !== id ||
       attempt.admissionId !== head.admissionId ||
-      run.goalId !== head.goalId
+      run.goalId !== head.goalId ||
+      ((run.workspace !== undefined || run.baseCommit !== undefined) && !after.runWorkspaces?.[id])
     )
       throw invalid();
   }
