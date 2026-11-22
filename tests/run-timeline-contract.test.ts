@@ -12,10 +12,16 @@ for (const kind of ['file', 'sqlite'] as const) {
       await fs.mkdtemp(path.join(os.tmpdir(), 'buro-timeline-contract-')),
     );
     const project = { id: 'p', name: 'Synthetic', root: directory };
-    const authority =
+    const queries: string[] = [];
+    const open = () =>
       kind === 'file'
-        ? await FileProjectStore.open({ directory, project })
-        : await SqliteProjectUsageAuthority.open({ directory, project });
+        ? FileProjectStore.open({ directory, project })
+        : SqliteProjectUsageAuthority.open({
+            directory,
+            project,
+            onQuery: (query) => queries.push(query.operation),
+          });
+    let authority = await open();
     t.after(async () => {
       await authority.close();
       await fs.rm(directory, { recursive: true, force: true });
@@ -39,6 +45,26 @@ for (const kind of ['file', 'sqlite'] as const) {
       }),
       { code: 'INVALID_RUN_CURSOR' },
     );
+    await assert.rejects(
+      authority.runs.transaction({ id: 'missing-page', fingerprint: 'missing-page' }, (tx) =>
+        tx.timeline({ runId: 'R-missing', limit: 10 }),
+      ),
+      { code: 'NOT_FOUND' },
+    );
+    assert.equal(
+      await authority.runs.receipt({ id: 'missing-page', fingerprint: 'missing-page' }),
+      undefined,
+    );
+    assert.equal(
+      queries.some((operation) => operation.startsWith('run.timeline.')),
+      false,
+      'A missing Run must reject before reading timeline rows.',
+    );
+    await authority.close();
+    authority = await open();
+    await assert.rejects(authority.runs.timeline({ runId: 'R-missing', limit: 10 }), {
+      code: 'NOT_FOUND',
+    });
     assert.equal(await authority.runs.current('R-missing'), undefined);
     assert.equal(await authority.runs.receipt({ id: 'read', fingerprint: 'read' }), undefined);
     if (kind === 'sqlite')

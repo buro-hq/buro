@@ -1,4 +1,4 @@
-import { initialRunView, mergeRunCurrent } from '../protocol/run-view.ts';
+import { initialRunView, mergeRunCurrent, mergeRunLifecycle } from '../protocol/run-view.ts';
 import type {
   CreateGoal,
   DomainEvent,
@@ -84,6 +84,15 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
       throw Error('Run cancellation needs a current run projection.');
     next.runs = snapshot.runs.map((previous) =>
       previous.id === c.current.id ? mergeRunCurrent(previous, c.current) : previous,
+    );
+  }
+  if (c.type === 'run.lifecycle-changed') {
+    if (!snapshot.runs.some((previous) => previous.id === c.current.id))
+      throw Error('Run lifecycle change needs a current run projection.');
+    next.runs = snapshot.runs.map((previous) =>
+      previous.id === c.current.id
+        ? mergeRunLifecycle(previous, c.current, c.entry, c.view)
+        : previous,
     );
   }
   if (c.type === 'run.changed') {
@@ -264,9 +273,12 @@ export class SocketProjectClient implements ProjectClient {
                 event.change.type === 'run.changed' ||
                 event.change.type === 'run.admitted') &&
                 !!event.change.roles?.length) ||
-              (['run.changed', 'run.admitted', 'run.cancel-requested'].includes(
-                event.change.type,
-              ) &&
+              ([
+                'run.changed',
+                'run.admitted',
+                'run.cancel-requested',
+                'run.lifecycle-changed',
+              ].includes(event.change.type) &&
                 busyBefore !== hasActiveRun(this.state))
             )
               this.invalidateProjection();

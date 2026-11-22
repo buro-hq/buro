@@ -723,10 +723,43 @@ export const DomainEventSchema = z
         roles: z.array(role).optional(),
       }),
       z.strictObject({ type: z.literal('run.cancel-requested'), current: RunCurrentSchema }),
+      z.strictObject({
+        type: z.literal('run.lifecycle-changed'),
+        current: RunCurrentSchema,
+        entry: z
+          .strictObject({
+            runId: z.string().min(1),
+            at: z.string().min(1),
+            type: z.string().min(1),
+            text: z.string(),
+          })
+          .optional(),
+        view: RunAdmissionViewSchema.optional(),
+      }),
       z.object({ type: z.literal('run.changed'), run, goal, roles: z.array(role).optional() }),
     ]),
   })
   .superRefine((event, ctx) => {
+    if (event.change.type === 'run.lifecycle-changed') {
+      const { current, entry } = event.change;
+      if (
+        current.status !== 'running' ||
+        current.cancelRequested ||
+        current.phase === 'done' ||
+        current.completedAt !== undefined ||
+        (!entry && current.phase !== 'queued') ||
+        (entry &&
+          (entry.runId !== current.id ||
+            entry.at !== current.updatedAt ||
+            entry.type !== 'phase.' + current.phase ||
+            current.phase === 'queued'))
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['change'],
+          message: 'Lifecycle changes describe active work and its matching phase event.',
+        });
+    }
     if (event.change.type === 'run.admitted') {
       const { current, admission, goal: linkedGoal } = event.change;
       if (

@@ -2,6 +2,8 @@
 
 Date: 2026-11-22. **Read-only implementation proposal** against the working 5A3c tree. No production sources, user projects, model endpoints or credentials changed. Current production remains the sole File authority; the SQLite kernel is not a live execution sidecar. Finite policies and current repair/context limits remain unchanged until 5C.
 
+Implementation checkpoint: 5A4a is committed as `a169551`. The following 5A4b1 slice migrates actual initial/continued execution activation and phase changes through semantic Run commands, with separate scalar/timeline persistence and independently tested mixed lifecycle/legacy-delta replay. See [progress](../../docs/IMPLEMENTATION-PROGRESS-2026-11-21.md) and [validation](stage5a4b1-validation-2026-11-22.json). This does not complete 5A4b: workspace, plan, assignment, continuation, finish and runtime observations still need their own actual consumers; 5A4c/5A4d and production SQL cutover remain pending. The proposal below is retained as the full target contract.
+
 ## Decision: move the minimum 5B contracts forward
 
 Implement typed current state, separate append/settle history and cursor reads **before** moving the execution writer to SQLite. This is the necessary part of 5B to avoid storing/hydrating a growing `Run` as authority. Full UI pagination can follow in a separate consumer slice; do not block the initial genuine queue writer on a complete inspector redesign, and do not claim full 5B completion merely because SQL can page events.

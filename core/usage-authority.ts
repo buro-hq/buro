@@ -412,7 +412,11 @@ export function validateProjectAuthorityChange(
   )
     throw new DomainError('INVALID_AUTHORITY_EVENT', 'The saved project event is invalid.');
   const { projectId, ...change } = input;
-  if (change.type === 'run.admitted' || change.type === 'run.cancel-requested')
+  if (
+    change.type === 'run.admitted' ||
+    change.type === 'run.cancel-requested' ||
+    change.type === 'run.lifecycle-changed'
+  )
     return { ...validateProjectRunChange(change, projectId), projectId };
   if (change.type === 'project.configured' || change.type === 'project.verified')
     return { ...validateProjectSettingsChange(change), projectId };

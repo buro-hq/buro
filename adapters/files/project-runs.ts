@@ -7,6 +7,7 @@ import {
   validateRunCurrent,
   validateRunAdmission,
   validateRunAttempt,
+  validateRunTimelineEntry,
   type ProjectRuns,
   type ProjectRunChange,
   type RunCommand,
@@ -216,19 +217,54 @@ export function createDocumentProjectRuns(host: DocumentFacetHost<ProjectRunChan
           if (!isDeepStrictEqual(current(previous.id), previous)) throw conflict();
           const run = legacy(previous.id)!;
           doc.runHeads![previous.id] = validateRunCurrent(next);
-          doc.runs[doc.runs.indexOf(run)] = mergeRunCurrent(run, next);
+          const updated = mergeRunCurrent(run, next);
+          if (!next.cancelRequested)
+            Object.assign(
+              updated,
+              projectRunAutonomy(updated, {
+                goalExists: doc.goals.some((goal) => goal.id === updated.goalId),
+                goalUnsettled: doc.runs.some(
+                  (other) =>
+                    other.id !== updated.id &&
+                    other.goalId === updated.goalId &&
+                    !!(other.pendingTurn || other.reconciliation),
+                ),
+                projectBusy: doc.runs.some(
+                  (other) =>
+                    other.id !== updated.id &&
+                    !!other.status &&
+                    ['queued', 'running', 'canceling'].includes(other.status),
+                ),
+                resumeSupported: true,
+                startSupported: true,
+                settingsSupported: !!updated.executionPolicySnapshot?.profile,
+              }),
+            );
+          doc.runs[doc.runs.indexOf(run)] = updated;
         }),
       appendTimeline: (entry) =>
         access.write(() => {
           const run = legacy(entry.runId);
           if (!run) throw conflict();
-          const last = run.events.at(-1);
-          // The legacy read projector installs the queue/stop item alongside its lifecycle view.
-          if (last?.at !== entry.at || last.type !== entry.type || last.text !== entry.text)
-            throw conflict();
+          if (entry.type === 'run.queued' || entry.type === 'run.cancel-requested') {
+            const last = run.events.at(-1);
+            // The legacy read projector installs the queue/stop item alongside its lifecycle view.
+            if (last?.at !== entry.at || last.type !== entry.type || last.text !== entry.text)
+              throw conflict();
+          } else {
+            const {
+              runId: _runId,
+              sequence: _sequence,
+              ...event
+            } = validateRunTimelineEntry({
+              ...entry,
+              sequence: run.events.length + 1,
+            });
+            run.events.push(event);
+          }
         }),
       appendChange: (change) => {
-        if (change.type !== 'run.admitted') {
+        if (change.type !== 'run.admitted' && change.type !== 'run.lifecycle-changed') {
           access.appendChange(change);
           return;
         }

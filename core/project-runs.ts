@@ -40,8 +40,9 @@ import type { WorkflowRoleResolver } from './workflow-roles.ts';
 export type RunCommand = { id: string; fingerprint: string };
 export type ProjectRunChange = Extract<
   DomainEvent['change'],
-  { type: 'run.admitted' | 'run.cancel-requested' }
+  { type: 'run.admitted' | 'run.cancel-requested' | 'run.lifecycle-changed' }
 >;
+export type ExecutionPhase = Exclude<RunCurrent['phase'], 'queued' | 'done'>;
 export type RunAdmissionProposal = {
   runId: string;
   admissionId: string;
@@ -59,6 +60,10 @@ export type RunAdmissionProposal = {
 export interface RunTransaction {
   admit(proposal: RunAdmissionProposal, workflowRoles: WorkflowRoleResolver): { runId: string };
   requestCancel(input: { runId: string; now: string }): { runId: string };
+  beginExecution(input: { runId: string; now: string }): { runId: string };
+  advancePhase(input: { runId: string; now: string; phase: ExecutionPhase; text: string }): {
+    runId: string;
+  };
   current(id: string): RunCurrent | undefined;
   timeline(query: RunTimelineQuery): RunTimelinePage;
 }
@@ -180,6 +185,49 @@ export function validateProjectRunChange(value: unknown, projectId?: string): Pr
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
   const input = value as Record<string, unknown>,
     keys = Reflect.ownKeys(input);
+  if (input.type === 'run.lifecycle-changed') {
+    if (!closed(input, ['type', 'current'], ['entry', 'view'])) throw invalid();
+    const current = validateRunCurrent(input.current);
+    if (
+      current.status !== 'running' ||
+      current.cancelRequested ||
+      current.phase === 'done' ||
+      current.completedAt !== undefined
+    )
+      throw invalid();
+    if (input.entry !== undefined && !closed(input.entry, ['runId', 'at', 'type', 'text']))
+      throw invalid();
+    const entry =
+      input.entry === undefined
+        ? undefined
+        : validateRunTimelineEntry({ ...(input.entry as object), sequence: 1 });
+    if (
+      entry &&
+      (entry.runId !== current.id ||
+        entry.at !== current.updatedAt ||
+        entry.type !== 'phase.' + current.phase ||
+        current.phase === 'queued')
+    )
+      throw invalid();
+    if (!entry && current.phase !== 'queued') throw invalid();
+    const view =
+      input.view === undefined ? undefined : RunAdmissionViewSchema.safeParse(input.view);
+    if (view && !view.success) throw invalid();
+    if (entry) {
+      const { sequence: _sequence, ...item } = entry;
+      return {
+        type: 'run.lifecycle-changed',
+        current,
+        entry: item,
+        ...(view?.success ? { view: canonical(view.data) } : {}),
+      };
+    }
+    return {
+      type: 'run.lifecycle-changed',
+      current,
+      ...(view?.success ? { view: canonical(view.data) } : {}),
+    };
+  }
   if (
     input.type === 'run.cancel-requested' &&
     keys.length === 2 &&
@@ -582,6 +630,80 @@ export function createRunTransaction(options: {
         text: 'Stop requested',
       });
       storage.appendChange({ type: 'run.cancel-requested', current: next });
+      return { runId: next.id };
+    },
+    beginExecution(input: { runId: string; now: string }) {
+      assertActive();
+      if (!closed(input, ['runId', 'now']) || !identity(input.now)) throw invalid();
+      const previous = current(input.runId);
+      if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      if (previous.cancelRequested || previous.status === 'canceling')
+        throw new DOMException('Interrupted', 'AbortError');
+      if (
+        previous.status !== 'queued' ||
+        previous.phase !== 'queued' ||
+        previous.completedAt !== undefined
+      )
+        throw new DomainError('INVALID_STATE', 'Only queued work can begin execution.');
+      if (storage.unresolvedForGoal(previous.goalId))
+        throw new DomainError(
+          'RUN_RECONCILIATION_REQUIRED',
+          'Reconcile unknown operations before execution.',
+        );
+      const next = validateRunCurrent({
+        ...previous,
+        revision: previous.revision + 1,
+        status: 'running',
+        updatedAt: input.now,
+      });
+      storage.replaceCurrent(structuredClone(previous), structuredClone(next));
+      storage.appendChange({ type: 'run.lifecycle-changed', current: next });
+      return { runId: next.id };
+    },
+    advancePhase(input: { runId: string; now: string; phase: ExecutionPhase; text: string }) {
+      assertActive();
+      if (
+        !closed(input, ['runId', 'now', 'phase', 'text']) ||
+        !identity(input.now) ||
+        typeof input.text !== 'string' ||
+        !['preparing', 'planning', 'implementation', 'checking', 'review', 'repair'].includes(
+          input.phase,
+        )
+      )
+        throw invalid();
+      const previous = current(input.runId);
+      if (!previous) throw new DomainError('NOT_FOUND', 'Run not found.');
+      if (previous.cancelRequested || previous.status === 'canceling')
+        throw new DOMException('Interrupted', 'AbortError');
+      if (
+        previous.status !== 'running' ||
+        previous.phase === 'done' ||
+        previous.completedAt !== undefined
+      )
+        throw new DomainError(
+          'INVALID_STATE',
+          'Only running work can advance its execution phase.',
+        );
+      if (storage.unresolvedForGoal(previous.goalId))
+        throw new DomainError(
+          'RUN_RECONCILIATION_REQUIRED',
+          'Reconcile unknown operations before execution.',
+        );
+      const next = validateRunCurrent({
+        ...previous,
+        revision: previous.revision + 1,
+        phase: input.phase,
+        updatedAt: input.now,
+      });
+      const entry = {
+        runId: next.id,
+        at: input.now,
+        type: 'phase.' + input.phase,
+        text: input.text,
+      };
+      storage.replaceCurrent(structuredClone(previous), structuredClone(next));
+      storage.appendTimeline(entry);
+      storage.appendChange({ type: 'run.lifecycle-changed', current: next, entry });
       return { runId: next.id };
     },
   });

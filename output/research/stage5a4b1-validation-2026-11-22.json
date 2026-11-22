@@ -1,0 +1,57 @@
+{
+  "stage": "5A4b1",
+  "date": "2026-11-22",
+  "parentCommit": "a169551",
+  "tests": {
+    "total": 1248,
+    "passed": 1248,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 84419.5755,
+    "log": "/private/tmp/buro-5a4b1-final-tests.log"
+  },
+  "buildTypecheck": { "passed": true, "log": "/private/tmp/buro-5a4b1-build.log" },
+  "format": {
+    "passed": true,
+    "logs": ["/private/tmp/buro-5a4b1-format.log", "/private/tmp/buro-5a4b1-server-format.log"]
+  },
+  "browser": {
+    "firstProfileScenarios": 6,
+    "firstProfileLog": "/private/tmp/buro-5a4b1-first-profile.log",
+    "projectScenarios": 17,
+    "projectLog": "/private/tmp/buro-5a4b1-projects.log",
+    "productionDesktopMobile": true,
+    "productionLog": "/private/tmp/buro-5a4b1-production.log",
+    "syntheticRequests": 26,
+    "nativeStarts": [],
+    "realModelRequests": 0,
+    "errors": []
+  },
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "independentReviewEvidence": {
+    "architectureFocusedPassed": 25,
+    "architectureReport": "stage5a4b1-architecture-review-2026-11-22.md",
+    "boundaryFocusedPassed": 29,
+    "boundaryReport": "stage5a4b1-boundary-review-2026-11-22.md",
+    "contractFocusedPassed": 31,
+    "contractReport": "stage5a4b1-tests-evidence-2026-11-22.md",
+    "priorMissingRunTimelineCorrectionIndependentlyVerified": true,
+    "mixedLifecycleDeltaReplayCorrectionIndependentlyVerified": true,
+    "countsOverlapFullSuite": true
+  },
+  "scopeLimits": [
+    "Production remains the sole File authority and existing managed ledger; standalone SQL is not a full executor.",
+    "Workspace/plan/assignment/continuation/finish/acceptance and runtime observations remain later semantic writers.",
+    "Post-await cancellation checks are not external dispatch leases or cross-process execution ownership.",
+    "Session/effect/accounting journals, complete artifacts, bounded active context, public history paging and default-none policies remain pending.",
+    "Reduced beta scope and publication are not approved; synthetic browser replies are not live-model quality evidence."
+  ],
+  "originalUserProjectsModified": false,
+  "outputUxPreserved": true,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

@@ -1,5 +1,5 @@
 import type { Run } from './domain.ts';
-import type { RunAdmission, RunCurrent } from './run-state.ts';
+import type { RunAdmission, RunCurrent, RunTimelineEntry } from './run-state.ts';
 
 /** Temporary legacy read projection for File/UI consumers; never a SQL execution authority. */
 export function initialRunView(
@@ -81,4 +81,19 @@ export function mergeRunCurrent(run: Run, current: RunCurrent): Run {
           ]
         : run.events,
   };
+}
+
+/** Public lifecycle projection retains all existing evidence and adds only its committed phase item. */
+export function mergeRunLifecycle(
+  run: Run,
+  current: RunCurrent,
+  entry?: Omit<RunTimelineEntry, 'sequence'>,
+  view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>,
+): Run {
+  const next = mergeRunCurrent(run, current);
+  if (entry) {
+    const { runId: _runId, ...item } = entry;
+    next.events = [...next.events, item];
+  }
+  return { ...next, ...view };
 }

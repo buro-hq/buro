@@ -2,7 +2,7 @@
 
 Date: 2026-11-22. Release-scope proposal following the user's question about a first release. This does not cancel the saved full vision, remove its default-none requirement, or authorize publication.
 
-The existing product already connects a repository, configures Codex/Ollama/DeepSeek routes, creates goals and roles, dispatches workers, checks an immutable workspace, obtains fresh review and exposes an accepted result. Stage 5A4a parent validation passes 1225 deterministic tests, build/typecheck and 23 browser scenarios. These results are not current live-model quality or clean-machine installation evidence.
+The existing product already connects a repository, configures Codex/Ollama/DeepSeek routes, creates goals and roles, dispatches workers, checks an immutable workspace, obtains fresh review and exposes an accepted result. Stage 5A4b1 validation passes 1248 deterministic tests, build/typecheck, 23 browser scenarios and desktop/mobile production smoke. Semantic execution activation/phase commands and mixed lifecycle/delta replay are verified; full executor/session/effect migration remains pending. These results are not current live-model quality or clean-machine installation evidence.
 
 ## Minimum beta gates still to verify or finish
 

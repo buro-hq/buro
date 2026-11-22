@@ -1,5 +1,5 @@
 /** Public data contracts. This module has no Node, Cordis, React or transport imports. */
-import type { RunCurrent, RunAdmission } from './run-state.ts';
+import type { RunCurrent, RunAdmission, RunTimelineEntry } from './run-state.ts';
 import type { EnvironmentConfig } from './environment.ts';
 import type { RoleProvenance, WorkflowIdentity } from './workflow-roles.ts';
 import type { ContextMaterial } from './context.ts';
@@ -339,6 +339,12 @@ export type DomainEvent = {
         roles?: Role[];
       }
     | { type: 'run.cancel-requested'; current: RunCurrent }
+    | {
+        type: 'run.lifecycle-changed';
+        current: RunCurrent;
+        entry?: Omit<RunTimelineEntry, 'sequence'>;
+        view?: Pick<Run, 'managedBudget' | 'effectivePolicy' | 'stop' | 'issue'>;
+      }
     | { type: 'run.changed'; run: Run; goal: Goal; roles?: Role[] };
 };
 export type ExecutionPolicyView = {

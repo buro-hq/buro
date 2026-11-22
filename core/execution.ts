@@ -1,4 +1,5 @@
 import { executionPolicy as savedExecutionPolicy } from './project-settings.ts';
+import type { ExecutionPhase } from './project-runs.ts';
 import { runWorkerAssignments } from './worker-assignments.ts';
 import { planningTurn, assertPlanningPolicy, planningOutputSchema } from './planning-policy.ts';
 import { ManagedBudgetErrorCodeSchema } from '../protocol/run-budget.ts';
@@ -682,9 +683,11 @@ ${installation.output || installation.error || ''}`,
         'NO_WORKSPACE',
         'The adapter does not support restoring this workspace.',
       );
-    await this.update(projectId, runId, (r) => {
-      r.status = 'running';
-    });
+    await this.beginExecution(projectId, runId);
+    const activated = this.get(projectId, runId);
+    assertRunReconciled(activated);
+    if (signal.aborted || activated.cancelRequested)
+      throw new DOMException('Interrupted', 'AbortError');
     const workspace = await this.env.workspaces.restore(
         projectId,
         runId,
@@ -909,11 +912,35 @@ ${installation.output || installation.error || ''}`,
         };
       });
   }
-  async phase(projectId: string, runId: string, phase: Run['phase'], text: string) {
-    await this.update(projectId, runId, (r) => {
-      r.phase = phase;
-      r.events.push({ at: this.env.now(), type: 'phase.' + phase, text });
-    });
+  private runCommands(projectId: string) {
+    const store = this.env.projects.get(projectId),
+      runs = store.runs;
+    if (store.project.id !== projectId || !runs || runs.projectId !== projectId)
+      throw new DomainError(
+        'PROJECT_STORAGE_MISMATCH',
+        'The run store belongs to another project.',
+      );
+    return runs;
+  }
+  async beginExecution(projectId: string, runId: string) {
+    return this.runCommands(projectId).transaction(
+      { id: 'internal-' + this.env.id(), fingerprint: 'run.begin-execution' },
+      (tx) => tx.beginExecution({ runId, now: this.env.now() }),
+    );
+  }
+  async phase(projectId: string, runId: string, phase: ExecutionPhase, text: string) {
+    const runs = this.runCommands(projectId);
+    const result = await runs.transaction(
+      { id: 'internal-' + this.env.id(), fingerprint: 'run.advance-phase' },
+      (tx) => tx.advancePhase({ runId, now: this.env.now(), phase, text }),
+    );
+    // Cancellation can commit after the phase transaction while its result is being delivered.
+    const current = await runs.current(runId);
+    if (current?.cancelRequested || current?.status === 'canceling')
+      throw new DOMException('Interrupted', 'AbortError');
+    if (!current || current.status !== 'running')
+      throw new DomainError('INVALID_STATE', 'This run is no longer executing.');
+    return result;
   }
   async cancel(
     requestId: string,
@@ -1014,9 +1041,8 @@ ${installation.output || installation.error || ''}`,
         await this.continueRun(projectId, runId, signal, threads);
         return;
       }
-      await this.update(projectId, runId, (r) => {
-        r.status = 'running';
-      });
+      await this.beginExecution(projectId, runId);
+      abort();
       let base = record.baseBranch;
       if (record.parentRunId) {
         const parent = this.env.projects

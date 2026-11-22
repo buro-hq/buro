@@ -111,7 +111,7 @@ function fromRow(row: Row): RunCurrent {
   });
 }
 
-/** Only the genuine queue/cancel writer; no full Run replacement or accepted-result method. */
+/** Semantic queue/cancel/lifecycle storage; no full Run replacement or accepted-result method. */
 export function createSqliteRunRows(database: RunDatabase): RunTransactionStorage {
   return {
     current: (id) => {
@@ -275,7 +275,7 @@ export function createSqliteRunRows(database: RunDatabase): RunTransactionStorag
           throw conflict();
         const changed = database.run(
           'run.current.update',
-          'UPDATE run_current SET revision=?,summary=?,status=?,phase=?,updated_at=?,completed_at=?,cancel_requested=? WHERE run_id=? AND revision=? AND goal_id=? AND admission_id=? AND attempt_id=? AND status=? AND phase=? AND updated_at=? AND cancel_requested=?',
+          'UPDATE run_current SET revision=?,summary=?,status=?,phase=?,updated_at=?,completed_at=?,cancel_requested=? WHERE run_id=? AND revision=? AND goal_id=? AND admission_id=? AND attempt_id=? AND title=? AND summary=? AND status=? AND phase=? AND created_at=? AND updated_at=? AND completed_at IS ? AND cancel_requested=?',
           after.revision,
           after.summary,
           after.status,
@@ -288,9 +288,13 @@ export function createSqliteRunRows(database: RunDatabase): RunTransactionStorag
           before.goalId,
           before.admissionId,
           before.attemptId,
+          before.title,
+          before.summary,
           before.status,
           before.phase,
+          before.createdAt,
           before.updatedAt,
+          before.completedAt ?? null,
           Number(before.cancelRequested),
         );
         if (Number(changed.changes) !== 1) throw conflict();
