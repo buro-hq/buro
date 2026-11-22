@@ -1,0 +1,52 @@
+{
+  "stage": "5A3b",
+  "date": "2026-11-22",
+  "parentCommit": "36f2643",
+  "tests": {
+    "total": 1164,
+    "passed": 1164,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 72757.23975,
+    "log": "/private/tmp/buro-stage5a3b-final-reviewed-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a3b-build.log"
+  },
+  "format": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a3b-format.log"
+  },
+  "browser": {
+    "scenariosPassed": 9,
+    "errors": [],
+    "log": "/private/tmp/buro-stage5a3b-context-browser-reviewed.log"
+  },
+  "independentReviews": [
+    "stage5a3b-architecture-review-2026-11-22.md",
+    "stage5a3b-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "actualEvidence": [
+    "Two actual importer instances on File and SQL converge/recover canonical metadata across duplicate, remove and same-command source-version races.",
+    "Metadata/reference/count/event/receipt rollback together after a caught physical SQL reference failure.",
+    "Changed extraction under the same loader identity cannot reactivate or partly attach a batch.",
+    "Incomplete temporary blob bytes are not published as a final content-addressed path.",
+    "Connected-client full snapshot and saved public revision agree after zero/multiple-event transactions.",
+    "Captured facet callbacks and requested-project guards reject retargeting before I/O."
+  ],
+  "scopeLimits": [
+    "Application still uses the sole JSON authority; SQL facet is not a live sidecar or production factory cutover.",
+    "Complete-byte atomic visibility is tested; full power-loss directory-entry persistence is not claimed.",
+    "Legacy registry metadata still uses snapshot projection.",
+    "Existing finite material policies and runtime quotas remain unchanged; complete journal/history/artifacts and default-none release are later."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

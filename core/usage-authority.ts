@@ -4,6 +4,12 @@ import {
   type ProjectEntities,
   type EntityTransaction,
 } from './project-entities.ts';
+import {
+  validateProjectMaterialChange,
+  type ProjectMaterialChange,
+  type ProjectMaterials,
+  type MaterialTransaction,
+} from './project-materials.ts';
 import { DomainError } from './ports.ts';
 import {
   admitGeneration,
@@ -46,7 +52,7 @@ export type ProjectUsageChange = {
 };
 export type ProjectAuthorityChange =
   | ProjectUsageChange
-  | (ProjectEntityChange & { projectId: string });
+  | ((ProjectEntityChange | ProjectMaterialChange) & { projectId: string });
 export type UsageAuthorityEvent = ProjectAuthorityChange & { sequence: number };
 export type UsageEventPage = {
   events: UsageAuthorityEvent[];
@@ -68,10 +74,12 @@ export interface UsageTransaction {
 export type UsageAuthorityTransaction = { readonly usage: UsageTransaction };
 export type ProjectAuthorityTransaction = UsageAuthorityTransaction & {
   readonly entities: EntityTransaction;
+  readonly materials: MaterialTransaction;
 };
 export interface ProjectUsageAuthority {
   readonly projectId: string;
   readonly entities: ProjectEntities;
+  readonly materials: ProjectMaterials;
   /** Callback is synchronous and its result must be JSON-safe; neither permits external effects. */
   transaction<T>(command: UsageCommand, apply: (tx: ProjectAuthorityTransaction) => T): Promise<T>;
   account(owner: ProjectUsageOwner): Promise<UsageAccount | undefined>;
@@ -384,5 +392,7 @@ export function validateProjectAuthorityChange(
   )
     throw new DomainError('INVALID_AUTHORITY_EVENT', 'The saved project event is invalid.');
   const { projectId, ...change } = input;
+  if (change.type === 'context.materials.added' || change.type === 'context.material.removed')
+    return { ...validateProjectMaterialChange(change), projectId };
   return { ...validateProjectEntityChange(change, projectId), projectId };
 }

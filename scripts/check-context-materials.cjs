@@ -191,6 +191,46 @@ const { execFile } = require('node:child_process'),
       'User materials stay external.',
     );
     passed.push('removing a project attachment preserves the user source');
+    const beforeReactivation = host.ctx.projects.registry
+      .get(project.id)
+      .snapshot()
+      .contextMaterials.find((material) => material.scope === 'project');
+    const reupload = page.waitForEvent('filechooser');
+    await page
+      .getByRole('region', { name: 'Project materials' })
+      .getByRole('button', { name: 'Upload files', exact: true })
+      .click();
+    await (
+      await reupload
+    ).setFiles([
+      {
+        name: 'requirements.md',
+        mimeType: 'text/markdown',
+        buffer: Buffer.from('User materials stay external.'),
+      },
+    ]);
+    await page
+      .getByRole('region', { name: 'Project materials' })
+      .getByText('requirements.md', { exact: true })
+      .waitFor();
+    const reactivated = host.ctx.projects.registry
+      .get(project.id)
+      .snapshot()
+      .contextMaterials.filter((material) => material.scope === 'project');
+    assert.equal(reactivated.length, 1);
+    assert.equal(reactivated[0].id, beforeReactivation.id);
+    assert.equal(reactivated[0].active, true);
+    await page.reload();
+    await page.getByRole('heading', { name: 'Context fixture', exact: true }).waitFor();
+    await page
+      .locator('.sidebar')
+      .getByRole('button', { name: 'Project settings', exact: true })
+      .click();
+    await page
+      .getByRole('region', { name: 'Project materials' })
+      .getByText('requirements.md', { exact: true })
+      .waitFor();
+    passed.push('reimport reactivates the original material in the connected UI and after reload');
     for (const width of [1440, 390, 320]) {
       await page.setViewportSize({ width, height: 1100 });
       assert.ok(

@@ -33,11 +33,14 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
   if (event.seq !== snapshot.sequence + 1) throw Error('Event gap: a new snapshot is required.');
   const next = { ...snapshot, sequence: event.seq, revision: snapshot.revision + 1 };
   const c = event.change;
-  if (c.type === 'context.materials.added')
+  if (c.type === 'context.materials.added') {
+    const incoming = new Map(c.materials.map((material) => [material.id, material]));
+    const existing = snapshot.contextMaterials || [];
     next.contextMaterials = [
-      ...(snapshot.contextMaterials || []),
-      ...c.materials.filter((m) => !snapshot.contextMaterials?.some((old) => old.id === m.id)),
+      ...existing.map((material) => incoming.get(material.id) ?? material),
+      ...c.materials.filter((material) => !existing.some((old) => old.id === material.id)),
     ];
+  }
   if (c.type === 'context.material.removed')
     next.contextMaterials = snapshot.contextMaterials?.map((m) =>
       m.id === c.id ? { ...m, active: false } : m,

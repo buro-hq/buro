@@ -26,6 +26,12 @@ import {
   type EntityTransaction,
   type ProjectEntities,
 } from '../../core/project-entities.ts';
+import {
+  createMaterialTransaction,
+  type MaterialTransaction,
+  type ProjectMaterials,
+} from '../../core/project-materials.ts';
+import { createSqliteMaterialRows, projectMaterialSchema } from './project-material-rows.ts';
 import { createSqliteEntityRows, projectEntitySchema } from './project-entity-rows.ts';
 import {
   json,
@@ -44,7 +50,7 @@ export type SqliteProjectUsageOptions = {
   /** Counts returned/changed rows without exposing SQL parameters or private payloads. */
   onQuery?: (observation: UsageQueryObservation) => void;
 };
-const format = 'buro-project-authority-v2';
+const format = 'buro-project-authority-v3';
 const failure = (code: string, message: string) => new DomainError(code, message);
 const stateConflict = () =>
   failure('USAGE_STATE_CONFLICT', 'The stored usage state changed. Refresh before trying again.');
@@ -56,6 +62,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
   #projectId: string;
   #directory: string;
   #entities: ProjectEntities;
+  #materials: ProjectMaterials;
   #database: DatabaseSync;
   #statements = new Map<string, StatementSync>();
   #queue: Promise<unknown> = Promise.resolve();
@@ -75,10 +82,18 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       goal: (id: string) => this.#readEntity((tx) => tx.goal(id)),
       role: (id: string, version?: number) => this.#readEntity((tx) => tx.role(id, version)),
     });
+    this.#materials = Object.freeze({
+      projectId: this.#projectId,
+      transaction: <T>(command: UsageCommand, apply: (tx: MaterialTransaction) => T) =>
+        this.transaction(command, (tx) => apply(tx.materials)),
+      receipt: (command: UsageCommand) => this.#materialReceipt(command),
+      material: (id: string) => this.#readMaterial((tx) => tx.material(id)),
+    });
     Object.defineProperties(this, {
       projectId: { enumerable: true, configurable: false, get: () => this.#projectId },
       directory: { enumerable: true, configurable: false, get: () => this.#directory },
       entities: { enumerable: true, configurable: false, get: () => this.#entities },
+      materials: { enumerable: true, configurable: false, get: () => this.#materials },
     });
     this.#onEvent = options.onEvent;
     this.#onQuery = options.onQuery;
@@ -93,6 +108,10 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
 
   get entities() {
     return this.#entities;
+  }
+
+  get materials() {
+    return this.#materials;
   }
 
   static async open(options: SqliteProjectUsageOptions) {
@@ -113,6 +132,25 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         .all();
       if (tables.length && !tables.some((table) => table.name === 'authority_metadata'))
         throw failure('USAGE_AUTHORITY_FORMAT', 'This file is not a supported project authority.');
+      const requiredTables = [
+        'authority_metadata',
+        'usage_accounts',
+        'usage_operations',
+        'usage_events',
+        'command_receipts',
+        'project_goals',
+        'role_versions',
+        'role_heads',
+        'material_refs',
+        'project_run_index',
+        'project_materials',
+        'material_counts',
+      ];
+      if (
+        tables.length &&
+        requiredTables.some((name) => !tables.some((table) => table.name === name))
+      )
+        throw failure('USAGE_AUTHORITY_FORMAT', 'The project authority schema is incomplete.');
       database.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; BEGIN IMMEDIATE;');
       try {
         database.exec(`
@@ -146,6 +184,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
           );
         `);
         database.exec(projectEntitySchema);
+        database.exec(projectMaterialSchema);
         const metadata = database
           .prepare('SELECT format,project_id FROM authority_metadata WHERE singleton=1')
           .get();
@@ -166,7 +205,12 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
           database
             .prepare('INSERT INTO authority_metadata(singleton,format,project_id) VALUES (1,?,?)')
             .run(format, captured.projectId);
+          database.exec(
+            'INSERT INTO material_counts(singleton,total_count,active_project_count) VALUES (1,0,0)',
+          );
         }
+        if (!database.prepare('SELECT singleton FROM material_counts WHERE singleton=1').get())
+          throw failure('USAGE_AUTHORITY_FORMAT', 'The project material summary is missing.');
         database.exec('COMMIT');
       } catch (error) {
         try {
@@ -275,20 +319,10 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       let active = true;
       this.#database.exec('BEGIN IMMEDIATE');
       try {
-        const saved = this.#get(
-          'receipt.read',
-          'SELECT fingerprint,result_json FROM command_receipts WHERE command_id=?',
-          captured.id,
-        );
+        const saved = this.#receiptRow(captured);
         if (saved) {
-          if (saved.fingerprint !== captured.fingerprint)
-            throw failure(
-              'IDEMPOTENCY_CONFLICT',
-              'This command ID was used with another fingerprint.',
-            );
-          const result = decodeResult(String(saved.result_json)) as T;
           this.#database.exec('COMMIT');
-          return result;
+          return saved.result as T;
         }
         let storageFailure: { error: unknown } | undefined;
         const mutate = <R>(action: () => R): R => {
@@ -404,7 +438,14 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
           ),
           assertActive,
         });
-        const tx = Object.freeze({ ...usage, entities });
+        const materials = createMaterialTransaction({
+          projectId: this.#projectId,
+          storage: this.#materialRows(mutate, (change) =>
+            appendChange({ ...change, projectId: this.#projectId }),
+          ),
+          assertActive,
+        });
+        const tx = Object.freeze({ ...usage, entities, materials });
         const result = apply(tx);
         active = false;
         if (thenable(result)) {
@@ -444,6 +485,60 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
           /* Preserve the original transaction failure. */
         }
         throw error;
+      } finally {
+        active = false;
+      }
+    });
+  }
+
+  #receiptRow(command: UsageCommand): { result: unknown } | undefined {
+    const saved = this.#get(
+      'receipt.read',
+      'SELECT fingerprint,result_json FROM command_receipts WHERE command_id=?',
+      command.id,
+    );
+    if (!saved) return undefined;
+    if (saved.fingerprint !== command.fingerprint)
+      throw failure('IDEMPOTENCY_CONFLICT', 'This command ID was used with another fingerprint.');
+    return { result: decodeResult(String(saved.result_json)) };
+  }
+  #materialReceipt(command: UsageCommand): Promise<{ result: unknown } | undefined> {
+    let captured: UsageCommand;
+    try {
+      captured = commandCopy(command);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return this.#enqueue(() => this.#receiptRow(captured));
+  }
+  #materialRows(
+    mutate: <T>(action: () => T) => T,
+    appendChange: Parameters<typeof createSqliteMaterialRows>[0]['appendChange'],
+  ) {
+    return createSqliteMaterialRows({
+      get: (...args) => this.#get(...args),
+      run: (...args) => this.#run(...args),
+      json,
+      mutate,
+      appendChange,
+    });
+  }
+  #readMaterial<T>(query: (tx: MaterialTransaction) => T): Promise<T> {
+    return this.#enqueue(() => {
+      let active = true;
+      const forbidden = (): never => {
+        throw failure('USAGE_TRANSACTION_CLOSED', 'This query does not grant a transaction.');
+      };
+      try {
+        return query(
+          createMaterialTransaction({
+            projectId: this.#projectId,
+            storage: this.#materialRows(forbidden, forbidden),
+            assertActive: () => {
+              if (!active) forbidden();
+            },
+          }),
+        );
       } finally {
         active = false;
       }

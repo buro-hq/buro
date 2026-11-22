@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { DomainError, type ProjectRegistry } from '../../core/ports.ts';
+import { validateProjectMaterial } from '../../core/project-materials.ts';
 import type { ContextMaterial } from '../../protocol/context.ts';
 import { ContextLoaderCatalog, type ResolvedContextLoader } from '../../core/context-loaders.ts';
 import { createBuiltinContextLoaders } from '../context/loaders/builtins.ts';
@@ -37,7 +38,17 @@ async function materialDirectory(root: string) {
         );
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
-      await fs.mkdir(directory, { mode: 0o700 });
+      try {
+        await fs.mkdir(directory, { mode: 0o700 });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      const created = await fs.lstat(directory);
+      if (!created.isDirectory() || created.isSymbolicLink())
+        throw new DomainError(
+          'INVALID_CONTEXT_DIRECTORY',
+          'The materials directory must be a regular directory.',
+        );
     }
   }
   try {
@@ -50,13 +61,25 @@ async function materialDirectory(root: string) {
 async function putBlob(directory: string, data: Buffer, extension: string) {
   const hash = digest(data),
     file = path.join(directory, hash + extension);
+  const temporary = path.join(directory, '.' + randomUUID() + '.tmp');
   try {
-    await fs.writeFile(file, data, { flag: 'wx', mode: 0o600 });
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-    const stat = await fs.lstat(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || digest(await fs.readFile(file)) !== hash)
-      throw new DomainError('CONTEXT_CORRUPT', 'The saved material copy is corrupted.');
+    const handle = await fs.open(temporary, 'wx', 0o600);
+    try {
+      await handle.writeFile(data);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    try {
+      await fs.link(temporary, file);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      const stat = await fs.lstat(file);
+      if (!stat.isFile() || stat.isSymbolicLink() || digest(await fs.readFile(file)) !== hash)
+        throw new DomainError('CONTEXT_CORRUPT', 'The saved material copy is corrupted.');
+    }
+  } finally {
+    await fs.rm(temporary, { force: true });
   }
   return { hash, relativePath: 'local/context/' + path.basename(file), file };
 }
@@ -79,6 +102,7 @@ export class ContextMaterials {
       upload?: { name: string; base64: string };
     },
   ) {
+    input = structuredClone(input);
     const work = (this.queues.get(input.projectId) || Promise.resolve())
       .catch(() => {})
       .then(() => this.performImport(id, fingerprint, input));
@@ -100,11 +124,16 @@ export class ContextMaterials {
       upload?: { name: string; base64: string };
     },
   ) {
-    const store = this.projects.get(input.projectId),
-      cached = store.receipt(id, fingerprint);
-    if (cached !== undefined) return cached as ContextMaterial[];
-    const snapshot = store.snapshot(),
-      files: { name: string; data: Buffer; loader: ResolvedContextLoader }[] = [];
+    const materials = this.materials(input.projectId);
+    const cached = await materials.receipt({ id, fingerprint });
+    if (cached) {
+      if (!Array.isArray(cached.result))
+        throw new DomainError('IDEMPOTENCY_CONFLICT', 'This receipt is not a material import.');
+      return cached.result.map((value) => validateProjectMaterial(value));
+    }
+    const project = this.projects.list().find((value) => value.id === input.projectId);
+    if (!project) throw new DomainError('NOT_FOUND', 'Project not found.');
+    const files: { name: string; data: Buffer; loader: ResolvedContextLoader }[] = [];
     let bytes = 0;
     const add = (name: string, data: Buffer, nested = false) => {
       if (data.length > maxFile)
@@ -174,24 +203,10 @@ export class ContextMaterials {
     }
     if (!files.length)
       throw new DomainError('CONTEXT_EMPTY', 'The selection contains no supported files.');
-    const directory = await materialDirectory(snapshot.project.root),
-      materials: ContextMaterial[] = [],
-      fresh: ContextMaterial[] = [];
+    const directory = await materialDirectory(project.root),
+      prepared: ContextMaterial[] = [];
     for (const { name, data, loader } of files) {
       const hash = digest(data);
-      const existing = [...(snapshot.contextMaterials || []), ...fresh].find(
-        (m) =>
-          m.active &&
-          m.scope === input.scope &&
-          m.hash === hash &&
-          m.name === name &&
-          m.loader?.id === loader.id &&
-          m.loader.revision === loader.revision,
-      );
-      if (existing) {
-        materials.push(existing);
-        continue;
-      }
       const extension = path.extname(name).toLowerCase();
       const loaded = await loader.load(new AbortController().signal);
       const safeExtension = /^\.[a-z0-9]{1,12}$/.test(extension) ? extension : '.txt',
@@ -218,33 +233,24 @@ export class ContextMaterials {
           material.textHash = extracted.hash;
         }
       }
-      fresh.push(material);
-      materials.push(material);
+      prepared.push(material);
     }
-    return store.transact(id, fingerprint, (doc) => {
-      if ((doc.contextMaterials?.length || 0) + fresh.length > 1000)
-        throw new DomainError('CONTEXT_LIMIT', 'The project material library is full.');
-      if (
-        input.scope === 'project' &&
-        (doc.contextMaterials || []).filter((m) => m.active && m.scope === 'project').length +
-          fresh.length >
-          64
-      )
-        throw new DomainError('CONTEXT_LIMIT', 'A project can have up to 64 attached materials.');
-      (doc.contextMaterials ??= []).push(...fresh);
-      return { result: materials, change: { type: 'context.materials.added', materials: fresh } };
-    });
+    return materials.transaction({ id, fingerprint }, (tx) => tx.attach(prepared));
+  }
+  private materials(projectId: string) {
+    const facet = this.projects.get(projectId).materials;
+    if (facet.projectId !== projectId)
+      throw new DomainError(
+        'INVALID_PROJECT_MATERIAL',
+        'The material store belongs to another project.',
+      );
+    return facet;
   }
   remove(id: string, fingerprint: string, input: { projectId: string; materialId: string }) {
-    return this.projects.get(input.projectId).transact(id, fingerprint, (doc) => {
-      const material = doc.contextMaterials?.find((m) => m.id === input.materialId);
-      if (!material) throw new DomainError('CONTEXT_NOT_FOUND', 'Material not found.');
-      material.active = false;
-      return {
-        result: { id: material.id },
-        change: { type: 'context.material.removed', id: material.id },
-      };
-    });
+    const { projectId, materialId } = input;
+    return this.materials(projectId).transaction({ id, fingerprint }, (tx) =>
+      tx.remove(materialId),
+    );
   }
   async dispose() {
     await Promise.allSettled([...this.queues.values()]);

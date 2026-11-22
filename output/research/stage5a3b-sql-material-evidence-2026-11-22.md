@@ -1,0 +1,15 @@
+# Stage 5A3b SQL material facet evidence
+
+Date: 2026-11-22. The standalone SQL kernel now consumes `createMaterialTransaction` through `.materials`, and the combined transaction supplies `{usage, entities, materials}`. Metadata, existence references, count summary, public events and command receipts share the existing database/transaction; there is no production factory switch or live JSON/SQL dual-write.
+
+`project_materials` stores one canonical record per indexed stable identity `(scope,name,hash,loader ID,loader revision)`. Deduplication/reactivation and immutable metadata checks belong to Core. Inactive rows and `material_refs` remain available to known goal references. New rows update both tables within the same transaction. `material_counts` is a singleton incremental CAS summary; admission does not count or load the entire library. Metadata/reference/count/event storage failures use the existing sticky rollback rule, including exceptions caught by the callback.
+
+Material and usage/entity changes use one validated public event union and contiguous sequence. `materials.receipt(command)` reads the shared receipt namespace and returns `{result}` for a found command, including `{result:undefined}` for a saved void; only an absent receipt returns undefined. A fingerprint conflict still rejects. The material facade is frozen, detached reads/results remain private to the caller, and retained transaction capabilities close with their owning callback.
+
+The fresh standalone format advances to v3. Existing authorities with missing required tables reject before schema creation. The material count row is initialized only for a brand-new authority; a missing summary on reopen is rejected, never silently reset to zero. Prior standalone formats are not imported or resumed. User state was not migrated.
+
+Focused command combines `tests/sqlite-project-materials.test.ts`, SQL entity/usage adapter tests, root SQL contract tests and usage facade tests: **23 passed, zero failures/skips**, log `/private/tmp/buro-stage5a3b-sql-units.log`. The five new SQL material cases cover canonical dedup/remove/reactivation with retained goal references; active-project count behavior after removal/replacement; found-void/absent/conflicting receipts; rollback/retry of combined material+goal+usage work with exact event order; immutable metadata/path validation and expired capabilities.
+
+Final server typecheck, formatter and diff checks passed. The root/cross-adapter agents own actual importer interleavings, FileProjectStore integration, deliberate SQL reference/count fault tests, full-suite validation and independent reviews; this receipt does not claim those unfinished results. Existing 1000-record/64-active-project finite library policies remain unchanged until their planned paging/policy cutover. No byte durability, artifact GC, full SQL runtime migration or default-none release is claimed.
+
+No model, network endpoint, credential, RTX machine, original user repository or Git metadata was accessed.

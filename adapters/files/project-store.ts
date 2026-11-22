@@ -4,6 +4,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DomainError, type ProjectDocument, type ProjectStore } from '../../core/ports.ts';
 import { capabilities } from '../../core/defaults.ts';
+import type { ProjectMaterials } from '../../core/project-materials.ts';
+import { createDocumentProjectMaterials } from './project-materials.ts';
 import type { ProjectEntities } from '../../core/project-entities.ts';
 import { createDocumentProjectEntities } from './project-entities.ts';
 import { parseSnapshot, DomainEventSchema } from '../../protocol/schema.ts';
@@ -43,6 +45,7 @@ type Options = {
 /** One writer per project. State, events and idempotency receipts share one atomic commit. */
 export class FileProjectStore implements ProjectStore {
   readonly entities: ProjectEntities;
+  readonly materials: ProjectMaterials;
   directory: string;
   file: string;
   lock: string;
@@ -59,14 +62,20 @@ export class FileProjectStore implements ProjectStore {
     this.doc = doc;
     this.nonce = nonce;
     this.replace = options.replace || fs.rename;
-    this.entities = createDocumentProjectEntities({
-      projectId: doc.project.id,
-      read: (query) => {
-        if (this.closing) return Promise.reject(new DomainError('CLOSED', 'Storage is closing.'));
-        return this.queue.then(() => query(this.doc));
+    const read = <T>(query: (doc: ProjectDocument) => T): Promise<T> => {
+      if (this.closing) return Promise.reject(new DomainError('CLOSED', 'Storage is closing.'));
+      return this.queue.then(() => query(this.doc));
+    };
+    const transaction = <T>(
+      command: { id: string; fingerprint: string },
+      apply: (doc: ProjectDocument) => {
+        result: T;
+        changes: DomainEvent['change'][];
       },
-      transaction: (command, apply) => this.transactChanges(command.id, command.fingerprint, apply),
-    });
+    ) => this.transactChanges(command.id, command.fingerprint, apply);
+    const host = { projectId: doc.project.id, read, transaction };
+    this.entities = createDocumentProjectEntities(host);
+    this.materials = createDocumentProjectMaterials(host);
   }
   static async open(options: Options) {
     await fs.mkdir(options.directory, { recursive: true });
@@ -210,7 +219,8 @@ export class FileProjectStore implements ProjectStore {
       validateResearchRoleSnapshot(draft);
       validateResultApplyIntents(draft, this.doc);
       validateRunReconciliationTransitions(this.doc.runs, draft.runs);
-      draft.revision++;
+      // Public revision follows visible changes, so zero/multi-event commands replay exactly.
+      draft.revision += changes.length;
       const events: DomainEvent[] = [];
       const packed: StoredEvent[] = [];
       const previousRuns = new Map<string, Run>();
