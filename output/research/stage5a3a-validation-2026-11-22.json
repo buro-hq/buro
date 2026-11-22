@@ -1,0 +1,47 @@
+{
+  "stage": "5A3a",
+  "date": "2026-11-22",
+  "parentCommit": "a51dbee",
+  "tests": {
+    "total": 1128,
+    "passed": 1128,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 71420.461833,
+    "log": "/private/tmp/buro-stage5a3a-first-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a3a-build.log"
+  },
+  "format": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a3a-server-format-check.log"
+  },
+  "browser": {
+    "scenariosPassed": 6,
+    "errors": [],
+    "syntheticRequests": 26,
+    "nativeStarts": [],
+    "realModelRequests": 0,
+    "log": "/private/tmp/buro-stage5a3a-first-profile-browser.log"
+  },
+  "independentReviews": [
+    "stage5a3a-architecture-review-2026-11-22.md",
+    "stage5a3a-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Actual GoalService and RoleService use the required narrow entity port.",
+    "The application still uses the sole JSON authority and a temporary common-rules entity bridge.",
+    "Standalone SQLite shares entity/accounting receipts and event sequence; run/material reference indices have no production writers yet.",
+    "No whole-project/session authority cutover, paged history or quota-default change."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

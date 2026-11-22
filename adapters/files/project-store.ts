@@ -4,6 +4,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DomainError, type ProjectDocument, type ProjectStore } from '../../core/ports.ts';
 import { capabilities } from '../../core/defaults.ts';
+import type { ProjectEntities } from '../../core/project-entities.ts';
+import { createDocumentProjectEntities } from './project-entities.ts';
 import { parseSnapshot, DomainEventSchema } from '../../protocol/schema.ts';
 import type {
   Project,
@@ -40,6 +42,7 @@ type Options = {
 };
 /** One writer per project. State, events and idempotency receipts share one atomic commit. */
 export class FileProjectStore implements ProjectStore {
+  readonly entities: ProjectEntities;
   directory: string;
   file: string;
   lock: string;
@@ -56,6 +59,14 @@ export class FileProjectStore implements ProjectStore {
     this.doc = doc;
     this.nonce = nonce;
     this.replace = options.replace || fs.rename;
+    this.entities = createDocumentProjectEntities({
+      projectId: doc.project.id,
+      read: (query) => {
+        if (this.closing) return Promise.reject(new DomainError('CLOSED', 'Storage is closing.'));
+        return this.queue.then(() => query(this.doc));
+      },
+      transaction: (command, apply) => this.transactChanges(command.id, command.fingerprint, apply),
+    });
   }
   static async open(options: Options) {
     await fs.mkdir(options.directory, { recursive: true });
@@ -167,6 +178,16 @@ export class FileProjectStore implements ProjectStore {
     fingerprint: string,
     apply: (draft: ProjectDocument) => { result: T; change: DomainEvent['change'] },
   ): Promise<T> {
+    return this.transactChanges(requestId, fingerprint, (draft) => {
+      const { result, change } = apply(draft);
+      return { result, changes: [change] };
+    });
+  }
+  private transactChanges<T>(
+    requestId: string,
+    fingerprint: string,
+    apply: (draft: ProjectDocument) => { result: T; changes: DomainEvent['change'][] },
+  ): Promise<T> {
     if (this.closing) return Promise.reject(new DomainError('CLOSED', 'Storage is closing.'));
     const work = this.queue.then(async () => {
       const receipt = Object.hasOwn(this.doc.receipts, requestId)
@@ -179,7 +200,7 @@ export class FileProjectStore implements ProjectStore {
       }
       const { events: history, ...state } = this.doc;
       const draft = structuredClone(state),
-        { result, change } = apply(draft);
+        { result, changes } = apply(draft);
       validateProjectRunBudgets(draft, this.doc);
       validateProjectPlanningPolicies(draft, this.doc);
       validateProjectOperationContexts(draft, this.doc);
@@ -190,24 +211,35 @@ export class FileProjectStore implements ProjectStore {
       validateResultApplyIntents(draft, this.doc);
       validateRunReconciliationTransitions(this.doc.runs, draft.runs);
       draft.revision++;
-      draft.sequence++;
-      const event: DomainEvent = {
-        version: 1,
-        id: randomUUID(),
-        projectId: draft.project.id,
-        seq: draft.sequence,
-        at: new Date().toISOString(),
-        change: structuredClone(change),
-      };
-      DomainEventSchema.parse(event);
-      const previous =
-        change.type === 'run.changed' &&
-        history.some(
-          (item) => item.change.type === 'run.changed' && item.change.run.id === change.run.id,
-        )
-          ? this.doc.runs.find((r) => r.id === change.run.id)
-          : undefined;
-      const next: StoredDocument = { ...draft, events: [...history, packEvent(event, previous)] };
+      const events: DomainEvent[] = [];
+      const packed: StoredEvent[] = [];
+      const previousRuns = new Map<string, Run>();
+      for (const change of changes) {
+        draft.sequence++;
+        const event: DomainEvent = {
+          version: 1,
+          id: randomUUID(),
+          projectId: draft.project.id,
+          seq: draft.sequence,
+          at: new Date().toISOString(),
+          change: structuredClone(change),
+        };
+        DomainEventSchema.parse(event);
+        let previous: Run | undefined;
+        if (change.type === 'run.changed') {
+          previous =
+            previousRuns.get(change.run.id) ||
+            (history.some(
+              (item) => item.change.type === 'run.changed' && item.change.run.id === change.run.id,
+            )
+              ? this.doc.runs.find((run) => run.id === change.run.id)
+              : undefined);
+          previousRuns.set(change.run.id, structuredClone(change.run));
+        }
+        events.push(event);
+        packed.push(packEvent(event, previous));
+      }
+      const next: StoredDocument = { ...draft, events: [...history, ...packed] };
       Object.defineProperty(draft.receipts, requestId, {
         value: { fingerprint, result: structuredClone(result) },
         enumerable: true,
@@ -216,11 +248,13 @@ export class FileProjectStore implements ProjectStore {
       });
       await this.persist(next);
       this.doc = next;
-      for (const listener of this.listeners) {
-        try {
-          listener(structuredClone(event));
-        } catch {
-          /* A broken observer cannot roll back a committed operation. */
+      for (const event of events) {
+        for (const listener of this.listeners) {
+          try {
+            listener(structuredClone(event));
+          } catch {
+            /* A broken observer cannot roll back a committed operation. */
+          }
         }
       }
       return structuredClone(result);
@@ -231,16 +265,22 @@ export class FileProjectStore implements ProjectStore {
   subscribe(after: number, listener: (event: DomainEvent) => void) {
     if (after > this.doc.sequence)
       throw new DomainError('CURSOR_AHEAD', 'A new project state snapshot is required.');
+    let delivered = after;
+    const forward = (event: DomainEvent) => {
+      if (event.seq <= delivered) return;
+      delivered = event.seq;
+      listener(event);
+    };
     // Synchronous registration + replay prevents a gap between history and live events.
     if (after < this.doc.sequence) {
       const runs = new Map<string, Run>();
       for (const stored of this.doc.events) {
         const event = expandEvent(stored, runs);
-        if (event.seq > after) listener(structuredClone(event));
+        if (event.seq > after) forward(structuredClone(event));
       }
     }
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    this.listeners.add(forward);
+    return () => this.listeners.delete(forward);
   }
   async storageInfo(): Promise<ProjectStorageInfo> {
     return {

@@ -260,7 +260,7 @@ export const ResourceConfigurationChangeSchema = z.strictObject({
   appliesTo: z.enum(['new-runs', 'service-restart']),
 });
 
-const goal = z.object({
+export const GoalSchema = z.object({
   materialIds: z.array(z.string()).optional(),
   id: z.string(),
   projectId: z.string(),
@@ -275,6 +275,7 @@ const goal = z.object({
   outcome: GoalOutcomeSchema.optional(),
   runId: z.string().optional(),
 });
+const goal = GoalSchema;
 const check = z.object({
   name: z.string(),
   passed: z.boolean(),

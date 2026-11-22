@@ -1,3 +1,9 @@
+import {
+  validateProjectEntityChange,
+  type ProjectEntityChange,
+  type ProjectEntities,
+  type EntityTransaction,
+} from './project-entities.ts';
 import { DomainError } from './ports.ts';
 import {
   admitGeneration,
@@ -38,7 +44,10 @@ export type ProjectUsageChange = {
   owner: ProjectUsageOwner;
   summary: ProjectUsageSummary;
 };
-export type UsageAuthorityEvent = ProjectUsageChange & { sequence: number };
+export type ProjectAuthorityChange =
+  | ProjectUsageChange
+  | (ProjectEntityChange & { projectId: string });
+export type UsageAuthorityEvent = ProjectAuthorityChange & { sequence: number };
 export type UsageEventPage = {
   events: UsageAuthorityEvent[];
   watermark: number;
@@ -57,10 +66,14 @@ export interface UsageTransaction {
   observeUsage(owner: ProjectUsageOwner, observation: UsageObservation): UsageTransition;
 }
 export type UsageAuthorityTransaction = { readonly usage: UsageTransaction };
+export type ProjectAuthorityTransaction = UsageAuthorityTransaction & {
+  readonly entities: EntityTransaction;
+};
 export interface ProjectUsageAuthority {
   readonly projectId: string;
+  readonly entities: ProjectEntities;
   /** Callback is synchronous and its result must be JSON-safe; neither permits external effects. */
-  transaction<T>(command: UsageCommand, apply: (tx: UsageAuthorityTransaction) => T): Promise<T>;
+  transaction<T>(command: UsageCommand, apply: (tx: ProjectAuthorityTransaction) => T): Promise<T>;
   account(owner: ProjectUsageOwner): Promise<UsageAccount | undefined>;
   operation(owner: ProjectUsageOwner, operationId: string): Promise<UsageOperation | undefined>;
   pagedEvents(query: UsageEventQuery): Promise<UsageEventPage>;
@@ -354,4 +367,22 @@ export function validateProjectUsageChange(
   } catch {
     throw invalid();
   }
+}
+
+/** Shared event stream: entity changes and usage changes consume the same authority sequence. */
+export function validateProjectAuthorityChange(
+  value: unknown,
+  expectedProjectId?: string,
+): ProjectAuthorityChange {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new DomainError('INVALID_AUTHORITY_EVENT', 'The saved project event is invalid.');
+  const input = value as Record<string, unknown>;
+  if (input.type === 'usage.changed') return validateProjectUsageChange(value, expectedProjectId);
+  if (
+    !identity(input.projectId) ||
+    (expectedProjectId !== undefined && input.projectId !== expectedProjectId)
+  )
+    throw new DomainError('INVALID_AUTHORITY_EVENT', 'The saved project event is invalid.');
+  const { projectId, ...change } = input;
+  return { ...validateProjectEntityChange(change, projectId), projectId };
 }

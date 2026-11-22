@@ -3,10 +3,11 @@ import {
   createUsageAuthorityTransaction,
   usageOwnerKey,
   validateUsageOwner,
-  validateProjectUsageChange,
+  validateProjectAuthorityChange,
   type ProjectUsageAuthority,
   type ProjectUsageOwner,
-  type UsageAuthorityTransaction,
+  type ProjectAuthorityTransaction,
+  type ProjectAuthorityChange,
   type UsageCommand,
   type UsageAuthorityEvent,
   type UsageEventQuery,
@@ -20,6 +21,19 @@ import {
   type UsageOperation,
 } from '../../core/usage-accounting.ts';
 import { DomainError } from '../../core/ports.ts';
+import {
+  createEntityTransaction,
+  type EntityTransaction,
+  type ProjectEntities,
+} from '../../core/project-entities.ts';
+import { createSqliteEntityRows, projectEntitySchema } from './project-entity-rows.ts';
+import {
+  json,
+  encodeResult,
+  decodeResult,
+  thenable,
+  commandCopy,
+} from '../state/transaction-values.ts';
 import { preparePrivateDatabase, assertPrivateDatabaseFiles } from './private-database.ts';
 
 export type UsageQueryObservation = { operation: string; rows: number };
@@ -30,105 +44,18 @@ export type SqliteProjectUsageOptions = {
   /** Counts returned/changed rows without exposing SQL parameters or private payloads. */
   onQuery?: (observation: UsageQueryObservation) => void;
 };
-const format = 'buro-project-authority-v1';
+const format = 'buro-project-authority-v2';
 const failure = (code: string, message: string) => new DomainError(code, message);
 const stateConflict = () =>
   failure('USAGE_STATE_CONFLICT', 'The stored usage state changed. Refresh before trying again.');
 const validString = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0;
 
-/** A receipt round trip must preserve the exact JSON result returned to the first caller. */
-function jsonValue(value: unknown, ancestors = new Set<object>()): unknown {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number' && Number.isFinite(value)) return Object.is(value, -0) ? 0 : value;
-  if (!value || typeof value !== 'object' || ancestors.has(value))
-    throw failure('USAGE_RESULT_NOT_JSON', 'A transaction result must be JSON-safe.');
-  const array = Array.isArray(value);
-  if (!array && ![Object.prototype, null].includes(Object.getPrototypeOf(value)))
-    throw failure('USAGE_RESULT_NOT_JSON', 'A transaction result must be JSON-safe.');
-  ancestors.add(value);
-  try {
-    if (array) {
-      const keys = Reflect.ownKeys(value);
-      if (
-        keys.length !== value.length + 1 ||
-        keys.some(
-          (key) =>
-            key !== 'length' &&
-            (typeof key !== 'string' ||
-              !/^(0|[1-9][0-9]*)$/.test(key) ||
-              Number(key) >= value.length),
-        )
-      )
-        throw failure('USAGE_RESULT_NOT_JSON', 'A transaction result must be JSON-safe.');
-      return Array.from({ length: value.length }, (_item, index) => {
-        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-        if (!descriptor || !('value' in descriptor) || !descriptor.enumerable)
-          throw failure('USAGE_RESULT_NOT_JSON', 'A transaction result must be JSON-safe.');
-        return jsonValue(descriptor.value, ancestors);
-      });
-    }
-    const result: [string, unknown][] = [];
-    const keys = Reflect.ownKeys(value);
-    if (keys.some((key) => typeof key !== 'string'))
-      throw failure('USAGE_RESULT_NOT_JSON', 'A transaction result must be JSON-safe.');
-    for (const key of (keys as string[]).sort()) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
-      if (!('value' in descriptor) || !descriptor.enumerable)
-        throw failure('USAGE_RESULT_NOT_JSON', 'A transaction result must be JSON-safe.');
-      if (descriptor.value !== undefined)
-        result.push([key, jsonValue(descriptor.value, ancestors)]);
-    }
-    return Object.fromEntries(result);
-  } finally {
-    ancestors.delete(value);
-  }
-}
-const json = (value: unknown) => JSON.stringify(jsonValue(value));
-function encodeResult(value: unknown) {
-  return value === undefined ? '{"kind":"void"}' : json({ kind: 'json', value });
-}
-function decodeResult(value: string): unknown {
-  const receipt = JSON.parse(value) as { kind: string; value?: unknown };
-  if (receipt.kind === 'void' && Object.keys(receipt).length === 1) return undefined;
-  if (
-    receipt.kind === 'json' &&
-    Object.hasOwn(receipt, 'value') &&
-    Object.keys(receipt).length === 2
-  )
-    return jsonValue(receipt.value);
-  throw failure('INVALID_USAGE_RECEIPT', 'The saved command receipt is invalid.');
-}
-function thenable(value: unknown): boolean {
-  if (!value || (typeof value !== 'object' && typeof value !== 'function')) return false;
-  for (
-    let current: object | null = value as object;
-    current;
-    current = Object.getPrototypeOf(current)
-  ) {
-    const descriptor = Object.getOwnPropertyDescriptor(current, 'then');
-    if (descriptor) return !('value' in descriptor) || typeof descriptor.value === 'function';
-  }
-  return false;
-}
-function commandCopy(command: UsageCommand): UsageCommand {
-  const keys = command && typeof command === 'object' ? Reflect.ownKeys(command) : [];
-  if (
-    keys.length !== 2 ||
-    !keys.includes('id') ||
-    !keys.includes('fingerprint') ||
-    keys.some((key) => !('value' in Object.getOwnPropertyDescriptor(command, key)!)) ||
-    !validString(command.id) ||
-    !validString(command.fingerprint)
-  )
-    throw failure('INVALID_USAGE_COMMAND', 'A command identity and fingerprint are required.');
-  return { id: command.id, fingerprint: command.fingerprint };
-}
-
-/** Standalone project transaction kernel; no JSON store, live scheduler or dispatch grant is wired here. */
+/** One SQL transaction kernel for usage and indexed entities; no live scheduler or dispatch grant is wired here. */
 export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
   #projectId: string;
   #directory: string;
+  #entities: ProjectEntities;
   #database: DatabaseSync;
   #statements = new Map<string, StatementSync>();
   #queue: Promise<unknown> = Promise.resolve();
@@ -141,9 +68,17 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
     this.#database = database;
     this.#projectId = options.projectId;
     this.#directory = options.directory;
+    this.#entities = Object.freeze({
+      projectId: this.#projectId,
+      transaction: <T>(command: UsageCommand, apply: (tx: EntityTransaction) => T) =>
+        this.transaction(command, (tx) => apply(tx.entities)),
+      goal: (id: string) => this.#readEntity((tx) => tx.goal(id)),
+      role: (id: string, version?: number) => this.#readEntity((tx) => tx.role(id, version)),
+    });
     Object.defineProperties(this, {
       projectId: { enumerable: true, configurable: false, get: () => this.#projectId },
       directory: { enumerable: true, configurable: false, get: () => this.#directory },
+      entities: { enumerable: true, configurable: false, get: () => this.#entities },
     });
     this.#onEvent = options.onEvent;
     this.#onQuery = options.onQuery;
@@ -154,6 +89,10 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
   }
   get directory() {
     return this.#directory;
+  }
+
+  get entities() {
+    return this.#entities;
   }
 
   static async open(options: SqliteProjectUsageOptions) {
@@ -206,6 +145,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
             result_json TEXT NOT NULL CHECK(json_valid(result_json))
           );
         `);
+        database.exec(projectEntitySchema);
         const metadata = database
           .prepare('SELECT format,project_id FROM authority_metadata WHERE singleton=1')
           .get();
@@ -323,7 +263,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
     return operation;
   }
 
-  transaction<T>(command: UsageCommand, apply: (tx: UsageAuthorityTransaction) => T): Promise<T> {
+  transaction<T>(command: UsageCommand, apply: (tx: ProjectAuthorityTransaction) => T): Promise<T> {
     let captured: UsageCommand;
     try {
       captured = commandCopy(command);
@@ -350,6 +290,32 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
           this.#database.exec('COMMIT');
           return result;
         }
+        let storageFailure: { error: unknown } | undefined;
+        const mutate = <R>(action: () => R): R => {
+          if (storageFailure) throw storageFailure.error;
+          try {
+            return action();
+          } catch (error) {
+            storageFailure = { error };
+            throw error;
+          }
+        };
+        const appendChange = (change: ProjectAuthorityChange) =>
+          mutate(() => {
+            const checked = validateProjectAuthorityChange(change, this.#projectId);
+            const result = this.#run(
+              'event.append',
+              'INSERT INTO usage_events(change_json) VALUES (?)',
+              json(checked),
+            );
+            const sequence = Number(result.lastInsertRowid);
+            if (!Number.isSafeInteger(sequence) || sequence < 1)
+              throw failure(
+                'USAGE_SEQUENCE_EXHAUSTED',
+                'The event cursor cannot safely represent another change.',
+              );
+            events.push({ ...checked, sequence });
+          });
         const storage: UsageTransactionStorage = {
           account: (owner) => this.#accountRow(owner),
           operation: (owner, operationId) => this.#operationRow(owner, operationId),
@@ -415,30 +381,30 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
               );
             }
           },
-          appendChange: (change) => {
-            const checked = validateProjectUsageChange(change, this.#projectId);
-            const result = this.#run(
-              'event.append',
-              'INSERT INTO usage_events(change_json) VALUES (?)',
-              json(checked),
-            );
-            const sequence = Number(result.lastInsertRowid);
-            if (!Number.isSafeInteger(sequence) || sequence < 1)
-              throw failure(
-                'USAGE_SEQUENCE_EXHAUSTED',
-                'The event cursor cannot safely represent another change.',
-              );
-            events.push({ ...checked, sequence });
-          },
+          appendChange,
         };
-        const tx = createUsageAuthorityTransaction({
+        const assertActive = () => {
+          if (!active)
+            throw failure('USAGE_TRANSACTION_CLOSED', 'This transaction capability is closed.');
+          if (storageFailure) throw storageFailure.error;
+        };
+        const usage = createUsageAuthorityTransaction({
           projectId: this.#projectId,
-          storage,
-          assertActive: () => {
-            if (!active)
-              throw failure('USAGE_TRANSACTION_CLOSED', 'This transaction capability is closed.');
+          storage: {
+            ...storage,
+            insertAccount: (...args) => mutate(() => storage.insertAccount(...args)),
+            applyTransition: (...args) => mutate(() => storage.applyTransition(...args)),
           },
+          assertActive,
         });
+        const entities = createEntityTransaction({
+          projectId: this.#projectId,
+          storage: this.#entityRows(mutate, (change) =>
+            appendChange({ ...change, projectId: this.#projectId }),
+          ),
+          assertActive,
+        });
+        const tx = Object.freeze({ ...usage, entities });
         const result = apply(tx);
         active = false;
         if (thenable(result)) {
@@ -453,6 +419,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
             'Project transaction callbacks must be synchronous.',
           );
         }
+        if (storageFailure) throw storageFailure.error;
         const encoded = encodeResult(result);
         this.#run(
           'receipt.insert',
@@ -477,6 +444,41 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
           /* Preserve the original transaction failure. */
         }
         throw error;
+      } finally {
+        active = false;
+      }
+    });
+  }
+
+  #entityRows(
+    mutate: <T>(action: () => T) => T,
+    appendChange: Parameters<typeof createSqliteEntityRows>[0]['appendChange'],
+  ) {
+    return createSqliteEntityRows({
+      projectId: this.#projectId,
+      get: (...args) => this.#get(...args),
+      run: (...args) => this.#run(...args),
+      json,
+      mutate,
+      appendChange,
+    });
+  }
+  #readEntity<T>(query: (tx: EntityTransaction) => T): Promise<T> {
+    return this.#enqueue(() => {
+      let active = true;
+      const forbidden = (): never => {
+        throw failure('USAGE_TRANSACTION_CLOSED', 'This query does not grant a transaction.');
+      };
+      try {
+        return query(
+          createEntityTransaction({
+            projectId: this.#projectId,
+            storage: this.#entityRows(forbidden, forbidden),
+            assertActive: () => {
+              if (!active) forbidden();
+            },
+          }),
+        );
       } finally {
         active = false;
       }
@@ -559,7 +561,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         ).all(captured.after, watermark, captured.limit + 1);
         this.#notify({ operation: 'event.page', rows: rows.length });
         const events = rows.slice(0, captured.limit).map((row) => ({
-          ...validateProjectUsageChange(JSON.parse(String(row.change_json)), this.#projectId),
+          ...validateProjectAuthorityChange(JSON.parse(String(row.change_json)), this.#projectId),
           sequence: Number(row.sequence),
         }));
         this.#database.exec('COMMIT');

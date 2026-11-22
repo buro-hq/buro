@@ -37,6 +37,7 @@ export type ProjectDocument = {
   research?: ProjectResearch;
 };
 export interface ProjectStore {
+  readonly entities: import('./project-entities.ts').ProjectEntities;
   snapshot(): Snapshot;
   receipt(id: string, fingerprint: string): unknown | undefined;
   transact<T>(
