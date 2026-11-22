@@ -1,0 +1,19 @@
+{
+  "reviewBaseCommit": "85ade5b",
+  "sourceOuterReport": "output/evaluation-2026-11-22/release-fixes/codex-default-permissions.json",
+  "sourceOuterSha256": "f6817f2197a19bb480245d9a194f35082ea82287c7a27d7618dab7fc9bf3bc57",
+  "sourceInnerSha256": "34e1139362dbc9653a4ebd8cbc2c2eef9c066499b93e9c93b1459dc2762eb5e4",
+  "caseId": "synthetic-ready-queue-v1",
+  "runId": "R-d42aa54b-1539-4fc6-8bc4-42a9e83033b4",
+  "status": "failed",
+  "typedStop": "WORKER_FAILED",
+  "phase": "done",
+  "accepted": false,
+  "publicPassed": 0,
+  "publicTotal": 3,
+  "holdoutPassed": 3,
+  "holdoutTotal": 5,
+  "changedFiles": [],
+  "workerReportedBlocker": "Blocked before editing: available tools provide no filesystem text reader without spawning a process, which the assignment forbids. No files were changed and no commands were spawned.",
+  "interpretationLimit": "This is a model-reported blocker plus persisted lifecycle/oracle evidence, not proof that every native client lacks another process-free reader. Review acquisition was not reached."
+}
