@@ -1,11 +1,6 @@
+import { executionPolicy as savedExecutionPolicy } from './project-settings.ts';
 import { runWorkerAssignments } from './worker-assignments.ts';
-import {
-  planningTurn,
-  selectPlanningPolicy,
-  assertPlanningPolicy,
-  planningOutputSchema,
-} from './planning-policy.ts';
-import { createManagedRunBudget, managedBudgetSummary } from './run-budget.ts';
+import { planningTurn, assertPlanningPolicy, planningOutputSchema } from './planning-policy.ts';
 import { ManagedBudgetErrorCodeSchema } from '../protocol/run-budget.ts';
 import { validateWorkerTask } from './worker-envelope.ts';
 import { workerFailureForReplan, refineWorkerTask, pendingWorkerRoles } from './worker-recovery.ts';
@@ -13,7 +8,6 @@ import { workerRefinementOutputSchema } from '../protocol/worker-tasks.ts';
 import { resolveWorkerResource, workerResourcePool } from './assignment-resources.ts';
 import type { AssignmentResource } from '../protocol/resources.ts';
 import { sessionResource } from '../protocol/resources.ts';
-import { resolveRoleResource } from './role-routing.ts';
 import { operationIds, serviceOperationContext } from './operation-catalog.ts';
 import type { WorkflowRoleResolver } from './workflow-roles.ts';
 import { projectRunAutonomy } from './autonomy-policy.ts';
@@ -82,6 +76,19 @@ type Environment = {
   id: () => string;
   onCompleted?: (projectId: string, runId: string) => void;
 };
+function runCommandResult(value: unknown): { runId: string } {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Reflect.ownKeys(value).length !== 1 ||
+    !Object.hasOwn(value, 'runId') ||
+    typeof (value as { runId?: unknown }).runId !== 'string' ||
+    !(value as { runId: string }).runId.length
+  )
+    throw new DomainError('INVALID_RUN_RECEIPT', 'The command receipt is not a run admission.');
+  return { runId: (value as { runId: string }).runId };
+}
 /** Durable workflow. Adapters own processes, Git and checks; this class owns decisions. */
 export class ExecutionService {
   env: Environment;
@@ -478,118 +485,64 @@ ${installation.output || installation.error || ''}`,
     fingerprint: string,
     input: { projectId: string; goalId: string; checkIds?: string[] },
   ) {
+    const captured = structuredClone(input);
     if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
-    const policy = this.policy(input.projectId),
-      checkIds = [...new Set(input.checkIds || policy.defaultCheckIds)];
-    if (!checkIds.length || checkIds.some((id) => !policy.checks.some((c) => c.id === id)))
-      throw new DomainError('INVALID_CHECK', 'Select registered checks.');
-    const result = await this.env.projects
-      .get(input.projectId)
-      .transact(requestId, fingerprint, (doc) => {
-        const goal = doc.goals.find((g) => g.id === input.goalId);
-        if (!goal) throw new DomainError('NOT_FOUND', 'Goal not found.');
-        this.assertEnvironmentRepair(goal, policy);
-        if (doc.runs.some((r) => r.goalId === goal.id && (r.reconciliation || r.pendingTurn)))
-          throw new DomainError(
-            'RUN_RECONCILIATION_REQUIRED',
-            'An earlier run of this goal has an unknown operation. Reconcile it before starting another run.',
-          );
-        if (doc.runs.some((r) => !terminal(r)))
-          throw new DomainError('PROJECT_BUSY', 'A goal is already running in this project.');
-        const now = this.env.now(),
-          run: Run = {
-            id: 'R-' + this.env.id(),
-            key: goal.id,
-            title: goal.title,
-            summary: 'Goal queued',
-            createdAt: now,
-            updatedAt: now,
-            threadId: '',
-            status: 'queued',
-            phase: 'queued',
-            delegation: 'buro',
-            resources: this.env.selection?.forProject(input.projectId),
-            goalId: goal.id,
-            contextMaterials: goalMaterials(doc, goal),
-            parentRunId: goal.parentRunId,
-            baseBranch: policy.profile?.baseBranch,
-            outcome: structuredClone(
-              goal.outcome || { kind: policy.profile ? 'pull-request' : 'local' },
-            ),
-            checkIds,
-            repairEnvironment: !!goal.repairEnvironment,
-            timePolicy: { kind: 'inactivity', idleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS },
-            executionPolicySnapshot: structuredClone(policy),
-            agents: [],
-            events: [{ at: now, type: 'run.queued', text: 'Goal queued' }],
-            commands: [],
-            plan: [],
-            changedFiles: [],
-            baseline: { passed: 0, total: 0, results: [] },
-            acceptance: { passed: 0, total: 0, results: [] },
-            specsUnchanged: true,
-            scopePreserved: true,
-            independentReviewer: false,
-            goalText: goal.body + '\n\nAcceptance criteria:\n' + goal.criteria,
-            result: '',
-            sourceHash: '',
-          };
-        if (!run.resources)
-          throw new DomainError(
-            'RESOURCE_PROFILE_REQUIRED',
-            'Execution requires a saved resource profile.',
-          );
-        run.workflow = structuredClone(this.env.workflowRoles.workflow);
-        const createdRoles: Role[] = [];
-        const serviceOperations = [operationIds.coordination, operationIds.review].map((id) =>
-          serviceOperationContext(id, policy.profile, policy.scope.mode === 'strict'),
-        );
-        run.roleSnapshots = serviceOperations.map((operation) => {
-          const resolved = this.env.workflowRoles.ensureRole(doc, operation, now);
-          if (resolved.created) createdRoles.push(structuredClone(resolved.role));
-          return resolved.role;
-        });
-        run.roleResources = Object.fromEntries(
-          serviceOperations.map((operation) => {
-            if (operation.roles.kind !== 'fixed')
-              throw new DomainError(
-                'WORKFLOW_ROLE_UNAVAILABLE',
-                'The service operation has no fixed role.',
-              );
-            const roleId = operation.roles.roleId;
-            const role = run.roleSnapshots!.find((role) => role.id === roleId)!;
-            return [role.id, resolveRoleResource(run.resources!, role, operation)];
-          }),
-        );
-        run.planningPolicy = selectPlanningPolicy(run.roleResources.coordinator.resource);
-        if (
-          run.resources &&
-          [
-            run.resources.coordinator,
-            run.resources.worker,
-            run.resources.reviewer,
-            ...(run.resources.workerPool || []),
-          ].some((resource) => resource.capabilities.hostToolLifecycle)
-        ) {
-          const ledger = createManagedRunBudget({
-            projectId: input.projectId,
-            ownerRunId: run.id,
-            policy: policy.profile?.managedBudget,
-            coverage: 'managed-api',
-          });
-          doc.managedRunBudgets = { ...doc.managedRunBudgets, [run.id]: ledger };
-          run.managedBudget = managedBudgetSummary(ledger);
-        }
-        Object.assign(run, projectRunAutonomy(run, this.autonomyContext(doc, run)));
-        doc.runs.unshift(run);
-        goal.status = 'running';
-        goal.runId = run.id;
-        return {
-          result: { runId: run.id },
-          change: { type: 'run.changed', run, goal, roles: createdRoles },
-        };
-      });
-    this.schedule(input.projectId, result.runId);
+    const store = this.env.projects.get(captured.projectId),
+      runs = store.runs;
+    if (
+      store.project.id !== captured.projectId ||
+      !runs ||
+      runs.projectId !== captured.projectId ||
+      store.entities.projectId !== captured.projectId ||
+      store.settings.projectId !== captured.projectId
+    )
+      throw new DomainError(
+        'PROJECT_STORAGE_MISMATCH',
+        'The run store belongs to another project.',
+      );
+    const command = { id: requestId, fingerprint };
+    const cached = await runs.receipt(command);
+    if (cached) {
+      const result = runCommandResult(cached.result);
+      this.schedule(captured.projectId, result.runId);
+      return result;
+    }
+    const configured = structuredClone(this.policy(captured.projectId));
+    const [goal, profile] = await Promise.all([
+      store.entities.goal(captured.goalId),
+      store.settings.profile(),
+    ]);
+    if (!goal) throw new DomainError('NOT_FOUND', 'Goal not found.');
+    const policy = profile ? savedExecutionPolicy(profile) : configured;
+    const resources = this.env.selection?.forProject(captured.projectId, { profile });
+    if (!resources)
+      throw new DomainError(
+        'RESOURCE_PROFILE_REQUIRED',
+        'Execution requires a saved resource profile.',
+      );
+    if (this.closing) throw new DomainError('STOPPING', 'The service is stopping.');
+    const runId = 'R-' + this.env.id();
+    const proposal = {
+      runId,
+      admissionId: 'admission-' + runId,
+      attemptId: 'initial-' + runId,
+      goalId: goal.id,
+      now: this.env.now(),
+      expectedGoalRevision: goal.revision ?? 1,
+      expectedProfileRevision: profile?.revision ?? null,
+      policy,
+      resources,
+      workflow: structuredClone(this.env.workflowRoles.workflow),
+      ...(captured.checkIds ? { checkIds: captured.checkIds } : {}),
+      repairCapabilities: {
+        managedEnvironment: !!this.env.environments,
+        synchronizeDependencies: !!this.env.workspaces.synchronizeDependencies,
+      },
+    };
+    const result = await runs.transaction(command, (tx) =>
+      tx.admit(proposal, this.env.workflowRoles),
+    );
+    this.schedule(captured.projectId, result.runId);
     return result;
   }
   async resume(
@@ -967,25 +920,18 @@ ${installation.output || installation.error || ''}`,
     fingerprint: string,
     input: { projectId: string; runId: string },
   ) {
-    const result = await this.env.projects
-      .get(input.projectId)
-      .transact(requestId, fingerprint, (doc) => {
-        const run = doc.runs.find((r) => r.id === input.runId),
-          goal = doc.goals.find((g) => g.id === run?.goalId);
-        if (!run || !goal) throw new DomainError('NOT_FOUND', 'Run not found.');
-        if (!terminal(run)) {
-          run.cancelRequested = true;
-          run.status = 'canceling';
-          run.updatedAt = this.env.now();
-          run.events.push({
-            at: this.env.now(),
-            type: 'run.cancel-requested',
-            text: 'Stop requested',
-          });
-        }
-        return { result: { runId: run.id }, change: { type: 'run.changed', run, goal } };
-      });
-    this.jobs.get(input.runId)?.controller.abort();
+    const captured = structuredClone(input),
+      store = this.env.projects.get(captured.projectId),
+      runs = store.runs;
+    if (store.project.id !== captured.projectId || !runs || runs.projectId !== captured.projectId)
+      throw new DomainError(
+        'PROJECT_STORAGE_MISMATCH',
+        'The run store belongs to another project.',
+      );
+    const result = await runs.transaction({ id: requestId, fingerprint }, (tx) =>
+      tx.requestCancel({ runId: captured.runId, now: this.env.now() }),
+    );
+    this.jobs.get(captured.runId)?.controller.abort();
     return result;
   }
   async recover() {

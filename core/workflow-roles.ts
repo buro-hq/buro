@@ -135,6 +135,11 @@ export class WorkflowCatalog {
 }
 export interface WorkflowRoleResolver {
   readonly workflow: WorkflowIdentity;
+  resolveRole(
+    current: Role | undefined,
+    operation: ServiceOperation,
+    now: string,
+  ): { role: Role; created: boolean };
   ensureRole(
     doc: Pick<ProjectDocument, 'roleVersions'>,
     operation: ServiceOperation,
@@ -176,30 +181,49 @@ export function createWorkflowRoleResolver(options: {
   workflows.assertSealed();
   const selected = workflows.get(options.workflowId),
     workflow = immutable({ id: selected.id, revision: selected.revision });
+  const resolveRole = (
+    existing: Role | undefined,
+    operation: ServiceOperation,
+    now: string,
+  ): { role: Role; created: boolean } => {
+    if (operation.roles.kind !== 'fixed')
+      throw new DomainError(
+        'WORKFLOW_ROLE_UNAVAILABLE',
+        'This operation does not bind a service role.',
+      );
+    const roleId = operation.roles.roleId;
+    if (existing) {
+      if (existing.id !== roleId)
+        throw new DomainError(
+          'WORKFLOW_ROLE_UNAVAILABLE',
+          'The role does not match this operation.',
+        );
+      return { role: structuredClone(existing), created: false };
+    }
+    const templateId = selected.templateFor(operation);
+    if (templateId === undefined)
+      throw new DomainError(
+        'WORKFLOW_ROLE_UNAVAILABLE',
+        'The selected workflow has no role template for this operation.',
+      );
+    const role = instantiateWorkflowRole(templates.get(templateId), workflow, roleId, now);
+    return { role, created: true };
+  };
   return Object.freeze({
     workflow,
+    resolveRole,
     ensureRole: (
       doc: Pick<ProjectDocument, 'roleVersions'>,
       operation: ServiceOperation,
       now: string,
     ) => {
-      if (operation.roles.kind !== 'fixed')
-        throw new DomainError(
-          'WORKFLOW_ROLE_UNAVAILABLE',
-          'This operation does not bind a service role.',
-        );
-      const roleId = operation.roles.roleId;
-      const existing = doc.roleVersions.filter((role) => role.id === roleId).at(-1);
-      if (existing) return { role: structuredClone(existing), created: false };
-      const templateId = selected.templateFor(operation);
-      if (templateId === undefined)
-        throw new DomainError(
-          'WORKFLOW_ROLE_UNAVAILABLE',
-          'The selected workflow has no role template for this operation.',
-        );
-      const role = instantiateWorkflowRole(templates.get(templateId), workflow, roleId, now);
-      doc.roleVersions.push(role);
-      return { role: structuredClone(role), created: true };
+      const roleId = operation.roles.kind === 'fixed' ? operation.roles.roleId : undefined;
+      const existing = roleId
+        ? doc.roleVersions.filter((role) => role.id === roleId).at(-1)
+        : undefined;
+      const result = resolveRole(existing, operation, now);
+      if (result.created) doc.roleVersions.push(structuredClone(result.role));
+      return { role: structuredClone(result.role), created: result.created };
     },
   });
 }

@@ -289,6 +289,87 @@ export const GoalSchema = z.object({
   runId: z.string().optional(),
 });
 const goal = GoalSchema;
+/** Independent current/grant records. None of these schemas accepts a whole legacy Run. */
+export const RunCurrentSchema = z.strictObject({
+  version: z.literal(1),
+  id: z.string().min(1),
+  goalId: z.string().min(1),
+  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  admissionId: z.string().min(1),
+  attemptId: z.string().min(1),
+  title: z.string(),
+  summary: z.string(),
+  status: z.enum([
+    'queued',
+    'running',
+    'canceling',
+    'completed',
+    'failed',
+    'interrupted',
+    'needs-attention',
+  ]),
+  phase: z.enum([
+    'preparing',
+    'queued',
+    'planning',
+    'implementation',
+    'checking',
+    'review',
+    'repair',
+    'done',
+  ]),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+  completedAt: z.string().optional(),
+  cancelRequested: z.boolean(),
+});
+export const RunAdmissionSchema = z.strictObject({
+  version: z.literal(1),
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  attemptId: z.string().min(1),
+  createdAt: z.string().min(1),
+  goal: GoalSchema.strict(),
+  goalText: z.string(),
+  policy: ExecutionPolicySchema.extend({
+    turnTimeoutMs: z.number().int().positive(),
+    context: z.string().optional(),
+    profile: ProjectProfileSchema.optional(),
+  }),
+  resources: ResourceSnapshotSchema,
+  workflow: WorkflowIdentitySchema,
+  roleSnapshots: z.array(role.strict()),
+  roleResources: z.record(z.string(), AssignmentResourceSchema),
+  planningPolicy: PlanningPolicySchema,
+  contextMaterials: z.array(ContextMaterialSchema.strict()),
+  checkIds: z.array(z.string().min(1)),
+  repairEnvironment: z.boolean(),
+  timePolicy: z.strictObject({
+    kind: z.literal('inactivity'),
+    idleTimeoutMs: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  }),
+  outcome: GoalOutcomeSchema,
+  parentRunId: z.string().optional(),
+});
+export const RunAttemptSchema = z.strictObject({
+  version: z.literal(1),
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  admissionId: z.string().min(1),
+  ordinal: z.literal(1),
+  reason: z.literal('initial'),
+  createdAt: z.string().min(1),
+});
+export const RunTimelineEntrySchema = z.strictObject({
+  runId: z.string().min(1),
+  sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  at: z.string().min(1),
+  type: z.string().min(1),
+  text: z.string().optional(),
+  threadId: z.string().optional(),
+  commandId: z.string().optional(),
+  durationMs: z.number().optional(),
+});
 const check = z.object({
   name: z.string(),
   passed: z.boolean(),
@@ -597,6 +678,13 @@ const run = z
         });
     }
   });
+/** Public queued presentation only; no resource, role, session or writable grant fields. */
+export const RunAdmissionViewSchema = z.strictObject({
+  managedBudget: ManagedRunBudgetSummarySchema.optional(),
+  effectivePolicy: EffectivePolicySchema.optional(),
+  stop: RunStopSchema.optional(),
+  issue: run.shape.issue.unwrap().strict().optional(),
+});
 export const DomainEventSchema = z
   .object({
     version: z.literal(1),
@@ -626,10 +714,59 @@ export const DomainEventSchema = z
         profile: ProjectProfileSchema,
         executionPolicy: ExecutionPolicySchema,
       }),
+      z.strictObject({
+        type: z.literal('run.admitted'),
+        view: RunAdmissionViewSchema.optional(),
+        current: RunCurrentSchema,
+        admission: RunAdmissionSchema,
+        goal,
+        roles: z.array(role).optional(),
+      }),
+      z.strictObject({ type: z.literal('run.cancel-requested'), current: RunCurrentSchema }),
       z.object({ type: z.literal('run.changed'), run, goal, roles: z.array(role).optional() }),
     ]),
   })
   .superRefine((event, ctx) => {
+    if (event.change.type === 'run.admitted') {
+      const { current, admission, goal: linkedGoal } = event.change;
+      if (
+        current.status !== 'queued' ||
+        current.phase !== 'queued' ||
+        current.revision !== 1 ||
+        current.cancelRequested ||
+        current.completedAt !== undefined ||
+        linkedGoal.status !== 'running'
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['change', 'current'],
+          message: 'A run admission describes only newly queued work.',
+        });
+      if (
+        current.id !== admission.runId ||
+        current.admissionId !== admission.id ||
+        current.attemptId !== admission.attemptId ||
+        current.goalId !== admission.goal.id ||
+        current.goalId !== linkedGoal.id ||
+        linkedGoal.runId !== current.id ||
+        linkedGoal.projectId !== event.projectId ||
+        admission.goal.projectId !== event.projectId
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['change'],
+          message: 'Run admission identities must match the current run and linked project goal.',
+        });
+    }
+    if (
+      event.change.type === 'run.cancel-requested' &&
+      (!event.change.current.cancelRequested || event.change.current.status !== 'canceling')
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['change', 'current'],
+        message: 'Cancellation must describe an actual stop request.',
+      });
     if (
       event.change.type === 'run.changed' &&
       event.change.run.verificationView &&

@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { createDocumentProjectRuns, validateDocumentRunAdmissions } from './project-runs.ts';
+import type { ProjectRuns } from '../../core/project-runs.ts';
 import { createDocumentProjectSettings } from './project-settings.ts';
 import {
   validateProjectIdentity,
@@ -52,6 +54,7 @@ type Options = {
 /** One writer per project. State, events and idempotency receipts share one atomic commit. */
 export class FileProjectStore implements ProjectStore {
   readonly entities: ProjectEntities;
+  readonly runs: ProjectRuns;
   readonly settings: ProjectSettings;
   #project: Project;
   get project(): Project {
@@ -95,6 +98,7 @@ export class FileProjectStore implements ProjectStore {
     this.entities = createDocumentProjectEntities(host);
     this.materials = createDocumentProjectMaterials(host);
     this.settings = createDocumentProjectSettings(host);
+    this.runs = createDocumentProjectRuns(host);
   }
   static async open(options: Options) {
     options = {
@@ -162,6 +166,7 @@ export class FileProjectStore implements ProjectStore {
           receipts: {},
         };
       }
+      validateDocumentRunAdmissions(doc, doc);
       validateProjectRunBudgets(doc);
       validateProjectPlanningPolicies(doc);
       validateProjectOperationContexts(doc);
@@ -248,6 +253,7 @@ export class FileProjectStore implements ProjectStore {
           'PROJECT_STORAGE_MISMATCH',
           'Project identity cannot be changed by a state transaction.',
         );
+      validateDocumentRunAdmissions(this.doc, draft);
       validateProjectRunBudgets(draft, this.doc);
       validateProjectPlanningPolicies(draft, this.doc);
       validateProjectOperationContexts(draft, this.doc);

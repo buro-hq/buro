@@ -37,6 +37,7 @@ export type ProjectDocument = {
   research?: ProjectResearch;
 };
 export interface ProjectStore {
+  readonly runs: import('./project-runs.ts').ProjectRuns;
   readonly project: Project;
   readonly settings: import('./project-settings.ts').ProjectSettings;
   readonly materials: import('./project-materials.ts').ProjectMaterials;
@@ -128,5 +129,9 @@ export interface RuntimeRegistry {
   get(id: string): RegisteredRuntime;
 }
 export interface RuntimeSelection {
-  forProject(projectId: string): ResourceSnapshot;
+  /** Admission callers pass the captured profile explicitly, including absence, rather than rereading a projection. */
+  forProject(
+    projectId: string,
+    captured?: { profile: ProjectProfile | undefined },
+  ): ResourceSnapshot;
 }

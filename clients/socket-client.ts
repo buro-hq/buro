@@ -1,3 +1,4 @@
+import { initialRunView, mergeRunCurrent } from '../protocol/run-view.ts';
 import type {
   CreateGoal,
   DomainEvent,
@@ -69,6 +70,21 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
       };
     next.profile = c.profile;
     next.executionPolicy = c.executionPolicy;
+  }
+  if (c.type === 'run.admitted') {
+    const run = initialRunView(c.current, c.admission, c.view);
+    next.runs = [run, ...snapshot.runs.filter((previous) => previous.id !== run.id)];
+    next.goals = [...snapshot.goals.filter((previous) => previous.id !== c.goal.id), c.goal];
+    for (const savedRole of c.roles || [])
+      next.roles = [...next.roles.filter((previous) => previous.id !== savedRole.id), savedRole];
+    next.effectivePolicy = undefined;
+  }
+  if (c.type === 'run.cancel-requested') {
+    if (!snapshot.runs.some((previous) => previous.id === c.current.id))
+      throw Error('Run cancellation needs a current run projection.');
+    next.runs = snapshot.runs.map((previous) =>
+      previous.id === c.current.id ? mergeRunCurrent(previous, c.current) : previous,
+    );
   }
   if (c.type === 'run.changed') {
     next.runs = [c.run, ...snapshot.runs.filter((r) => r.id !== c.run.id)];
@@ -245,9 +261,13 @@ export class SocketProjectClient implements ProjectClient {
               event.change.type === 'project.configured' ||
               event.change.type === 'goal.deleted' ||
               ((event.change.type === 'project.research.changed' ||
-                event.change.type === 'run.changed') &&
+                event.change.type === 'run.changed' ||
+                event.change.type === 'run.admitted') &&
                 !!event.change.roles?.length) ||
-              (event.change.type === 'run.changed' && busyBefore !== hasActiveRun(this.state))
+              (['run.changed', 'run.admitted', 'run.cancel-requested'].includes(
+                event.change.type,
+              ) &&
+                busyBefore !== hasActiveRun(this.state))
             )
               this.invalidateProjection();
           } catch {

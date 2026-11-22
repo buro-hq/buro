@@ -1,0 +1,19 @@
+# Stage 5A4a SQL Run queue and cancellation evidence
+
+Date: 2026-11-22. The standalone SQL authority now consumes the actual Core Run admission/cancellation facade. `.runs` provides semantic synchronous commands plus current/timeline/receipt reads; the combined callback includes `{usage, entities, materials, settings, runs}`. Production remains the sole File authority. This slice does not switch a runtime to SQL, fabricate a full Run aggregate, initialize a second budget account, write acceptance or claim successful coding.
+
+`run_current` stores scalar lifecycle fields and admission/attempt references, without a Run/history JSON column. `run_admissions` retains the complete initial goal/task, captured policy/resources/workflow/role/material grants; `run_attempts` stores the immutable first attempt separately. `run_timeline` is append-only and keyed by Run/sequence. Immutable SQL triggers and deferred foreign keys bind these rows in the same transaction as the actual goal link, missing role versions, command receipt and public change.
+
+The current writer inserts genuine queued facts into `project_run_index` and updates them to canceling after a stop request. Active/unresolved checks are indexed boolean reads, including older facts without constructing a fake RunCurrent. Missing-role inserts reuse the entity storage and are reported in the actual admission event, without an extra fabricated role event. Goal/material/profile reads are scoped; active project material grants use a partial index and selected materials use point lookups. No growing navigation/history collection is an admission input.
+
+The timeline uses keyset pages with a closed versioned cursor bound to project, Run, after position and fixed watermark. Validation occurs before a queued SQL read. A read transaction captures the page watermark consistently. The technical per-page bound is Core's 200 entries, with at most limit+1 returned rows; it is not a lifetime history cap. Known optional timeline text/thread/command/duration fields remain optional and are not replaced with invented blank text. Actual queue/cancel entries contain their genuine text.
+
+Fresh standalone format v5 rejects prior temporary formats. Existing queue/event/receipt rollback behavior and sticky physical write failure handling apply to all facets. An admission that fails after role/admission/attempt/current work cannot publish or retain partial state. A stop request remains active/canceling until a later genuine execution writer records termination; it is not evidence that a process stopped.
+
+Focused command: `node --test tests/sqlite-project-runs.test.ts`.
+
+Result: **6 passed, zero failures/skips**, log `/private/tmp/buro-stage5a4a-sql-runs.log`. Cases cover complete frozen task/grant capture and actual goal/active-index linking; replay without another callback/attempt/timeline entry; one cancellation transition; project/Run/watermark-bound timeline pages; rollback/retry of all admission state; preservation of user role instructions/fixed model preferences despite later role edits; and expired Run transaction capabilities. The tests verify that queue admission creates no new usage account.
+
+Final server typecheck, formatter and diff checks passed. The cross-adapter agent separately reports six actual ExecutionService start/cancel tests passing with its public scheduler held and legacy snapshot/transact/receipt access rejected. Historical-index/physical fault/race cases, full-suite validation and independent reviews belong to the other stage agents/root; this receipt does not claim their pending results.
+
+No model, network endpoint, credential, RTX host, original user repository or Git metadata was accessed. Current finite execution limits remain unchanged. Full SQL execution journaling, complete private artifacts, genuine acceptance and default-none policy activation remain later stages.

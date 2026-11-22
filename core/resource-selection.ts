@@ -1,3 +1,4 @@
+import type { ProjectProfile } from '../protocol/domain.ts';
 import type { ResourceProfile, RuntimeResource, ResourceSnapshot } from '../protocol/resources.ts';
 import { ResourceProfileSchema } from '../protocol/resources.ts';
 import { DomainError, type ProjectRegistry, type RuntimeSelection } from './ports.ts';
@@ -12,11 +13,13 @@ export class ResourceSelection implements RuntimeSelection {
   constructor(options: ResourceSelection['options']) {
     this.options = options;
   }
-  forProject(projectId: string): ResourceSnapshot {
-    return this.resolve(
-      this.options.projects.get(projectId).snapshot().profile?.resourceProfile ??
-        this.options.defaultProfile(),
-    );
+  forProject(
+    projectId: string,
+    captured?: { profile: ProjectProfile | undefined },
+  ): ResourceSnapshot {
+    const store = this.options.projects.get(projectId);
+    const profile = captured ? captured.profile : store.snapshot().profile;
+    return this.resolve(profile?.resourceProfile ?? this.options.defaultProfile());
   }
   forMachine(): ResourceSnapshot {
     return this.resolve(this.options.defaultProfile());

@@ -16,6 +16,12 @@ import {
   type ProjectSettings,
   type SettingsTransaction,
 } from './project-settings.ts';
+import {
+  validateProjectRunChange,
+  type ProjectRunChange,
+  type ProjectRuns,
+  type RunTransaction,
+} from './project-runs.ts';
 import type { Project } from '../protocol/domain.ts';
 import { DomainError } from './ports.ts';
 import {
@@ -59,7 +65,9 @@ export type ProjectUsageChange = {
 };
 export type ProjectAuthorityChange =
   | ProjectUsageChange
-  | ((ProjectEntityChange | ProjectMaterialChange | ProjectSettingsChange) & { projectId: string });
+  | ((ProjectEntityChange | ProjectMaterialChange | ProjectSettingsChange | ProjectRunChange) & {
+      projectId: string;
+    });
 export type UsageAuthorityEvent = ProjectAuthorityChange & { sequence: number };
 export type UsageEventPage = {
   events: UsageAuthorityEvent[];
@@ -83,6 +91,7 @@ export type ProjectAuthorityTransaction = UsageAuthorityTransaction & {
   readonly entities: EntityTransaction;
   readonly materials: MaterialTransaction;
   readonly settings: SettingsTransaction;
+  readonly runs: RunTransaction;
 };
 export interface ProjectUsageAuthority {
   readonly project: Project;
@@ -90,6 +99,7 @@ export interface ProjectUsageAuthority {
   readonly entities: ProjectEntities;
   readonly materials: ProjectMaterials;
   readonly settings: ProjectSettings;
+  readonly runs: ProjectRuns;
   /** Callback is synchronous and its result must be JSON-safe; neither permits external effects. */
   transaction<T>(command: UsageCommand, apply: (tx: ProjectAuthorityTransaction) => T): Promise<T>;
   account(owner: ProjectUsageOwner): Promise<UsageAccount | undefined>;
@@ -402,6 +412,8 @@ export function validateProjectAuthorityChange(
   )
     throw new DomainError('INVALID_AUTHORITY_EVENT', 'The saved project event is invalid.');
   const { projectId, ...change } = input;
+  if (change.type === 'run.admitted' || change.type === 'run.cancel-requested')
+    return { ...validateProjectRunChange(change, projectId), projectId };
   if (change.type === 'project.configured' || change.type === 'project.verified')
     return { ...validateProjectSettingsChange(change), projectId };
   if (change.type === 'context.materials.added' || change.type === 'context.material.removed')

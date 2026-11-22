@@ -21,6 +21,14 @@ import {
   type UsageOperation,
 } from '../../core/usage-accounting.ts';
 import { DomainError } from '../../core/ports.ts';
+import {
+  createRunTransaction,
+  validateRunTimelineQuery,
+  type ProjectRuns,
+  type RunTransaction,
+} from '../../core/project-runs.ts';
+import type { RunTimelineQuery } from '../../protocol/run-state.ts';
+import { createSqliteRunRows, projectRunSchema } from './project-run-rows.ts';
 import type { Project, ProjectProfile } from '../../protocol/domain.ts';
 import {
   createSettingsTransaction,
@@ -60,7 +68,7 @@ export type SqliteProjectUsageOptions = {
   /** Counts returned/changed rows without exposing SQL parameters or private payloads. */
   onQuery?: (observation: UsageQueryObservation) => void;
 };
-const format = 'buro-project-authority-v4';
+const format = 'buro-project-authority-v5';
 const failure = (code: string, message: string) => new DomainError(code, message);
 const stateConflict = () =>
   failure('USAGE_STATE_CONFLICT', 'The stored usage state changed. Refresh before trying again.');
@@ -75,6 +83,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
   #entities: ProjectEntities;
   #materials: ProjectMaterials;
   #settings: ProjectSettings;
+  #runs: ProjectRuns;
   #database: DatabaseSync;
   #statements = new Map<string, StatementSync>();
   #queue: Promise<unknown> = Promise.resolve();
@@ -99,18 +108,34 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       projectId: this.#projectId,
       transaction: <T>(command: UsageCommand, apply: (tx: MaterialTransaction) => T) =>
         this.transaction(command, (tx) => apply(tx.materials)),
-      receipt: (command: UsageCommand) => this.#materialReceipt(command),
+      receipt: (command: UsageCommand) => this.#commandReceipt(command),
       material: (id: string) => this.#readMaterial((tx) => tx.material(id)),
     });
     this.#settings = Object.freeze({
       projectId: this.#projectId,
       transaction: <T>(command: UsageCommand, apply: (tx: SettingsTransaction) => T) =>
         this.transaction(command, (tx) => apply(tx.settings)),
-      receipt: (command: UsageCommand) => this.#materialReceipt(command),
+      receipt: (command: UsageCommand) => this.#commandReceipt(command),
       profile: () => this.#readSettings((tx) => tx.profile()),
       verification: () => this.#readSettings((tx) => tx.verification()),
       researchProposal: () => this.#readSettings((tx) => tx.researchProposal()),
       hasActiveRun: () => this.#readSettings((tx) => tx.hasActiveRun()),
+    });
+    this.#runs = Object.freeze({
+      projectId: this.#projectId,
+      transaction: <T>(command: UsageCommand, apply: (tx: RunTransaction) => T) =>
+        this.transaction(command, (tx) => apply(tx.runs)),
+      receipt: (command: UsageCommand) => this.#commandReceipt(command),
+      current: (id: string) => this.#readRun((tx) => tx.current(id)),
+      timeline: (query: RunTimelineQuery) => {
+        let captured: RunTimelineQuery;
+        try {
+          captured = validateRunTimelineQuery(query, this.#projectId);
+        } catch (error) {
+          return Promise.reject(error);
+        }
+        return this.#readRun((tx) => tx.timeline(captured));
+      },
     });
     Object.defineProperties(this, {
       projectId: { enumerable: true, configurable: false, get: () => this.#projectId },
@@ -119,6 +144,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       entities: { enumerable: true, configurable: false, get: () => this.#entities },
       materials: { enumerable: true, configurable: false, get: () => this.#materials },
       settings: { enumerable: true, configurable: false, get: () => this.#settings },
+      runs: { enumerable: true, configurable: false, get: () => this.#runs },
     });
     this.#onEvent = options.onEvent;
     this.#onQuery = options.onQuery;
@@ -144,6 +170,10 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
   }
   get settings() {
     return this.#settings;
+  }
+
+  get runs() {
+    return this.#runs;
   }
 
   static async open(options: SqliteProjectUsageOptions) {
@@ -180,6 +210,10 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         'project_profiles',
         'project_verifications',
         'project_research_proposals',
+        'run_current',
+        'run_admissions',
+        'run_attempts',
+        'run_timeline',
       ];
       if (
         tables.length &&
@@ -222,6 +256,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
         database.exec(projectEntitySchema);
         database.exec(projectMaterialSchema);
         database.exec(projectSettingsSchema);
+        database.exec(projectRunSchema);
         const metadata = database
           .prepare(
             'SELECT format,project_id,project_json FROM authority_metadata WHERE singleton=1',
@@ -310,6 +345,11 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
     const row = this.#statement(sql).get(...values);
     this.#notify({ operation, rows: row ? 1 : 0 });
     return row;
+  }
+  #all(operation: string, sql: string, ...values: SQLInputValue[]) {
+    const rows = this.#statement(sql).all(...values);
+    this.#notify({ operation, rows: rows.length });
+    return rows;
   }
   #run(operation: string, sql: string, ...values: SQLInputValue[]) {
     const result = this.#statement(sql).run(...values);
@@ -512,7 +552,14 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
           ),
           assertActive,
         });
-        const tx = Object.freeze({ ...usage, entities, materials, settings });
+        const runs = createRunTransaction({
+          projectId: this.#projectId,
+          storage: this.#runRows(mutate, (change) =>
+            appendChange({ ...change, projectId: this.#projectId }),
+          ),
+          assertActive,
+        });
+        const tx = Object.freeze({ ...usage, entities, materials, settings, runs });
         const result = apply(tx);
         active = false;
         if (thenable(result)) {
@@ -569,7 +616,7 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
       throw failure('IDEMPOTENCY_CONFLICT', 'This command ID was used with another fingerprint.');
     return { result: decodeResult(String(saved.result_json)) };
   }
-  #materialReceipt(command: UsageCommand): Promise<{ result: unknown } | undefined> {
+  #commandReceipt(command: UsageCommand): Promise<{ result: unknown } | undefined> {
     let captured: UsageCommand;
     try {
       captured = commandCopy(command);
@@ -578,6 +625,58 @@ export class SqliteProjectUsageAuthority implements ProjectUsageAuthority {
     }
     return this.#enqueue(() => this.#receiptRow(captured));
   }
+  #runRows(
+    mutate: <T>(action: () => T) => T,
+    appendChange: Parameters<typeof createSqliteRunRows>[0]['appendChange'],
+  ) {
+    const outsideFacet = (): never => {
+      throw failure('INVALID_RUN_STORAGE', 'Run storage must emit its owning run change.');
+    };
+    return createSqliteRunRows({
+      projectId: this.#projectId,
+      get: (...args) => this.#get(...args),
+      all: (...args) => this.#all(...args),
+      run: (...args) => this.#run(...args),
+      json,
+      mutate,
+      entities: this.#entityRows(mutate, outsideFacet),
+      materials: this.#materialRows(mutate, outsideFacet),
+      settings: this.#settingsRows(mutate, outsideFacet),
+      appendChange,
+    });
+  }
+  #readRun<T>(query: (tx: RunTransaction) => T): Promise<T> {
+    return this.#enqueue(() => {
+      let active = true;
+      const forbidden = (): never => {
+        throw failure('USAGE_TRANSACTION_CLOSED', 'This query does not grant a transaction.');
+      };
+      this.#database.exec('BEGIN');
+      try {
+        const value = query(
+          createRunTransaction({
+            projectId: this.#projectId,
+            storage: this.#runRows(forbidden, forbidden),
+            assertActive: () => {
+              if (!active) forbidden();
+            },
+          }),
+        );
+        this.#database.exec('COMMIT');
+        return value;
+      } catch (error) {
+        try {
+          this.#database.exec('ROLLBACK');
+        } catch {
+          /* Preserve the read failure. */
+        }
+        throw error;
+      } finally {
+        active = false;
+      }
+    });
+  }
+
   #settingsRows(
     mutate: <T>(action: () => T) => T,
     appendChange: Parameters<typeof createSqliteSettingsRows>[0]['appendChange'],

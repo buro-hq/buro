@@ -38,7 +38,8 @@ export const projectEntitySchema = `
     status TEXT CHECK(status IS NULL OR status IN ('queued','running','canceling','completed','failed','interrupted','needs-attention')),
     commit_oid TEXT,
     delivery_busy INTEGER NOT NULL DEFAULT 0 CHECK(delivery_busy IN (0,1)),
-    preview_busy INTEGER NOT NULL DEFAULT 0 CHECK(preview_busy IN (0,1))
+    preview_busy INTEGER NOT NULL DEFAULT 0 CHECK(preview_busy IN (0,1)),
+    unresolved INTEGER NOT NULL DEFAULT 0 CHECK(unresolved IN (0,1))
   );
   CREATE INDEX IF NOT EXISTS project_runs_delivery_busy ON project_run_index(goal_id) WHERE delivery_busy=1;
   CREATE INDEX IF NOT EXISTS project_runs_preview_busy ON project_run_index(goal_id) WHERE preview_busy=1;

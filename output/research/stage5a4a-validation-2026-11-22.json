@@ -1,0 +1,65 @@
+{
+  "stage": "5A4a",
+  "date": "2026-11-22",
+  "parentCommit": "bd8d173",
+  "tests": {
+    "total": 1225,
+    "passed": 1225,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 73676.701209,
+    "log": "/private/tmp/buro-stage5a4a-final-reviewed-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a4a-final-build.log"
+  },
+  "format": {
+    "passed": true,
+    "log": "/private/tmp/buro-stage5a4a-final-format.log"
+  },
+  "browser": {
+    "firstProfileScenarios": 6,
+    "firstProfileLog": "/private/tmp/buro-stage5a4a-first-profile-browser.log",
+    "projectScenarios": 17,
+    "projectLog": "/private/tmp/buro-stage5a4a-projects-browser.log",
+    "syntheticRequests": 26,
+    "nativeStarts": [],
+    "realModelRequests": 0,
+    "errors": []
+  },
+  "agentRoles": {
+    "implementationAndScenarioTests": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "independentReviewEvidence": {
+    "architectureFocusedPassed": 44,
+    "architectureReport": "stage5a4a-architecture-review-2026-11-22.md",
+    "architectureReportCompiler": "parent from delivered findings; reviewer final writing turn stopped by agent usage limit",
+    "testsReport": "stage5a4a-tests-review-2026-11-22.md",
+    "testsFocusedPassed": 24,
+    "testsPostFreezePassed": 8,
+    "lastDelta": "Common unknown-Run timeline rejection was parent-reviewed after independent focused reviews.",
+    "lastDeltaIndependentFollowup": false,
+    "lastDeltaFocusedPassed": 28
+  },
+  "actualEvidence": [
+    "Real ExecutionService queue/cancel on both adapters, SQL scheduler held and legacy document APIs unavailable.",
+    "SQL scalar current, immutable admission/initial attempt and separate scoped timeline share goal/role/event/receipt transaction.",
+    "Caught physical timeline/event/index failure rolls back prior rows and permits same-command retry.",
+    "Old unresolved guard fact behind 17409 newer facts blocks real admission; 17410-entry timeline supports indexed fixed-watermark keyset pages.",
+    "File OPEN/COMMIT guards protect captured packets and identity links while allowing existing executor progress.",
+    "Full saved-profile policy projection comparison rejects relaxed scope/check/worker/timeout/context proposals.",
+    "Actual public queue/cancel events retain displayed history and honest optional File ledger projections."
+  ],
+  "scopeLimits": [
+    "Production remains the sole File authority/old ledger, not a SQL sidecar or full executor activation.",
+    "SQL queue creates no usage account, model observation, accepted code or external dispatch permission.",
+    "Complete executor/attempt/session/effect/history/artifact migration and default-none policies remain later.",
+    "Final small read-contract correction has parent tests and full validation but no additional independent followup because the agent tool usage limit was reached."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}
