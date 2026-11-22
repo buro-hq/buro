@@ -15,6 +15,8 @@ import { localFilesPlugin } from './local-files.ts';
 import { resourceContributionsPlugin } from './resource-contributions.ts';
 import { toolContributionsPlugin } from './tool-contributions.ts';
 import { projectContributionsPlugin } from './project-contributions.ts';
+import type { ProjectContributionCatalogs } from './project-contributions.ts';
+import type { ToolContributionCatalog } from '../core/tool-contributions.ts';
 
 declare module 'cordis' {
   interface Events {
@@ -167,6 +169,9 @@ export const rolesPlugin: Plugin.Object = {
 export type HostOptions = {
   projects?: ProjectStoreOpenSpec[];
   storeFactory?: ProjectStoreFactory;
+  /** Explicit catalogs replace that category's defaults before startup is sealed. */
+  projectContributions?: ProjectContributionCatalogs;
+  toolContributions?: ToolContributionCatalog;
   /** Trusted Cordis plugins register before tool and application catalogs are sealed. */
   configure?: (ctx: Context) => void | Promise<void>;
 };
@@ -175,8 +180,8 @@ export async function createHost(options: HostOptions = {}) {
   try {
     await ctx.plugin(Commands);
     await ctx.plugin(resourceContributionsPlugin);
-    await ctx.plugin(toolContributionsPlugin);
-    await ctx.plugin(projectContributionsPlugin);
+    await ctx.plugin(toolContributionsPlugin, { catalog: options.toolContributions });
+    await ctx.plugin(projectContributionsPlugin, options.projectContributions ?? {});
     await ctx.plugin(storagePlugin, {
       projects: options.projects || [],
       factory: options.storeFactory || new FileProjectStoreFactory(),

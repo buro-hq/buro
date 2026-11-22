@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { createBuiltinProjectAnalyses } from '../adapters/analysis/project-setup.ts';
 import { readAuthorizedMaterialText } from '../adapters/files/context-material-text.ts';
 import test from 'node:test';
@@ -15,7 +16,7 @@ import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { ProjectStoreRegistry } from '../core/project-registry.ts';
 import { ProjectResearchService } from '../core/project-research.ts';
 import { ResultService, type ResultOperations } from '../core/results.ts';
-import { operationalRoles } from '../core/operational-roles.ts';
+import { operationalRoles } from './fixtures/roles.ts';
 import { NativeProjectOperations } from '../adapters/processes/project-operations.ts';
 import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import type { ProjectProfile, Run } from '../protocol/domain.ts';
@@ -157,7 +158,12 @@ async function fixture(t: any) {
     },
     async dispose() {},
   };
-  const service = new ResultService({ projects, runtime, operations });
+  const service = new ResultService({
+    workflowRoles: createBuiltinWorkflowRoles(),
+    projects,
+    runtime,
+    operations,
+  });
   t.after(async () => {
     await service.dispose();
     await store.close();
@@ -299,6 +305,7 @@ test('project research proposes components and checks without changing the exist
     }),
   });
   const research = new ProjectResearchService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     selection: fixtureExecutionSelection('fixture', fixtureExecutionCapabilities()),
     analysis: createBuiltinProjectAnalyses().get('project-setup'),
     materials: (projectId, selected, signal) =>

@@ -9,6 +9,7 @@ import {
   clock,
   eventsAt,
   isTest,
+  roleViewForAgent,
   seconds,
   type Agent,
   type Milestone,
@@ -149,8 +150,10 @@ export function RunInspector({
       {agentDetail &&
         (() => {
           const chosen =
-            run.agents.find((a) => a.threadId === agentDetail) ||
-            [...run.agents].reverse().find((a) => a.name === agentDetail);
+            [...run.agents, ...(run.resultAgents || [])].find((a) => a.threadId === agentDetail) ||
+            [...run.agents, ...(run.resultAgents || [])]
+              .reverse()
+              .find((a) => a.name === agentDetail);
           if (agentDetail !== 'coordinator' && !chosen) return null;
           const agentName = chosen?.name || 'coordinator';
           const a: Agent =
@@ -167,7 +170,7 @@ export function RunInspector({
                   session: run.coordinatorSession,
                 }
               : chosen!;
-          const role = roles[agentName];
+          const role = roleViewForAgent(run, a, roles[agentName]);
           const state =
             agentDetail === 'coordinator'
               ? complete
@@ -198,6 +201,12 @@ export function RunInspector({
               </div>
               <p>{role.description}</p>
               <div className="agent-facts">
+                {a.session && (
+                  <div>
+                    <span>{t('Role version')}</span>
+                    <b>v{a.session.roleVersion}</b>
+                  </div>
+                )}
                 {a.session && (
                   <div>
                     <span>{t('Execution resource')}</span>

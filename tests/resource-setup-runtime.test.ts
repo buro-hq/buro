@@ -1,4 +1,4 @@
-import { defaultRoles } from '../core/defaults.ts';
+import { defaultRoles } from './fixtures/roles.ts';
 import { resolveRoleResource } from '../core/role-routing.ts';
 import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
 import test from 'node:test';

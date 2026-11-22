@@ -97,6 +97,7 @@ function fixture(t: any) {
   let defaultProfile = 'local',
     sequence = 0;
   const role: Role = {
+    provenance: { origin: 'user' },
     id: 'builder',
     version: 3,
     title: 'Builder',

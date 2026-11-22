@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { RelativePathSchema } from './projects-paths.ts';
 import { ContextMaterialSchema, type ContextMaterial } from './context.ts';
 import { ResourceSnapshotSchema, type ResourceSnapshot } from './resources.ts';
+import { AssignmentResourceSchema, type AssignmentResource } from './resources.ts';
+import { RoleSchema } from './workflow-roles.ts';
+import type { Role } from './domain.ts';
 
 export const ComponentSchema = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
@@ -49,6 +52,8 @@ export const GoalOutcomeSchema = z.strictObject({
 });
 export type GoalOutcome = z.infer<typeof GoalOutcomeSchema>;
 export type ProjectResearch = {
+  roleSnapshot: Role;
+  roleResource: AssignmentResource;
   analysis: { id: string; revision: string };
   contextMaterials: ContextMaterial[];
   resources: ResourceSnapshot;
@@ -86,6 +91,8 @@ export const ResearchResultSchema = z.object({
   questions: z.array(z.string().max(2000)).max(12),
 });
 export const ResearchSchema = z.object({
+  roleSnapshot: RoleSchema,
+  roleResource: AssignmentResourceSchema,
   contextMaterials: z.array(ContextMaterialSchema),
   resources: ResourceSnapshotSchema,
   analysis: z.strictObject({

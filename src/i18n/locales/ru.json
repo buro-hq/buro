@@ -1163,5 +1163,15 @@
   "Prepare local preview": "Подготовка локального запуска",
   "Prepare pull request": "Подготовка пул-реквеста",
   "Prepare deployment: {p0}": "Подготовка деплоя: {p0}",
-  "Review changes": "Ревью изменений"
+  "Review changes": "Ревью изменений",
+  "Your team will appear here": "Здесь появится твоя команда",
+  "Start a goal: the workflow adds its required roles, and the coordinator selects or creates specialists.": "Запусти цель: появятся необходимые роли, а координатор подберёт или создаст специалистов.",
+  "Your role": "Твоя роль",
+  "Created by coordinator": "Создана координатором",
+  "From workflow": "Из рабочего процесса",
+  "Your instructions and model preference are reused for new work.": "Твои инструкции и выбор модели используются в новых задачах.",
+  "This role was added automatically. Your edits take priority for new work.": "Эта роль добавлена автоматически. В новых задачах будут использоваться твои настройки.",
+  "Understands project context, plans and integrates team work.": "Разбирается в проекте, планирует работу и объединяет результаты команды.",
+  "The team grows with your work. Roles are reused; each goal gets its own sessions.": "Команда растёт вместе с задачами. Роли используются повторно, а сессии у каждой цели свои.",
+  "Role version": "Версия роли"
 }

@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import {
   fixtureExecutionSelection,
   fixtureExecutionCapabilities,
@@ -136,6 +137,7 @@ async function fixture(t: any) {
   const env = { projects, now: () => new Date().toISOString(), id: () => crypto.randomUUID() },
     goals = new GoalService(env),
     engine = new ExecutionService({
+      workflowRoles: createBuiltinWorkflowRoles(),
       ...env,
       runtime,
       selection: fixtureExecutionSelection(

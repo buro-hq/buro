@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { createBuiltinProjectAnalyses } from '../adapters/analysis/project-setup.ts';
 import { readAuthorizedMaterialText } from '../adapters/files/context-material-text.ts';
 import test from 'node:test';
@@ -21,7 +22,7 @@ import { GitWorkspaces } from '../adapters/files/git-workspaces.ts';
 import { ProjectChecks } from '../adapters/checks/project-commands.ts';
 import { ProjectResearchService } from '../core/project-research.ts';
 import { ResultService, type ResultOperations } from '../core/results.ts';
-import { operationalRoles } from '../core/operational-roles.ts';
+import { operationalRoles } from './fixtures/roles.ts';
 import { ProjectProfileSchema } from '../protocol/projects.ts';
 import { executionPolicy } from '../adapters/files/project-manager.ts';
 import type { ClientCommand } from '../protocol/schema.ts';
@@ -1061,6 +1062,7 @@ test('a DeepSeek goal with no credential preserves work and never falls back to 
 test('project research and environment discovery use the selected managed coordinator with read-only tools', async (t) => {
   const f = await fixture(t, 'mixed');
   const research = new ProjectResearchService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     selection: f.host.ctx.agentRuntime.selection!,
     analysis: createBuiltinProjectAnalyses().get('project-setup'),
     materials: (projectId, selected, signal) =>
@@ -1203,6 +1205,7 @@ test('environment and result preparation keep the accepted local-only run route 
     async dispose() {},
   };
   const results = new ResultService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects: f.host.ctx.projects.registry,
     runtime: f.host.ctx.agentRuntime.adapter,
     operations,

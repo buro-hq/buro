@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
@@ -46,6 +47,7 @@ const source = () => ({
   maxWorkers: 2,
   roles: [
     {
+      provenance: { origin: 'user' },
       id: 'builder',
       version: 3,
       title: 'Builder',
@@ -119,6 +121,7 @@ function correction() {
         maxWorkers: 2,
       } as Parameters<typeof resolveTeam>[2],
       'now',
+      createBuiltinWorkflowRoles().workflow,
     );
   } catch (error) {
     return (error as Error).message;

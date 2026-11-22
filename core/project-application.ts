@@ -12,8 +12,6 @@ import {
   type WorkspacePort,
   type CheckPort,
 } from './execution-ports.ts';
-import { defaultRoles } from './defaults.ts';
-import { operationalRoles } from './operational-roles.ts';
 import { profileWithResearch } from '../protocol/research-profile.ts';
 import type {
   Project,
@@ -159,7 +157,6 @@ export class ProjectApplication {
       storageAddress: loaded.storageAddress,
       project,
       profile: loaded.profile,
-      roles: defaultRoles.filter((role) => ['coordinator', 'reviewer'].includes(role.id)),
     });
     let transferred = false;
     try {
@@ -190,13 +187,6 @@ export class ProjectApplication {
             },
           };
         });
-      }
-      for (const role of operationalRoles) {
-        if (!store.snapshot().roles.some((saved) => saved.id === role.id))
-          await store.transact('internal-role-' + this.id(), 'template', (doc) => {
-            doc.roleVersions.push(role);
-            return { result: null, change: { type: 'role.saved', role } };
-          });
       }
       await this.options.repository.ensureLocal(project);
       this.registry.add(store);

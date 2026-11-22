@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,6 +26,7 @@ const resource = (id: string): RuntimeResource => ({
   }),
 });
 const role = (id: string, runtimeId = 'second', version = 1): Role => ({
+  provenance: { origin: 'user' },
   id,
   version,
   title: id,
@@ -153,7 +155,12 @@ function fixture(t: any) {
     },
     id: () => String(++sequence),
   });
-  const results = new ResultService({ projects, runtime: router, operations: {} as any });
+  const results = new ResultService({
+    workflowRoles: createBuiltinWorkflowRoles(),
+    projects,
+    runtime: router,
+    operations: {} as any,
+  });
   t.after(async () => {
     await router.dispose();
     await registry.dispose();

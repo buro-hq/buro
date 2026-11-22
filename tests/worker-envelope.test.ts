@@ -21,6 +21,7 @@ import { WorkerEnvelopeSchema } from '../protocol/worker-tasks.ts';
 import { workerFailureForReplan } from '../core/worker-recovery.ts';
 
 const role: Role = {
+  provenance: { origin: 'user' },
   id: 'builder',
   version: 2,
   title: 'Builder',

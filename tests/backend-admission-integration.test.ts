@@ -373,6 +373,6 @@ test('strict project scope still permits an eligible read-only inspection sessio
     id: 'R-synthetic',
     executionPolicySnapshot: filePolicy('strict'),
   });
-  await f.create().start({ ...startInput(), purpose: 'research', readOnly: true });
+  await f.create().start({ ...startInput(), purpose: 'environment', readOnly: true });
   assert.equal(f.backends[0].effects.starts, 1);
 });

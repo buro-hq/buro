@@ -10,15 +10,16 @@ declare module 'cordis' {
 
 /** Trusted startup tools are sealed before application commands can use their definitions. */
 export class ToolContributions extends Service {
-  readonly catalog = new ToolContributionCatalog();
-  constructor(ctx: Context) {
+  readonly catalog: ToolContributionCatalog;
+  constructor(ctx: Context, catalog?: ToolContributionCatalog) {
     super(ctx, 'toolContributions');
-    registerBuiltinRepositoryTools(this.catalog);
+    this.catalog = catalog ?? new ToolContributionCatalog();
+    if (!catalog) registerBuiltinRepositoryTools(this.catalog);
   }
 }
-export const toolContributionsPlugin: Plugin.Object = {
+export const toolContributionsPlugin: Plugin.Object<{ catalog?: ToolContributionCatalog }> = {
   name: 'tool-contributions',
-  apply(ctx) {
-    new ToolContributions(ctx);
+  apply(ctx, options) {
+    new ToolContributions(ctx, options.catalog);
   },
 };

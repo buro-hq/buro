@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WorkScopeSchema, ScopeObservationSchema, type WorkScope } from '../protocol/work-scope.ts';
@@ -126,7 +127,14 @@ test('strict child selectors cannot promote an exact file grant into a directory
   for (const selector of ['src/', './src/', 'src//', 'src/nested/', './']) {
     assert.equal(planPathAllowed(selector, exact), false, selector);
     assert.throws(
-      () => resolveTeam(plan([selector]), [], { ...policy, scope: exact }, 'now'),
+      () =>
+        resolveTeam(
+          plan([selector]),
+          [],
+          { ...policy, scope: exact },
+          'now',
+          createBuiltinWorkflowRoles().workflow,
+        ),
       /strict work scope/,
     );
   }
@@ -250,23 +258,61 @@ function plan(paths: string[], extra?: string[]) {
 
 test('team allocation follows advisory mode without allowing protected or unsafe proposals', () => {
   for (const paths of [[], ['package.json'], ['src/index.ts']])
-    assert.equal(resolveTeam(plan(paths), [], policy, 'now').roles.length, 1);
+    assert.equal(
+      resolveTeam(plan(paths), [], policy, 'now', createBuiltinWorkflowRoles().workflow).roles
+        .length,
+      1,
+    );
   for (const paths of [[], ['package.json']])
     assert.throws(
-      () => resolveTeam(plan(paths), [], { ...policy, scope: strict }, 'now'),
+      () =>
+        resolveTeam(
+          plan(paths),
+          [],
+          { ...policy, scope: strict },
+          'now',
+          createBuiltinWorkflowRoles().workflow,
+        ),
       /strict work scope/,
     );
   for (const paths of [['AGENTS.md'], ['../outside'], ['.buro/'], ['secrets/key']])
-    assert.throws(() => resolveTeam(plan(paths), [], policy, 'now'), /unauthorized/);
+    assert.throws(
+      () => resolveTeam(plan(paths), [], policy, 'now', createBuiltinWorkflowRoles().workflow),
+      /unauthorized/,
+    );
   assert.throws(
-    () => resolveTeam(plan(['src/'], ['./src/nested/file.ts']), [], policy, 'now'),
+    () =>
+      resolveTeam(
+        plan(['src/'], ['./src/nested/file.ts']),
+        [],
+        policy,
+        'now',
+        createBuiltinWorkflowRoles().workflow,
+      ),
     /overlapping/,
   );
   assert.throws(
-    () => resolveTeam(plan(['./src/'], ['src/file.ts']), [], policy, 'now'),
+    () =>
+      resolveTeam(
+        plan(['./src/'], ['src/file.ts']),
+        [],
+        policy,
+        'now',
+        createBuiltinWorkflowRoles().workflow,
+      ),
     /overlapping/,
   );
-  assert.throws(() => resolveTeam(plan(['./'], ['src/file.ts']), [], policy, 'now'), /overlapping/);
+  assert.throws(
+    () =>
+      resolveTeam(
+        plan(['./'], ['src/file.ts']),
+        [],
+        policy,
+        'now',
+        createBuiltinWorkflowRoles().workflow,
+      ),
+    /overlapping/,
+  );
 });
 
 test('effective policies detach scope arrays from mutable project settings', () => {

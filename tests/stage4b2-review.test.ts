@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -21,6 +22,7 @@ async function fixture(t: any) {
     await fs.mkdtemp(path.join(os.tmpdir(), 'stage4b2-frozen-operation-')),
   );
   const role: Role = {
+    provenance: { origin: 'user' },
     id: 'release_manager',
     version: 1,
     title: 'Shared specialist',
@@ -180,6 +182,7 @@ async function fixture(t: any) {
     id: () => crypto.randomUUID(),
   });
   const results = new ResultService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects,
     runtime: router,
     operations: { async dispose() {} } as any,

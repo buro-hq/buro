@@ -2,6 +2,7 @@ import type { Plugin } from 'cordis';
 import { ProjectResearchService } from '../core/project-research.ts';
 import { ResultService, type ResultOperations } from '../core/results.ts';
 import { readAuthorizedMaterialText } from '../adapters/files/context-material-text.ts';
+import { createWorkflowRoleResolver } from '../core/workflow-roles.ts';
 declare module 'cordis' {
   interface Events {
     'run/completed'(projectId: string, runId: string): void;
@@ -10,10 +11,16 @@ declare module 'cordis' {
 export const projectOperationsPlugin: Plugin.Object<{
   operations: ResultOperations;
   analysisId?: string;
+  workflowId?: string;
 }> = {
   name: 'project-operations',
   inject: ['projects', 'commands', 'agentRuntime', 'projectManagement', 'projectContributions'],
-  async apply(ctx, { operations, analysisId = 'project-setup' }) {
+  async apply(ctx, { operations, analysisId = 'project-setup', workflowId = 'code' }) {
+    const workflowRoles = createWorkflowRoleResolver({
+      templates: ctx.projectContributions.roleTemplates,
+      workflows: ctx.projectContributions.workflows,
+      workflowId,
+    });
     const research = new ProjectResearchService({
       projects: ctx.projects.registry,
       runtime: ctx.agentRuntime.adapter,
@@ -22,11 +29,13 @@ export const projectOperationsPlugin: Plugin.Object<{
       materials: (projectId, selected, signal) =>
         readAuthorizedMaterialText(ctx.projects.registry, projectId, selected, signal),
       selection: ctx.agentRuntime.selection!,
+      workflowRoles,
     });
     const results = new ResultService({
       projects: ctx.projects.registry,
       runtime: ctx.agentRuntime.adapter,
       operations,
+      workflowRoles,
     });
     ctx.effect(() => async () => {
       await research.dispose();

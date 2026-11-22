@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -231,6 +232,7 @@ for (const mode of ['advisory', 'strict'] as const)
     );
     const env = { projects, now: () => new Date().toISOString(), id: randomUUID };
     const engine = new ExecutionService({
+      workflowRoles: createBuiltinWorkflowRoles(),
       ...env,
       runtime,
       selection,

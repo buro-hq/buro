@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import {
@@ -18,7 +19,7 @@ import type { Goal, Run } from '../protocol/domain.ts';
 import { parseSnapshot } from '../protocol/schema.ts';
 import { sampleRun } from './fixtures/sample-run.ts';
 import { selectPlanningPolicy } from '../core/planning-policy.ts';
-import { defaultRoles } from '../core/defaults.ts';
+import { defaultRoles } from './fixtures/roles.ts';
 import { resolveRoleResource } from '../core/role-routing.ts';
 
 const configured = {
@@ -283,6 +284,7 @@ test('resume archives the frozen planning strategy and rejects attempt-history r
       async dispose() {},
     };
     const engine = new ExecutionService({
+      workflowRoles: createBuiltinWorkflowRoles(),
       projects,
       runtime,
       policies: {

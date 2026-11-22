@@ -44,7 +44,7 @@ export function TeamPanel({
         <div>
           <h2>{t('Project team')}</h2>
           <p className="caption">
-            {t('Role versions are saved in the project. Each task gets a separate session.')}
+            {t('The team grows with your work. Roles are reused; each goal gets its own sessions.')}
           </p>
         </div>
         <Button
@@ -61,12 +61,32 @@ export function TeamPanel({
       {!canEdit && (
         <p className="caption">{t('Connect to the local service to edit the catalog.')}</p>
       )}
-      <div className="team-grid">
+      {roles.length === 0 && (
+        <div className="team-empty" role="status">
+          <RoleIcon kind="coordination" />
+          <div>
+            <Text fw={500} size="sm">
+              {t('Your team will appear here')}
+            </Text>
+            <Text c="dimmed" size="sm">
+              {t(
+                'Start a goal: the workflow adds its required roles, and the coordinator selects or creates specialists.',
+              )}
+            </Text>
+          </div>
+        </div>
+      )}
+      <div className="team-grid project-team-grid">
         {roles.map((role) => {
           const color = roleColor(role.kind);
           const preference = role.runtimePreference;
-          const hasSession =
-            !!run && (role.id === 'coordinator' || run.agents.some((a) => a.name === role.id));
+          const labels = roleLabels(role);
+          const sessionId =
+            run &&
+            ([...run.agents, ...(run.resultAgents || [])]
+              .reverse()
+              .find((agent) => agent.name === role.id)?.threadId ||
+              (role.id === 'coordinator' && run.threadId ? 'coordinator' : undefined));
           return (
             <div
               key={role.id}
@@ -77,11 +97,21 @@ export function TeamPanel({
                 <span className="team-role-icon">
                   <RoleIcon kind={role.kind} />
                 </span>
+                <div className="role-card-title">
+                  <h3>{labels.title}</h3>
+                  <Text size="xs" c="dimmed">
+                    {role.provenance.origin === 'user'
+                      ? t('Your role')
+                      : role.provenance.origin === 'coordinator'
+                        ? t('Created by coordinator')
+                        : t('From workflow')}
+                  </Text>
+                </div>
                 <Badge variant="light" color="gray" size="xs">
                   v{role.version}
                 </Badge>
               </div>
-              <h3>{roleLabels(role).title}</h3>
+              <p>{labels.description}</p>
               {run?.roleOrigins?.[role.id] && (
                 <Badge size="xs" variant="light" color="sage">
                   {run.roleOrigins[role.id] === 'created'
@@ -89,9 +119,7 @@ export function TeamPanel({
                     : t('Reused')}
                 </Badge>
               )}
-              <span className="mono muted">{role.id}</span>
-              <p>{roleLabels(role).description}</p>
-              <Text size="xs" c="dimmed">
+              <Text size="xs" c="dimmed" className="role-card-model">
                 {preference && preference.mode !== 'auto'
                   ? t(preference.mode === 'fixed' ? 'Only: {p0}' : 'Prefer: {p0}', {
                       p0:
@@ -101,22 +129,25 @@ export function TeamPanel({
                   : t('Auto model')}
               </Text>
               <div className="role-actions">
-                <button
-                  className="text-button"
-                  disabled={!hasSession}
-                  onClick={() => onSession(role.id)}
+                <Button
+                  variant="subtle"
+                  size="xs"
+                  disabled={!sessionId}
+                  rightSection={<ArrowUpRight size={14} />}
+                  onClick={() => sessionId && onSession(sessionId)}
                 >
-                  {hasSession ? t('Open session') : t('Not assigned yet')}
-                  <ArrowUpRight size={12} />
-                </button>
-                <button
-                  className="text-button"
+                  {sessionId ? t('Open session') : t('Not assigned yet')}
+                </Button>
+                <Button
+                  variant="subtle"
+                  size="xs"
                   disabled={!canEdit}
+                  leftSection={<Pencil size={13} />}
                   aria-label={t('Edit role {p0}', { p0: role.id })}
                   onClick={() => setEditor(role)}
                 >
-                  <Pencil size={13} />
-                </button>
+                  {t('Edit')}
+                </Button>
               </div>
             </div>
           );
@@ -224,6 +255,13 @@ function RoleForm({
   }
   return (
     <div className="goal-form role-form">
+      {initial && (
+        <Text size="sm" c="dimmed">
+          {initial.provenance.origin === 'user'
+            ? t('Your instructions and model preference are reused for new work.')
+            : t('This role was added automatically. Your edits take priority for new work.')}
+        </Text>
+      )}
       <TextInput
         label={t('Role ID')}
         placeholder="browser_debugger"

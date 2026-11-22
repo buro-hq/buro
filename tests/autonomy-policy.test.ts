@@ -170,6 +170,7 @@ test('project policy resolves the current fixed role preference and reports an u
     workerPool: [eligible, alternate],
   };
   const role: Role = {
+    provenance: { origin: 'user' },
     id: 'coordinator',
     version: 2,
     title: 'Coordinator',

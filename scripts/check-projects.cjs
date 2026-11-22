@@ -6,6 +6,15 @@ const fs = require('node:fs/promises'),
 const { execFile } = require('node:child_process'),
   { promisify } = require('node:util');
 const exec = promisify(execFile);
+async function expectRoleSources(page) {
+  const cards = page.locator('.project-team-grid .team-role');
+  await cards
+    .filter({ hasText: 'JS developer' })
+    .getByText('Created by coordinator', { exact: true })
+    .waitFor();
+  assert.equal(await cards.count(), 3);
+  assert.equal(await cards.getByText('From workflow', { exact: true }).count(), 2);
+}
 (async () => {
   const { Service } = await import('cordis');
   const { createHost } = await import('../plugins/host.ts');
@@ -14,6 +23,11 @@ const exec = promisify(execFile);
   const { websocketPlugin } = await import('../daemon/websocket.ts');
   const { GitWorkspaces } = await import('../adapters/files/git-workspaces.ts');
   const { ProjectChecks } = await import('../adapters/checks/project-commands.ts');
+  const { EnvironmentExecutors } = await import('../adapters/environments/executors.ts');
+  const { ProjectEnvironments } = await import('../adapters/environments/project-environments.ts');
+  const { fixtureExecutionSelection, fixtureExecutionCapabilities } = await import(
+    '../tests/fixtures/execution-resources.ts'
+  );
   const directory = await fs.realpath(
       await fs.mkdtemp(path.join(os.tmpdir(), 'project-onboarding-ui-')),
     ),
@@ -30,7 +44,11 @@ const exec = promisify(execFile);
   await fs.writeFile(path.join(root, '.gitignore'), 'node_modules/\ndist/\n');
   await fs.writeFile(
     path.join(root, 'package.json'),
-    JSON.stringify({ name: 'Fixture repository', scripts: { test: 'node --test' } }),
+    JSON.stringify({
+      name: 'Fixture repository',
+      scripts: { test: 'node --test' },
+      dependencies: { 'fixture-dependency': '1.0.0' },
+    }),
   );
   await git(['add', '.']);
   await git(['commit', '-m', 'Initial']);
@@ -40,10 +58,15 @@ const exec = promisify(execFile);
     path.join(root, 'node_modules/fixture-dependency/index.js'),
     'module.exports=7;',
   );
+  await fs.writeFile(
+    path.join(root, 'node_modules/fixture-dependency/package.json'),
+    JSON.stringify({ name: 'fixture-dependency', version: '1.0.0', main: 'index.js' }),
+  );
   const passed = [],
     errors = [];
   let host, browser;
   try {
+    await fs.mkdir('artifacts', { recursive: true });
     host = await createHost({
       projects: [
         {
@@ -53,12 +76,17 @@ const exec = promisify(execFile);
       ],
     });
     const policies = {},
+      executors = new EnvironmentExecutors(),
       workspaces = new GitWorkspaces(host.ctx.projects.registry),
-      checks = new ProjectChecks(host.ctx.projects.registry, {
-        async run() {
-          throw Error('Unexpected fallback');
+      checks = new ProjectChecks(
+        host.ctx.projects.registry,
+        {
+          async run() {
+            throw Error('Unexpected fallback');
+          },
         },
-      }),
+        executors,
+      ),
       listeners = new Set(),
       threads = new Map();
     let counter = 0,
@@ -89,6 +117,33 @@ const exec = promisify(execFile);
       },
       async turn(threadId, text) {
         const input = threads.get(threadId);
+        if (input.purpose === 'environment')
+          return {
+            turnId: 'environment',
+            text: JSON.stringify({
+              summary: 'Use the isolated fixture dependency and existing setup.',
+              inputs: ['package.json'],
+              variables: [],
+              setup: [
+                {
+                  id: 'fixture-setup',
+                  title: 'Prepare private fixture dependency',
+                  command:
+                    'mkdir -p node_modules/fixture-dependency && cp "$PROJECT_ROOT/node_modules/fixture-dependency/index.js" node_modules/fixture-dependency/index.js && cp "$PROJECT_ROOT/node_modules/fixture-dependency/package.json" node_modules/fixture-dependency/package.json',
+                  timeoutMs: 10000,
+                },
+              ],
+              ready: [
+                {
+                  id: 'fixture-ready',
+                  title: 'Fixture dependency',
+                  command:
+                    'test -f node_modules/fixture-dependency/package.json && node -e "require(\'fixture-dependency\')"',
+                  timeoutMs: 10000,
+                },
+              ],
+            }),
+          };
         if (text.startsWith('First,'))
           return {
             turnId: 'plan',
@@ -144,20 +199,34 @@ const exec = promisify(execFile);
       constructor(ctx) {
         super(ctx, 'agentRuntime');
         this.adapter = runtime;
+        this.selection = fixtureExecutionSelection(
+          'fixture',
+          fixtureExecutionCapabilities({ resumeSessions: true }),
+        );
       }
     }
     await host.ctx.plugin(FixtureRuntime);
+    const environments = new ProjectEnvironments(
+      host.ctx.projects.registry,
+      runtime,
+      executors,
+      host.ctx.agentRuntime.selection,
+    );
     await host.ctx.plugin(projectManagementPlugin, {
       catalogFile: path.join(data, 'linked-projects.json'),
       policies,
       workspaces,
       checks,
+      environments,
     });
-    await host.ctx.plugin(executionPlugin, { policies, workspaces, checks });
+    await host.ctx.plugin(executionPlugin, { policies, workspaces, checks, environments });
     let port;
     await host.ctx.plugin(websocketPlugin, { port: 0, onListen: (p) => (port = p) });
     const endpoint = 'ws://127.0.0.1:' + port,
-      url = 'http://127.0.0.1:4317/?daemon=' + encodeURIComponent(endpoint);
+      url =
+        (process.env.BURO_UI_BASE_URL || 'http://127.0.0.1:4317') +
+        '/?daemon=' +
+        encodeURIComponent(endpoint);
     browser = await chromium.launch();
     const context = await browser.newContext({ viewport: { width: 1512, height: 1080 } }),
       page = await context.newPage();
@@ -195,6 +264,12 @@ const exec = promisify(execFile);
       'User-owned project context. Only change assigned files.',
     );
     passed.push('UI connects and opens a repository without daemon restart');
+    assert.deepEqual(host.ctx.projects.registry.get(project.id).snapshot().roles, []);
+    await page.locator('.sidebar').getByRole('button', { name: 'Team', exact: true }).click();
+    await page.getByText('Your team will appear here', { exact: true }).waitFor();
+    assert.equal(await page.locator('.project-team-grid .team-role').count(), 0);
+    passed.push('new project opens an honest empty team without predefined assignments');
+    await page.locator('.sidebar').getByRole('button', { name: 'Goals', exact: true }).click();
     const other = await context.newPage();
     other.on('pageerror', (e) => errors.push(e.message));
     await other.goto(url + '&project=codex-panel');
@@ -219,10 +294,49 @@ const exec = promisify(execFile);
       true,
     );
     await page.getByRole('button', { name: 'Start goal', exact: true }).click();
-    await page.locator('.phase-badge').filter({ hasText: 'Failed' }).waitFor();
+    await page
+      .locator('.phase-badge')
+      .filter({ hasText: 'Failed' })
+      .waitFor()
+      .catch(async (error) => {
+        console.error(
+          JSON.stringify(
+            host.ctx.projects.registry
+              .get(project.id)
+              .snapshot()
+              .runs.map(({ status, phase, result, events }) => ({ status, phase, result, events })),
+            null,
+            2,
+          ),
+        );
+        await page.screenshot({ path: 'artifacts/first-goal-failure.png', fullPage: true });
+        throw error;
+      });
     const stopped = host.ctx.projects.registry.get(project.id).snapshot().runs[0];
     assert.equal(stopped.status, 'failed');
     assert.ok(stopped.workspace);
+    const createdRoles = host.ctx.projects.registry.get(project.id).snapshot().roles;
+    assert.deepEqual(
+      createdRoles.map((role) => role.id).sort(),
+      ['coordinator', 'js_developer', 'reviewer'],
+      JSON.stringify({ result: stopped.result, acceptance: stopped.acceptance }),
+    );
+    assert.equal(
+      createdRoles.find((role) => role.id === 'coordinator').provenance.origin,
+      'workflow',
+    );
+    assert.equal(createdRoles.find((role) => role.id === 'reviewer').provenance.origin, 'workflow');
+    assert.equal(
+      createdRoles.find((role) => role.id === 'js_developer').provenance.origin,
+      'coordinator',
+    );
+    assert.ok(stopped.review.blockingFindings.length > 0);
+    await page.locator('.sidebar').getByRole('button', { name: 'Team', exact: true }).click();
+    await expectRoleSources(page);
+    await page.locator('.sidebar').getByRole('button', { name: 'Runs', exact: true }).click();
+    passed.push(
+      'first goal creates workflow coordinator/reviewer and a live coordinator-authored specialist without reload; fresh review still blocks acceptance',
+    );
     await page.reload();
     await page.locator('.phase-badge').filter({ hasText: 'Failed' }).waitFor();
     await page.getByRole('button', { name: 'Edit goal', exact: true }).click();
@@ -238,10 +352,10 @@ const exec = promisify(execFile);
     passed.push('stopped goal is editable after reload with a versioned update');
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await page
-      .getByRole('textbox', { name: 'What needs to be fixed or clarified?' })
+      .getByRole('textbox', { name: 'Clarification (optional)', exact: true })
       .fill('Resolve the review finding and keep the saved implementation.');
     rejectReview = false;
-    await page.getByRole('button', { name: 'Continue with clarification', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
     await page.locator('.phase-badge').filter({ hasText: 'Accepted' }).waitFor();
     const continued = host.ctx.projects.registry.get(project.id).snapshot().runs[0];
     assert.equal(continued.id, stopped.id);
@@ -269,6 +383,19 @@ const exec = promisify(execFile);
       'User-owned project context. Only change assigned files.',
     );
     assert.equal(run.roleOrigins.js_developer, 'created');
+    assert.equal(run.independentReviewer, true);
+    assert.equal(run.review.verdict, 'approved');
+    assert.deepEqual(
+      host.ctx.projects.registry
+        .get(project.id)
+        .snapshot()
+        .roles.map((role) => [role.id, role.version]),
+      createdRoles.map((role) => [role.id, role.version]),
+    );
+    await page.locator('.sidebar').getByRole('button', { name: 'Team', exact: true }).click();
+    await expectRoleSources(page);
+    await page.screenshot({ path: 'artifacts/first-goal-team.png', fullPage: true });
+    passed.push('continued goal reuses existing role versions and team shows each actual creator');
     assert.equal((await git(['rev-parse', 'HEAD'])).stdout.trim(), initial);
     assert.match(await fs.readFile(path.join(root, 'src/value.mjs'), 'utf8'), /value=1/);
     assert.equal(host.ctx.projects.registry.get('codex-panel').snapshot().goals.length, 0);
@@ -329,8 +456,17 @@ const exec = promisify(execFile);
         })
       ).stdout,
     );
-    assert.equal(cli.project.id, project.id);
-    assert.equal(cli.goals, 1);
+    assert.ok(cli.projects.some((item) => item.id === project.id));
+    const cliGoals = JSON.parse(
+      (
+        await exec(process.execPath, ['cli/main.ts', 'goals'], {
+          cwd: process.cwd(),
+          env: { ...process.env, PROJECT_DAEMON_URL: endpoint, PROJECT_ID: project.id },
+        })
+      ).stdout,
+    );
+    assert.equal(cliGoals.length, 1);
+    assert.equal(cliGoals[0].projectId, project.id);
     passed.push('CLI reads the same connected repository');
     assert.deepEqual(errors, []);
     await browser.close();

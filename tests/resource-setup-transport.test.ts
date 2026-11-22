@@ -1,3 +1,4 @@
+import { defaultRoles } from './fixtures/roles.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -73,7 +74,12 @@ async function server(t: any) {
     maxRepairs: 0,
     turnTimeoutMs: 10000,
   });
-  const seed = await FileProjectStore.open({ directory: projectDirectory, project, profile });
+  const seed = await FileProjectStore.open({
+    directory: projectDirectory,
+    project,
+    profile,
+    roles: defaultRoles,
+  });
   await seed.close();
   const original = initialResources();
   const privateFiles = new PrivateJSONFiles(path.join(directory, 'local'));

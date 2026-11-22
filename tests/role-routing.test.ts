@@ -40,6 +40,7 @@ const snapshot = (): ResourceSnapshot => ({
   workerPool: [weak, strong],
 });
 const role = (id = 'builder', preference: Role['runtimePreference'] = { mode: 'auto' }): Role => ({
+  provenance: { origin: 'user' },
   id,
   version: 2,
   title: id,

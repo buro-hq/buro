@@ -230,6 +230,42 @@ console.log(JSON.stringify({results:[{name:'immutable',passed:denied&&fs.readFil
   assert.equal(await fs.readFile(path.join(f.readRoot, 'src/value.txt'), 'utf8'), 'frozen');
 });
 
+test('prepared dependencies support actual Node package resolution inside immutable verification', async (t) => {
+  const f = await fixture(t);
+  const dependency = path.join(f.sourceWorkspace, 'node_modules');
+  await fs.mkdir(path.join(dependency, 'fixture-dependency'), { recursive: true });
+  await fs.writeFile(
+    path.join(dependency, 'fixture-dependency/package.json'),
+    JSON.stringify({ name: 'fixture-dependency', main: 'index.cjs' }),
+  );
+  await fs.writeFile(path.join(dependency, 'fixture-dependency/index.cjs'), 'module.exports = 42;');
+  await fs.symlink(dependency, path.join(f.readRoot, 'node_modules'), 'dir');
+  f.view.readonlyDependencies = [
+    { path: path.join(f.readRoot, 'node_modules'), target: dependency },
+  ];
+  f.profile.checks = [
+    {
+      id: 'check',
+      title: 'ESM package resolution',
+      command:
+        quote(process.execPath) +
+        ' --input-type=module -e ' +
+        quote("import value from 'fixture-dependency'; if (value !== 42) process.exit(2);"),
+      timeoutMs: 5000,
+      outputPaths: ['dist'],
+    },
+  ];
+  const result = await f.checks.run(
+    'p',
+    f.sourceWorkspace,
+    ['check'],
+    new AbortController().signal,
+    f.profile,
+    { verificationView: f.view },
+  );
+  assert.equal(result.passed, 1, result.results[0].output);
+});
+
 test('only the prepared dependency target is readable and its contents remain read-only', async (t) => {
   const f = await fixture(t);
   const dependency = path.join(f.sourceWorkspace, 'node_modules');

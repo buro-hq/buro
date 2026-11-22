@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { fixtureCapabilities } from './fixtures/backend-capabilities.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -152,6 +153,7 @@ test('baseline and final verification never run checks on the host after their r
   );
   let sequence = 0;
   const service = new ExecutionService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects: f.projects,
     runtime,
     workspaces: {
@@ -207,6 +209,7 @@ test('native-only and legacy verification require immutable check isolation too'
     });
     let sequence = 0;
     const service = new ExecutionService({
+      workflowRoles: createBuiltinWorkflowRoles(),
       projects: f.projects,
       runtime,
       workspaces: {

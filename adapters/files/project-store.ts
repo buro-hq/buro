@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DomainError, type ProjectDocument, type ProjectStore } from '../../core/ports.ts';
-import { capabilities, defaultRoles } from '../../core/defaults.ts';
+import { capabilities } from '../../core/defaults.ts';
 import { parseSnapshot, DomainEventSchema } from '../../protocol/schema.ts';
 import type {
   Project,
@@ -21,7 +21,14 @@ import { validateProjectPlanningPolicies } from './project-planning-policy.ts';
 import { validateResultApplyIntents } from '../../core/result-apply.ts';
 import { validateRunReconciliationTransitions } from '../../core/reconciliation-transitions.ts';
 import { validateProjectOperationContexts } from '../../core/operation-transitions.ts';
-import { validateProjectResearchTransitions } from '../../core/project-analysis.ts';
+import {
+  validateProjectResearchTransitions,
+  validateResearchRoleSnapshot,
+} from '../../core/project-analysis.ts';
+import {
+  validateRoleHistoryTransitions,
+  validateCapturedRoleSnapshots,
+} from '../../core/workflow-roles.ts';
 type StoredDocument = ProjectDocument & { events: StoredEvent[]; eventEncoding?: 'run-delta-v1' };
 type Options = {
   directory: string;
@@ -92,7 +99,7 @@ export class FileProjectStore implements ProjectStore {
           revision: 0,
           sequence: 0,
           project: options.project,
-          roleVersions: structuredClone(options.roles || defaultRoles),
+          roleVersions: structuredClone(options.roles || []),
           goals: [],
           runs: options.runs || [],
           events: [],
@@ -105,6 +112,7 @@ export class FileProjectStore implements ProjectStore {
       validateProjectRunBudgets(doc);
       validateProjectPlanningPolicies(doc);
       validateProjectOperationContexts(doc);
+      validateResearchRoleSnapshot(doc);
       validateResultApplyIntents(doc);
       store = new FileProjectStore(options, doc, nonce);
       doc.eventEncoding = 'run-delta-v1';
@@ -176,6 +184,9 @@ export class FileProjectStore implements ProjectStore {
       validateProjectPlanningPolicies(draft, this.doc);
       validateProjectOperationContexts(draft, this.doc);
       validateProjectResearchTransitions(this.doc.research, draft.research);
+      validateRoleHistoryTransitions(this.doc.roleVersions, draft.roleVersions);
+      validateCapturedRoleSnapshots(this.doc, draft);
+      validateResearchRoleSnapshot(draft);
       validateResultApplyIntents(draft, this.doc);
       validateRunReconciliationTransitions(this.doc.runs, draft.runs);
       draft.revision++;

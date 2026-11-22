@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { fixtureExecutionSelection } from './fixtures/execution-resources.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,6 +22,8 @@ import type { ProjectProfile } from '../protocol/domain.ts';
 import type { RegisteredRuntime } from '../core/ports.ts';
 import { ContextMaterials } from '../adapters/files/context-materials.ts';
 import { readAuthorizedMaterialText } from '../adapters/files/context-material-text.ts';
+import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
+import { resolveRoleResource } from '../core/role-routing.ts';
 const exec = promisify(execFile);
 const profile = (): ProjectProfile => ({
   version: 1,
@@ -402,6 +405,7 @@ test('cancellation before dispatch keeps admitted analysis identity and rejects 
     });
   let starts = 0;
   const service = new ProjectResearchService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects,
     runtime: {
       id: 'fake',
@@ -473,6 +477,7 @@ test('simultaneous retries of one research request schedule one job and preserve
     starts = 0,
     turns = 0;
   const service = new ProjectResearchService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects,
     selection: fixtureExecutionSelection(
       'fake',
@@ -567,6 +572,7 @@ test('material selection is admitted atomically and remains valid after later li
   });
   catalog.seal();
   const service = new ProjectResearchService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects,
     selection: fixtureExecutionSelection(
       'fake',
@@ -654,11 +660,18 @@ test('recovery interrupts a pending historical analyzer without rebinding it to 
     events: [],
   };
   await store.transact('seed', 'seed', (doc) => {
-    doc.research = historical;
-    return { result: null, change: { type: 'project.research.changed', research: historical } };
+    const operation = serviceOperationContext(operationIds.research, doc.profile);
+    const { role } = createBuiltinWorkflowRoles().ensureRole(doc, operation, historical.startedAt);
+    doc.research = {
+      ...historical,
+      roleSnapshot: role,
+      roleResource: resolveRoleResource(historical.resources, role, operation),
+    };
+    return { result: null, change: { type: 'project.research.changed', research: doc.research } };
   });
   let calls = 0;
   const service = new ProjectResearchService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects,
     selection,
     analysis: createBuiltinProjectAnalyses().get('project-setup'),

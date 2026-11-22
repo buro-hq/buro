@@ -5,6 +5,10 @@ import { ResourceConfigSchema, ResourceIdSchema } from '../protocol/resources.ts
 import { DomainError } from './ports.ts';
 import { ProjectProfileSchema } from '../protocol/projects.ts';
 import type { ProjectResearch } from '../protocol/domain.ts';
+import { RoleSchema } from '../protocol/workflow-roles.ts';
+import type { ProjectDocument } from './ports.ts';
+import { serviceOperationContext, operationIds } from './operation-catalog.ts';
+import { validateRoleResource } from './role-routing.ts';
 
 /** Host-selected, hash-verified material content. No callback receives a path or resolver. */
 export type AuthorizedMaterialText = {
@@ -217,6 +221,13 @@ export function validateProjectResearchTransitions(
       previous.profileRevision,
       previous.resources,
       previous.contextMaterials,
+      previous.roleSnapshot,
+      previous.roleResource && [
+        previous.roleResource.resource,
+        previous.roleResource.roleVersion,
+        previous.roleResource.preference,
+        previous.roleResource.source,
+      ],
     ]) !==
       JSON.stringify([
         next.analysis,
@@ -224,10 +235,43 @@ export function validateProjectResearchTransitions(
         next.profileRevision,
         next.resources,
         next.contextMaterials,
+        next.roleSnapshot,
+        next.roleResource && [
+          next.roleResource.resource,
+          next.roleResource.roleVersion,
+          next.roleResource.preference,
+          next.roleResource.source,
+        ],
       ])
   )
     throw new DomainError(
       'PROJECT_ANALYSIS_CHANGED',
       'The admitted analysis identity and source revision cannot be changed.',
     );
+}
+
+export function validateResearchRoleSnapshot(doc: ProjectDocument): void {
+  const research = doc.research;
+  if (!research) return;
+  const role = research.roleSnapshot,
+    decision = research.roleResource;
+  const recorded =
+    role && doc.roleVersions.find((item) => item.id === role.id && item.version === role.version);
+  if (
+    !role ||
+    !decision ||
+    !recorded ||
+    JSON.stringify(RoleSchema.parse(recorded)) !== JSON.stringify(RoleSchema.parse(role))
+  )
+    throw new DomainError(
+      'INVALID_ASSIGNMENT',
+      'Research must retain the exact recorded role version.',
+    );
+  const operation = serviceOperationContext(operationIds.research);
+  if (operation.roles.kind !== 'fixed' || role.id !== operation.roles.roleId)
+    throw new DomainError(
+      'INVALID_ASSIGNMENT',
+      'Research must use its actual service role binding.',
+    );
+  validateRoleResource(research.resources, role, decision, operation);
 }

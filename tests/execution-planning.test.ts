@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { fixtureExecutionCapabilities } from './fixtures/execution-resources.ts';
@@ -301,7 +302,10 @@ async function fixture(
       },
     },
   };
-  const engine = new ExecutionService(environment);
+  const engine = new ExecutionService({
+    ...environment,
+    workflowRoles: createBuiltinWorkflowRoles(),
+  });
   t.after(async () => {
     await engine.dispose();
     await store.close();

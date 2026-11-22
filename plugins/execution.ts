@@ -4,6 +4,7 @@ import type { ExecutionEnvironmentPort } from '../core/environment-ports.ts';
 import { effectiveProjectPolicy, projectRunAutonomy } from '../core/autonomy-policy.ts';
 import { terminal } from '../core/execution-ports.ts';
 import { ExecutionService } from '../core/execution.ts';
+import { createWorkflowRoleResolver } from '../core/workflow-roles.ts';
 import type { ExecutionPolicy, WorkspacePort, CheckPort } from '../core/execution-ports.ts';
 declare module 'cordis' {
   interface Context {
@@ -22,12 +23,18 @@ export const executionPlugin: Plugin.Object<{
   policies: Record<string, ExecutionPolicy>;
   workspaces: WorkspacePort;
   checks: CheckPort;
+  workflowId?: string;
 }> = {
   name: 'goal-execution',
-  inject: ['projects', 'commands', 'agentRuntime'],
+  inject: ['projects', 'commands', 'agentRuntime', 'projectContributions'],
   async apply(ctx, options) {
     const api = new ExecutionService({
       ...options,
+      workflowRoles: createWorkflowRoleResolver({
+        templates: ctx.projectContributions.roleTemplates,
+        workflows: ctx.projectContributions.workflows,
+        workflowId: options.workflowId || 'code',
+      }),
       projects: ctx.projects.registry,
       runtime: ctx.agentRuntime.adapter,
       selection: ctx.agentRuntime.selection,

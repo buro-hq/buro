@@ -2,7 +2,11 @@ import path from 'node:path';
 import type { ExecutionPolicy } from '../core/execution-ports.ts';
 import type { ProjectStoreOpenSpec } from '../core/ports.ts';
 import type { TrustedCheck } from '../adapters/checks/node-checks.ts';
-import { defaultRoles } from '../core/defaults.ts';
+import {
+  createBuiltinRoleTemplates,
+  createBuiltinWorkflowRoles,
+} from '../adapters/workflows/builtins.ts';
+import { instantiateWorkflowRole } from '../core/workflow-roles.ts';
 
 /** Explicit development fixture. Ordinary application startup never loads these projects. */
 export function demoBootstrap(root: string, directory: string) {
@@ -20,11 +24,14 @@ export function demoBootstrap(root: string, directory: string) {
       sourceRoot: root,
     },
   ];
+  const templates = createBuiltinRoleTemplates(),
+    workflow = createBuiltinWorkflowRoles().workflow,
+    now = new Date().toISOString();
   const projects: ProjectStoreOpenSpec[] = ['demo-buro', 'demo-goals'].map((id, index) => ({
     storageAddress: path.join(directory, 'demo', id),
     project: { id, name: index ? 'Goal workflow · Demo' : 'Buro · Demo', root },
-    roles: structuredClone(
-      defaultRoles.filter((role) => ['coordinator', 'reviewer'].includes(role.id)),
+    roles: ['coordinator', 'reviewer'].map((id) =>
+      instantiateWorkflowRole(templates.get(id), workflow, id, now),
     ),
   }));
   const policy: ExecutionPolicy = {

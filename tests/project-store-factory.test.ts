@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { FileProjectStoreFactory } from '../adapters/files/project-store-factory.ts';
 import { ProjectStoreRegistry } from '../core/project-registry.ts';
-import { defaultRoles } from '../core/defaults.ts';
+import { defaultRoles } from './fixtures/roles.ts';
 import type { ProjectStore, ProjectStoreOpenSpec } from '../core/ports.ts';
 import type { Snapshot } from '../protocol/domain.ts';
 import { GoalService } from '../core/services.ts';
@@ -180,4 +181,18 @@ test('factory retains writer exclusivity without poisoning the existing owner', 
   assert.throws(() => f.factory.open({ ...f.spec, storageAddress: '  ' }), {
     code: 'INVALID_STORAGE_ADDRESS',
   });
+});
+
+test('raw file storage starts without roles and never seeds on reopen', async (t) => {
+  const f = await directoryFixture(t);
+  const options = { directory: f.spec.storageAddress, project: f.spec.project };
+  const store = await FileProjectStore.open(options);
+  t.after(() => store.close());
+  assert.deepEqual(store.snapshot().roles, []);
+  assert.equal(store.snapshot().sequence, 0);
+  await store.close();
+  const reopened = await FileProjectStore.open(options);
+  t.after(() => reopened.close());
+  assert.deepEqual(reopened.snapshot().roles, []);
+  assert.equal(reopened.snapshot().sequence, 0);
 });

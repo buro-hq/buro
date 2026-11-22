@@ -9,7 +9,9 @@ import {
 } from './ports.ts';
 import { ResourceSnapshotSchema } from '../protocol/resources.ts';
 import { roleResourcePool } from './role-routing.ts';
-import { operationIds } from './operation-catalog.ts';
+import { operationIds, serviceOperationContext } from './operation-catalog.ts';
+import type { WorkflowRoleResolver } from './workflow-roles.ts';
+import { resolveRoleResource } from './role-routing.ts';
 import type { ContextMaterial } from '../protocol/context.ts';
 import type {
   ResolvedProjectAnalysis,
@@ -32,6 +34,7 @@ export class ProjectResearchService {
   #analysis: ResolvedProjectAnalysis;
   #materials: AuthorizedMaterialTextReader;
   #selection: RuntimeSelection;
+  #workflowRoles: WorkflowRoleResolver;
   closing = false;
   #admissions = new Set<{
     projectId: string;
@@ -46,6 +49,7 @@ export class ProjectResearchService {
     analysis: ResolvedProjectAnalysis;
     materials: AuthorizedMaterialTextReader;
     selection: RuntimeSelection;
+    workflowRoles: WorkflowRoleResolver;
   }) {
     this.projects = options.projects;
     this.runtime = options.runtime;
@@ -56,6 +60,12 @@ export class ProjectResearchService {
         'Research requires an explicit execution resource selection.',
       );
     this.#selection = options.selection;
+    if (!options.workflowRoles || typeof options.workflowRoles.ensureRole !== 'function')
+      throw new DomainError(
+        'WORKFLOW_REQUIRED',
+        'Configure a workflow role resolver before research.',
+      );
+    this.#workflowRoles = options.workflowRoles;
     if (
       !options.analysis ||
       options.analysis.purpose !== 'project-setup' ||
@@ -128,8 +138,9 @@ export class ProjectResearchService {
       selected: [],
       root: snapshot.project.root,
     };
-    const research: ProjectResearch = {
-      id: 'setup-' + crypto.randomUUID(),
+    const researchId = 'setup-' + crypto.randomUUID();
+    const initial: Omit<ProjectResearch, 'roleSnapshot' | 'roleResource'> = {
+      id: researchId,
       analysis: { id: analysis.id, revision: analysis.revision },
       resources,
       contextMaterials: [],
@@ -165,16 +176,27 @@ export class ProjectResearchService {
           (material) => material.active && material.scope === 'project',
         ),
       );
-      research.contextMaterials = structuredClone(admission.selected);
+      const operation = serviceOperationContext(operationIds.research, admission.input.profile);
+      const resolved = this.#workflowRoles.ensureRole(doc, operation, new Date().toISOString());
+      const research: ProjectResearch = {
+        ...initial,
+        contextMaterials: structuredClone(admission.selected),
+        roleSnapshot: resolved.role,
+        roleResource: resolveRoleResource(resources, resolved.role, operation),
+      };
       doc.research = research;
       return {
         result: { researchId: research.id },
-        change: { type: 'project.research.changed', research },
+        change: {
+          type: 'project.research.changed',
+          research,
+          ...(resolved.created ? { roles: [resolved.role] } : {}),
+        },
       };
     });
-    if (admitted.researchId !== research.id) return admitted;
+    if (admitted.researchId !== researchId) return admitted;
     if (this.closing || controller.signal.aborted) {
-      await this.update(projectId, research.id, (saved) => {
+      await this.update(projectId, researchId, (saved) => {
         saved.status = 'interrupted';
         saved.completedAt = new Date().toISOString();
         saved.error = 'Research was stopped before model dispatch.';
@@ -182,7 +204,7 @@ export class ProjectResearchService {
       return admitted;
     }
     const promise = Promise.resolve().then(() =>
-      this.execute(projectId, research.id, admission, controller.signal),
+      this.execute(projectId, researchId, admission, controller.signal),
     );
     this.jobs.set(projectId, { controller, promise });
     void promise
@@ -190,7 +212,7 @@ export class ProjectResearchService {
         if (this.jobs.get(projectId)?.promise === promise) this.jobs.delete(projectId);
       })
       .catch(() => {});
-    return { researchId: research.id };
+    return { researchId };
   }
   async update(projectId: string, researchId: string, change: (r: ProjectResearch) => void) {
     return this.projects
@@ -249,9 +271,12 @@ export class ProjectResearchService {
         readOnly: true,
         purpose: 'research',
         operationId: operationIds.research,
+        roleId: snapshot.research.roleSnapshot.id,
         runId: researchId,
         instructions:
           'This is a read-only project research operation. Returned commands are suggestions; only the application may apply settings or execute operations.\n' +
+          snapshot.research.roleSnapshot.instructions +
+          '\n' +
           request.instructions +
           materialInstructions(admission.selected, admission.root),
       });

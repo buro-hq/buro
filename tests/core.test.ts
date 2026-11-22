@@ -144,7 +144,9 @@ test('one writer per project; a failing observer cannot invalidate a commit', as
 test('plugin disposal withdraws handlers and leaves independent services working', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'project-plugins-'));
   const host = await createHost({
-    projects: [{ storageAddress: directory, project: { id: 'sample', name: 'Sample', root: directory } }],
+    projects: [
+      { storageAddress: directory, project: { id: 'sample', name: 'Sample', root: directory } },
+    ],
   });
   t.after(async () => {
     await host.dispose();
@@ -214,7 +216,9 @@ test('completion and reviewer participation are insufficient for acceptance', ()
 test('Codex runtime is a replaceable plugin; same session supports follow-up turns', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'project-runtime-'));
   const host = await createHost({
-    projects: [{ storageAddress: directory, project: { id: 'sample', name: 'Sample', root: directory } }],
+    projects: [
+      { storageAddress: directory, project: { id: 'sample', name: 'Sample', root: directory } },
+    ],
   });
   t.after(async () => {
     await host.dispose();

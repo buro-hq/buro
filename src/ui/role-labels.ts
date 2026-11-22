@@ -5,7 +5,10 @@ const seeds: Record<string, { title: string; description: string }> = {
   implementer: { title: 'Developer', description: 'Implements agreed changes.' },
   test_author: { title: 'Test author', description: 'Independently verifies task requirements.' },
   reviewer: { title: 'Reviewer', description: 'Checks result correctness.' },
-  coordinator: { title: 'Coordinator', description: 'Plans and integrates team work.' },
+  coordinator: {
+    title: 'Coordinator',
+    description: 'Understands project context, plans and integrates team work.',
+  },
   local_preview: {
     title: 'Local result verification',
     description: 'Prepares a way to inspect a UI, API or another component.',

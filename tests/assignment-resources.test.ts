@@ -53,6 +53,7 @@ const snapshot = (): ResourceSnapshot => ({
   workerPool: [local, cloud],
 });
 const role = (extra: Partial<Role> = {}): Role => ({
+  provenance: { origin: 'user' },
   id: 'builder',
   version: 3,
   title: 'Builder',

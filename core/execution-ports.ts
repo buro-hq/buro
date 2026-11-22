@@ -1,5 +1,6 @@
 import { PROJECT_DIRECTORY, LEGACY_PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
 import { roleIdPattern } from '../protocol/domain.ts';
+import { WorkflowIdentitySchema, type WorkflowIdentity } from '../protocol/workflow-roles.ts';
 /** Shared admission policy for roles that the workflow may allocate as workers. */
 export const isWorkerRoleId = (roleId: string) =>
   roleIdPattern.test(roleId) &&
@@ -132,6 +133,7 @@ export function resolveTeam(
   catalog: Role[],
   policy: ExecutionPolicy,
   now: string,
+  workflow: WorkflowIdentity,
 ): { roles: Role[]; origins: Record<string, 'created' | 'reused'> } {
   if (plan.team.length > policy.maxWorkers) throw Error('Invalid number of workers.');
   const ids = new Set<string>(),
@@ -184,6 +186,10 @@ export function resolveTeam(
       description: worker.description,
       instructions: worker.instructions,
       kind: worker.kind,
+      provenance: {
+        origin: 'coordinator' as const,
+        workflow: WorkflowIdentitySchema.parse(workflow),
+      },
       createdAt: now,
       updatedAt: now,
     };

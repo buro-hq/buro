@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import {
   fixtureExecutionSelection,
   fixtureExecutionCapabilities,
@@ -233,6 +234,7 @@ async function fixture(
   };
   const env = { projects, now: () => new Date().toISOString(), id: () => crypto.randomUUID() },
     engine = new ExecutionService({
+      workflowRoles: createBuiltinWorkflowRoles(),
       ...env,
       runtime,
       selection: fixtureExecutionSelection(
@@ -564,7 +566,7 @@ test('native child names and prompts cannot claim or complete Buro assignments',
   assert.equal(assigned.status, 'running');
 });
 
-test('cancelling a service-owned worker preserves its session and never promotes its role', async (t) => {
+test('cancelling a worker preserves its session and planned role without accepting its work', async (t) => {
   const f = await fixture(t, { pauseWorker: true });
   const started = await f.start();
   while (!f.turns.some((turn) => turn.text.startsWith('Execute your assigned work')))
@@ -575,10 +577,10 @@ test('cancelling a service-owned worker preserves its session and never promotes
   const worker = result.agents.find((agent) => agent.session?.roleId === 'builder')!;
   assert.equal(worker.status, 'interrupted');
   assert.equal(worker.session?.result, undefined);
-  assert.equal(
-    f.store.snapshot().roles.some((role) => role.id === 'builder'),
-    false,
-  );
+  const role = f.store.snapshot().roles.find((role) => role.id === 'builder')!;
+  assert.equal(role.provenance.origin, 'coordinator');
+  assert.equal(role.version, worker.session?.roleVersion);
+  assert.equal(result.commit, undefined);
   assert.equal(
     f.turns.some((turn) => turn.text.startsWith('Review goal')),
     false,
@@ -622,17 +624,16 @@ test('blocking reviewer sends repair to the same coordinator session, then reche
   assert.ok(run.events.some((e) => e.type === 'phase.repair'));
   assert.equal(run.agents.filter((a) => a.name === 'reviewer').length, 2);
 });
-test('unapproved or out-of-scope work is never accepted and does not save roles', async (t) => {
+test('unapproved or out-of-scope work remains unaccepted while valid planned roles remain reusable', async (t) => {
   for (const options of [{ rejectReview: 99 }, { outOfScope: true }, { noWorkers: true }]) {
     const f = await fixture(t, options),
       first = await f.start(),
       run = await f.drain(first.runId);
     assert.equal(run.status, 'failed');
     assert.equal(run.commit, undefined);
-    assert.equal(
-      f.store.snapshot().roles.some((r) => r.id === 'builder'),
-      false,
-    );
+    const role = f.store.snapshot().roles.find((r) => r.id === 'builder');
+    assert.equal(!!role, !!run.planSavedAt);
+    if (role) assert.equal(role.provenance.origin, 'coordinator');
     assert.equal(f.store.snapshot().goals[0].status, 'failed');
   }
 });
@@ -677,16 +678,30 @@ test('team validation rejects overlapping ownership, missing reuse and escaping 
         [],
         policy,
         '',
+        createBuiltinWorkflowRoles().workflow,
       ),
     /overlapping/,
   );
   assert.throws(
-    () => resolveTeam({ ...plan, team: [{ ...worker, action: 'reuse' }] }, [], policy, ''),
+    () =>
+      resolveTeam(
+        { ...plan, team: [{ ...worker, action: 'reuse' }] },
+        [],
+        policy,
+        '',
+        createBuiltinWorkflowRoles().workflow,
+      ),
     /not in the catalog/,
   );
   assert.throws(
     () =>
-      resolveTeam({ ...plan, team: [{ ...worker, paths: ['src/../README.md'] }] }, [], policy, ''),
+      resolveTeam(
+        { ...plan, team: [{ ...worker, paths: ['src/../README.md'] }] },
+        [],
+        policy,
+        '',
+        createBuiltinWorkflowRoles().workflow,
+      ),
     /unauthorized path|strict work scope/,
   );
 });
@@ -829,9 +844,19 @@ test('hyphenated worker ids validate, while missing ids receive actionable diagn
     ],
     team: [{ ...worker, roleId: 'react-developer' }],
   };
-  assert.equal(resolveTeam(plan, [], policy, '').roles[0].id, 'react-developer');
+  assert.equal(
+    resolveTeam(plan, [], policy, '', createBuiltinWorkflowRoles().workflow).roles[0].id,
+    'react-developer',
+  );
   assert.throws(
-    () => resolveTeam({ ...plan, team: [{ ...worker, roleId: '' }] }, [], policy, ''),
+    () =>
+      resolveTeam(
+        { ...plan, team: [{ ...worker, roleId: '' }] },
+        [],
+        policy,
+        '',
+        createBuiltinWorkflowRoles().workflow,
+      ),
     /roleId.*react_developer/,
   );
 });

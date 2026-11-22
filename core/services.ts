@@ -94,10 +94,24 @@ export class RoleService {
       const current = doc.roleVersions.filter((r) => r.id === input.id).at(-1);
       if ((current?.version || 0) !== input.expectedVersion)
         throw new DomainError('CONFLICT', 'The role changed. Refresh it before saving.');
-      const { expectedVersion, projectId, ...fields } = input;
+      const { expectedVersion } = input;
       const runtimePreference = input.runtimePreference ?? current?.runtimePreference;
       const role: Role = {
-        ...fields,
+        id: input.id,
+        title: input.title,
+        description: input.description,
+        instructions: input.instructions,
+        kind: input.kind,
+        ...(input.model !== undefined ? { model: input.model } : {}),
+        provenance: {
+          origin: 'user',
+          ...(current?.provenance.workflow
+            ? { workflow: structuredClone(current.provenance.workflow) }
+            : {}),
+          ...(current?.provenance && 'template' in current.provenance && current.provenance.template
+            ? { template: structuredClone(current.provenance.template) }
+            : {}),
+        },
         ...(runtimePreference ? { runtimePreference: structuredClone(runtimePreference) } : {}),
         version: expectedVersion + 1,
         createdAt: current?.createdAt || this.env.now(),

@@ -13,6 +13,7 @@ import type { ProjectProfile, Role } from '../protocol/domain.ts';
 import type { ResourceSnapshot, RuntimeResource } from '../protocol/resources.ts';
 
 const role = (id: string): Role => ({
+  provenance: { origin: 'user' },
   id,
   version: 1,
   title: id,
@@ -169,7 +170,13 @@ test('coordinator and reviewer names can serve configured delivery without acqui
     roles: [teamRole],
     resources: selected,
   });
-  assert.equal(rows.filter((row) => row.roleId === 'coordinator').length, 2);
+  assert.deepEqual(
+    rows
+      .filter((row) => row.roleId === 'coordinator')
+      .map((row) => row.operationId)
+      .sort(),
+    [operationIds.coordination, operationIds.research, operationIds.deploy('staging')].sort(),
+  );
 });
 
 test('service operations are captured, explicit and unavailable IDs do not fall back by role or purpose', () => {

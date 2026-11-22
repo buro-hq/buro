@@ -22,6 +22,10 @@ export async function createBuroApplication(options: {
   fetch?: typeof fetch;
   credentials?: (reference: string) => string | undefined;
   configure?: HostOptions['configure'];
+  projectContributions?: HostOptions['projectContributions'];
+  toolContributions?: HostOptions['toolContributions'];
+  analysisId?: string;
+  workflowId?: string;
 }) {
   const fixture = options.demo
     ? (await import('./demo.ts')).demoBootstrap(options.root, options.directory)
@@ -30,6 +34,8 @@ export async function createBuroApplication(options: {
     projects: fixture?.projects,
     storeFactory: options.storeFactory,
     configure: options.configure,
+    projectContributions: options.projectContributions,
+    toolContributions: options.toolContributions,
   });
   try {
     const policies: Record<string, ExecutionPolicy> = fixture?.policies || {};
@@ -61,8 +67,18 @@ export async function createBuroApplication(options: {
       workspaces,
       checks,
     });
-    await host.ctx.plugin(projectOperationsPlugin, { operations: new NativeProjectOperations() });
-    await host.ctx.plugin(executionPlugin, { policies, workspaces, checks, environments });
+    await host.ctx.plugin(projectOperationsPlugin, {
+      operations: new NativeProjectOperations(),
+      analysisId: options.analysisId,
+      workflowId: options.workflowId,
+    });
+    await host.ctx.plugin(executionPlugin, {
+      policies,
+      workspaces,
+      checks,
+      environments,
+      workflowId: options.workflowId,
+    });
     return host;
   } catch (error) {
     await host.dispose().catch(() => {});

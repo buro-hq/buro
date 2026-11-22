@@ -50,6 +50,7 @@ const exec = promisify(execFile);
     passed = [];
   let deployCalls = 0;
   try {
+    await fs.mkdir('artifacts', { recursive: true });
     let count = 0;
     const runtime = {
       id: 'fixture',
@@ -165,9 +166,21 @@ const exec = promisify(execFile);
     const project = host.ctx.projects.registry.list().find((p) => p.root === root);
     const store = host.ctx.projects.registry.get(project.id);
     assert.equal(store.snapshot().profile.components[0].kind, 'api');
-    assert.ok(store.snapshot().roles.some((r) => r.id === 'production_delivery'));
+    assert.deepEqual(
+      store.snapshot().roles.map((role) => role.id),
+      ['coordinator'],
+    );
+    assert.equal(store.snapshot().roles[0].provenance.origin, 'workflow');
     assert.equal((await git(['rev-parse', 'HEAD'])).stdout.trim(), initial);
-    passed.push('profile and operational roles saved; original branch preserved');
+    await page.locator('.sidebar').getByRole('button', { name: 'Team', exact: true }).click();
+    await page
+      .locator('.project-team-grid .team-role')
+      .getByText('From workflow', { exact: true })
+      .waitFor();
+    assert.equal(await page.locator('.project-team-grid .team-role').count(), 1);
+    passed.push(
+      'research creates only its required coordinator role without seeding unused specialists',
+    );
     await page
       .locator('.sidebar')
       .getByRole('button', { name: 'Project settings', exact: true })
@@ -292,6 +305,40 @@ const exec = promisify(execFile);
     await page.getByRole('heading', { name: 'Implementation ready', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Configure and launch locally', exact: true }).click();
     await page.getByRole('link', { name: 'Open Fixture API', exact: true }).waitFor();
+    assert.deepEqual(
+      store.snapshot().roles.map((role) => role.id),
+      ['coordinator', 'local_preview'],
+    );
+    const savedPreviewRole = store.snapshot().roles.find((role) => role.id === 'local_preview');
+    assert.equal(savedPreviewRole.provenance.origin, 'workflow');
+    assert.deepEqual(
+      store.snapshot().runs[0].roleSnapshots.find((role) => role.id === 'local_preview'),
+      savedPreviewRole,
+    );
+    passed.push('preview creates only its needed workflow role and freezes it before preparation');
+    await page.locator('.sidebar').getByRole('button', { name: 'Team', exact: true }).click();
+    const livePreviewRole = page
+      .locator('.project-team-grid .team-role')
+      .filter({ hasText: 'Local result verification' });
+    await livePreviewRole.getByRole('button', { name: 'Open session', exact: true }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('heading', { name: 'Local result verification', exact: true })
+      .waitFor();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', {
+        name: store.snapshot().runs[0].resultAgents.at(-1).threadId,
+        exact: true,
+      })
+      .waitFor();
+    await page.locator('.mantine-Drawer-close').click();
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    passed.push(
+      'live result-role update appears in the team and opens its actual preparation session',
+    );
+    await page.locator('.sidebar').getByRole('button', { name: 'Runs', exact: true }).click();
+    await page.getByRole('tab', { name: 'Result', exact: true }).click();
     const url = await page
       .getByRole('link', { name: 'Open Fixture API', exact: true })
       .getAttribute('href');
@@ -357,6 +404,13 @@ const exec = promisify(execFile);
     await page.getByRole('link', { name: 'Open delivery result', exact: true }).waitFor();
     assert.equal(deployCalls, 1);
     assert.equal(store.snapshot().runs[0].status, 'completed');
+    assert.deepEqual(
+      store
+        .snapshot()
+        .roles.map((role) => role.id)
+        .sort(),
+      ['coordinator', 'local_preview', 'production_delivery'],
+    );
     passed.push(
       'production preparation waits for concrete-commit confirmation; acceptance stays completed',
     );
@@ -408,11 +462,61 @@ const exec = promisify(execFile);
       'Base branch: main',
     );
     await page.locator('.mantine-Modal-close').click();
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('.sidebar').getByRole('button', { name: 'Team', exact: true }).click();
+    const cards = page.locator('.project-team-grid .team-role');
+    await expect(cards).toHaveCount(3);
+    assert.equal(await cards.getByText('From workflow', { exact: true }).count(), 3);
+    const previewRole = cards.filter({ hasText: 'Local result verification' });
+    const editRole = previewRole.getByRole('button', { name: 'Edit role local_preview' });
+    const bounds = await editRole.boundingBox();
+    assert.ok(bounds.height >= 32 && bounds.width >= 44);
+    const cardBounds = await previewRole.boundingBox();
+    assert.ok(cardBounds.width <= 420, 'one role must not stretch across the entire page');
+    await editRole.click();
+    await page
+      .getByText('This role was added automatically. Your edits take priority for new work.', {
+        exact: true,
+      })
+      .waitFor();
+    await page
+      .getByRole('textbox', { name: 'Persistent instructions', exact: true })
+      .fill('User-owned preview instructions for future work.');
+    await page
+      .getByRole('textbox', { name: 'Role name', exact: true })
+      .fill('Personal preview specialist');
+    await page.getByRole('button', { name: 'Save version 2', exact: true }).click();
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    const customized = store.snapshot().roles.find((role) => role.id === 'local_preview');
+    assert.equal(customized.provenance.origin, 'user');
+    assert.equal(customized.instructions, 'User-owned preview instructions for future work.');
+    assert.equal(customized.version, 2);
     assert.equal(
-      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
-      false,
+      store.snapshot().runs[0].roleSnapshots.find((role) => role.id === 'local_preview').version,
+      1,
     );
+    const editedPreviewRole = cards.filter({ hasText: 'Personal preview specialist' });
+    await editedPreviewRole.getByText('Your role', { exact: true }).waitFor();
+    await editedPreviewRole.getByRole('button', { name: 'Open session', exact: true }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('heading', { name: 'Local result verification', exact: true })
+      .waitFor();
+    await page.getByRole('dialog').getByText('v1', { exact: true }).waitFor();
+    await page.locator('.mantine-Drawer-close').click();
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    passed.push(
+      'compact team explains generated roles, offers large actions and preserves accepted snapshots after a user edit',
+    );
+    await page.screenshot({ path: 'artifacts/setup-on-demand-team.png', fullPage: true });
+    for (const width of [1024, 390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+        false,
+      );
+    }
+    await page.screenshot({ path: 'artifacts/setup-on-demand-team-mobile.png', fullPage: true });
+    passed.push('team cards fit tablet and narrow phones without horizontal overflow');
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ passed, errors }, null, 2));
   } finally {

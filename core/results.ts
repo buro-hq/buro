@@ -19,6 +19,7 @@ import {
   type AssignmentResource,
 } from '../protocol/resources.ts';
 import type { DeliveryConfig } from '../protocol/operations.ts';
+import type { WorkflowRoleResolver } from './workflow-roles.ts';
 import {
   DomainError,
   type AgentRuntime,
@@ -61,6 +62,7 @@ export class ResultService {
   projects: ProjectRegistry;
   runtime: AgentRuntime;
   operations: ResultOperations;
+  #workflowRoles: WorkflowRoleResolver;
   jobs = new Map<string, { controller: AbortController; promise: Promise<unknown> }>();
   queues = new Map<string, Promise<unknown>>();
   closing = false;
@@ -81,10 +83,17 @@ export class ResultService {
     projects: ProjectRegistry;
     runtime: AgentRuntime;
     operations: ResultOperations;
+    workflowRoles: WorkflowRoleResolver;
   }) {
     this.projects = options.projects;
     this.runtime = options.runtime;
     this.operations = options.operations;
+    if (!options.workflowRoles || typeof options.workflowRoles.ensureRole !== 'function')
+      throw new DomainError(
+        'WORKFLOW_REQUIRED',
+        'Configure a workflow role resolver before result preparation.',
+      );
+    this.#workflowRoles = options.workflowRoles;
   }
   get(projectId: string, runId: string) {
     const s = this.projects.get(projectId).snapshot(),
@@ -109,10 +118,24 @@ export class ResultService {
           const run = doc.runs.find((r) => r.id === runId)!,
             goal = doc.goals.find((g) => g.id === run?.goalId);
           if (!run || !goal) throw new DomainError('NOT_FOUND', 'Goal not found.');
+          const previousRoles = new Set(
+            doc.roleVersions.map((role) => JSON.stringify([role.id, role.version])),
+          );
           fn(run, doc);
+          const createdRoles = doc.roleVersions.filter(
+            (role) => !previousRoles.has(JSON.stringify([role.id, role.version])),
+          );
           run.effectivePolicy = effectiveRunPolicy(run);
           if (run.status === 'completed') run.stop = undefined;
-          return { result, change: { type: 'run.changed', run, goal } };
+          return {
+            result,
+            change: {
+              type: 'run.changed',
+              run,
+              goal,
+              ...(createdRoles.length ? { roles: createdRoles } : {}),
+            },
+          };
         },
       );
   }
@@ -159,7 +182,7 @@ export class ResultService {
         ? saved.roleSnapshots?.find(
             (item) => item.id === roleId && item.version === existing.roleVersion,
           )
-        : doc.roleVersions.filter((item) => item.id === roleId).at(-1);
+        : this.#workflowRoles.ensureRole(doc, operation, new Date().toISOString()).role;
       if (!role)
         throw new DomainError(
           'ROLE_MISSING',

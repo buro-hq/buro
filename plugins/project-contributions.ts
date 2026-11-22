@@ -2,9 +2,14 @@ import { Service, type Context, type Plugin } from 'cordis';
 import { ContextLoaderCatalog } from '../core/context-loaders.ts';
 import { ProjectAnalysisCatalog } from '../core/project-analysis.ts';
 import { CheckRecipeCatalog } from '../core/check-recipes.ts';
+import { RoleTemplateCatalog, WorkflowCatalog } from '../core/workflow-roles.ts';
 import { registerBuiltinContextLoaders } from '../adapters/context/loaders/builtins.ts';
 import { registerBuiltinProjectAnalyses } from '../adapters/analysis/project-setup.ts';
 import { registerBuiltinCheckRecipes } from '../adapters/discovery/check-recipes/builtins.ts';
+import {
+  registerBuiltinRoleTemplates,
+  registerBuiltinWorkflows,
+} from '../adapters/workflows/builtins.ts';
 
 declare module 'cordis' {
   interface Context {
@@ -13,25 +18,43 @@ declare module 'cordis' {
 }
 
 /** Installed project extensions supply data; application services retain admission and execution. */
+export type ProjectContributionCatalogs = {
+  contextLoaders?: ContextLoaderCatalog;
+  analyses?: ProjectAnalysisCatalog;
+  checkRecipes?: CheckRecipeCatalog;
+  roleTemplates?: RoleTemplateCatalog;
+  workflows?: WorkflowCatalog;
+};
 export class ProjectContributions extends Service {
-  readonly contextLoaders = new ContextLoaderCatalog();
-  readonly analyses = new ProjectAnalysisCatalog();
-  readonly checkRecipes = new CheckRecipeCatalog();
-  constructor(ctx: Context) {
+  readonly contextLoaders: ContextLoaderCatalog;
+  readonly analyses: ProjectAnalysisCatalog;
+  readonly checkRecipes: CheckRecipeCatalog;
+  readonly roleTemplates: RoleTemplateCatalog;
+  readonly workflows: WorkflowCatalog;
+  constructor(ctx: Context, catalogs: ProjectContributionCatalogs = {}) {
     super(ctx, 'projectContributions');
-    registerBuiltinContextLoaders(this.contextLoaders);
-    registerBuiltinProjectAnalyses(this.analyses);
-    registerBuiltinCheckRecipes(this.checkRecipes);
+    this.contextLoaders = catalogs.contextLoaders ?? new ContextLoaderCatalog();
+    this.analyses = catalogs.analyses ?? new ProjectAnalysisCatalog();
+    this.checkRecipes = catalogs.checkRecipes ?? new CheckRecipeCatalog();
+    this.roleTemplates = catalogs.roleTemplates ?? new RoleTemplateCatalog();
+    this.workflows = catalogs.workflows ?? new WorkflowCatalog();
+    if (!catalogs.contextLoaders) registerBuiltinContextLoaders(this.contextLoaders);
+    if (!catalogs.analyses) registerBuiltinProjectAnalyses(this.analyses);
+    if (!catalogs.checkRecipes) registerBuiltinCheckRecipes(this.checkRecipes);
+    if (!catalogs.roleTemplates) registerBuiltinRoleTemplates(this.roleTemplates);
+    if (!catalogs.workflows) registerBuiltinWorkflows(this.workflows);
   }
   seal() {
     this.contextLoaders.seal();
     this.analyses.seal();
     this.checkRecipes.seal();
+    this.roleTemplates.seal();
+    this.workflows.seal();
   }
 }
-export const projectContributionsPlugin: Plugin.Object = {
+export const projectContributionsPlugin: Plugin.Object<ProjectContributionCatalogs> = {
   name: 'project-contributions',
-  apply(ctx) {
-    new ProjectContributions(ctx);
+  apply(ctx, catalogs) {
+    new ProjectContributions(ctx, catalogs);
   },
 };

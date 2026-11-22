@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -21,6 +22,7 @@ async function fixture(t: any) {
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-operation-routing-')),
   );
   const role: Role = {
+    provenance: { origin: 'user' },
     id: 'coordinator',
     version: 1,
     title: 'Shared role',
@@ -218,6 +220,7 @@ async function fixture(t: any) {
     id: () => String(++next),
   });
   const results = new ResultService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects,
     runtime: router,
     operations: { async dispose() {} } as any,

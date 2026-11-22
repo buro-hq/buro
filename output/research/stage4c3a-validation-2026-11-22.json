@@ -1,0 +1,57 @@
+{
+  "stage": "4C3a",
+  "date": "2026-11-22",
+  "parentCommit": "b7a5c70",
+  "tests": {
+    "total": 1012,
+    "passed": 1012,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 68452.457959,
+    "log": "/private/tmp/buro-stage4c3a-final-tests.log"
+  },
+  "buildTypecheck": {
+    "passed": true,
+    "logs": ["/private/tmp/buro-stage4c3a-build.log", "/private/tmp/buro-stage4c3a-typecheck.log"]
+  },
+  "format": {
+    "passed": true,
+    "logs": [
+      "/private/tmp/buro-stage4c3a-format-check.log",
+      "/private/tmp/buro-stage4c3a-server-format-check.log"
+    ]
+  },
+  "browser": {
+    "productionDesktopMobile": true,
+    "firstGoalScenarios": 17,
+    "researchSettingsResultScenarios": 14,
+    "liveWorkerAndResultRoleProjection": true,
+    "frozenSessionVersionAfterUserEdit": true,
+    "immutableDependencyChecksAndFreshReview": true,
+    "sameWriterContinuation": true,
+    "pageErrors": 0,
+    "logs": [
+      "/private/tmp/buro-stage4c3a-production.log",
+      "/private/tmp/buro-stage4c3a-projects-browser-final.log",
+      "/private/tmp/buro-stage4c3a-setup-browser.log"
+    ]
+  },
+  "independentReviews": [
+    "stage4c3a-architecture-review-2026-11-22.md",
+    "stage4c3a-tests-review-2026-11-22.md"
+  ],
+  "agentRoles": {
+    "implementation": 3,
+    "independentReview": 2,
+    "execution": "waves"
+  },
+  "scopeLimits": [
+    "Trusted startup extensions select content and do not replace execution or acceptance authority.",
+    "A current unreferenced planning roster may be replaced; complete paged history remains later work.",
+    "Machine model defaults remain until 4C3b.",
+    "SQLite, default-none quotas, operational preparation receipts, reusable package consumers and concurrency remain subsequent work."
+  ],
+  "originalUserProjectsModified": false,
+  "rtxRequests": 0,
+  "liveModelRequests": 0
+}

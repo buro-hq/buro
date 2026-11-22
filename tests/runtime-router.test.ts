@@ -567,6 +567,7 @@ test('closing a review view does not block idempotent cleanup or replay released
     router = f.create();
   const resources = f.selection.forProject('p');
   const reviewer: Role = {
+    provenance: { origin: 'user' },
     id: 'reviewer',
     version: 1,
     title: 'Reviewer',

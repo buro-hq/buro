@@ -1,5 +1,6 @@
 /** Public data contracts. This module has no Node, Cordis, React or transport imports. */
 import type { EnvironmentConfig } from './environment.ts';
+import type { RoleProvenance, WorkflowIdentity } from './workflow-roles.ts';
 import type { ContextMaterial } from './context.ts';
 import type {
   AssignmentResource,
@@ -81,6 +82,7 @@ export const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 export const roleIdPattern = /^[a-z][a-z0-9_-]{0,63}$/;
 export type RoleKind = 'implementation' | 'testing' | 'review' | 'coordination' | 'general';
 export type Role = {
+  provenance: RoleProvenance;
   id: string;
   version: number;
   title: string;
@@ -197,6 +199,7 @@ export type RunIssue = {
   checks: string[];
 };
 export type Run = {
+  workflow?: WorkflowIdentity;
   verificationView?: import('./verification.ts').VerificationView;
   verificationEvidence?: import('./verification.ts').VerificationEvidence;
   reconciliation?: import('./reconciliation.ts').RunReconciliation;
@@ -313,7 +316,7 @@ export type DomainEvent = {
     | { type: 'role.saved'; role: Role }
     | { type: 'context.materials.added'; materials: ContextMaterial[] }
     | { type: 'context.material.removed'; id: string }
-    | { type: 'project.research.changed'; research: ProjectResearch }
+    | { type: 'project.research.changed'; research: ProjectResearch; roles?: Role[] }
     | {
         type: 'project.configured';
         profile: ProjectProfile;

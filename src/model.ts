@@ -24,6 +24,7 @@ export function roleViewsForRun(catalog: Role[], run: Run): Record<string, RoleV
   for (const id of new Set([
     ...catalog.map((r) => r.id),
     ...run.agents.map((a) => a.name),
+    ...(run.resultAgents || []).map((a) => a.name),
     'coordinator',
   ])) {
     const role = run.roleSnapshots?.find((r) => r.id === id) || catalog.find((r) => r.id === id),
@@ -46,6 +47,27 @@ export function roleViewsForRun(catalog: Role[], run: Run): Record<string, RoleV
     };
   }
   return views;
+}
+/** An opened session describes the role version it actually used, including result preparation. */
+export function roleViewForAgent(run: Run, agent: Agent, fallback?: RoleView): RoleView {
+  const definition = agent.session
+    ? run.roleSnapshots?.find(
+        (role) => role.id === agent.session!.roleId && role.version === agent.session!.roleVersion,
+      )
+    : fallback?.definition;
+  const labels = definition ? roleLabels(definition) : undefined;
+  const title = labels?.title || (agent.session ? agent.name : fallback?.title) || agent.name;
+  return {
+    title,
+    description:
+      labels?.description ||
+      (agent.session ? undefined : fallback?.description) ||
+      t('Task specialist'),
+    color: roleColor(definition?.kind),
+    letter: title.slice(0, 1),
+    owns: agent.assignment?.paths.join(', ') || fallback?.owns || t('Current task files'),
+    definition,
+  };
 }
 export const seconds = (from: string, to: string) => (Date.parse(to) - Date.parse(from)) / 1000;
 export const isTerminal = (r: Run) =>

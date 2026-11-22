@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import { fixtureExecutionSelection } from './fixtures/execution-resources.ts';
@@ -260,6 +261,7 @@ test('managed execution reads, edits and checks a real worktree, then independen
   );
   const env = { projects: f.projects, now: () => new Date().toISOString(), id: randomUUID };
   const engine = new ExecutionService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     ...env,
     runtime,
     selection: fixtureExecutionSelection(runtime.id, runtime.capabilities),

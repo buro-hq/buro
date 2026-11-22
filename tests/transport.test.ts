@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { WebSocket as RawSocket } from 'ws';
-import { defaultRoles } from '../core/defaults.ts';
+import { defaultRoles } from './fixtures/roles.ts';
 import { createHost } from '../plugins/host.ts';
 import { websocketPlugin } from '../daemon/websocket.ts';
 import { SocketProjectClient, applyEvent } from '../clients/socket-client.ts';

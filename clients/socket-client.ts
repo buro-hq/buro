@@ -49,7 +49,11 @@ export function applyEvent(snapshot: Snapshot, event: DomainEvent): Snapshot {
     next.roles = [...snapshot.roles.filter((r) => r.id !== c.role.id), c.role];
   if (c.type === 'role.saved' || c.type === 'project.configured') next.effectivePolicy = undefined; // Only the service can resolve changed policy inheritance.
   if (c.type === 'project.verified') next.verification = c.verification;
-  if (c.type === 'project.research.changed') next.research = c.research;
+  if (c.type === 'project.research.changed') {
+    next.research = c.research;
+    for (const role of c.roles || [])
+      next.roles = [...next.roles.filter((previous) => previous.id !== role.id), role];
+  }
   if (c.type === 'project.configured') {
     if (c.research) next.research = c.research;
     next.profile = c.profile;
@@ -229,6 +233,9 @@ export class SocketProjectClient implements ProjectClient {
               event.change.type === 'role.saved' ||
               event.change.type === 'project.configured' ||
               event.change.type === 'goal.deleted' ||
+              ((event.change.type === 'project.research.changed' ||
+                event.change.type === 'run.changed') &&
+                !!event.change.roles?.length) ||
               (event.change.type === 'run.changed' && busyBefore !== hasActiveRun(this.state))
             )
               this.invalidateProjection();

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RoleSchema as role, WorkflowIdentitySchema } from './workflow-roles.ts';
 import { VerificationViewSchema, VerificationEvidenceSchema } from './verification.ts';
 import { ManagedRunBudgetSummarySchema, ManagedBudgetErrorCodeSchema } from './run-budget.ts';
 import {
@@ -259,18 +260,6 @@ export const ResourceConfigurationChangeSchema = z.strictObject({
   appliesTo: z.enum(['new-runs', 'service-restart']),
 });
 
-const role = z.object({
-  id: z.string(),
-  version: z.number().int().positive(),
-  title: z.string(),
-  description: z.string(),
-  instructions: z.string(),
-  kind: z.enum(['implementation', 'testing', 'review', 'coordination', 'general']),
-  model: z.string().optional(),
-  runtimePreference: RuntimePreferenceSchema.optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
 const goal = z.object({
   materialIds: z.array(z.string()).optional(),
   id: z.string(),
@@ -345,6 +334,7 @@ const run = z
     resources: ResourceSnapshotSchema.optional(),
     assignmentResources: z.record(z.string(), AssignmentResourceSchema).optional(),
     roleResources: z.record(z.string(), AssignmentResourceSchema).optional(),
+    workflow: WorkflowIdentitySchema.optional(),
     operationContexts: z
       .record(z.string(), SavedOperationContextSchema)
       .refine(
@@ -464,6 +454,7 @@ const run = z
     resultAgents: z
       .array(
         z.object({
+          session: agentSession.optional(),
           threadId: z.string(),
           name: z.string(),
           agentPath: z.string(),
@@ -585,7 +576,11 @@ export const DomainEventSchema = z
         materials: z.array(ContextMaterialSchema),
       }),
       z.object({ type: z.literal('context.material.removed'), id: z.string() }),
-      z.object({ type: z.literal('project.research.changed'), research: ResearchSchema }),
+      z.object({
+        type: z.literal('project.research.changed'),
+        research: ResearchSchema,
+        roles: z.array(role).optional(),
+      }),
       z.object({ type: z.literal('project.verified'), verification }),
       z.object({
         type: z.literal('project.configured'),

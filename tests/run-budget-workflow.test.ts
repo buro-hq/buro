@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 import { PiAgentLoopRunner } from '../adapters/agents/pi-loop.ts';
 import {
@@ -261,6 +262,7 @@ async function fixture(
     if (options.poisonAfterReview && session?.purpose === 'review') await poison();
   };
   const engine = new ExecutionService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects,
     runtime,
     selection: { forProject: () => structuredClone(selection) },
@@ -382,9 +384,10 @@ test('aggregate exhaustion is needs-attention and never starts a hidden replacem
   assert.equal(run.independentReviewer, false);
   assert.equal(f.checkpoints, 0);
   assert.equal(
-    f.store.snapshot().roles.some((role) => role.id === 'builder'),
-    false,
+    f.store.snapshot().roles.find((role) => role.id === 'builder')?.provenance.origin,
+    'coordinator',
   );
+  assert.equal(run.commit, undefined);
 });
 
 test('manual continuation with a larger current profile cannot reset the frozen budget', async (t) => {
@@ -460,8 +463,8 @@ test('the final acceptance transaction rejects a budget poisoned during checkpoi
   assert.equal(f.checkpoints, 1);
   assert.equal((await f.raw()).executionHead, undefined);
   assert.equal(
-    f.store.snapshot().roles.some((role) => role.id === 'builder'),
-    false,
+    f.store.snapshot().roles.find((role) => role.id === 'builder')?.provenance.origin,
+    'coordinator',
   );
 });
 

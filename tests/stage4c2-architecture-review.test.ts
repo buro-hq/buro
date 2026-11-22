@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -67,6 +68,7 @@ async function fixture(t: any, start: AgentRuntime['start'], onRelease?: () => P
     dispose: async () => {},
   };
   const service = new ProjectResearchService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects,
     runtime,
     selection: fixtureExecutionSelection(

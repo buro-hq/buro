@@ -94,7 +94,7 @@ export function projectOperationCatalog(
       label: 'Research project',
       purpose: 'research',
       requirements: inspection,
-      roles: { kind: 'none' },
+      roles: { kind: 'fixed', roleId: 'coordinator' },
       readOnly: true,
     },
     {

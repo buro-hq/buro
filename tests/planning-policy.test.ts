@@ -35,6 +35,7 @@ const input = () => ({
   maxWorkers: 2,
   roles: [
     {
+      provenance: { origin: 'user' },
       id: 'builder',
       version: 3,
       title: 'Builder',

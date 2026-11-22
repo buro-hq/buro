@@ -1,3 +1,4 @@
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkContext, changeContext, roleContext } from '../core/agent-context.ts';
@@ -70,6 +71,7 @@ test('streaming deltas never copy project snapshots or enter the persistence que
   let subscriber: (event: any) => void = () => {},
     lookups = 0;
   const service = new ExecutionService({
+    workflowRoles: createBuiltinWorkflowRoles(),
     projects: {
       list: () => {
         lookups++;

@@ -16,7 +16,24 @@ import { ProjectChecks, runProjectCommand } from '../adapters/checks/project-com
 import { GoalService } from '../core/services.ts';
 import type { ExecutionPolicy } from '../core/execution-ports.ts';
 import type { Run } from '../protocol/domain.ts';
+import type { ProjectDocument } from '../core/ports.ts';
+import type { ProjectResearch } from '../protocol/operations.ts';
+import { createBuiltinWorkflowRoles } from '../adapters/workflows/builtins.ts';
+import { serviceOperationContext, operationIds } from '../core/operation-catalog.ts';
+import { resolveRoleResource } from '../core/role-routing.ts';
 const exec = promisify(execFile);
+function fixtureResearch(
+  doc: ProjectDocument,
+  research: Omit<ProjectResearch, 'roleSnapshot' | 'roleResource'>,
+): ProjectResearch {
+  const operation = serviceOperationContext(operationIds.research, doc.profile);
+  const { role } = createBuiltinWorkflowRoles().ensureRole(doc, operation, research.startedAt);
+  return {
+    ...research,
+    roleSnapshot: role,
+    roleResource: resolveRoleResource(research.resources, role, operation),
+  };
+}
 async function fixture(t: any) {
   const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'user-projects-'))),
     root = path.join(directory, 'repo'),
@@ -147,19 +164,13 @@ test('inspect is read-only, detects dirty files, and rejects a nested or non-Git
   await assert.rejects(f.manager.inspect(f.data), { code: 'INVALID_REPOSITORY' });
   await assert.rejects(fs.access(path.join(f.root, '.buro')));
 });
-test('connect persists a per-repo profile and isolated roles; aliases and retries do not duplicate projects', async (t) => {
+test('connect persists a per-repo profile with an empty team; aliases and retries do not duplicate projects', async (t) => {
   const f = await fixture(t),
     project = await f.connect();
   assert.equal(project.root, f.root);
   assert.equal(project.managed, true);
   assert.equal(f.registry.list().length, 1);
-  assert.equal(f.registry.get(project.id).snapshot().roles.length, 5);
-  assert.ok(
-    f.registry
-      .get(project.id)
-      .snapshot()
-      .roles.some((r) => r.id === 'production_delivery'),
-  );
+  assert.deepEqual(f.registry.get(project.id).snapshot().roles, []);
   await fs.access(path.join(f.root, '.buro/local'));
   assert.match(await fs.readFile(path.join(f.root, '.buro/.gitignore'), 'utf8'), /local\//);
   const alias = path.join(f.directory, 'alias');
@@ -213,6 +224,7 @@ test('connect persists a per-repo profile and isolated roles; aliases and retrie
   });
   await manager.restore();
   assert.equal(registry.get(project.id).snapshot().goals[0].title, 'Owned goal');
+  assert.deepEqual(registry.get(project.id).snapshot().roles, [], 'restoring does not seed roles');
   assert.equal(registry.list().length, 1);
 });
 test('profiles have optimistic revisions; retrying an older successful save never rolls back the latest profile', async (t) => {
@@ -520,8 +532,8 @@ test('research proposals cannot overwrite a profile after repository or profile 
     events: [],
   };
   await store.transact('research', 'research', (doc) => {
-    doc.research = research;
-    return { result: null, change: { type: 'project.research.changed', research } };
+    doc.research = fixtureResearch(doc, research);
+    return { result: null, change: { type: 'project.research.changed', research: doc.research } };
   });
   await assert.rejects(
     f.manager.configure('stale-research', 'stale-research', {
@@ -565,8 +577,8 @@ test('manual save acknowledges ready research and later proposal acceptance uses
     events: [],
   };
   await store.transact('manual-research', 'manual-research', (doc) => {
-    doc.research = research;
-    return { result: null, change: { type: 'project.research.changed', research } };
+    doc.research = fixtureResearch(doc, research);
+    return { result: null, change: { type: 'project.research.changed', research: doc.research } };
   });
   const initial = store.snapshot().profile!;
   await f.manager.configure('manual-settings', 'manual-settings', {
@@ -632,8 +644,8 @@ test('quick research application adds missing launch settings and preserves manu
     checks: [{ ...initial.checks[0], command: 'different generated command' }],
   };
   await store.transact('research-quick', 'research-quick', (doc) => {
-    doc.research = research;
-    return { result: null, change: { type: 'project.research.changed', research } };
+    doc.research = fixtureResearch(doc, research);
+    return { result: null, change: { type: 'project.research.changed', research: doc.research } };
   });
   await f.manager.applyResearch('accept-quick', 'accept-quick', {
     projectId: project.id,

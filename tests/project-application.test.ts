@@ -196,11 +196,14 @@ test('connect and restore use injected storage with opaque addresses and durable
   assert.equal(f.opened.length, 1);
   assert.equal(f.opened[0].storageAddress, 'memory://sample/state');
   assert.deepEqual(f.registry.list(), [f.project]);
+  assert.equal(f.opened[0].roles, undefined, 'connecting does not install workflow roles');
+  assert.deepEqual(f.registry.get(f.project.id).snapshot().roles, []);
   await assert.rejects(f.connect('connect', 'different'), { code: 'IDEMPOTENCY_CONFLICT' });
   const restored = fixture(f.persisted());
   await restored.app.restore();
   await restored.connect();
   assert.equal(restored.opened.length, 1);
+  assert.deepEqual(restored.registry.get(f.project.id).snapshot().roles, []);
   assert.equal(restored.calls.prepare, 0);
   assert.equal(restored.policies.sample.profile?.revision, 1);
   await Promise.all([f.registry.close(), restored.registry.close()]);

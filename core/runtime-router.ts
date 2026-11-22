@@ -4,8 +4,12 @@ import {
   savedOperationContext,
   type ServiceOperation,
 } from './operation-catalog.ts';
-import type { Run, Snapshot } from '../protocol/domain.ts';
-import type { RuntimeResource, AssignmentResource } from '../protocol/resources.ts';
+import type { Run, Snapshot, Role } from '../protocol/domain.ts';
+import type {
+  RuntimeResource,
+  AssignmentResource,
+  ResourceSnapshot,
+} from '../protocol/resources.ts';
 import { validateRoleResource } from './role-routing.ts';
 import { resourceForPurpose } from '../protocol/resources.ts';
 import { WorkScopeSchema } from '../protocol/work-scope.ts';
@@ -39,6 +43,7 @@ export type RuntimeRoute = {
   roleId?: string;
   operationId?: string;
   roleDecision?: AssignmentResource;
+  roleGrant?: { role: Role; resources: ResourceSnapshot };
   verificationViewId?: string;
   externalThreadId?: string;
   status: 'starting' | 'ready' | 'unknown' | 'rejected';
@@ -176,16 +181,6 @@ export class RuntimeRouter implements AgentRuntime {
       route.purpose === 'research' && snapshot.research?.id === route.runId
         ? snapshot.research
         : undefined;
-    if (
-      research &&
-      (!research.resources ||
-        JSON.stringify(resourceForPurpose(research.resources, 'research')) !==
-          JSON.stringify(route.resource))
-    )
-      throw new DomainError(
-        'INVALID_ASSIGNMENT',
-        'The research route does not match its admitted resource profile.',
-      );
     const owner = snapshot.runs.find((run) => run.id === (route.ownerRunId || route.runId));
     const scope =
       owner?.executionPolicySnapshot?.scope ||
@@ -204,12 +199,62 @@ export class RuntimeRouter implements AgentRuntime {
         'INVALID_ASSIGNMENT',
         'The saved route lost its operation requirements.',
       );
+    const researchGrant = route.purpose === 'research' ? route.roleGrant : undefined;
+    if (route.purpose === 'research' && (research || route.roleDecision) && !researchGrant)
+      throw new DomainError('INVALID_ASSIGNMENT', 'The research route has no original role grant.');
+    if (researchGrant) {
+      if (
+        !operation ||
+        operation.roles.kind !== 'fixed' ||
+        !route.roleDecision ||
+        route.roleId !== researchGrant.role.id ||
+        operation.roles.roleId !== researchGrant.role.id
+      )
+        throw new DomainError(
+          'INVALID_ASSIGNMENT',
+          'The research route has no captured role decision.',
+        );
+      const saved = validateRoleResource(
+        researchGrant.resources,
+        researchGrant.role,
+        route.roleDecision,
+        operation,
+      );
+      const authority = (value: AssignmentResource) =>
+        JSON.stringify([value.resource, value.roleVersion, value.preference, value.source]);
+      if (JSON.stringify(saved.resource) !== JSON.stringify(route.resource))
+        throw new DomainError(
+          'INVALID_ASSIGNMENT',
+          'The research route differs from its original grant.',
+        );
+      if (research) {
+        if (
+          !research.roleSnapshot ||
+          !research.roleResource ||
+          JSON.stringify(research.roleSnapshot) !== JSON.stringify(researchGrant.role) ||
+          JSON.stringify(research.resources) !== JSON.stringify(researchGrant.resources)
+        )
+          throw new DomainError('INVALID_ASSIGNMENT', 'The admitted research role grant changed.');
+        const current = validateRoleResource(
+          research.resources,
+          research.roleSnapshot,
+          research.roleResource,
+          operation,
+        );
+        if (authority(current) !== authority(saved))
+          throw new DomainError(
+            'INVALID_ASSIGNMENT',
+            'The admitted research resource decision changed.',
+          );
+      }
+    }
     const serviceRoleId =
       route.roleId || (operation?.roles.kind === 'fixed' ? operation.roles.roleId : undefined);
     const decision = serviceRoleId
       ? this.serviceDecision(owner, operation, serviceRoleId)
       : undefined;
     if (
+      !researchGrant &&
       serviceRoleId &&
       (route.roleDecision || decision || (owner && operation?.roles.kind === 'fixed'))
     ) {
@@ -373,7 +418,29 @@ export class RuntimeRouter implements AgentRuntime {
       ? input.roleId || (operation?.roles.kind === 'fixed' ? operation.roles.roleId : undefined)
       : undefined;
     let serviceDecision: AssignmentResource | undefined;
+    if (research) {
+      if (
+        !operation ||
+        operation.roles.kind !== 'fixed' ||
+        !research.roleSnapshot ||
+        !research.roleResource ||
+        input.roleId !== research.roleSnapshot.id ||
+        operation.roles.roleId !== research.roleSnapshot.id
+      )
+        throw new DomainError(
+          'INVALID_ASSIGNMENT',
+          'Research dispatch requires its captured role and resource decision.',
+        );
+      serviceDecision = validateRoleResource(
+        research.resources,
+        research.roleSnapshot,
+        research.roleResource,
+        operation,
+      );
+      resource = serviceDecision.resource;
+    }
     if (
+      !research &&
       serviceRoleId &&
       (input.roleId ||
         this.serviceDecision(run, operation, serviceRoleId) ||
@@ -493,6 +560,14 @@ export class RuntimeRouter implements AgentRuntime {
       ...(operation ? { operationId: operation.id } : {}),
       ...(serviceDecision
         ? { roleId: serviceRoleId, roleDecision: structuredClone(serviceDecision) }
+        : {}),
+      ...(research
+        ? {
+            roleGrant: {
+              role: structuredClone(research.roleSnapshot),
+              resources: structuredClone(research.resources),
+            },
+          }
         : {}),
       ...(immutableReview && verification ? { verificationViewId: verification.id } : {}),
       status: 'starting',

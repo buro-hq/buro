@@ -15,7 +15,7 @@ import type { AssignmentResource } from '../protocol/resources.ts';
 import { sessionResource } from '../protocol/resources.ts';
 import { resolveRoleResource } from './role-routing.ts';
 import { operationIds, serviceOperationContext } from './operation-catalog.ts';
-import { defaultRoles } from './defaults.ts';
+import type { WorkflowRoleResolver } from './workflow-roles.ts';
 import { projectRunAutonomy } from './autonomy-policy.ts';
 import { recordableRuntimeEvent } from './runtime-events.ts';
 import { applyRuntimeEvent } from './runtime-projection.ts';
@@ -73,6 +73,7 @@ type Environment = {
   environments?: ExecutionEnvironmentPort;
   projects: ProjectRegistry;
   runtime: AgentRuntime;
+  workflowRoles: WorkflowRoleResolver;
   selection?: RuntimeSelection;
   workspaces: WorkspacePort;
   checks: CheckPort;
@@ -91,6 +92,11 @@ export class ExecutionService {
   seen = new Set<string>();
   private verificationViews = new Map<string, VerificationView>();
   constructor(env: Environment) {
+    if (!env.workflowRoles || typeof env.workflowRoles.ensureRole !== 'function')
+      throw new DomainError(
+        'WORKFLOW_REQUIRED',
+        'Configure a workflow role resolver before execution.',
+      );
     this.env = env;
     this.unsubscribe =
       env.runtime.subscribe?.((event) => {
@@ -533,29 +539,27 @@ ${installation.output || installation.error || ''}`,
             'RESOURCE_PROFILE_REQUIRED',
             'Execution requires a saved resource profile.',
           );
+        run.workflow = structuredClone(this.env.workflowRoles.workflow);
         const createdRoles: Role[] = [];
-        run.roleSnapshots = ['coordinator', 'reviewer'].map((id) => {
-          const existing = doc.roleVersions.filter((role) => role.id === id).at(-1);
-          if (existing) return structuredClone(existing);
-          const template = defaultRoles.find((role) => role.id === id)!;
-          const role = { ...structuredClone(template), createdAt: now, updatedAt: now };
-          doc.roleVersions.push(role);
-          createdRoles.push(role);
-          return structuredClone(role);
+        const serviceOperations = [operationIds.coordination, operationIds.review].map((id) =>
+          serviceOperationContext(id, policy.profile, policy.scope.mode === 'strict'),
+        );
+        run.roleSnapshots = serviceOperations.map((operation) => {
+          const resolved = this.env.workflowRoles.ensureRole(doc, operation, now);
+          if (resolved.created) createdRoles.push(structuredClone(resolved.role));
+          return resolved.role;
         });
         run.roleResources = Object.fromEntries(
-          run.roleSnapshots.map((role) => [
-            role.id,
-            resolveRoleResource(
-              run.resources!,
-              role,
-              serviceOperationContext(
-                role.id === 'coordinator' ? operationIds.coordination : operationIds.review,
-                policy.profile,
-                policy.scope.mode === 'strict',
-              ),
-            ),
-          ]),
+          serviceOperations.map((operation) => {
+            if (operation.roles.kind !== 'fixed')
+              throw new DomainError(
+                'WORKFLOW_ROLE_UNAVAILABLE',
+                'The service operation has no fixed role.',
+              );
+            const roleId = operation.roles.roleId;
+            const role = run.roleSnapshots!.find((role) => role.id === roleId)!;
+            return [role.id, resolveRoleResource(run.resources!, role, operation)];
+          }),
         );
         run.planningPolicy = selectPlanningPolicy(run.roleResources.coordinator.resource);
         if (
@@ -1346,7 +1350,18 @@ ${installation.output || installation.error || ''}`,
             .filter((worker) => worker.assignment != null)
             .map((worker) => [worker.roleId, validateWorkerTask(worker.assignment)]),
         );
-        const candidateTeam = resolveTeam(candidatePlan, planningRoles, policy, this.env.now());
+        if (!run.workflow)
+          throw new DomainError(
+            'WORKFLOW_REQUIRED',
+            'The saved run has no explicit workflow identity. Start a new run.',
+          );
+        const candidateTeam = resolveTeam(
+          candidatePlan,
+          planningRoles,
+          policy,
+          this.env.now(),
+          run.workflow,
+        );
         let assignments: Record<string, AssignmentResource> | undefined;
         if (run.resources)
           assignments = Object.fromEntries(
@@ -1370,56 +1385,67 @@ ${installation.output || installation.error || ''}`,
             'RESOURCE_PROFILE_REQUIRED',
             'Model selection requires a saved execution resource profile.',
           );
-        await this.update(projectId, runId, (r, _goal, doc) => {
-          // A user changing a pin while the model plans must get a fresh decision, not stale dispatch.
-          for (const role of candidateTeam.roles) {
-            const current = doc.roleVersions.filter((item) => item.id === role.id).at(-1);
-            if (
-              (candidateTeam.origins[role.id] === 'reused' && current?.version !== role.version) ||
-              (candidateTeam.origins[role.id] === 'created' && current)
-            )
-              throw new DomainError(
-                'ROLE_CHANGED',
-                `Role ${role.id} changed during planning. Choose from the updated catalog.`,
-              );
-          }
-          r.plan = candidatePlan.steps;
-          r.planSavedAt = this.env.now();
-          if (inspectionPlanning) {
-            r.planningSession = r.coordinatorSession;
-            r.coordinatorSession = undefined;
-            // A saved read-only planner must never be resumed as a writer after a crash.
-            r.threadId = '';
-          }
-          r.summary = candidatePlan.summary;
-          r.roleSnapshots = [
-            ...(r.roleSnapshots || []).filter((role) =>
-              ['coordinator', 'reviewer'].includes(role.id),
-            ),
-            ...candidateTeam.roles,
-          ];
-          r.roleOrigins = candidateTeam.origins;
-          r.roleAssignments = Object.fromEntries(
-            candidatePlan.team.map((worker) => [worker.roleId, worker.paths]),
-          );
-          r.workerTasks = workerTasks;
-          if (assignments) r.assignmentResources = assignments;
-          for (const role of candidateTeam.roles) {
-            r.events.push({
-              at: this.env.now(),
-              type: candidateTeam.origins[role.id] === 'created' ? 'role.proposed' : 'role.reused',
-              text: `${role.id}: ${role.title}`,
-            });
-            const selected = assignments?.[role.id];
-            if (selected)
+        const createdPlanRoles = candidateTeam.roles.filter(
+          (role) => candidateTeam.origins[role.id] === 'created',
+        );
+        await this.update(
+          projectId,
+          runId,
+          (r, _goal, doc) => {
+            // A user changing a pin while the model plans must get a fresh decision, not stale dispatch.
+            for (const role of candidateTeam.roles) {
+              const current = doc.roleVersions.filter((item) => item.id === role.id).at(-1);
+              if (
+                (candidateTeam.origins[role.id] === 'reused' &&
+                  current?.version !== role.version) ||
+                (candidateTeam.origins[role.id] === 'created' && current)
+              )
+                throw new DomainError(
+                  'ROLE_CHANGED',
+                  `Role ${role.id} changed during planning. Choose from the updated catalog.`,
+                );
+            }
+            for (const role of createdPlanRoles) doc.roleVersions.push(structuredClone(role));
+            r.plan = candidatePlan.steps;
+            r.planSavedAt = this.env.now();
+            if (inspectionPlanning) {
+              r.planningSession = r.coordinatorSession;
+              r.coordinatorSession = undefined;
+              // A saved read-only planner must never be resumed as a writer after a crash.
+              r.threadId = '';
+            }
+            r.summary = candidatePlan.summary;
+            r.roleSnapshots = [
+              ...(r.roleSnapshots || []).filter((role) =>
+                ['coordinator', 'reviewer'].includes(role.id),
+              ),
+              ...candidateTeam.roles,
+            ];
+            r.roleOrigins = candidateTeam.origins;
+            r.roleAssignments = Object.fromEntries(
+              candidatePlan.team.map((worker) => [worker.roleId, worker.paths]),
+            );
+            r.workerTasks = workerTasks;
+            if (assignments) r.assignmentResources = assignments;
+            for (const role of candidateTeam.roles) {
               r.events.push({
                 at: this.env.now(),
-                type: 'agent.resource-selected',
-                text: `${role.id}: ${selected.resource.model || selected.resource.id}. ${selected.reason}`,
+                type:
+                  candidateTeam.origins[role.id] === 'created' ? 'role.proposed' : 'role.reused',
+                text: `${role.id}: ${role.title}`,
               });
-          }
-          r.events.push({ at: this.env.now(), type: 'plan.saved', text: candidatePlan.summary });
-        });
+              const selected = assignments?.[role.id];
+              if (selected)
+                r.events.push({
+                  at: this.env.now(),
+                  type: 'agent.resource-selected',
+                  text: `${role.id}: ${selected.resource.model || selected.resource.id}. ${selected.reason}`,
+                });
+            }
+            r.events.push({ at: this.env.now(), type: 'plan.saved', text: candidatePlan.summary });
+          },
+          createdPlanRoles,
+        );
         plan = candidatePlan;
         team = candidateTeam;
         break;
@@ -1868,14 +1894,16 @@ Do not start agents. Do not modify checks or instructions, and do not commit. Re
       );
     }
     abort();
-    // Fail closed if a role with the proposed id was edited while agents were running.
+    // New project versions are future-only; this accepted work retains its captured version.
     const catalog = this.env.projects.get(projectId).snapshot().roles;
     for (const role of proposed) {
       const current = catalog.find((r) => r.id === role.id);
       if (
         current &&
-        JSON.stringify({ ...current, createdAt: '', updatedAt: '' }) !==
-          JSON.stringify({ ...role, createdAt: '', updatedAt: '' })
+        (current.version < role.version ||
+          (current.version === role.version &&
+            JSON.stringify({ ...current, createdAt: '', updatedAt: '' }) !==
+              JSON.stringify({ ...role, createdAt: '', updatedAt: '' })))
       )
         throw Error('Role catalog conflict: ' + role.id);
       if (!current) acceptedRoles.push(role);
