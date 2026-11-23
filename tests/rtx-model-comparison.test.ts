@@ -382,6 +382,7 @@ test('actual injected RTX probe saves only a temporary explicitly trusted connec
     let generations = 0;
     const report = await runLiveProviderEvaluation({
       mode: 'ollama',
+      ollamaThink: false,
       env,
       models,
       endpoints: { ollama: RTX_EVALUATION_ENDPOINT },

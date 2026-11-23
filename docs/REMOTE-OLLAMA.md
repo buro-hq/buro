@@ -8,6 +8,8 @@ Choose an installed model and context size that fit the available GPU and system
 
 For the RTX comparison harness, set `BURO_RTX_ENDPOINT` and `BURO_OLLAMA_MODEL` in your local environment. Both are required; neither has a host-specific default. The endpoint must be an HTTP root URL with a literal RFC1918 or ULA address. The harness also requires explicit comparison and provider opt-ins, uses synthetic tasks only, and binds requests to the selected endpoint and model for the experiment.
 
+Programmatic evaluation helpers accept optional `ollamaThink`. Omitting it preserves the model default; an explicit boolean or supported model setting is passed through unchanged. Reports record the requested mode. A non-thinking baseline must select `false` explicitly rather than silently disabling the model's default.
+
 Validate fully local and explicitly permitted mixed profiles separately with the same synthetic task, service-owned checks, and a fresh independent reviewer. A mixed profile may send context to a remote provider and requires an appropriate data grant.
 
 Machine addresses, firewall scopes, host configuration, and private-project evaluation records are kept outside this repository. See [evaluation](EVALUATION.md) and [resources](RESOURCES.md).

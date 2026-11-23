@@ -15,6 +15,7 @@ const {
   normalizedLimits,
   contextBudgets,
   evaluationTargetContract,
+  requestedOllamaThinking,
 } = require('./live-provider-runner.cjs');
 const exec = promisify(execFile);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -172,6 +173,7 @@ async function runModelRepair(options = {}) {
   const env = options.env || process.env;
   if (env.BURO_MODEL_REPAIR !== '1' || env.BURO_LIVE_OLLAMA !== '1')
     throw codeError('REPAIR_OPT_IN_REQUIRED');
+  const ollamaThinking = requestedOllamaThinking(options.ollamaThink);
   const target = options.target === undefined ? 'local' : options.target;
   const model =
     options.model ??
@@ -226,6 +228,7 @@ async function runModelRepair(options = {}) {
     startedAt: new Date().toISOString(),
     limits,
     contextTokensByProvider: contexts,
+    requestedOllamaThinking: ollamaThinking,
     accepted: false,
     repairCoverage: false,
   };
@@ -239,6 +242,7 @@ async function runModelRepair(options = {}) {
       target,
       endpoints,
       models: { ollama: model },
+      ...(ollamaThinking.mode === 'explicit' ? { ollamaThink: ollamaThinking.value } : {}),
       budgets: limits,
       contextTokensByProvider: contexts,
       forceWorker: false,

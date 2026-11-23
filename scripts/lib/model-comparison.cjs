@@ -10,6 +10,7 @@ const {
   contextBudgets,
   runLiveProviderEvaluation,
   evaluationTargetContract,
+  requestedOllamaThinking,
 } = require('./live-provider-runner.cjs');
 const exec = promisify(execFile);
 const { SAFE_JSON_SOURCE } = require('./oracle-serialization.cjs');
@@ -418,6 +419,7 @@ async function prepareComparisonFixture({ temporaryDirectory }) {
 function validateComparison(options = {}) {
   const env = options.env || process.env;
   if (env.BURO_MODEL_COMPARISON !== '1') throw codeError('COMPARISON_OPT_IN_REQUIRED');
+  const ollamaThinking = requestedOllamaThinking(options.ollamaThink);
   const target = options.target === undefined ? 'local' : options.target;
   if (!['local', 'rtx'].includes(target)) throw codeError('COMPARISON_INVALID_TARGET');
   const arms = options.arms || (target === 'rtx' ? ['mixed-buro', 'ollama-buro'] : ARMS);
@@ -483,6 +485,7 @@ function validateComparison(options = {}) {
     models: Object.freeze(models),
     reasoningEffort,
     endpoints: Object.freeze(endpoints),
+    ollamaThinking,
     limits,
     contexts,
   };
@@ -677,6 +680,9 @@ async function runModelComparison(options = {}) {
     startedAt: new Date().toISOString(),
     limits: config.limits,
     contextTokensByProvider: config.contexts,
+    ...(config.arms.some((arm) => ['ollama-buro', 'mixed-buro'].includes(arm))
+      ? { requestedOllamaThinking: config.ollamaThinking }
+      : {}),
     comparability: {
       sameFixture: true,
       sameTask: true,
@@ -723,6 +729,9 @@ async function runModelComparison(options = {}) {
             endpoints: config.endpoints,
             models: config.models,
             target: config.target,
+            ...(config.ollamaThinking.mode === 'explicit'
+              ? { ollamaThink: config.ollamaThinking.value }
+              : {}),
             codex: {
               ...options.codex,
               model: config.models.codex,

@@ -34,6 +34,14 @@ class LiveEvaluationError extends Error {
   }
 }
 
+/** Match the optional production Ollama setting without changing a model's default. */
+function requestedOllamaThinking(value) {
+  if (value === undefined) return Object.freeze({ mode: 'model-default' });
+  if (typeof value !== 'boolean' && !(typeof value === 'string' && value.length <= 40))
+    throw new LiveEvaluationError('LIVE_INVALID_OLLAMA_THINK');
+  return Object.freeze({ mode: 'explicit', value });
+}
+
 /** Evaluation-only route selection; private-network trust requires an exact synthetic target. */
 function evaluationTargetContract(options = {}) {
   const env = options.env || process.env;
@@ -321,9 +329,10 @@ function preflight(options = {}) {
     ollama: options.models?.ollama || env.BURO_OLLAMA_MODEL,
     deepseek: options.models?.deepseek || env.BURO_DEEPSEEK_MODEL,
   };
-  let target;
+  let target, ollamaThinking;
   try {
     target = options.target === undefined ? undefined : evaluationTargetContract(options);
+    ollamaThinking = requestedOllamaThinking(options.ollamaThink);
   } catch (error) {
     return { ok: false, code: error.code || 'LIVE_INVALID_CONFIGURATION' };
   }
@@ -370,6 +379,7 @@ function preflight(options = {}) {
       mode,
       models: Object.freeze(models),
       endpoints: Object.freeze(endpoints),
+      ollamaThinking,
       limits,
       ...(target?.trust ? { ollamaTrust: target.trust } : {}),
       contexts: contextBudgets(endpoints, limits, options.contextTokensByProvider),
@@ -957,6 +967,7 @@ async function runLiveProviderEvaluation(options = {}) {
     Object.entries(checked.models).filter(([name]) => checked.endpoints[name] || name === 'codex'),
   );
   report.contextTokensByProvider = checked.contexts;
+  if (checked.endpoints.ollama) report.requestedOllamaThinking = checked.ollamaThinking;
   const observedFetch = createBudgetedFetch({
     endpoints: checked.endpoints,
     models: checked.models,
@@ -1052,7 +1063,9 @@ async function runLiveProviderEvaluation(options = {}) {
                 config: {
                   endpoint: checked.endpoints.ollama,
                   capacity: 1,
-                  think: false,
+                  ...(checked.ollamaThinking.mode === 'explicit'
+                    ? { think: checked.ollamaThinking.value }
+                    : {}),
                   ...(checked.ollamaTrust ? { trust: checked.ollamaTrust } : {}),
                 },
               },
@@ -1461,6 +1474,7 @@ async function runLiveProviderEvaluation(options = {}) {
 }
 
 module.exports = {
+  requestedOllamaThinking,
   evaluationTargetContract,
   DEFAULT_LIVE_LIMITS,
   EVALUATION_LIMIT_OPTIONS,
