@@ -7,7 +7,7 @@ import type {
   ManagedTurnHost,
   ManagedTurnState,
 } from './managed-turn-state.ts';
-import { estimateManagedRequest, prepareManagedRequest } from './request-policy.ts';
+import { prepareManagedRequest } from './request-policy.ts';
 import { checkManagedWorkerStep } from './managed-worker-checks.ts';
 import { coordinatorToolsStalled } from './managed-tool-progress.ts';
 import {
@@ -40,27 +40,12 @@ const finalInstruction = (session: Pick<ManagedSession, 'purpose'>, closing = fa
       ? closingFinalResponseInstruction
       : finalResponseInstruction;
 
-function finalContextState(
-  state: Pick<
-    ManagedTurnState,
-    'session' | 'schema' | 'noTools' | 'separate' | 'finalizing' | 'closing'
-  >,
-  instruction: string | undefined = !state.finalizing && state.separate
-    ? finalInstruction(state.session)
-    : undefined,
-) {
-  return {
-    ...state,
-    closing: false,
-    finalizing: true,
-    session:
-      instruction !== undefined
-        ? {
-            ...state.session,
-            messages: [...state.session.messages, { role: 'user' as const, content: instruction }],
-          }
-        : state.session,
-  };
+/** Last server-observed context use, not a guess based on payload size. */
+function observedContextTokens(session: ManagedSession): number | undefined {
+  const usage = session.generation?.response?.usage;
+  return usage?.inputTokens !== undefined && usage.outputTokens !== undefined
+    ? usage.inputTokens + usage.outputTokens
+    : undefined;
 }
 
 /** Coding context is application policy; it never schedules a model or dispatches model tools. */
@@ -103,27 +88,12 @@ export async function initializeManagedCodingContext(
   } else {
     const step = session.workSegments;
     if (coordinator && session.requests > step.active.startedAtRequest) {
-      const projectedState = {
-        ...state,
-        session: {
-          ...session,
-          messages: [...session.messages, { role: 'user' as const, content: task }],
-        },
-      };
-      const work = projectManagedRequestContext(projectedState, host);
-      const final = projectManagedRequestContext(finalContextState(projectedState), host);
-      const estimate = (view: typeof work) =>
-        estimateManagedRequest({
-          messages: view.messages,
-          tools: view.definitions,
-          schema: view.schema,
-        });
       const decision = decideWorkSegment(
         {
           limits: step.limits,
           toolRounds: step.active.toolRounds,
           segmentCount: step.active.index,
-          estimatedInput: Math.max(estimate(work), estimate(final)),
+          observedTokens: observedContextTokens(session),
           contextTokens: session.limits.contextTokens,
           maxOutputTokens: session.limits.maxOutputTokens,
         },
@@ -253,24 +223,12 @@ export async function prepareManagedCodingRequest(
     host.options.segmentPolicy
   ) {
     const step = session.workSegments;
-    const final = projectManagedRequestContext(finalContextState(state), host);
     const decision = decideWorkSegment(
       {
         limits: step.limits,
         toolRounds: step.active.toolRounds,
         segmentCount: step.active.index,
-        estimatedInput: Math.max(
-          estimateManagedRequest({
-            messages: projected.messages,
-            tools: projected.definitions,
-            schema: projected.schema,
-          }),
-          estimateManagedRequest({
-            messages: final.messages,
-            tools: final.definitions,
-            schema: final.schema,
-          }),
-        ),
+        observedTokens: observedContextTokens(session),
         contextTokens: limits.contextTokens,
         maxOutputTokens: limits.maxOutputTokens,
       },
@@ -413,19 +371,11 @@ export async function afterManagedResponse(
     const evidence = await host.options.segmentEvidence!.inspect(session.scope, host.signal);
     host.check();
     assertSegmentScope(step.baseline, evidence, session.scope);
-    const final = projectManagedRequestContext(
-      finalContextState(state, finalInstruction(session, true)),
-      host,
-    );
+    const observed = observedContextTokens(session);
     const needsFinalRotation =
       decision.status === 'complete' &&
-      estimateManagedRequest({
-        messages: final.messages,
-        tools: final.definitions,
-        schema: final.schema,
-      }) +
-        session.limits.maxOutputTokens >
-        session.limits.contextTokens;
+      observed !== undefined &&
+      observed + session.limits.maxOutputTokens > session.limits.contextTokens;
     if (decision.status === 'continue' || needsFinalRotation) {
       if (step.limits.maxSegments !== undefined && step.active.index >= step.limits.maxSegments)
         throw new DomainError('WORK_SEGMENT_LIMIT', 'The saved work segment limit is exhausted.');

@@ -129,7 +129,7 @@ export class CapabilityProbeService {
             }
           : undefined,
         contextTokens: binding.contextTokens,
-        maxOutputTokens: Math.min(binding.maxOutputTokens, 1024),
+        maxOutputTokens: binding.maxOutputTokens,
         signal: controller.signal,
         onProgress() {},
       });

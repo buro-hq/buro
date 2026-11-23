@@ -108,8 +108,8 @@ export type OpenAICompatibleConnectionConfig = z.infer<
 
 export const ManagedLimitsSchema = z
   .strictObject({
-    contextTokens: z.number().int().min(1024).max(262144).default(32768),
-    maxOutputTokens: z.number().int().min(128).max(32768).default(4096),
+    contextTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).default(32768),
+    maxOutputTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).default(4096),
     maxRequestsPerTurn: z.number().int().positive().optional(),
     maxToolCallsPerTurn: z.number().int().positive().optional(),
     maxSessionRequests: z.number().int().positive().optional(),

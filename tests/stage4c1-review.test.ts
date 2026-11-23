@@ -67,7 +67,13 @@ async function fixture(
     tools,
     sessions,
     projects: {
-      get: () => ({ snapshot: () => ({ project: { id: 'p', root: directory }, runs: [] }) }),
+      get: () => ({
+        snapshot: () => ({
+          project: { id: 'p', root: directory },
+          profile: { scope: { mode: 'strict', plannedPaths: ['value.txt'], protectedPaths: [] } },
+          runs: [],
+        }),
+      }),
     } as unknown as ProjectRegistry,
     loopRunner: new PiAgentLoopRunner(),
     idGenerator: () => String(++sequence),

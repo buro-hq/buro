@@ -106,7 +106,7 @@ test('searching a protected file remains readable without granting editing or co
   assert.equal(await fs.readFile(path.join(f.root, 'checks/value.mjs'), 'utf8'), before);
 });
 
-test('file search rejects secrets, outside paths and symlink targets before reading their content', async (t) => {
+test('file search rejects secrets and outside symlink targets before reading their content', async (t) => {
   const f = await fixture(t);
   const marker = 'PRIVATE_SEARCH_MARKER';
   await fs.mkdir(path.join(f.root, '.buro/local'), { recursive: true });
@@ -121,7 +121,6 @@ test('file search rejects secrets, outside paths and symlink targets before read
     '../outside.txt',
     path.join(f.directory, 'outside.txt'),
     'src/link.txt',
-    'alias/value.mjs',
   ]) {
     const result = await f.search(file, marker);
     assert.equal(result.isError, true, file);
@@ -132,11 +131,14 @@ test('file search rejects secrets, outside paths and symlink targets before read
   assert.deepEqual(JSON.parse(directory.content).matches, []);
 });
 
-test('direct file search preserves the bounded text reader and match limits', async (t) => {
+test('direct file search accepts large text while excluding binary files and reporting match limits', async (t) => {
   const f = await fixture(t);
   await fs.writeFile(path.join(f.root, 'src/oversized.mjs'), 'priority' + ' '.repeat(256000));
   await fs.writeFile(path.join(f.root, 'src/binary.mjs'), 'priority\0hidden');
-  for (const file of ['src/oversized.mjs', 'src/binary.mjs']) {
+  const large = await f.search('src/oversized.mjs');
+  assert.equal(large.isError, undefined, large.content);
+  assert.equal(JSON.parse(large.content).matches.length, 1);
+  for (const file of ['src/binary.mjs']) {
     const result = await f.search(file);
     assert.equal(result.isError, true, file);
     assert.doesNotMatch(result.content, /priority|hidden/);
@@ -154,8 +156,6 @@ test('direct file search preserves the bounded text reader and match limits', as
   const directory = await f.search('src');
   assert.equal(directory.isError, undefined, directory.content);
   assert.ok(
-    JSON.parse(directory.content).matches.every(
-      (match: any) => !['src/oversized.mjs', 'src/binary.mjs'].includes(match.path),
-    ),
+    JSON.parse(directory.content).matches.every((match: any) => match.path !== 'src/binary.mjs'),
   );
 });

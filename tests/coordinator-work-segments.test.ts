@@ -49,6 +49,7 @@ async function fixture(
   t: any,
   options: {
     policy?: WorkSegmentPolicy;
+    omitUsage?: boolean;
     useTool?: boolean;
     separateLongNote?: boolean;
     serviceActionOnClosure?: boolean;
@@ -165,6 +166,7 @@ async function fixture(
           return {
             model: 'controlled-model',
             finish: 'stop',
+            ...(!options.omitUsage ? { usage: { inputTokens: 15000, outputTokens: 200 } } : {}),
             message: {
               role: 'assistant',
               content: 'LONG_PRIVATE_COMPLETION_NOTE: ' + 'Observed source detail. '.repeat(380),
@@ -175,6 +177,7 @@ async function fixture(
           return {
             model: 'controlled-model',
             finish: 'stop',
+            ...(!options.omitUsage ? { usage: { inputTokens: 15000, outputTokens: 200 } } : {}),
             message: {
               role: 'assistant',
               content: JSON.stringify(
@@ -195,7 +198,7 @@ async function fixture(
         return {
           model: 'controlled-model',
           finish: 'stop',
-          usage: { inputTokens: 100, outputTokens: 100 },
+          ...(!options.omitUsage ? { usage: { inputTokens: 15000, outputTokens: 200 } } : {}),
           message: {
             role: 'assistant',
             content: JSON.stringify({
@@ -266,7 +269,7 @@ async function fixture(
   };
 }
 
-test('action-only coordinator turns rotate by physical context, keep all history and current state across more than sixteen windows', async (t) => {
+test('action-only coordinator turns rotate by server-reported context, keep all history and current state across more than sixteen windows', async (t) => {
   const f = await fixture(t);
   const turns = 60;
   for (let index = 1; index <= turns; index++) await f.turn(f.runtime, index);
@@ -617,3 +620,12 @@ for (const progress of ['output', 'workspace', 'arguments'] as const)
     assert.equal(f.toolCalls(), 5);
     assert.equal(f.requests.length, 7);
   });
+
+test('large coordinator text without server usage does not trigger invented context rotation', async (t) => {
+  const f = await fixture(t, { omitUsage: true });
+  for (let index = 1; index <= 6; index++) await f.turn(f.runtime, index);
+  const saved = (await f.files.load(f.threadId))!;
+  assert.equal(saved.workSegments!.archives.length, 0);
+  assert.equal(f.requests.length, 6);
+  assert.ok(f.requests.every((request) => request.maxOutputTokens === 2048));
+});

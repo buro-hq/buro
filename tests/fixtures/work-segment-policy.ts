@@ -9,11 +9,12 @@ export const testBoundedWorkSegmentPolicy: WorkSegmentPolicy = {
     maxSegments: 4,
     contextThresholdPercent: 60,
   },
-  decide({ limits, toolRounds, estimatedInput, maxOutputTokens, contextTokens }) {
+  decide({ limits, toolRounds, observedTokens, maxOutputTokens, contextTokens }) {
     if (limits.maxToolRounds === undefined || limits.contextThresholdPercent === undefined)
       throw Error('The test policy requires explicit tool-round and context limits.');
     return toolRounds >= limits.maxToolRounds ||
-      estimatedInput + maxOutputTokens >= (contextTokens * limits.contextThresholdPercent) / 100
+      (observedTokens ?? 0) + maxOutputTokens >=
+        (contextTokens * limits.contextThresholdPercent) / 100
       ? 'close'
       : 'continue';
   },

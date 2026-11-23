@@ -6,7 +6,7 @@ import { DomainError, type ProjectRegistry } from '../../core/ports.ts';
 import { canonicalOutputPaths } from '../../core/verification-view.ts';
 import type { ProjectCommand, ProjectProfile } from '../../protocol/domain.ts';
 import type { VerificationView } from '../../protocol/verification.ts';
-/** Commands are chosen by the user in the protected profile, never by an agent. */
+/** Run an isolated command; service checks select commands from the protected profile. */
 export async function runProjectCommand(
   command: ProjectCommand,
   workspace: string,
@@ -17,84 +17,87 @@ export async function runProjectCommand(
 ) {
   if (signal.aborted) throw new DOMException('Interrupted', 'AbortError');
   const started = Date.now();
-  return new Promise<{ exitCode: number | null; output: string; durationMs: number }>(
-    (resolve, reject) => {
-      const child = spawn(
-        launch?.executable || '/bin/sh',
-        launch?.args || ['-c', command.command],
-        {
-          cwd: workspace,
-          detached: true,
-          env: {
-            PATH: process.env.PATH,
-            HOME: os.homedir(),
-            TMPDIR: process.env.TMPDIR || os.tmpdir(),
-            PROJECT_ROOT: root,
-            GOAL_WORKSPACE: workspace,
-            CI: '1',
-            ...launch?.env,
-            ...environment,
-          },
-          stdio: ['ignore', 'pipe', 'pipe'],
-        },
-      );
-      let output = '',
-        timedOut = false,
-        killTimer: ReturnType<typeof setTimeout> | undefined;
-      let termination = Promise.resolve(),
-        killed = false;
-      const kill = () => {
-        if (killed) return;
-        killed = true;
-        if (launch?.terminate) termination = launch.terminate();
-        // Attach immediately so a cleanup failure cannot become an unhandled rejection.
-        void termination.catch(() => {});
+  return new Promise<{
+    exitCode: number | null;
+    output: string;
+    durationMs: number;
+    truncated: boolean;
+  }>((resolve, reject) => {
+    const child = spawn(launch?.executable || '/bin/sh', launch?.args || ['-c', command.command], {
+      cwd: workspace,
+      detached: true,
+      env: {
+        PATH: process.env.PATH,
+        HOME: os.homedir(),
+        TMPDIR: process.env.TMPDIR || os.tmpdir(),
+        PROJECT_ROOT: root,
+        GOAL_WORKSPACE: workspace,
+        CI: '1',
+        ...launch?.env,
+        ...environment,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let output = '',
+      truncated = false,
+      timedOut = false,
+      killTimer: ReturnType<typeof setTimeout> | undefined;
+    let termination = Promise.resolve(),
+      killed = false;
+    const kill = () => {
+      if (killed) return;
+      killed = true;
+      if (launch?.terminate) termination = launch.terminate();
+      // Attach immediately so a cleanup failure cannot become an unhandled rejection.
+      void termination.catch(() => {});
+      try {
+        if (child.pid) process.kill(-child.pid, 'SIGTERM');
+      } catch {}
+      killTimer = setTimeout(() => {
         try {
-          if (child.pid) process.kill(-child.pid, 'SIGTERM');
+          if (child.pid) process.kill(-child.pid, 'SIGKILL');
         } catch {}
-        killTimer = setTimeout(() => {
-          try {
-            if (child.pid) process.kill(-child.pid, 'SIGKILL');
-          } catch {}
-        }, 1000);
-      };
-      const timer = setTimeout(() => {
-          timedOut = true;
-          kill();
-        }, command.timeoutMs),
-        abort = () => kill();
-      signal.addEventListener('abort', abort, { once: true });
-      const read = (b: Buffer) => {
-        output = (output + String(b)).slice(-30000);
-      };
-      child.stdout.on('data', read);
-      child.stderr.on('data', read);
-      const cleanup = () => {
-        clearTimeout(timer);
-        clearTimeout(killTimer);
-        signal.removeEventListener('abort', abort);
-      };
-      child.once('error', (error) => {
-        cleanup();
+      }, 1000);
+    };
+    const timer = setTimeout(() => {
+        timedOut = true;
+        kill();
+      }, command.timeoutMs),
+      abort = () => kill();
+    signal.addEventListener('abort', abort, { once: true });
+    const read = (b: Buffer) => {
+      const combined = output + String(b);
+      truncated ||= combined.length > 30000;
+      output = combined.slice(-30000);
+    };
+    child.stdout.on('data', read);
+    child.stderr.on('data', read);
+    const cleanup = () => {
+      clearTimeout(timer);
+      clearTimeout(killTimer);
+      signal.removeEventListener('abort', abort);
+    };
+    child.once('error', (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.once('close', async (code) => {
+      cleanup();
+      try {
+        await termination;
+      } catch (error) {
         reject(error);
+        return;
+      }
+      if (signal.aborted) return reject(new DOMException('Interrupted', 'AbortError'));
+      resolve({
+        exitCode: timedOut ? -1 : code,
+        output: (timedOut ? 'Command timed out.\n' : '') + output,
+        durationMs: Date.now() - started,
+        truncated,
       });
-      child.once('close', async (code) => {
-        cleanup();
-        try {
-          await termination;
-        } catch (error) {
-          reject(error);
-          return;
-        }
-        if (signal.aborted) return reject(new DOMException('Interrupted', 'AbortError'));
-        resolve({
-          exitCode: timedOut ? -1 : code,
-          output: (timedOut ? 'Command timed out.\n' : '') + output,
-          durationMs: Date.now() - started,
-        });
-      });
-    },
-  );
+    });
+  });
 }
 export class ProjectChecks implements CheckPort {
   projects: ProjectRegistry;

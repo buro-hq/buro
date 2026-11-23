@@ -171,7 +171,7 @@ async function fixture(t: any) {
     messages: state.session.messages,
     definitions: host.toolDefinitions(scope),
     schema: {},
-    budget: { estimatedInput: 100, maxOutputTokens: 512, reason: 'configured-limit' },
+    budget: { maxOutputTokens: 512, reason: 'configured-limit' },
   };
   return {
     directory,

@@ -8,7 +8,7 @@ import { FileManagedSessions } from '../adapters/files/managed-sessions.ts';
 import { OllamaProvider } from '../adapters/models/ollama.ts';
 import { createBuiltinExecutionActions } from '../adapters/workflows/actions.ts';
 import { ManagedAgentRuntime } from '../core/managed-runtime.ts';
-import { conservativeRequestPolicy } from '../core/request-policy.ts';
+import { configuredRequestPolicy } from '../core/request-policy.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 
@@ -90,7 +90,7 @@ test('a real managed 16K session carries check, review and finish decisions thro
     }),
   } as unknown as ProjectRegistry;
   const reservations: number[] = [];
-  const estimates: number[] = [];
+  const messageSizes: number[] = [];
   let nextId = 0,
     toolEffects = 0;
   const settings = {
@@ -109,10 +109,10 @@ test('a real managed 16K session carries check, review and finish decisions thro
       maxSessionRequests: 16,
     },
     requestPolicy: {
-      revision: conservativeRequestPolicy.revision,
-      prepare(input: Parameters<typeof conservativeRequestPolicy.prepare>[0]) {
-        const decision = conservativeRequestPolicy.prepare(input);
-        estimates.push(decision.estimatedInput);
+      revision: configuredRequestPolicy.revision,
+      prepare(input: Parameters<typeof configuredRequestPolicy.prepare>[0]) {
+        const decision = configuredRequestPolicy.prepare(input);
+        messageSizes.push(JSON.stringify(input.messages).length);
         return decision;
       },
     },
@@ -204,10 +204,9 @@ test('a real managed 16K session carries check, review and finish decisions thro
   assert.ok(saved.messages.some((message) => message.content === JSON.stringify(decisions[1])));
   assert.ok(saved.messages.every((message) => !message.content.includes(schemaText)));
   assert.deepEqual(reservations, Array(7).fill(2048));
-  assert.equal(estimates.length, 7);
-  assert.ok(estimates.every((estimate) => estimate + 2048 <= 16384));
+  assert.equal(messageSizes.length, 7);
   t.diagnostic(
-    `Seven generations; maximum estimated input ${Math.max(...estimates)}; all output reservations 2048; response grammar ${schemaText.length} bytes.`,
+    `Seven generations; maximum serialized message length ${Math.max(...messageSizes)}; all output reservations 2048; response grammar ${schemaText.length} bytes.`,
   );
   const formatted = bodies.filter((body) => body.format !== undefined);
   assert.equal(formatted.length, 3);

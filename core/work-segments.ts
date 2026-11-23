@@ -25,7 +25,7 @@ export type WorkSegmentInput = {
   limits: WorkSegmentLimits;
   toolRounds: number;
   segmentCount: number;
-  estimatedInput: number;
+  observedTokens?: number;
   contextTokens: number;
   maxOutputTokens: number;
 };
@@ -34,14 +34,15 @@ export interface WorkSegmentPolicy {
   readonly limits: WorkSegmentLimits;
   decide(input: WorkSegmentInput): 'continue' | 'close';
 }
-/** Rotate only when the projected request cannot retain its full configured output allowance. */
+/** Rotate from server-reported token use; unknown usage never becomes a byte estimate. */
 export const contextWorkSegmentPolicy: WorkSegmentPolicy = Object.freeze({
-  revision: 'managed-context-segments-v3',
+  revision: 'managed-context-segments-v4',
   limits: Object.freeze({
-    revision: 'managed-context-segments-v3',
+    revision: 'managed-context-segments-v4',
   }),
   decide(input: WorkSegmentInput) {
-    return input.estimatedInput + input.maxOutputTokens > input.contextTokens
+    return input.observedTokens !== undefined &&
+      input.observedTokens + input.maxOutputTokens > input.contextTokens
       ? 'close'
       : 'continue';
   },

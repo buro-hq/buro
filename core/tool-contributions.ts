@@ -6,12 +6,18 @@ import { ResourceConfigSchema } from '../protocol/resources.ts';
 
 /** Only bounded workspace operations cross the trusted handler boundary. */
 export interface RepositoryToolOperations {
-  readFile(input: { path: string; startLine?: number; lineCount?: number }): Promise<ToolResult>;
+  readFile(input: {
+    path: string;
+    startLine?: number;
+    startColumn?: number;
+    lineCount?: number;
+    maxChars?: number;
+  }): Promise<ToolResult>;
   listFiles(input: { path?: string }): Promise<ToolResult>;
   searchText(input: { query: string; path?: string }): Promise<ToolResult>;
   readDiff(): Promise<ToolResult>;
   editFile(input: { path: string; oldText: string; newText: string }): Promise<ToolResult>;
-  runCommand(input: { command: string }): Promise<ToolResult>;
+  runCommand(input: { command: string; timeoutMs?: number }): Promise<ToolResult>;
 }
 export type ToolContribution<Shape extends z.ZodRawShape = z.ZodRawShape> = {
   name: string;
@@ -32,7 +38,7 @@ export type RegisteredToolContribution = {
   readonly parameters: Record<string, unknown>;
   invoke(input: unknown, operations: RepositoryToolOperations): Promise<ToolResult>;
 };
-export const TOOL_EFFECT_POLICY_REVISION = 'repository-tool-effects-v1';
+export const TOOL_EFFECT_POLICY_REVISION = 'repository-tool-effects-v2';
 export function toolEffectAllowed(effect: ToolEffect, scope: ToolScope): boolean {
   if (!['read', 'write', 'command'].includes(effect))
     throw new DomainError('INVALID_TOOL_CONTRIBUTION', 'The tool has no registered effect policy.');
@@ -40,8 +46,7 @@ export function toolEffectAllowed(effect: ToolEffect, scope: ToolScope): boolean
   if (scope.readOnly || scope.verificationViewId || scope.verificationTree) return false;
   if (effect === 'write')
     return scope.writeScope.mode === 'advisory' || scope.writeScope.plannedPaths.length > 0;
-  if (effect === 'command')
-    return scope.writeScope.mode === 'advisory' && scope.commands.length > 0;
+  if (effect === 'command') return scope.writeScope.mode === 'advisory';
   throw new DomainError('INVALID_TOOL_CONTRIBUTION', 'The tool has no registered effect policy.');
 }
 function immutable<T>(value: T): T {
@@ -299,7 +304,7 @@ export class ToolContributionCatalog {
         description:
           description +
           (effect === 'command'
-            ? ' Allowed commands: ' +
+            ? ' Suggested project checks: ' +
               JSON.stringify(scope.commands.map((command) => command.command))
             : ''),
         parameters: structuredClone(parameters),

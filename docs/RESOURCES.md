@@ -39,7 +39,7 @@ Authentication is optional. Set `apiKeyEnv` to an environment-variable reference
 
 Ollama and OpenAI-compatible connection JSON can also include optional `sampling`, for example `{"temperature":0.7,"topP":0.8,"presencePenalty":1.5}`. Omitted settings retain the server's defaults; explicit zero values are preserved. Sampling changes invalidate the provider binding like other model settings. Different connections to the same endpoint can configure reasoning and sampling for separate roles while sharing endpoint capacity.
 
-The configured runtime output allowance includes reasoning tokens. Work-step closing uses that allowance and the available context headroom; it does not impose a separate 512-token ceiling.
+The configured runtime output allowance includes reasoning tokens. Every request phase, including capability probes and work-step closing, uses that allowance. Buro does not estimate tokens from bytes or silently shrink the answer. Context rotation uses server-reported token usage when available; the backend enforces its physical context limit.
 
 Saving a connection requires a Buro service restart to apply it. The interface shows the saved address, active API address and **Restart required** badge. New work using a changed connection, model discovery and diagnostics are blocked until restart; work already owned by the current service retains its active provider. Saving never silently replaces a provider under a running conversation. After restart, an old run whose frozen resource revision no longer matches stops with a configuration error rather than moving to the new endpoint.
 
@@ -249,7 +249,7 @@ Environment discovery and result preparation reference their owning run explicit
 
 ## Supported execution boundary
 
-Managed tools provide bounded text reads/search, exact edits in assigned paths, inspection of actual changes and exact configured check commands. Model-directed commands use native confinement, cannot read private Buro/client state and cannot use the network. Explicit environment setup/readiness recipes can use the network while retaining private-file restrictions. Acceptance checks remain service-owned.
+Managed tools provide bounded text reads/search, exact edits in assigned paths, inspection of actual changes and workspace shell commands. Model-directed commands use native confinement, cannot read private Buro/client state and cannot use the network. Explicit environment setup/readiness recipes can use the network while retaining private-file restrictions. Acceptance checks remain service-owned.
 
 Managed Docker execution currently fails closed because the existing native-client container does not provide the required private-data isolation. Native Codex Docker behavior remains available. Unsupported environments never fall back to an unconfined host command.
 

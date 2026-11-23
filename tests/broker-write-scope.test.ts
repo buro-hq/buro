@@ -17,6 +17,7 @@ async function fixture(t: any) {
   const marker = path.join(root, 'command-child-marker');
   let launches = 0;
   const tools = new RepositoryTools({
+    dependencyReadRoots: () => [],
     launch() {
       launches++;
       throw Error('A strict command must never be launched');

@@ -386,7 +386,7 @@ test('tool intent and result persistence failures never repeat a possibly comple
   }
 });
 
-test('duplicate tool IDs and exhausted token budgets stop before dispatch', async (t) => {
+test('duplicate tool IDs stop effects while request size does not create an invented token rejection', async (t) => {
   const f = await fixture(t);
   let effects = 0,
     requests = 0;
@@ -412,15 +412,25 @@ test('duplicate tool IDs and exhausted token budgets stop before dispatch', asyn
     code: 'DUPLICATE_TOOL_CALL',
   });
   assert.equal(effects, 0);
-  const small = f.make(p, {
-    tools,
-    limits: { ...limits, contextTokens: 1000, maxOutputTokens: 100 },
-  });
+  const small = f.make(
+    provider(async (input) => {
+      requests++;
+      assert.equal(input.maxOutputTokens, 100);
+      assert.ok(input.messages.some((message) => message.content.includes('x'.repeat(2000))));
+      return response();
+    }),
+    {
+      tools,
+      limits: { ...limits, contextTokens: 1000, maxOutputTokens: 100 },
+    },
+  );
   const second = await f.start(small);
-  await assert.rejects(small.turn(second.threadId, 'x'.repeat(2000), turnOptions()), {
-    code: 'MODEL_CONTEXT_EXHAUSTED',
-  });
-  assert.equal(requests, 1);
+  assert.equal(
+    (await small.turn(second.threadId, 'x'.repeat(2000), turnOptions())).text,
+    '{"ok":true}',
+  );
+  assert.equal(requests, 2);
+  assert.equal(effects, 0);
 });
 
 test('separate structured output keeps the final schema out of tool requests and publishes only the final answer', async (t) => {
@@ -958,7 +968,7 @@ test('private checkpoint schema rejects invalid, duplicate, unordered or pending
   assert.deepEqual(await f.sessions.load(started.threadId), saved);
 });
 
-test('omitting the current intermediate content cannot bypass a large private continuation on the final request', async (t) => {
+test('final projection retains large private continuation without byte-based output clipping', async (t) => {
   const f = await fixture(t);
   const candidate = 'PRIVATE_CURRENT_NOTE '.repeat(1000);
   const continuation = { private: 'REQUIRED_FINAL_CONTINUATION '.repeat(1000) };
@@ -966,8 +976,16 @@ test('omitting the current intermediate content cannot bypass a large private co
   const phases: string[] = [];
   const runtime = f.make(
     {
-      ...provider(async () => {
+      ...provider(async (input) => {
         requests++;
+        assert.equal(input.maxOutputTokens, 1000);
+        if (requests === 2) {
+          assert.deepEqual(
+            input.messages.find((message) => message.continuation)?.continuation,
+            continuation,
+          );
+          return response();
+        }
         return {
           ...response([], candidate),
           message: { role: 'assistant', content: candidate, continuation },
@@ -985,20 +1003,21 @@ test('omitting the current intermediate content cannot bypass a large private co
     { limits: { ...limits, contextTokens: 16000, maxOutputTokens: 1000 } },
   );
   const started = await f.start(runtime);
-  await assert.rejects(runtime.turn(started.threadId, 'Inspect', turnOptions()), {
-    code: 'MODEL_CONTEXT_EXHAUSTED',
-  });
-  assert.equal(requests, 1);
+  assert.equal(
+    (await runtime.turn(started.threadId, 'Inspect', turnOptions())).text,
+    '{"ok":true}',
+  );
+  assert.equal(requests, 2);
   assert.deepEqual(phases, ['work', 'final']);
   const saved = (await f.sessions.load(started.threadId))!;
-  assert.equal(saved.requests, 1);
-  const intermediate = saved.messages.at(-2)!;
+  assert.equal(saved.requests, 2);
+  const intermediate = saved.messages.find((message) => message.content === candidate)!;
   assert.equal(intermediate.content, candidate);
   assert.deepEqual(intermediate.continuation, continuation);
   assert.equal(saved.actions.length, 0);
 });
 
-test('essential tool results and private continuation still exhaust projected context before another model request', async (t) => {
+test('essential tool results and private continuation reach the backend without invented context admission', async (t) => {
   const f = await fixture(t);
   for (const essential of ['tool-result', 'continuation']) {
     let requests = 0,
@@ -1008,8 +1027,19 @@ test('essential tool results and private continuation still exhaust projected co
     const continuation = { private: essential === 'continuation' ? oversized : 'kept' };
     const result = essential === 'tool-result' ? oversized : 'Read completed';
     const p: ModelProvider = {
-      ...provider(async () => {
+      ...provider(async (input) => {
         requests++;
+        assert.equal(input.maxOutputTokens, 1000);
+        if (requests === 2) {
+          assert.ok(
+            input.messages.some((message) => message.role === 'tool' && message.content === result),
+          );
+          assert.deepEqual(
+            input.messages.find((message) => message.toolCalls?.length)?.continuation,
+            continuation,
+          );
+          return response();
+        }
         return {
           ...response([
             { id: 'read-once', name: 'read_file', arguments: { path: 'src/value.mjs' } },
@@ -1045,14 +1075,15 @@ test('essential tool results and private continuation still exhaust projected co
       },
     });
     const started = await f.start(runtime);
-    await assert.rejects(runtime.turn(started.threadId, 'Inspect', turnOptions()), {
-      code: 'MODEL_CONTEXT_EXHAUSTED',
-    });
+    assert.equal(
+      (await runtime.turn(started.threadId, 'Inspect', turnOptions())).text,
+      '{"ok":true}',
+    );
     const saved = (await f.sessions.load(started.threadId))!;
-    assert.equal(requests, 1);
+    assert.equal(requests, 2);
     assert.equal(projections, 2);
     assert.equal(actions, 1);
-    assert.equal(saved.requests, 1);
+    assert.equal(saved.requests, 2);
     assert.equal(saved.actions[0].status, 'completed');
     assert.equal(saved.actions[0].result?.content, result);
     assert.deepEqual(
@@ -1066,13 +1097,21 @@ test('essential tool results and private continuation still exhaust projected co
   }
 });
 
-test('providers without context projection retain the full-history guard and never silently omit commentary', async (t) => {
+test('providers without context projection retain full history and configured output', async (t) => {
   const f = await fixture(t);
   let requests = 0;
   const commentary = 'REQUIRED_ORIGINAL_COMMENTARY '.repeat(1000);
   const runtime = f.make(
-    provider(async () => {
+    provider(async (input) => {
       requests++;
+      assert.equal(input.maxOutputTokens, 1000);
+      if (requests === 2) {
+        assert.equal(
+          input.messages.find((message) => message.toolCalls?.length)?.content,
+          commentary,
+        );
+        return response();
+      }
       return {
         ...response([{ id: 'read', name: 'read_file', arguments: { path: 'src/value.mjs' } }]),
         message: {
@@ -1085,12 +1124,13 @@ test('providers without context projection retain the full-history guard and nev
     { limits: { ...limits, contextTokens: 16000, maxOutputTokens: 1000 } },
   );
   const started = await f.start(runtime);
-  await assert.rejects(runtime.turn(started.threadId, 'Inspect', turnOptions()), {
-    code: 'MODEL_CONTEXT_EXHAUSTED',
-  });
+  assert.equal(
+    (await runtime.turn(started.threadId, 'Inspect', turnOptions())).text,
+    '{"ok":true}',
+  );
   const saved = (await f.sessions.load(started.threadId))!;
-  assert.equal(requests, 1);
-  assert.equal(saved.requests, 1);
+  assert.equal(requests, 2);
+  assert.equal(saved.requests, 2);
   assert.equal(saved.actions.length, 1);
   assert.equal(saved.messages.find((message) => message.toolCalls?.length)?.content, commentary);
 });

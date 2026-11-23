@@ -446,6 +446,34 @@ export class EnvironmentExecutors {
   isVerificationWorkspace(workspace: string) {
     return [...this.verification.values()].some((entry) => entry.view.readRoot === workspace);
   }
+  /** Explicit dependency reads use only the prepared project or registered immutable view. */
+  dependencyReadRoots(workspace: string): string[] {
+    const verified = [...this.verification.values()].find(
+      (entry) => entry.view.readRoot === workspace,
+    );
+    if (verified) {
+      this.launchVerification(verified.view, [process.execPath], true);
+      return (verified.view.readonlyDependencies || []).map((dependency) => dependency.target);
+    }
+    const world = this.worlds.get(workspace);
+    if (!world) return [];
+    const prepared = path.join(world.root, 'node_modules');
+    const linked = path.join(workspace, 'node_modules');
+    if (!existsSync(prepared) || !existsSync(linked)) return [];
+    const target = realpathSync(prepared);
+    if (realpathSync(linked) !== target) return [];
+    const home = os.homedir();
+    const privateRoots = [
+      this.agentConfigHome,
+      ...this.privatePaths,
+      ...['.ssh', '.aws', '.codex', '.claude', '.config', 'Library/Keychains'].map((name) =>
+        path.join(home, name),
+      ),
+    ];
+    if (target === home || privateRoots.some((root) => overlap(root, target))) return [];
+    return [target];
+  }
+
   launch(
     workspace: string,
     argv: string[],
@@ -455,6 +483,7 @@ export class EnvironmentExecutors {
       variables?: Record<string, string>;
       privateDataIsolation?: boolean;
       allowNetwork?: boolean;
+      immutablePaths?: string[];
     } = {},
   ): Launch {
     const world = this.worlds.get(workspace);
@@ -477,6 +506,8 @@ export class EnvironmentExecutors {
         variables,
         !!options.readOnly,
         !!options.allowNetwork,
+        undefined,
+        options.immutablePaths,
       );
     }
     if (world.container) {
@@ -583,7 +614,31 @@ export class EnvironmentExecutors {
       immutableRoots: string[];
       denyLinks: boolean;
     },
+    immutablePaths?: string[],
   ): Launch {
+    const immutable = new Set<string>();
+    if (immutablePaths) {
+      for (const relative of [
+        ...['.git', '.buro/local', 'node_modules'].filter((name) =>
+          existsSync(path.join(world.workspace, name)),
+        ),
+        ...immutablePaths,
+      ]) {
+        const target = path.resolve(world.workspace, relative);
+        if (target !== world.workspace && !target.startsWith(world.workspace + path.sep))
+          throw new DomainError('TOOL_SCOPE', 'A protected path escapes the workspace.');
+        immutable.add(target);
+        if (existsSync(target)) immutable.add(realpathSync(target));
+      }
+    }
+    const immutableParents = new Set<string>();
+    for (const target of immutable) {
+      let parent = path.dirname(target);
+      while (parent === world.workspace || parent.startsWith(world.workspace + path.sep)) {
+        immutableParents.add(parent);
+        parent = path.dirname(parent);
+      }
+    }
     const home = os.homedir();
     const protectedPaths = new Set([
       path.join(world.root, '.buro/local'),
@@ -625,6 +680,7 @@ export class EnvironmentExecutors {
       world.cacheRoot,
       path.dirname(process.execPath),
       ...(verification?.readRoots || []),
+      ...(!verification ? this.dependencyReadRoots(world.workspace) : []),
     ]);
     for (const value of (process.env.PATH || '').split(path.delimiter)) {
       if (!value || !path.isAbsolute(value) || !existsSync(value)) continue;
@@ -675,10 +731,26 @@ export class EnvironmentExecutors {
           .map((value) => `(allow file-read-data (subpath ${literal(value)}))`)
           .join('') +
         writable.map((value) => `(allow file-write* (subpath ${literal(value)}))`).join('') +
-        (verification?.immutableRoots || [])
+        [...(verification?.immutableRoots || []), ...immutable]
           .map((value) => `(deny file-write* (subpath ${literal(value)}))`)
           .join('') +
-        (verification?.denyLinks ? '(deny file-link)(deny file-mount)(deny file-unmount)' : '') +
+        [...immutableParents]
+          .map((value) => `(deny file-write-unlink (literal ${literal(value)}))`)
+          .join('') +
+        (immutablePaths
+          ? [...new Set([world.root, world.workspace])]
+              .map(
+                (root) =>
+                  `(deny file-write* (regex #${literal('^' + escape(root) + '/(.*/)?([.]git|node_modules|[.]aws|[.]ssh|[.]codex|[.]claude)(/.*)?$')}))` +
+                  `(deny file-write* (regex #${literal('^' + escape(root) + '/(.*/)?([.]env([.].*)?|[.]npmrc|[.]netrc|id_rsa|id_ed25519|.*[.](pem|key|p12|pfx|keystore))$')}))`,
+              )
+              .join('') +
+            // Cache writes are permitted beneath otherwise private metadata.
+            `(allow file-write* (subpath ${literal(world.cacheRoot)}))`
+          : '') +
+        (verification?.denyLinks || immutablePaths
+          ? '(deny file-link)(deny file-mount)(deny file-unmount)'
+          : '') +
         '(allow file-write* (literal "/dev/null"))' +
         (!allowNetwork ? '(deny network*)' : '');
       return {
@@ -735,6 +807,7 @@ export class EnvironmentExecutors {
       }
     };
     for (const root of new Set([world.root, world.workspace])) inspect(root);
+    if (immutablePaths) for (const value of excluded) if (existsSync(value)) immutable.add(value);
     for (const value of excluded)
       if (existsSync(value) && value !== world.cacheRoot)
         args.push(
@@ -747,6 +820,15 @@ export class EnvironmentExecutors {
     // Re-expose only this run's artifact cache beneath the masked metadata root.
     if (existsSync(world.cacheRoot))
       args.push(readOnly ? '--ro-bind' : '--bind', world.cacheRoot, world.cacheRoot);
+    for (const value of immutable) {
+      // A missing protected target is covered by its nearest existing parent.
+      let existing = value;
+      while (!existsSync(existing)) existing = path.dirname(existing);
+      if (excluded.has(existing)) args.push('--remount-ro', existing);
+      else args.push('--ro-bind', existing, existing);
+    }
+    if (immutablePaths && existsSync(world.cacheRoot))
+      args.push('--bind', world.cacheRoot, world.cacheRoot);
     args.push('--chdir', world.workspace, '--', ...argv);
     return { executable: 'bwrap', args, cwd: world.workspace, env };
   }
@@ -766,4 +848,8 @@ function bindMount(source: string, destination: string, readOnly = false) {
   return ['type=bind', `src=${source}`, `dst=${destination}`, ...(readOnly ? ['readonly'] : [])]
     .map((value) => (/[,"\n\r]/.test(value) ? '"' + value.replaceAll('"', '""') + '"' : value))
     .join(',');
+}
+
+function overlap(a: string, b: string) {
+  return a === b || a.startsWith(b + path.sep) || b.startsWith(a + path.sep);
 }

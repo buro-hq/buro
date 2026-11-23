@@ -69,7 +69,7 @@ test('configured policies cannot change revisions, return invalid decisions or m
     limits: { ...contextWorkSegmentPolicy.limits },
     toolRounds: 2,
     segmentCount: 1,
-    estimatedInput: 2000,
+    observedTokens: 2000,
     contextTokens: 16000,
     maxOutputTokens: 1024,
   };
@@ -92,23 +92,27 @@ test('configured policies cannot change revisions, return invalid decisions or m
   assert.deepEqual(input, snapshot, 'A plugin cannot mutate the frozen limits');
 });
 
-test('context policy rotates only when the projected request and full output allowance exceed context', () => {
+test('context policy rotates only when reported usage plus the full output allowance exceed context', () => {
   const input = {
     limits: { ...contextWorkSegmentPolicy.limits },
     toolRounds: 200,
     segmentCount: 1,
-    estimatedInput: 10000,
+    observedTokens: 10000,
     contextTokens: 16000,
     maxOutputTokens: 1024,
   };
-  assert.deepEqual(input.limits, { revision: 'managed-context-segments-v3' });
+  assert.deepEqual(input.limits, { revision: 'managed-context-segments-v4' });
   assert.equal(decideWorkSegment(input, contextWorkSegmentPolicy), 'continue');
   assert.equal(
-    decideWorkSegment({ ...input, estimatedInput: 14976 }, contextWorkSegmentPolicy),
+    decideWorkSegment({ ...input, observedTokens: undefined }, contextWorkSegmentPolicy),
     'continue',
   );
   assert.equal(
-    decideWorkSegment({ ...input, estimatedInput: 14977 }, contextWorkSegmentPolicy),
+    decideWorkSegment({ ...input, observedTokens: 14976 }, contextWorkSegmentPolicy),
+    'continue',
+  );
+  assert.equal(
+    decideWorkSegment({ ...input, observedTokens: 14977 }, contextWorkSegmentPolicy),
     'close',
   );
   assert.equal(

@@ -31,6 +31,7 @@ function fixture(complete?: ModelProvider['complete']) {
     local: true,
     complete: async (input) => {
       requests++;
+      assert.equal(input.maxOutputTokens, 6144);
       if (complete) return complete(input);
       assert.equal(store.requests.get('command')?.status, 'started');
       if (requests === 1) {
@@ -84,7 +85,7 @@ function fixture(complete?: ModelProvider['complete']) {
         model: 'model-requested',
         configurationRevision: 'v1',
         contextTokens: 16000,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 6144,
       }),
     });
   return { store, make, requests: () => requests };

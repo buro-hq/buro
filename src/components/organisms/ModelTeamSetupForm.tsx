@@ -382,8 +382,7 @@ export function ModelTeamSetupForm({
                         label={t('Context tokens')}
                         value={contextTokens}
                         onChange={setContextTokens}
-                        min={1024}
-                        max={262144}
+                        min={1}
                         allowDecimal={false}
                         disabled={saving}
                       />
@@ -391,8 +390,7 @@ export function ModelTeamSetupForm({
                         label={t('Output tokens per request')}
                         value={maxOutputTokens}
                         onChange={setMaxOutputTokens}
-                        min={128}
-                        max={32768}
+                        min={1}
                         allowDecimal={false}
                         disabled={saving}
                       />

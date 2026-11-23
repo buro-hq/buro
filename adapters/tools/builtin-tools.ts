@@ -3,10 +3,10 @@ import { repositoryToolSchemas as schemas } from './repository-tool-schemas.ts';
 export function registerBuiltinRepositoryTools(catalog: ToolContributionCatalog): void {
   catalog.register({
     name: 'read_file',
-    revision: 'read-file-v1',
+    revision: 'read-file-v2',
     effect: 'read',
     description:
-      'Read a bounded section of a repository file. Paths may be relative to the workspace. Defaults to the first 120 lines.',
+      'Read text from a repository file, including dependencies. Defaults to 120 lines and 16000 characters; both are configurable. When truncated, pass the returned next cursor to continue, including within a long line.',
     schema: schemas.read_file,
     execute: (input, operations) => operations.readFile(input),
   });
@@ -15,7 +15,7 @@ export function registerBuiltinRepositoryTools(catalog: ToolContributionCatalog)
     revision: 'list-files-v1',
     effect: 'read',
     description:
-      'List repository files, excluding private metadata, secrets, dependencies and generated directories. Defaults to the workspace root.',
+      'List repository files, excluding private metadata and secrets. Dependencies and generated directories are skipped in general scans; pass their path to inspect them explicitly.',
     schema: schemas.list_files,
     execute: (input, operations) => operations.listFiles(input),
   });
@@ -48,10 +48,10 @@ export function registerBuiltinRepositoryTools(catalog: ToolContributionCatalog)
   });
   catalog.register({
     name: 'run_command',
-    revision: 'run-command-v1',
+    revision: 'run-command-v2',
     effect: 'command',
     description:
-      'Run one of the exact configured project check commands. Arbitrary shell commands are not accepted.',
+      'Run a shell command inside the isolated workspace. Protected files and private data remain inaccessible for mutation. Uses a matching project check timeout or 120000 ms by default; timeoutMs overrides it. Does not replace service checks.',
     schema: schemas.run_command,
     execute: (input, operations) => operations.runCommand(input),
   });

@@ -24,9 +24,9 @@ export const ProjectProfileSchema = z
       .optional(),
     context: z.string().max(16000),
     scope: WorkScopeSchema,
-    checks: z.array(ProjectCommandSchema).max(8),
-    defaultCheckIds: z.array(z.string()).max(8),
-    setup: z.array(ProjectCommandSchema).max(4),
+    checks: z.array(ProjectCommandSchema),
+    defaultCheckIds: z.array(z.string()),
+    setup: z.array(ProjectCommandSchema),
     environment: EnvironmentConfigSchema.optional(),
     checkConcurrency: z.number().int().min(1).max(4).optional(),
     dependencies: z.enum(['none', 'link-node-modules']),
@@ -39,7 +39,7 @@ export const ProjectProfileSchema = z
       .max(200)
       .regex(/^[a-zA-Z0-9][a-zA-Z0-9_./-]*$/)
       .optional(),
-    components: z.array(ComponentSchema).max(12).optional(),
+    components: z.array(ComponentSchema).optional(),
     delivery: DeliveryConfigSchema.optional(),
   })
   .superRefine((p, ctx) => {

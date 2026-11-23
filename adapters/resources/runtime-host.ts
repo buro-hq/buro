@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { ProjectRegistry } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
-import { conservativeRequestPolicy, type ManagedRequestPolicy } from '../../core/request-policy.ts';
+import { configuredRequestPolicy, type ManagedRequestPolicy } from '../../core/request-policy.ts';
 import type { ManagedRunBudgetPort } from '../../core/run-budget.ts';
 import type { CheckPort, WorkspacePort } from '../../core/execution-ports.ts';
 import type { WorkerStepCheckPort } from '../../core/worker-step-checks.ts';
@@ -52,7 +52,7 @@ export function prepareRuntimeHost(options: RuntimeHostOptions) {
   const sessions = new FileManagedSessions(path.join(local, 'managed-sessions'));
   const tools = options.tools || new RepositoryTools(options.executors, options.toolContributions);
   const budgets = options.budgets || new ProjectRunBudgets(options.projects);
-  const requestPolicy = options.requestPolicy || conservativeRequestPolicy;
+  const requestPolicy = options.requestPolicy || configuredRequestPolicy;
   const segmentEvidence =
     options.segmentEvidence ||
     (options.workspaces ? new RepositorySegmentEvidence(options.workspaces) : undefined);

@@ -54,6 +54,7 @@ async function fixture(
     maxTurn?: number;
     maxSession?: number;
     readOnly?: boolean;
+    strict?: boolean;
     coordinator?: boolean;
   } = {},
 ) {
@@ -75,7 +76,11 @@ async function fixture(
     sessionId: 'M-fixture',
     workspace: directory,
     readOnly: !!options.readOnly,
-    writeScope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
+    writeScope: {
+      mode: options.strict ? 'strict' : 'advisory',
+      plannedPaths: ['src/'],
+      protectedPaths: ['checks/'],
+    },
     materials: [],
     commands: [],
   };
@@ -635,7 +640,10 @@ for (const boundary of [
   'forbidden-effect',
 ] as const)
   test(`unadvertised-tool feedback cannot bypass ${boundary}`, async (t) => {
-    const f = await fixture(t, { readOnly: boundary === 'read-only-write' });
+    const f = await fixture(t, {
+      readOnly: boundary === 'read-only-write',
+      strict: boundary === 'forbidden-effect',
+    });
     let requests = 0;
     f.host.options.provider.complete = async () => {
       requests++;

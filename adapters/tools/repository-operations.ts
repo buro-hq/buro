@@ -13,15 +13,8 @@ import { repositoryToolSchemas as schemas } from './repository-tool-schemas.ts';
 import type { EnvironmentExecutors } from '../environments/executors.ts';
 import { runProjectCommand } from '../checks/project-commands.ts';
 const exec = promisify(execFile);
-const hidden = new Set([
-  '.git',
-  '.buro',
-  '.codex',
-  '.claude',
-  '.aws',
-  '.ssh',
-  '.npm',
-  '.cache',
+const hidden = new Set(['.git', '.buro', '.codex', '.claude', '.aws', '.ssh', '.npm', '.cache']);
+const generated = new Set([
   'node_modules',
   'dist',
   'build',
@@ -87,10 +80,26 @@ export class BoundedRepositoryOperations implements RepositoryToolOperations {
     return relative;
   }
 
-  private async filename(scope: ToolScope, relative: string, allowMissing = false) {
+  private async filename(
+    scope: ToolScope,
+    relative: string,
+    allowMissing = false,
+    reading = false,
+  ) {
     const root = path.resolve(scope.workspace);
     if ((await fs.realpath(root)) !== root)
       throw new DomainError('TOOL_SCOPE', 'Workspace paths cannot contain symlinks.');
+    if (reading) {
+      const resolved = await fs.realpath(path.join(root, relative));
+      const roots = [root, ...this.#executors.dependencyReadRoots(root)];
+      const owner = roots.find((base) => resolved === base || resolved.startsWith(base + path.sep));
+      if (!owner || blocked(path.relative(owner, resolved).split(path.sep).join('/'), scope))
+        throw new DomainError(
+          'TOOL_SCOPE',
+          'The resolved path is outside the permitted workspace or dependencies.',
+        );
+      return resolved;
+    }
     let current = root;
     for (const part of relative.split('/').filter(Boolean)) {
       current = path.join(current, part);
@@ -106,10 +115,9 @@ export class BoundedRepositoryOperations implements RepositoryToolOperations {
   }
 
   private async read(scope: ToolScope, relative: string) {
-    const filename = await this.filename(scope, relative);
+    const filename = await this.filename(scope, relative, false, true);
     const stat = await fs.stat(filename);
-    if (!stat.isFile() || stat.size > 256000)
-      throw new DomainError('TOOL_LIMIT', 'Read a smaller text file (at most 256 KB).');
+    if (!stat.isFile()) throw new DomainError('TOOL_LIMIT', 'This tool reads text files only.');
     const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
     let text: string;
     try {
@@ -149,13 +157,18 @@ export class BoundedRepositoryOperations implements RepositoryToolOperations {
     let visited = 0;
     const visit = async (directory: string) => {
       signal.throwIfAborted();
-      const filename = await this.filename(scope, directory);
+      const filename = await this.filename(scope, directory, false, true);
       const entries = await fs.readdir(filename, { withFileTypes: true });
       entries.sort((a, b) => a.name.localeCompare(b.name));
       for (const entry of entries) {
         if (++visited > 5000 || result.length >= 300) return;
         const rel = directory ? directory + '/' + entry.name : entry.name;
-        if (blocked(rel, scope) || entry.isSymbolicLink()) continue;
+        if (
+          blocked(rel, scope) ||
+          entry.isSymbolicLink() ||
+          (!relative.split('/').some((part) => generated.has(part)) && generated.has(entry.name))
+        )
+          continue;
         if (entry.isDirectory()) await visit(rel);
         else if (entry.isFile()) result.push(rel);
       }
@@ -168,20 +181,53 @@ export class BoundedRepositoryOperations implements RepositoryToolOperations {
     this.check('read');
     const input = this.input(schemas.read_file, raw),
       scope = this.#scope;
-    const text = await this.read(scope, this.relative(scope, input.path));
-    const lines = text.split('\n'),
-      start = (input.startLine || 1) - 1;
+    const filename = await this.filename(scope, this.relative(scope, input.path), false, true);
+    const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const startLine = input.startLine || 1,
+      startColumn = input.startColumn || 1;
+    const lastLine = startLine + (input.lineCount || 120) - 1;
+    const maxChars = input.maxChars || 16000;
+    let line = 1,
+      column = 1,
+      text = '',
+      truncated = false;
+    const stream = handle.createReadStream({ encoding: 'utf8', autoClose: false });
+    try {
+      if (!(await handle.stat()).isFile())
+        throw new DomainError('TOOL_LIMIT', 'This tool reads text files only.');
+      read: for await (const chunk of stream) {
+        this.#options.signal.throwIfAborted();
+        if (String(chunk).includes('\0'))
+          throw new DomainError('TOOL_LIMIT', 'This tool reads text files only.');
+        for (const character of String(chunk)) {
+          if (line >= startLine && (line > startLine || column >= startColumn)) {
+            if (line > lastLine || (text.length > 0 && text.length + character.length > maxChars)) {
+              truncated = true;
+              break read;
+            }
+            text += character;
+          }
+          if (character === '\n') {
+            line++;
+            column = 1;
+          } else column += character.length;
+        }
+      }
+    } finally {
+      stream.destroy();
+      await handle.close();
+    }
     return {
       content: JSON.stringify({
-        startLine: start + 1,
-        totalLines: lines.length,
-        text: lines
-          .slice(start, start + (input.lineCount || 120))
-          .join('\n')
-          .slice(0, 16000),
+        startLine,
+        startColumn,
+        text,
+        truncated,
+        ...(truncated ? { next: { startLine: line, startColumn: column } } : { totalLines: line }),
       }),
     };
   }
+
   async listFiles(raw: Parameters<RepositoryToolOperations['listFiles']>[0]): Promise<ToolResult> {
     this.check('read');
     const input = this.input(schemas.list_files, raw),
@@ -197,11 +243,11 @@ export class BoundedRepositoryOperations implements RepositoryToolOperations {
       scope = this.#scope,
       options = this.#options;
     const relative = this.relative(scope, input.path || '.');
-    const singleFile = (await fs.lstat(await this.filename(scope, relative))).isFile();
+    const singleFile = (await fs.lstat(await this.filename(scope, relative, false, true))).isFile();
     const listed = singleFile
       ? { files: [relative], truncated: false }
       : await this.files(scope, relative, options.signal);
-    const matches: { path: string; line: number; text: string }[] = [];
+    const matches: { path: string; line: number; text: string; truncated?: boolean }[] = [];
     for (const file of listed.files) {
       options.signal.throwIfAborted();
       // A requested file must report an unreadable/oversized target. Directory
@@ -212,7 +258,12 @@ export class BoundedRepositoryOperations implements RepositoryToolOperations {
       const lines = text.split('\n');
       for (let i = 0; i < lines.length && matches.length < 50; i++)
         if (lines[i].includes(input.query))
-          matches.push({ path: file, line: i + 1, text: lines[i].slice(0, 500) });
+          matches.push({
+            path: file,
+            line: i + 1,
+            text: lines[i].slice(0, 500),
+            ...(lines[i].length > 500 ? { truncated: true } : {}),
+          });
       if (matches.length >= 50) break;
     }
     return {
@@ -274,11 +325,15 @@ export class BoundedRepositoryOperations implements RepositoryToolOperations {
     const input = this.input(schemas.run_command, raw),
       scope = this.#scope,
       options = this.#options;
-    const command = scope.commands.find((c) => c.command === input.command);
-    if (!command)
-      throw new DomainError('TOOL_SCOPE', 'Only exact configured project checks may run.');
+    const configured = scope.commands.find((c) => c.command === input.command);
+    const command = {
+      id: configured?.id || 'workspace-command',
+      command: input.command,
+      timeoutMs: input.timeoutMs ?? configured?.timeoutMs ?? 120000,
+    };
     const launch = this.#executors.launch(scope.workspace, ['/bin/sh', '-c', command.command], {
       privateDataIsolation: true,
+      immutablePaths: scope.writeScope.protectedPaths,
     });
     options.onCommandStart?.(command.command);
     options.signal.throwIfAborted();
@@ -294,7 +349,8 @@ export class BoundedRepositoryOperations implements RepositoryToolOperations {
     return {
       content: JSON.stringify({
         exitCode: result.exitCode,
-        output: result.output.slice(-16000),
+        output: result.output,
+        truncated: result.truncated,
       }),
       isError: result.exitCode !== 0,
       exitCode: result.exitCode,
