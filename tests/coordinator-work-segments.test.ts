@@ -52,6 +52,9 @@ async function fixture(
     useTool?: boolean;
     separateLongNote?: boolean;
     serviceActionOnClosure?: boolean;
+    script?: (input: Request, index: number) => Awaited<ReturnType<ModelProvider['complete']>>;
+    onExecute?: (index: number) => { content: string };
+    observe?: () => SegmentEvidence;
   } = {},
 ) {
   const directory = await fs.realpath(
@@ -91,7 +94,7 @@ async function fixture(
     segmentPolicy: options.policy || contextWorkSegmentPolicy,
     segmentEvidence: {
       async inspect() {
-        return structuredClone(observed);
+        return structuredClone(options.observe ? options.observe() : observed);
       },
     },
     sessions: {
@@ -124,7 +127,9 @@ async function fixture(
       ],
       async execute() {
         toolCalls++;
-        return { content: 'ACTUAL_READ_RECEIPT: priorityOf preserves zero.' };
+        return options.onExecute
+          ? options.onExecute(toolCalls)
+          : { content: 'ACTUAL_READ_RECEIPT: priorityOf preserves zero.' };
       },
     },
     provider: {
@@ -142,6 +147,7 @@ async function fixture(
             onEvent: undefined,
           }) as unknown as Request,
         );
+        if (options.script) return options.script(input, requests.length);
         if (options.useTool && requests.length === 1)
           return {
             model: 'controlled-model',
@@ -515,3 +521,99 @@ test('File authority rejects forged service-turn archives with dropped history, 
     }
   }
 });
+
+const repeatedRead = (index: number) => ({
+  model: 'controlled-model',
+  finish: 'tools' as const,
+  message: {
+    role: 'assistant' as const,
+    content: '',
+    toolCalls: [{ id: 'repeat-' + index, name: 'read_file', arguments: { path: 'src/queue.mjs' } }],
+  },
+});
+const serviceReview = () => ({
+  model: 'controlled-model',
+  finish: 'stop' as const,
+  message: {
+    role: 'assistant' as const,
+    content: JSON.stringify({
+      decision: {
+        action: 'review',
+        input: {
+          result: {
+            status: 'success',
+            summary: 'Request actual independent review.',
+            artifacts: ['src/queue.mjs'],
+            notesForNextAgent: 'Acceptance remains unverified.',
+          },
+        },
+      },
+    }),
+  },
+});
+
+test('identical settled coordinator receipts on an unchanged workspace request a service decision without implying acceptance', async (t) => {
+  const f = await fixture(t, {
+    separateLongNote: true,
+    script(input, index) {
+      if (!input.schema) return repeatedRead(index);
+      assert.equal(index, 4);
+      assert.deepEqual(input.tools, []);
+      assert.match(input.messages.at(-1)!.content, /same results repeatedly/);
+      assert.match(input.messages.at(-1)!.content, /do not certify completion/);
+      return serviceReview();
+    },
+  });
+  const result = await f.turn(f.runtime, 1);
+  assert.equal(JSON.parse(result.text).decision.action, 'review');
+  const saved = (await f.files.load(f.threadId))!;
+  assert.equal(f.toolCalls(), 3);
+  assert.equal(saved.requests, 4);
+  assert.equal(saved.actions.length, 3);
+  assert.ok(saved.actions.every((action) => action.status === 'completed' && action.result));
+  assert.equal(saved.status, 'ready');
+  assert.equal(saved.generation!.outcome, 'completed');
+  assert.equal(saved.messages.filter((message) => message.role === 'tool').length, 3);
+  // Another service turn gets its own observations rather than inheriting a stalled streak.
+  await f.runtime.release(f.threadId);
+  const resumed = f.make();
+  await resumed.resume({ ...f.start, threadId: f.threadId });
+  assert.deepEqual((await f.files.load(f.threadId))!.actions, saved.actions);
+});
+
+for (const progress of ['output', 'workspace', 'arguments'] as const)
+  test('coordinator repeated tools retain useful progress in ' + progress, async (t) => {
+    let executed = 0;
+    const f = await fixture(t, {
+      separateLongNote: true,
+      script(input, index) {
+        if (!input.schema && index <= 5) {
+          const response = repeatedRead(index);
+          if (progress === 'arguments')
+            response.message.toolCalls[0].arguments.path = 'src/' + index + '.mjs';
+          return response;
+        }
+        if (!input.schema)
+          return {
+            ...serviceReview(),
+            message: { role: 'assistant', content: 'Ready for the next action.' },
+          };
+        assert.equal(index, 7, 'Five useful rounds and a completion note precede serialization.');
+        return serviceReview();
+      },
+      onExecute(index) {
+        executed = index;
+        return { content: progress === 'output' ? 'OBSERVATION_' + index : 'same output' };
+      },
+      observe() {
+        return {
+          ...evidence(),
+          workspaceFingerprint:
+            progress === 'workspace' ? String(executed).padStart(64, '0') : 'b'.repeat(64),
+        };
+      },
+    });
+    await f.turn(f.runtime, 1);
+    assert.equal(f.toolCalls(), 5);
+    assert.equal(f.requests.length, 7);
+  });

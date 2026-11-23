@@ -21,6 +21,7 @@ export type ManagedTurnState = {
   dispatchedActions: Set<string>;
   round: number;
   calls: number;
+  toolProgress?: { signature: string; repeats: number; workspace?: string };
   activeBatch?: {
     requestId: string;
     actionIds: string[];

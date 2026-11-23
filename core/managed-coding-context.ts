@@ -9,6 +9,7 @@ import type {
 } from './managed-turn-state.ts';
 import { estimateManagedRequest, prepareManagedRequest } from './request-policy.ts';
 import { checkManagedWorkerStep } from './managed-worker-checks.ts';
+import { coordinatorToolsStalled } from './managed-tool-progress.ts';
 import {
   assertSegmentScope,
   decideWorkSegment,
@@ -337,6 +338,19 @@ export async function afterManagedResponse(
     if (session.workSegments) {
       session.workSegments.active.toolRounds++;
       await host.commit(session);
+    }
+    if (await coordinatorToolsStalled(state, host)) {
+      const next = structuredClone(state.session);
+      next.messages.push({
+        role: 'user',
+        content:
+          'The same repository calls returned the same results repeatedly while the observed workspace stayed unchanged. ' +
+          'Choose the next registered service action using the goal packet and these actual receipts. ' +
+          'If more work is needed, request an appropriate service action or report the blocker. ' +
+          'Repeated results do not certify completion, current acceptance or review. No repository tools are available in this response.',
+      });
+      await host.commit(next);
+      state.finalizing = true;
     }
     return { kind: 'continue' };
   }
