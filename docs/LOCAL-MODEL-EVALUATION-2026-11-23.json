@@ -1,0 +1,280 @@
+{
+  "complete": true,
+  "date": "2026-11-23",
+  "codeCommits": [
+    "870b34e",
+    "9a7ffd7"
+  ],
+  "hardware": {
+    "GPU": "RTX3060 12GiB",
+    "RAM": "32GiB",
+    "CPU": "i5-12600KF",
+    "inferenceOS": "Windows11",
+    "controllerOS": "macOS"
+  },
+  "tasks": {
+    "closing-schema": "Native closing grammar agrees with parser and supported Zod conversion",
+    "reasoning-output": "Remove hidden512-token closing limit while keeping configured/context limits",
+    "ollama-sampling": "Typed optional nested sampling; zero values, frozen settings and unchanged existing behavior"
+  },
+  "method": "Production Buro provider adapters, literal edits in independent copies of historical source, hidden controller checks, one attempt per model/task/mode. This is not a full autonomous workflow score.",
+  "rows": [
+    {
+      "model": "qwen3.6:35b-a3b-q4_K_M",
+      "engine": "llama.cpp b12359",
+      "thinking": false,
+      "thinkingBudget": 0,
+      "attempts": 3,
+      "fullyPassed": 1,
+      "meanGenerationSeconds": 27.997212471999998,
+      "meanWallSeconds": 29.600152527666665,
+      "details": [
+        {
+          "task": "closing-schema",
+          "passed": false,
+          "failureClass": "schema-parser-mismatch",
+          "generationSeconds": 18.067033958,
+          "wallSeconds": 18.200950625,
+          "outputTokens": 523,
+          "finish": "stop",
+          "reasoningObserved": false,
+          "schemaChecks": {
+            "passed": 8,
+            "total": 12
+          }
+        },
+        {
+          "task": "reasoning-output",
+          "passed": true,
+          "generationSeconds": 44.364057499999994,
+          "wallSeconds": 48.227324792,
+          "outputTokens": 1717,
+          "finish": "stop",
+          "reasoningObserved": false
+        },
+        {
+          "task": "ollama-sampling",
+          "passed": false,
+          "failureClass": "sampling-contract-or-import",
+          "generationSeconds": 21.560545957999988,
+          "wallSeconds": 22.372182165999998,
+          "outputTokens": 763,
+          "finish": "stop",
+          "reasoningObserved": false
+        }
+      ]
+    },
+    {
+      "model": "qwen3.6:35b-a3b-q4_K_M",
+      "engine": "llama.cpp b12359",
+      "thinking": true,
+      "thinkingBudget": 1024,
+      "attempts": 3,
+      "fullyPassed": 2,
+      "meanGenerationSeconds": 30.725313264000004,
+      "meanWallSeconds": 32.07963677766667,
+      "details": [
+        {
+          "task": "closing-schema",
+          "passed": false,
+          "failureClass": "schema-parser-mismatch",
+          "generationSeconds": 36.165220125000005,
+          "wallSeconds": 36.297449582999995,
+          "outputTokens": 1769,
+          "finish": "stop",
+          "reasoningObserved": true,
+          "schemaChecks": {
+            "passed": 9,
+            "total": 12
+          }
+        },
+        {
+          "task": "reasoning-output",
+          "passed": true,
+          "generationSeconds": 22.312204042000012,
+          "wallSeconds": 25.487774167000012,
+          "outputTokens": 1081,
+          "finish": "stop",
+          "reasoningObserved": true
+        },
+        {
+          "task": "ollama-sampling",
+          "passed": true,
+          "generationSeconds": 33.698515625,
+          "wallSeconds": 34.453686583,
+          "outputTokens": 1632,
+          "finish": "stop",
+          "reasoningObserved": true
+        }
+      ]
+    },
+    {
+      "model": "qwen3.5:9b-q4_K_M",
+      "engine": "Ollama0.40.16",
+      "thinking": false,
+      "thinkingBudget": 0,
+      "attempts": 3,
+      "fullyPassed": 0,
+      "meanGenerationSeconds": 24.850791708666662,
+      "meanWallSeconds": 25.26685023633334,
+      "details": [
+        {
+          "task": "closing-schema",
+          "passed": false,
+          "failureClass": "schema-parser-mismatch",
+          "generationSeconds": 18.484677959,
+          "wallSeconds": 18.616774834000005,
+          "outputTokens": 276,
+          "finish": "stop",
+          "reasoningObserved": false,
+          "schemaChecks": {
+            "passed": 9,
+            "total": 12
+          }
+        },
+        {
+          "task": "reasoning-output",
+          "passed": false,
+          "failureClass": "syntax-or-runtime-behavior",
+          "generationSeconds": 42.40246637499999,
+          "wallSeconds": 42.781434333,
+          "outputTokens": 2134,
+          "finish": "stop",
+          "reasoningObserved": false
+        },
+        {
+          "task": "ollama-sampling",
+          "passed": false,
+          "failureClass": "sampling-contract-or-import",
+          "generationSeconds": 13.665230792000003,
+          "wallSeconds": 14.40234154200001,
+          "outputTokens": 638,
+          "finish": "stop",
+          "reasoningObserved": false
+        }
+      ]
+    },
+    {
+      "model": "qwen3.5:9b-q4_K_M",
+      "engine": "Ollama0.40.16",
+      "thinking": true,
+      "thinkingBudget": "native default, bounded only by total output6144",
+      "attempts": 3,
+      "fullyPassed": 0,
+      "meanGenerationSeconds": 115.53933673600001,
+      "meanWallSeconds": 115.539422278,
+      "details": [
+        {
+          "task": "closing-schema",
+          "passed": false,
+          "failureClass": "output-limit",
+          "generationSeconds": 115.384790375,
+          "wallSeconds": 115.38487324999998,
+          "outputTokens": 6144,
+          "finish": "length",
+          "reasoningObserved": true,
+          "error": {
+            "message": "Incomplete response: length"
+          }
+        },
+        {
+          "task": "reasoning-output",
+          "passed": false,
+          "failureClass": "output-limit",
+          "generationSeconds": 115.91098304100002,
+          "wallSeconds": 115.91105575,
+          "outputTokens": 6144,
+          "finish": "length",
+          "reasoningObserved": true,
+          "error": {
+            "message": "Incomplete response: length"
+          }
+        },
+        {
+          "task": "ollama-sampling",
+          "passed": false,
+          "failureClass": "output-limit",
+          "generationSeconds": 115.32223679200001,
+          "wallSeconds": 115.32233783400001,
+          "outputTokens": 6144,
+          "finish": "length",
+          "reasoningObserved": true,
+          "error": {
+            "message": "Incomplete response: length"
+          }
+        }
+      ]
+    }
+  ],
+  "extendedThinking": {
+    "model": "qwen3.6:35b-a3b-q4_K_M",
+    "thinkingBudget": 4096,
+    "trials": [
+      {
+        "task": "closing-schema",
+        "thinking": true,
+        "passed": false,
+        "generationSeconds": 103.84944375,
+        "outputTokens": 4732,
+        "finish": "stop",
+        "schemaChecks": {
+          "passed": 8,
+          "total": 12
+        }
+      }
+    ]
+  },
+  "workflowRegression": {
+    "before": "Repeated successful commands reached64-generation evaluation bound without accepted commit",
+    "after": {
+      "status": "completed",
+      "hasCommit": true,
+      "reviewVerdict": "approved",
+      "seconds": 300.23687929199997,
+      "publicChecks": 3,
+      "holdoutChecks": 5,
+      "generations": 64
+    },
+    "limitation": "One live success, no general autonomous success-rate claim"
+  },
+  "validation": {
+    "tests": 1424,
+    "passed": 1424,
+    "typecheck": "passed",
+    "build": "passed"
+  },
+  "limitations": [
+    "Three narrow source tasks, one sample per task/mode, no general model ranking",
+    "Native35B reasoning budget1024 and Ollama9B default reasoning are different practical configurations",
+    "The first9B request includes model loading, so generation means are end-to-end observations, not clean engine throughput",
+    "First35B schema trials lacked an explicit validator compatibility constraint; clarified schema trials replace both modes under a predeclared correction, not a best-result selection",
+    "Connection settings, raw machine-specific receipts and generated patches are excluded from public history."
+  ],
+  "provenance": {
+    "referenceCommit": "870b34e",
+    "historicalSourceCommit": "78c3ab3",
+    "taskContractRevision": 2,
+    "modelManifests": [
+      {
+        "model": "qwen3.6:35b-a3b-q4_K_M",
+        "sha256": "07d35212591fc27746f0a317c975a6d68754fb38e9053d82e25f06057af28522"
+      },
+      {
+        "model": "qwen3.5:9b-q4_K_M",
+        "sha256": "56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90"
+      }
+    ],
+    "liveLoopValidation": "The live regression ran during implementation. Canonical JSON equality then replaced equivalent hashed signatures to keep core platform-neutral; the committed implementation passed all1424 tests."
+  },
+  "controls": {
+    "contextTokens": 32768,
+    "maxOutputTokens": 6144,
+    "temperature": 0.6,
+    "topP": 0.95,
+    "presencePenalty": 0,
+    "seed": 42,
+    "requestTimeoutMs": 240000,
+    "independentSourcePerAttempt": true,
+    "extraCase": "One predeclared schema-only35B thinking attempt with a4096 reasoning budget; not pooled into the three-task result."
+  }
+}
