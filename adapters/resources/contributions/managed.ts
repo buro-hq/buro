@@ -74,6 +74,7 @@ export function managedContribution(
         revision: createHash('sha256')
           .update(
             JSON.stringify([
+              'managed-completion-v2',
               host.requestPolicy.revision,
               host.tools.revision,
               host.segmentPolicy ? [host.segmentPolicy.revision, host.segmentPolicy.limits] : null,

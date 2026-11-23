@@ -271,7 +271,10 @@ test(
         structuredToolMode: 'separate-turn',
         async complete() {
           providerCalls++;
-          return completion();
+          return {
+            ...completion(),
+            message: { role: 'assistant', content: 'Needs structured serialization' },
+          };
         },
       },
       tools: {

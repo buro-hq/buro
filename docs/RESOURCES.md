@@ -179,7 +179,7 @@ For local execution, add a managed runtime and profile to the private configurat
 
 Use an installed model ID returned by discovery. The model must support tool calling; its advertised context and thinking settings are checked. The explicit 4B Instruct example avoids relying on the mutable `qwen3:4b` thinking-model alias. Its bounded mixed synthetic trial passed with DeepSeek coordination/review; this is not a guarantee of accepted project changes. [Ollama model details](https://docs.ollama.com/api-reference/show-model-details), [Qwen3 variants](https://ollama.com/library/qwen3/tags).
 
-Restart the daemon after changing connection or runtime definitions. This deliberately avoids replacing a client under an active session. Changing only the default through `resources use` takes effect for future runs without a restart:
+Saving connection settings or adding runtimes/profiles activates them without restarting the daemon. New work uses the new definitions; existing runs retain their captured backend generation. Private configuration archives also preserve those generations across daemon restart. Profile selection remains explicit:
 
 ```sh
 npm run cli -- resources probe local-coder
@@ -241,7 +241,7 @@ Each accepted plan saves the canonical resource, configuration revision, role ve
 
 ## Interface and inheritance
 
-User settings show the default profile, its coordinator/worker/reviewer models, editable API connections, restart state, model discovery and explicit diagnostics. Project settings can pin a profile or inherit the machine default. The agent inspector displays the saved runtime/model identity rather than labelling every session Codex.
+User settings show the default profile, its coordinator/worker/reviewer models, editable API connections, model discovery and explicit diagnostics. Project settings can pin a profile or inherit the machine default. The agent inspector displays the saved runtime/model identity rather than labelling every session Codex.
 
 Each run freezes its profile, data policy and runtime configuration revisions. Buro handles identify sessions independently of native thread IDs. Restart or repair follows the saved route; changing the default does not move an existing session to another provider. If that runtime configuration has changed or disappeared, continuation stops with a configuration error. Restore it or start a new run. Historical prototype runs without the required resource/planning/route bindings are not silently resumed; preserve/archive their records and start a fresh run after the controlled cutover.
 
@@ -249,7 +249,7 @@ Environment discovery and result preparation reference their owning run explicit
 
 ## Supported execution boundary
 
-Managed tools provide bounded text reads/search, exact edits in assigned paths, inspection of actual changes and workspace shell commands. Model-directed commands use native confinement, cannot read private Buro/client state and cannot use the network. Explicit environment setup/readiness recipes can use the network while retaining private-file restrictions. Acceptance checks remain service-owned.
+Managed tools provide bounded text reads/search, exact edits in assigned paths, inspection of actual changes and workspace shell commands. Model-directed commands use native confinement, cannot read private Buro/client state and cannot use the network. Explicit environment setup/readiness recipes can use the network while retaining private-file restrictions. Acceptance checks remain service-owned. A coordinator can request `finish` directly: Buro obtains missing or stale checks and independent review before acceptance, returning failures for repair.
 
 Managed Docker execution currently fails closed because the existing native-client container does not provide the required private-data isolation. Native Codex Docker behavior remains available. Unsupported environments never fall back to an unconfined host command.
 

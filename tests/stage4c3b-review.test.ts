@@ -189,14 +189,11 @@ test(
     const pending = await f.list(f.project, 'p');
     assert.equal(pending.defaultProfile, null);
     assert.equal(pending.selected, undefined);
-    assert.equal(pending.configured!.profiles[0].restartRequired, true);
-    assert.deepEqual(pending.runtimes, []);
-    await assert.rejects(
-      f.command(f.host, 'resources.use', { profileId: 'first' }, 'choose-first'),
-      { code: 'RESOURCE_PROFILE_RESTART_REQUIRED' },
-    );
+    assert.equal(pending.configured!.profiles[0].restartRequired, false);
+    assert.equal(pending.runtimes.length, 1);
+    assert.equal(operationResourceReady(pending, 'project.research'), false);
     assert.deepEqual(await f.command(f.host, 'resources.setup.save', setup, 'first-setup'), result);
-    assert.equal(f.creates(), 0);
+    assert.equal(f.creates(), 1);
     assert.equal(f.project.snapshot().sequence, 0);
     const generations = [f.service.getResourceGeneration(), f.project.getResourceGeneration()];
     const reconnect = Promise.all([connectedAgain(f.service), connectedAgain(f.project)]);
@@ -205,7 +202,7 @@ test(
     await reconnect;
     assert.ok(f.service.getResourceGeneration() > generations[0]);
     assert.ok(f.project.getResourceGeneration() > generations[1]);
-    assert.equal(f.creates(), 1);
+    assert.equal(f.creates(), 2);
     for (const catalog of [await f.list(f.service), await f.list(f.project, 'p')]) {
       assert.equal(catalog.defaultProfile, null);
       assert.equal(catalog.selected, undefined);

@@ -208,16 +208,18 @@ test('managed runtime preserves configured output and complete request evidence'
   assert.equal(f.checkpoints.get(session.threadId)?.requests, 1);
 });
 
-test('separate tool phase does not reserve a final schema that is not sent', async (t) => {
+test('separate tool requests preserve configured output and accept an already structured result', async (t) => {
   const f = runtimeFixture({ separate: true });
   t.after(() => f.runtime.dispose());
   const session = await start(f.runtime);
   const schema = { type: 'object', description: 's'.repeat(5000) };
   await f.runtime.turn(session.threadId, 'Inspect the task.', turn(schema));
-  assert.equal(f.requests.length, 2);
+  assert.equal(f.requests.length, 1);
   assert.equal(f.requests[0].schema, undefined);
   assert.equal(f.requests[0].tools.length, 1);
-  assert.deepEqual(f.requests[1].schema, schema);
+  assert.ok(
+    f.requests[0].messages.some((message) => message.content.includes(JSON.stringify(schema))),
+  );
   assert.ok(f.requests.every((request) => request.maxOutputTokens === f.limits.maxOutputTokens));
 });
 

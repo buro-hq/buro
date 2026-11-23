@@ -275,3 +275,37 @@ test('cancellation and an unknown effect still block finalization after genuine 
     assert.equal(f.service.get('p', f.ctx.runId).commit, undefined);
   }
 });
+
+test('a completion request obtains checks and independent review before accepting without extra coordinator decisions', async (t) => {
+  const f = await fixture(t);
+  const result = await f.service.completeRun(f.ctx, undefined, envelope);
+  assert.equal(result.accepted, true);
+  assert.equal(result.review?.verdict, 'approved');
+  assert.equal(f.counts().reviewTurns, 1);
+  assert.equal(f.counts().checkpoints, 1);
+  assert.equal(f.service.get('p', f.ctx.runId).status, 'completed');
+});
+
+test('automatic completion returns blocking review findings and does not repeat an unchanged rejected review', async (t) => {
+  const f = await fixture(t);
+  f.setVerdict('changes_requested');
+  const result = await f.service.completeRun(f.ctx, undefined, envelope);
+  assert.equal(result.accepted, false);
+  assert.deepEqual(result.review?.blockingFindings, ['Missing edge case']);
+  const again = await f.service.completeRun(f.ctx, result.checked, envelope);
+  assert.equal(again.accepted, false);
+  assert.equal(f.counts().reviewTurns, 1);
+  assert.equal(f.counts().checkpoints, 0);
+});
+
+test('a completion request renews stale checks and never accepts the previously reviewed revision', async (t) => {
+  const f = await fixture(t);
+  const checked = await f.service.checkRun(f.ctx);
+  await f.service.reviewRun(f.ctx, checked, envelope);
+  f.revision.tree = 'e'.repeat(40);
+  f.revision.changes[0].after = 'updated candidate';
+  const result = await f.service.completeRun(f.ctx, checked, envelope);
+  assert.equal(result.accepted, true);
+  assert.equal(f.counts().reviewTurns, 2);
+  assert.equal(f.service.get('p', f.ctx.runId).verificationEvidence?.tree, f.revision.tree);
+});

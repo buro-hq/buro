@@ -117,7 +117,7 @@ export class WorkerStepChecks implements WorkerStepCheckPort {
     // A goal-wide check can legitimately fail until another specialist has finished.
     if (Object.keys(run.roleAssignments || {}).length !== 1) return;
     const ids = run.checkIds;
-    if (!ids?.length || ids.length > 8 || new Set(ids).size !== ids.length) blocked();
+    if (!ids?.length || new Set(ids).size !== ids.length) blocked();
     const commands = ids.map((id) => profile.checks.find((check) => check.id === id));
     if (commands.some((command) => !command)) blocked();
     const configurationRevision = createHash('sha256')

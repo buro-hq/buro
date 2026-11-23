@@ -237,7 +237,7 @@ test('concurrent clients saving against the same full revision produce one atomi
   assert.deepEqual(s.http, []);
 });
 
-test('saved models and profiles remain pending over the socket and cannot select or probe an inactive runtime', async (t) => {
+test('saved models and profiles activate over the socket before explicit selection', async (t) => {
   const s = await server(t),
     a = await s.client(),
     b = await s.client();
@@ -247,29 +247,26 @@ test('saved models and profiles remain pending over the socket and cannot select
   assert.deepEqual(result, {
     profileId: 'new-team',
     runtimeIds: ['new-worker'],
-    appliesTo: 'service-restart',
+    appliesTo: 'new-runs',
   });
   const after = await catalog(b);
   assert.equal(
     after.configured?.runtimes.find((item) => item.definition.id === 'new-worker')?.restartRequired,
-    true,
+    false,
   );
   assert.equal(
     after.configured?.profiles.find((item) => item.profile.id === 'new-team')?.restartRequired,
-    true,
+    false,
   );
-  assert.ok(!after.runtimes.some((item) => item.id === 'new-worker'));
-  assert.ok(!after.profiles.some((item) => item.id === 'new-team'));
-  assert.deepEqual(after.runtimes, before.runtimes);
+  assert.ok(after.runtimes.some((item) => item.id === 'new-worker'));
+  assert.ok(after.profiles.some((item) => item.id === 'new-team'));
+  assert.deepEqual(
+    after.runtimes.filter((item) => item.id !== 'new-worker'),
+    before.runtimes,
+  );
   assert.deepEqual(after.selected, before.selected);
-  await assert.rejects(b.command({ method: 'resources.use', params: { profileId: 'new-team' } }), {
-    code: 'RESOURCE_PROFILE_RESTART_REQUIRED',
-  });
-  await assert.rejects(
-    b.command({ method: 'resources.probe', params: { runtimeId: 'new-worker' } }),
-    { code: 'RESOURCE_RUNTIME_RESTART_REQUIRED' },
-  );
-  assert.equal((await catalog(a)).defaultProfile, 'codex');
+  await b.command({ method: 'resources.use', params: { profileId: 'new-team' } });
+  assert.equal((await catalog(a)).defaultProfile, 'new-team');
   assert.deepEqual(s.http, []);
 });
 

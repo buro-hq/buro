@@ -433,7 +433,7 @@ test('duplicate tool IDs stop effects while request size does not create an inve
   assert.equal(effects, 0);
 });
 
-test('separate structured output keeps the final schema out of tool requests and publishes only the final answer', async (t) => {
+test('providers without mixed tools/format support use explicit formatting only when direct output needs correction', async (t) => {
   const f = await fixture(t);
   const schema = {
     type: 'object',
@@ -455,7 +455,7 @@ test('separate structured output keeps the final schema out of tool requests and
           'The tools phase must not request final structured output',
         );
         assert.ok(input.tools.length > 0);
-        assert.doesNotMatch(JSON.stringify(input.messages), /final_schema_only_marker/);
+        assert.match(JSON.stringify(input.messages), /final_schema_only_marker/);
       }
       if (requests === 1)
         return response([
@@ -796,9 +796,17 @@ test('core-owned intermediate tags survive private reload and omit only marked n
       requests++;
       if (requests % 2) {
         assert.equal(input.schema, undefined);
-        for (const schema of schemas)
+        const current = schemas[(requests - 1) / 2];
+        assert.equal(
+          input.messages
+            .map((message) => message.content)
+            .join('\n')
+            .split(JSON.stringify(current)).length - 1,
+          1,
+        );
+        for (const other of schemas.filter((schema) => schema !== current))
           assert.ok(
-            input.messages.every((message) => !message.content.includes(JSON.stringify(schema))),
+            input.messages.every((message) => !message.content.includes(JSON.stringify(other))),
           );
       } else {
         const schema = schemas[requests / 2 - 1];
@@ -1258,4 +1266,54 @@ test('repository tools reject secret paths, symlinks, arbitrary commands and wri
   assert.match(diff.content, /src\/new.mjs/);
   assert.match(diff.content, /added=true/);
   assert.doesNotMatch(diff.content, /SECRET=private/);
+});
+
+test('a valid direct JSON result completes a separate-turn provider without a note or serialization request', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  const schema = {
+    type: 'object',
+    properties: { answer: { type: 'string' } },
+    required: ['answer'],
+    additionalProperties: false,
+  };
+  const runtime = f.make({
+    ...provider(async (input) => {
+      requests++;
+      assert.equal(input.schema, undefined);
+      assert.match(input.messages.at(-1)!.content, /without a completion note/);
+      return response([], '{"answer":"verified"}');
+    }),
+    structuredToolMode: 'separate-turn',
+  });
+  const start = await f.start(runtime);
+  const result = await runtime.turn(start.threadId, 'Answer', { ...turnOptions(), schema });
+  assert.equal(result.text, '{"answer":"verified"}');
+  assert.equal(requests, 1);
+  const saved = (await f.sessions.load(start.threadId))!;
+  assert.equal(saved.intermediateNotes, undefined);
+});
+
+test('JSON with the wrong structure uses the structured correction path instead of completing', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  const schema = {
+    type: 'object',
+    properties: { ok: { type: 'boolean' } },
+    required: ['ok'],
+    additionalProperties: false,
+  };
+  const runtime = f.make({
+    ...provider(async (input) => {
+      if (++requests === 1) return response([], '{"wrong":true}');
+      assert.deepEqual(input.schema, schema);
+      assert.deepEqual(input.tools, []);
+      return response([], '{"ok":true}');
+    }),
+    structuredToolMode: 'separate-turn',
+  });
+  const start = await f.start(runtime);
+  const result = await runtime.turn(start.threadId, 'Answer', { ...turnOptions(), schema });
+  assert.equal(result.text, '{"ok":true}');
+  assert.equal(requests, 2);
 });

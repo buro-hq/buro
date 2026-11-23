@@ -1276,6 +1276,57 @@ ${installation.output || installation.error || ''}`,
     return checked;
   }
 
+  /** Reuse current service evidence or obtain it without asking the model to order prerequisites. */
+  async ensureChecks(ctx: ExecutionContext, checked?: CheckedRun, openView = false) {
+    if (checked) {
+      try {
+        await this.checkedRun(ctx, checked, openView);
+        return checked;
+      } catch (error) {
+        if (
+          !(error instanceof DomainError) ||
+          !['CHECKS_REQUIRED', 'VERIFICATION_REVISION_CHANGED'].includes(error.code)
+        )
+          throw error;
+      }
+    }
+    return this.checkRun(ctx);
+  }
+
+  /** A finish request runs missing verification; only the existing acceptance writer can commit. */
+  async completeRun(
+    ctx: ExecutionContext,
+    candidate: CheckedRun | undefined,
+    proposedEnvelope: ReturnType<typeof EnvelopeSchema.parse>,
+  ) {
+    const envelope = EnvelopeSchema.parse(proposedEnvelope);
+    let checked = await this.ensureChecks(ctx, candidate);
+    const passed = () =>
+      checked.scope &&
+      checked.specsUnchanged &&
+      checked.checks.total > 0 &&
+      checked.checks.passed === checked.checks.total;
+    if (!passed() || envelope.status !== 'success') return { checked, accepted: false as const };
+    const current = this.assertExecutionContext(ctx);
+    const issued = this.checkedRuns.get(checked)?.review;
+    let review =
+      issued &&
+      current.independentReviewer &&
+      current.verificationEvidence?.reviewerSessionId === issued.sessionId &&
+      JSON.stringify(current.review) === JSON.stringify(issued.result)
+        ? issued.result
+        : undefined;
+    if (!review) {
+      checked = await this.ensureChecks(ctx, checked, true);
+      if (!passed()) return { checked, accepted: false as const };
+      review = await this.reviewRun(ctx, checked, envelope);
+    }
+    if (review.verdict !== 'approved' || review.blockingFindings.length)
+      return { checked, review, accepted: false as const };
+    await this.acceptRun(ctx, checked, envelope);
+    return { checked, review, accepted: true as const };
+  }
+
   /** Resolve host-issued evidence, never revision/check assertions supplied by an action. */
   private async checkedRun(ctx: ExecutionContext, checked: CheckedRun, openView = false) {
     const run = this.assertExecutionContext(ctx);

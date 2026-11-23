@@ -87,7 +87,15 @@ async function fixture(t: any, configuration = initialConfiguration()) {
       return new Response(
         JSON.stringify({
           model: 'fixture-small',
-          message: { role: 'assistant', content: '{"ok":true}' },
+          message: body.tools?.some((tool: any) => tool.function.name === 'diagnostic_echo')
+            ? {
+                role: 'assistant',
+                content: '',
+                tool_calls: [
+                  { function: { name: 'diagnostic_echo', arguments: { value: 'buro-ready' } } },
+                ],
+              }
+            : { role: 'assistant', content: '{"ok":true}' },
           done: true,
           done_reason: 'stop',
           prompt_eval_count: 10,
@@ -151,7 +159,7 @@ test('connection saves expose saved settings and optimistic revisions without in
     resources = await f.create();
   const before = (await resources.list('p')).connections.find((item) => item.id === 'ollama')!;
   const saved = await update(resources, direct());
-  assert.deepEqual(saved, { connectionId: 'ollama', appliesTo: 'service-restart' });
+  assert.deepEqual(saved, { connectionId: 'ollama', appliesTo: 'new-runs' });
   assert.deepEqual(await resources.saveConnection(direct(), before.revision, meta('save')), saved);
   await assert.rejects(
     resources.saveConnection(
@@ -164,8 +172,8 @@ test('connection saves expose saved settings and optimistic revisions without in
   const catalog = await resources.list('p');
   const after = catalog.connections.find((item) => item.id === 'ollama')!;
   assert.equal(after.endpoint, new URL(String(direct().config.endpoint)).href);
-  assert.equal(after.activeEndpoint, before.endpoint);
-  assert.equal(after.restartRequired, true);
+  assert.equal(after.activeEndpoint, after.endpoint);
+  assert.equal(after.restartRequired, false);
   assert.notEqual(after.revision, before.revision);
   assert.equal(after.config.capacity, 2);
   assert.equal(after.provider === 'ollama' && after.config.trust, 'private-network');
@@ -180,7 +188,7 @@ test('connection saves expose saved settings and optimistic revisions without in
   assert.deepEqual(f.calls, []);
 });
 
-test('pending connections block discovery and cached probe replay before lookup or new receipts', async (t) => {
+test('live connection changes invalidate probe badges and use the new endpoint for discovery and diagnostics', async (t) => {
   const f = await fixture(t),
     resources = await f.create();
   const probes = new PrivateJSONFiles(path.join(f.directory, 'local/resource-probes'));
@@ -205,31 +213,31 @@ test('pending connections block discovery and cached probe replay before lookup 
   assert.deepEqual(await resources.probe('local', meta('old')), result);
   await update(resources, direct());
   assert.deepEqual((await resources.list()).probes, []);
-  await assert.rejects(resources.models('ollama'), { code: 'CONNECTION_RESTART_REQUIRED' });
-  await assert.rejects(resources.probe('local', meta('old')), {
-    code: 'CONNECTION_RESTART_REQUIRED',
-  });
-  await assert.rejects(resources.probe('local', meta('new')), {
-    code: 'CONNECTION_RESTART_REQUIRED',
-  });
-  assert.equal(await probes.load('request-new'), undefined);
+  await resources.models('ollama');
+  assert.deepEqual(await resources.probe('local', meta('old')), result);
+  assert.equal((await resources.probe('local', meta('new'))).status, 'passed');
+  assert.ok(await probes.load('request-new'));
   const added = ResourceConnectionSchema.parse({ ...direct(), id: 'rtx' });
   await update(resources, added, 'add');
-  await assert.rejects(resources.models('rtx'), { code: 'CONNECTION_RESTART_REQUIRED' });
+  await resources.models('rtx');
   await assert.rejects(resources.models('missing'), { code: 'CONNECTION_UNAVAILABLE' });
-  assert.deepEqual(f.calls, []);
+  assert.ok(f.calls.length > 0);
+  assert.ok(f.calls.every((call) => call.url.startsWith('http://192.168.50.10:11434/')));
 });
 
-test('default selection still supports native work, but pending selected resources and optional workers block new work', async (t) => {
+test('default selection and worker pools use live connection settings without model calls', async (t) => {
   const f = await fixture(t),
     resources = await f.create();
   await update(resources, direct());
   assert.equal(resources.selection.forProject('p').coordinator.backendId, 'codex');
   await resources.configuration.use('local', 'local', 'local');
-  assert.throws(() => resources.selection.forProject('p'), { code: 'CONNECTION_RESTART_REQUIRED' });
+  assert.equal(resources.selection.forProject('p').worker.id, 'local');
   assert.equal((await resources.list('p')).selected?.profileId, 'local');
   await resources.configuration.use('pool', 'pool', 'pool');
-  assert.throws(() => resources.selection.forProject('p'), { code: 'CONNECTION_RESTART_REQUIRED' });
+  assert.equal(
+    resources.selection.forProject('p').workerPool?.some((resource) => resource.id === 'local'),
+    true,
+  );
   await resources.configuration.use('native', 'native', 'codex');
   assert.equal(resources.selection.forProject('p').coordinator.id, 'codex');
   assert.deepEqual(f.calls, []);
@@ -267,7 +275,7 @@ test('service restart activates saved endpoint and trust while leaving model and
   assert.equal(restarted.selection.forProject('p').policy, 'local-only');
 });
 
-test('editing a connection preserves frozen run routes and blocks fresh research until restart', async (t) => {
+test('editing a connection preserves frozen routes while new research uses the activated configuration', async (t) => {
   const f = await fixture(t),
     active = await f.create();
   await active.configuration.use('local', 'local', 'local');
@@ -295,6 +303,7 @@ test('editing a connection preserves frozen run routes and blocks fresh research
     selection: active.selection,
     projects: f.projects,
     resources: active.resources,
+    resolveRuntime: active.resolveRuntime,
     routes: new FileRuntimeRoutes(path.join(f.directory, 'routes')),
     id: () => String(++sequence),
   });
@@ -308,25 +317,18 @@ test('editing a connection preserves frozen run routes and blocks fresh research
     instructions: 'Original run',
   });
   await update(active, direct());
-  assert.deepEqual(
+  assert.notDeepEqual(
     active.resources.find((item) => item.id === 'local'),
     frozen.coordinator,
   );
-  await assert.rejects(
-    router.start({
-      projectId: 'p',
-      runId: 'fresh',
-      purpose: 'research',
-      operationId: 'project.research',
-      readOnly: true,
-      instructions: 'New research',
-    }),
-    { code: 'CONNECTION_RESTART_REQUIRED' },
-  );
-  await assert.rejects(
-    router.start({ projectId: 'p', purpose: 'coordination', instructions: 'New goal' }),
-    { code: 'CONNECTION_RESTART_REQUIRED' },
-  );
+  const newResearch = await router.start({
+    projectId: 'p',
+    purpose: 'research',
+    operationId: 'project.research',
+    readOnly: true,
+    instructions: 'New research',
+  });
+  await router.release(newResearch.threadId);
   // Both a saved session and a new service session for the already-owned run stay on the active endpoint.
   const continuation = await router.start({
     projectId: 'p',
@@ -359,27 +361,27 @@ test('editing a connection preserves frozen run routes and blocks fresh research
     selection: restarted.selection,
     projects: f.projects,
     resources: restarted.resources,
+    resolveRuntime: restarted.resolveRuntime,
     routes: new FileRuntimeRoutes(path.join(f.directory, 'routes')),
     id: () => String(++sequence),
   });
   t.after(() => afterRestart.dispose());
+  const historical = await afterRestart.start({
+    projectId: 'p',
+    runId: 'running',
+    purpose: 'coordination',
+    operationId: operationIds.coordination,
+    roleId: 'coordinator',
+    instructions: 'Continue original configuration',
+  });
+  const oldReply = await afterRestart.turn(historical.threadId, 'Return ready', {
+    schema: {},
+    signal: new AbortController().signal,
+    timeoutMs: 1000,
+  });
+  assert.deepEqual(JSON.parse(oldReply.text), { ok: true });
+  assert.ok(f.calls.at(-1)!.url.startsWith('http://127.0.0.1:11434/'));
   const callsBefore = f.calls.length;
-  await assert.rejects(
-    afterRestart.start({
-      projectId: 'p',
-      runId: 'running',
-      purpose: 'coordination',
-      operationId: operationIds.coordination,
-      roleId: 'coordinator',
-      instructions: 'Old configuration',
-    }),
-    { code: 'RUNTIME_CONFIG_CHANGED' },
-  );
-  assert.equal(
-    f.calls.length,
-    callsBefore,
-    'A historical run must never be silently retargeted after restart',
-  );
   const fresh = await afterRestart.start({
     projectId: 'p',
     purpose: 'research',
@@ -437,9 +439,9 @@ test('resource plugin publishes and executes API connection saves through the sh
     },
     meta('save-api'),
   );
-  assert.deepEqual(saved, { connectionId: 'ollama', appliesTo: 'service-restart' });
+  assert.deepEqual(saved, { connectionId: 'ollama', appliesTo: 'new-runs' });
   const after = await bus.execute({ method: 'resources.list', params: {} }, meta('after'));
-  assert.equal(after.connections.find((item: any) => item.id === 'ollama').restartRequired, true);
+  assert.equal(after.connections.find((item: any) => item.id === 'ollama').restartRequired, false);
 });
 
 test('role choices expose server eligibility for the selected profile and actual provider diagnostics without model calls', async (t) => {
@@ -500,7 +502,6 @@ test('role choices expose server eligibility for the selected profile and actual
   const pending = (await resources.list('p'))
     .roleChoices!.find((entry) => entry.roleId === '*')!
     .choices.find((choice) => choice.resource.id === 'local')!;
-  assert.equal(pending.eligible, false);
-  assert.match(pending.reason, /Restart the service/);
+  assert.equal(pending.eligible, true);
   assert.deepEqual(f.calls, []);
 });

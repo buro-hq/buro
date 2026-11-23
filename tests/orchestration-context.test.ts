@@ -12,7 +12,7 @@ import { configuredRequestPolicy } from '../core/request-policy.ts';
 import type { ProjectRegistry } from '../core/ports.ts';
 import { fixtureToolEffect } from './fixtures/tool-broker.ts';
 
-test('a real managed 16K session carries check, review and finish decisions through native format without repeated schema text', async (t) => {
+test('a real managed 16K session carries check, review and finish decisions through optional native formatting without persisting response schemas', async (t) => {
   const directory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), 'buro-action-context-')),
   );
@@ -218,7 +218,12 @@ test('a real managed 16K session carries check, review and finish decisions thro
         (message: any) => message.role === 'user' && message.content.includes(goal),
       ),
     );
-    assert.ok(body.messages.every((message: any) => !message.content.includes(schemaText)));
+    const schemaCopies =
+      body.messages
+        .map((message: any) => message.content)
+        .join('\n')
+        .split(schemaText).length - 1;
+    assert.equal(schemaCopies, body.format !== undefined ? 0 : 1);
     if (body.format !== undefined) {
       assert.deepEqual(body.format, schema);
       assert.deepEqual(body.tools, []);

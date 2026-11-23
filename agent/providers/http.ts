@@ -29,6 +29,21 @@ export class RequestGate {
     this.capacity = privateCapacity;
   }
   private capacity: number;
+  /** Apply a capacity change without dropping active work or queued cancellation handlers. */
+  setCapacity(capacity: number) {
+    if (!Number.isSafeInteger(capacity) || capacity < 1)
+      throw failure(
+        'INVALID_PROVIDER_CONFIGURATION',
+        'Invalid endpoint capacity.',
+        'not-dispatched',
+      );
+    this.capacity = capacity;
+    while (this.active < this.capacity && this.waiting.length) {
+      const next = this.waiting.shift()!;
+      if (!next.signal.aborted) next.grant();
+    }
+  }
+
   async run<T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> {
     if (signal.aborted) throw aborted('not-dispatched');
     await new Promise<void>((resolve, reject) => {

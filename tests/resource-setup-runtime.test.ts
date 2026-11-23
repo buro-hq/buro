@@ -125,6 +125,7 @@ async function fixture(t: any) {
       projects,
       selection: factory.selection,
       resources: factory.resources,
+      resolveRuntime: factory.resolveRuntime,
       routes: new FileRuntimeRoutes(path.join(directory, 'routes')),
       id: () => String(++sequence),
     });
@@ -190,7 +191,7 @@ async function editConnection(
   );
 }
 
-test('setup saves metadata atomically while active profiles, defaults and existing runtime bindings remain unchanged', async (t) => {
+test('setup activates models and profiles atomically while preserving the explicit default', async (t) => {
   const f = await fixture(t),
     active = await f.create();
   const before = await active.list('p');
@@ -199,31 +200,38 @@ test('setup saves metadata atomically while active profiles, defaults and existi
   assert.deepEqual(result, {
     profileId: 'new-team',
     runtimeIds: ['new-model'],
-    appliesTo: 'service-restart',
+    appliesTo: 'new-runs',
   });
   assert.deepEqual(await active.saveSetup(bundle, meta('create')), result);
   const after = await active.list('p');
   assert.notEqual(after.configurationRevision, before.configurationRevision);
-  assert.deepEqual(after.profiles, before.profiles);
-  assert.deepEqual(after.runtimes, before.runtimes);
+  assert.ok(after.profiles.some((profile) => profile.id === 'new-team'));
+  assert.deepEqual(
+    after.profiles.filter((profile) => profile.id !== 'new-team'),
+    before.profiles,
+  );
+  assert.ok(after.runtimes.some((runtime) => runtime.id === 'new-model'));
+  assert.deepEqual(
+    after.runtimes.filter((runtime) => runtime.id !== 'new-model'),
+    before.runtimes,
+  );
   assert.deepEqual(after.selected, before.selected);
   assert.equal(after.defaultProfile, 'codex');
   assert.equal(
     after.configured.profiles.find((entry) => entry.profile.id === 'new-team')?.restartRequired,
-    true,
+    false,
   );
   assert.equal(
     after.configured.runtimes.find((entry) => entry.definition.id === 'new-model')?.restartRequired,
-    true,
+    false,
   );
   assert.equal(
     after.configured.profiles.find((entry) => entry.profile.id === 'codex')?.restartRequired,
     false,
   );
   assert.equal(active.selection.forProject('p').coordinator.id, 'codex');
-  await assert.rejects(active.useProfile('new-team', meta('use-pending')), {
-    code: 'RESOURCE_PROFILE_RESTART_REQUIRED',
-  });
+  await active.useProfile('new-team', meta('use-live'));
+  assert.equal(active.selection.forProject('p').coordinator.id, 'new-model');
   await assert.rejects(active.useProfile('missing', meta('missing')), {
     code: 'RESOURCE_PROFILE_UNAVAILABLE',
   });
@@ -231,7 +239,7 @@ test('setup saves metadata atomically while active profiles, defaults and existi
   assert.deepEqual(f.calls, []);
 });
 
-test('profile selection validates pending dependencies before replaying cached selection receipts', async (t) => {
+test('profile selection and cached receipts use activated connection settings', async (t) => {
   const f = await fixture(t),
     active = await f.create();
   const cached = meta('choose-local');
@@ -241,29 +249,27 @@ test('profile selection validates pending dependencies before replaying cached s
   const catalog = await active.list('p');
   assert.equal(
     catalog.configured.profiles.find((entry) => entry.profile.id === 'local')?.restartRequired,
-    true,
+    false,
   );
   assert.equal(
     catalog.configured.runtimes.find((entry) => entry.definition.id === 'local')?.restartRequired,
-    true,
+    false,
   );
-  await assert.rejects(active.useProfile('local', cached), { code: 'CONNECTION_RESTART_REQUIRED' });
-  await assert.rejects(active.useProfile('local', meta('choose-again')), {
-    code: 'CONNECTION_RESTART_REQUIRED',
-  });
-  assert.throws(() => active.selection.forProject('p'), { code: 'CONNECTION_RESTART_REQUIRED' });
+  await active.useProfile('local', cached);
+  await active.useProfile('local', meta('choose-again'));
+  assert.equal(active.selection.forProject('p').coordinator.id, 'local');
   assert.equal(
     catalog.selected?.coordinator.id,
     'local',
     'Pending state must not hide settings for the active profile',
   );
-  assert.deepEqual(active.resources, original);
+  assert.notDeepEqual(active.resources, original);
   await active.useProfile('codex', meta('native-still-active'));
   assert.equal(active.selection.forProject('p').coordinator.id, 'codex');
   assert.deepEqual(f.calls, []);
 });
 
-test('a new pending runtime cannot replay a cached probe and service restart activates it without selecting or generating', async (t) => {
+test('a new runtime is immediately probe-ready without implicit selection or generation', async (t) => {
   const f = await fixture(t),
     active = await f.create();
   await active.saveSetup(await setup(active), meta('create'));
@@ -274,12 +280,7 @@ test('a new pending runtime cannot replay a cached probe and service restart act
     status: 'completed',
     result: { status: 'passed', runtimeId: 'new-model' },
   });
-  await assert.rejects(active.probe('new-model', meta('cached')), {
-    code: 'RESOURCE_RUNTIME_RESTART_REQUIRED',
-  });
-  await assert.rejects(active.probe('new-model', meta('fresh')), {
-    code: 'RESOURCE_RUNTIME_RESTART_REQUIRED',
-  });
+  assert.equal((await active.probe('new-model', meta('cached'))).status, 'passed');
   assert.equal(await probes.load('request-fresh'), undefined);
   const restarted = await f.create();
   const catalog = await restarted.list('p');
@@ -305,7 +306,7 @@ test('a new pending runtime cannot replay a cached probe and service restart act
   assert.equal(f.calls.filter((call) => call.url.endsWith('/api/chat')).length, 2);
 });
 
-test('adding a setup leaves existing owned routes and their model identity usable across restart', async (t) => {
+test('live connection changes preserve frozen route endpoints and model identity across restart', async (t) => {
   const f = await fixture(t),
     active = await f.create();
   await active.useProfile('local', meta('select-local'));
@@ -336,7 +337,13 @@ test('adding a setup leaves existing owned routes and their model identity usabl
   };
   const original = await router.start(input);
   await active.saveSetup(await setup(active), meta('create'));
-  assert.deepEqual(active.selection.forProject('p'), frozen);
+  await editConnection(active, 'http://10.12.0.6:11434', 'private-network');
+  assert.notEqual(
+    active.selection.forProject('p').coordinator.configurationRevision,
+    frozen.coordinator.configurationRevision,
+  );
+  await active.models('ollama');
+  assert.ok(f.calls.at(-1)!.url.startsWith('http://10.12.0.6:11434/'));
   const turnOptions = {
     schema: { type: 'object' },
     signal: new AbortController().signal,
@@ -358,7 +365,10 @@ test('adding a setup leaves existing owned routes and their model identity usabl
   assert.ok(
     f.calls
       .filter((call) => call.url.endsWith('/api/chat'))
-      .every((call) => call.body.model === 'fixture-small'),
+      .every(
+        (call) =>
+          call.body.model === 'fixture-small' && call.url.startsWith('http://127.0.0.1:11434/'),
+      ),
   );
 });
 
@@ -387,7 +397,7 @@ test('local-only setup requires explicit LAN trust and never treats a remote mod
   assert.deepEqual(f.calls, []);
 });
 
-test('the shared resource command bus publishes setup creation and rejects pending profile use before restart', async (t) => {
+test('the shared resource command bus activates setup creation before selecting the new profile', async (t) => {
   const f = await fixture(t);
   const host = await createHost({
     projects: [
@@ -430,19 +440,16 @@ test('the shared resource command bus publishes setup creation and rejects pendi
   assert.deepEqual(saved, {
     profileId: 'another-local-team',
     runtimeIds: [],
-    appliesTo: 'service-restart',
+    appliesTo: 'new-runs',
   });
-  await assert.rejects(
-    bus.execute(
-      { method: 'resources.use', params: { profileId: 'another-local-team' } },
-      meta('use'),
-    ),
-    { code: 'RESOURCE_PROFILE_RESTART_REQUIRED' },
+  await bus.execute(
+    { method: 'resources.use', params: { profileId: 'another-local-team' } },
+    meta('use'),
   );
   assert.deepEqual(f.calls, []);
 });
 
-test('queued profile selection cannot replay a receipt before an earlier connection edit becomes pending', async (t) => {
+test('queued profile selection waits for an earlier connection edit to activate', async (t) => {
   const f = await fixture(t),
     active = await f.create();
   const cached = meta('select-local');
@@ -457,27 +464,23 @@ test('queued profile selection cannot replay a receipt before an earlier connect
     connection.revision,
     meta('edit'),
   );
-  const selection = assert.rejects(active.useProfile('local', cached), {
-    code: 'CONNECTION_RESTART_REQUIRED',
-  });
+  const selection = active.useProfile('local', cached);
   await edit;
   await selection;
   assert.equal(active.configuration.snapshot().defaultProfile, 'local');
-  assert.throws(() => active.selection.forProject('p'), { code: 'CONNECTION_RESTART_REQUIRED' });
+  assert.equal(active.selection.forProject('p').coordinator.id, 'local');
   assert.deepEqual(f.calls, []);
 });
 
-test('queued setup creation completes before selecting its still-inactive profile', async (t) => {
+test('queued setup creation activates before selecting its new profile', async (t) => {
   const f = await fixture(t),
     active = await f.create();
   const creation = active.saveSetup(await setup(active), meta('create'));
-  const selection = assert.rejects(active.useProfile('new-team', meta('select')), {
-    code: 'RESOURCE_PROFILE_RESTART_REQUIRED',
-  });
+  const selection = active.useProfile('new-team', meta('select'));
   await creation;
   await selection;
-  assert.equal(active.configuration.snapshot().defaultProfile, 'codex');
-  assert.equal(active.selection.forProject('p').coordinator.id, 'codex');
+  assert.equal(active.configuration.snapshot().defaultProfile, 'new-team');
+  assert.equal(active.selection.forProject('p').coordinator.id, 'new-model');
   assert.deepEqual(f.calls, []);
 });
 
@@ -492,9 +495,7 @@ test('probe admission waits for an earlier queued setup before replaying a new-r
     result: { runtimeId: 'new-model', status: 'passed' },
   });
   const creation = active.saveSetup(await setup(active), meta('create'));
-  const probing = assert.rejects(active.probe('new-model', meta('cached-new')), {
-    code: 'RESOURCE_RUNTIME_RESTART_REQUIRED',
-  });
+  const probing = active.probe('new-model', meta('cached-new'));
   await creation;
   await probing;
   assert.deepEqual(f.calls, []);
@@ -520,15 +521,12 @@ test('metadata and cached probe admission wait for a preceding queued connection
     connection.revision,
     meta('edit-before-admission'),
   );
-  const discovery = assert.rejects(active.models('ollama'), {
-    code: 'CONNECTION_RESTART_REQUIRED',
-  });
-  const probing = assert.rejects(active.probe('local', meta('cached-local')), {
-    code: 'CONNECTION_RESTART_REQUIRED',
-  });
+  const discovery = active.models('ollama');
+  const probing = active.probe('local', meta('cached-local'));
   await edit;
   await Promise.all([discovery, probing]);
-  assert.deepEqual(f.calls, []);
+  assert.ok(f.calls.length > 0);
+  assert.ok(f.calls.every((call) => call.url.startsWith('http://10.12.0.5:11434/')));
 });
 
 test('a cached receipt cannot make an unknown or native runtime appear probe-ready', async (t) => {

@@ -77,7 +77,7 @@ export async function runGoalOrchestration(
     'Do not start native child agents; delegate through Buro actions. Do not commit, reset, checkout or modify .git. ' +
     'Respect the saved scope and protected files. Service checks and fresh independent review must approve the exact final revision. ' +
     'Do not claim a tool result, check or review you did not observe. Ask the user when information is missing.\n' +
-    'Service checks are obtained through the registered check action; a repository command result does not replace service verification.\n' +
+    'When the candidate is ready, request finish. The service runs missing checks and independent review before acceptance, and returns real failures for repair. You may request checks or review earlier when useful. A repository command result does not replace service verification.\n' +
     'Project context: ' +
     (policy.context || '') +
     materialInstructions(run.contextMaterials || [], workspace.path, true) +
@@ -235,20 +235,40 @@ export async function runGoalOrchestration(
     },
     async review({ result }) {
       assertCurrent(service, ctx);
-      if (!checked)
-        throw new DomainError('CHECKS_REQUIRED', 'Request current service checks before review.');
+      checked = await service.ensureChecks(ctx, checked, true);
+      if (
+        !checked.scope ||
+        !checked.specsUnchanged ||
+        !checked.checks.total ||
+        checked.checks.passed !== checked.checks.total
+      )
+        return {
+          ...observed({
+            checks: checkContext(checked.checks),
+            scopePreserved: checked.scope,
+            specsUnchanged: checked.specsUnchanged,
+            accepted: false,
+          }),
+          isError: true,
+        };
       const review = await service.reviewRun(ctx, checked, result);
       return observed({ review, accepted: false });
     },
     async finish({ result }) {
       assertCurrent(service, ctx);
-      if (!checked)
-        throw new DomainError(
-          'CHECKS_REQUIRED',
-          'Current checks and independent review are required.',
-        );
-      await service.acceptRun(ctx, checked, result);
-      return observed({ accepted: true, commit: service.get(projectId, runId).commit });
+      const completed = await service.completeRun(ctx, checked, result);
+      checked = completed.checked;
+      return {
+        ...observed({
+          accepted: completed.accepted,
+          checks: checkContext(checked.checks),
+          scopePreserved: checked.scope,
+          specsUnchanged: checked.specsUnchanged,
+          review: completed.review,
+          commit: service.get(projectId, runId).commit,
+        }),
+        ...(!completed.accepted ? { isError: true } : {}),
+      };
     },
     async askUser({ question }) {
       assertCurrent(service, ctx);

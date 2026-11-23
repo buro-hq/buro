@@ -532,7 +532,7 @@ function selectedScenario(options: {
       const response = scenario(body),
         proposal = JSON.parse(response.content);
       const corrected = prompt.startsWith('The service rejected this action');
-      if (corrected && (body.format || body.response_format)) options.onCorrection?.();
+      if (corrected) options.onCorrection?.();
       const worker = proposal.decision.input.worker;
       worker.action = options.reuse ? 'reuse' : 'create';
       worker.runtimeId = corrected

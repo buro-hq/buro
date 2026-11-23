@@ -64,6 +64,7 @@ export const resourcesPlugin: Plugin.Object<{
           selection: resources.selection,
           projects: ctx.projects.registry,
           resources: resources.resources,
+          resolveRuntime: resources.resolveRuntime,
           routes: new FileRuntimeRoutes(path.join(options.directory, 'local/runtime-routes')),
           id: randomUUID,
         }),

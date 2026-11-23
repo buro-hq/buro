@@ -145,11 +145,11 @@ test('Ollama metadata failure settles the private generation as not dispatched a
   );
   const result = await reopened.runtime.turn(started.threadId, 'Respond as JSON.', options());
   assert.deepEqual(JSON.parse(result.text), { ok: true });
-  assert.deepEqual(nextRoutes, ['/api/show', '/api/chat', '/api/show', '/api/chat']);
+  assert.deepEqual(nextRoutes, ['/api/show', '/api/chat']);
   assert.equal(
     nextRoutes.filter((route) => route === '/api/chat').length,
-    2,
-    'Only the explicit work request and its required structured final response generate output.',
+    1,
+    'A valid direct JSON response needs only the explicit work request.',
   );
   assert.equal(f.toolCalls(), 0);
 });

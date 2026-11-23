@@ -78,16 +78,16 @@ const evidence = z.strictObject({
 });
 const workerStepCheckPlan = z.strictObject({
   version: z.literal(1),
-  checkIds: z.array(z.string().min(1).max(100)).min(1).max(8),
+  checkIds: z.array(z.string().min(1).max(100)).min(1),
   configurationRevision: z.string(),
 });
 const workerStepCheckResult = z.strictObject({
   version: z.literal(1),
   outcome: z.enum(['completed', 'unavailable']),
   workspaceFingerprint: z.string(),
-  checkIds: z.array(z.string().min(1).max(100)).min(1).max(8),
+  checkIds: z.array(z.string().min(1).max(100)).min(1),
   passed: z.number().int().nonnegative(),
-  total: z.number().int().positive().max(8),
+  total: z.number().int().positive(),
   results: z
     .array(
       z.strictObject({
@@ -98,8 +98,7 @@ const workerStepCheckResult = z.strictObject({
         diagnostic: z.string().max(512),
       }),
     )
-    .min(1)
-    .max(8),
+    .min(1),
 });
 const workerStepChecks = z.strictObject({
   version: z.literal(1),

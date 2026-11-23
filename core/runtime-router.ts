@@ -61,6 +61,7 @@ export class RuntimeRouter implements AgentRuntime {
     selection: RuntimeSelection;
     projects: ProjectRegistry;
     resources: RuntimeResource[];
+    resolveRuntime?: (resource: RuntimeResource) => RegisteredRuntime | undefined;
     routes: RuntimeRouteStore;
     id: () => string;
   };
@@ -74,11 +75,12 @@ export class RuntimeRouter implements AgentRuntime {
   >();
   private listeners = new Set<(event: RuntimeEvent) => void>();
   private unsubscribe: (() => void)[] = [];
+  private subscribed = new WeakSet<RegisteredRuntime>();
   private closed = false;
   private pending = new Set<Promise<unknown>>();
   constructor(options: RuntimeRouter['options']) {
     this.options = options;
-    for (const id of options.registry.list()) {
+    for (const id of options.resolveRuntime ? [] : options.registry.list()) {
       const unsubscribe = options.registry.get(id).subscribe?.((event) => this.relay(id, event));
       if (unsubscribe) this.unsubscribe.push(unsubscribe);
     }
@@ -168,13 +170,19 @@ export class RuntimeRouter implements AgentRuntime {
         resource.configurationRevision,
         resource.local,
       ]);
-    if (!current || identity(current) !== identity(route.resource))
+    const retained = this.options.resolveRuntime?.(route.resource);
+    if (!retained && (!current || identity(current) !== identity(route.resource)))
       throw new DomainError(
         'RUNTIME_CONFIG_CHANGED',
         'The saved runtime configuration is unavailable. Restore it or start a new attempt.',
       );
-    const runtime = this.options.registry.get(route.resource.id);
-    assertBackendAdmission(current, runtime, route.requirements);
+    const runtime = retained || this.options.registry.get(route.resource.id);
+    if (this.options.resolveRuntime && !this.subscribed.has(runtime)) {
+      const unsubscribe = runtime.subscribe?.((event) => this.relay(route.resource.id, event));
+      if (unsubscribe) this.unsubscribe.push(unsubscribe);
+      this.subscribed.add(runtime);
+    }
+    assertBackendAdmission(retained ? route.resource : current!, runtime, route.requirements);
     assertBackendAdmission(route.resource, runtime, route.requirements);
     const snapshot = this.options.projects.get(route.projectId).snapshot();
     const research =

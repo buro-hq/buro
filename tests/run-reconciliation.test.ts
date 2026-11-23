@@ -254,7 +254,11 @@ test('cancellation before the current generation dispatch settles its intent, in
     const f = managedFixture(
       async () => {
         calls++;
-        return { model: 'fixture', message: { role: 'assistant', content: '{}' }, finish: 'stop' };
+        return {
+          model: 'fixture',
+          message: { role: 'assistant', content: 'Needs structured serialization' },
+          finish: 'stop',
+        };
       },
       {
         separateTurn: targetRequest === 2,

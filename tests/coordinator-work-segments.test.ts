@@ -365,10 +365,7 @@ test('the full action grammar can finalize a long tool-phase note through a safe
   assert.doesNotMatch(finalRequest.messages[0].content, /ORIGINAL_COMPLETE_GOAL/);
   assert.match(JSON.stringify(finalRequest.messages), /ORIGINAL_COMPLETE_GOAL/);
   assert.ok(finalRequest.messages.some((message) => message.content.startsWith(packet(1))));
-  assert.match(
-    f.requests[0].messages.at(-1)!.content,
-    /You need not complete the whole goal before requesting an action/,
-  );
+  assert.match(f.requests[0].messages.at(-1)!.content, /the overall goal need not be complete/);
   assert.deepEqual(await new FileManagedSessions(f.directory).load(f.threadId), saved);
 });
 

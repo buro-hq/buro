@@ -112,3 +112,24 @@ test('only real completed failures produce bounded permission-preserving feedbac
     code: 'INVALID_STEP_CHECK',
   });
 });
+
+test('worker checks accept selections beyond the former eight-check ceiling', () => {
+  const checkIds = Array.from({ length: 20 }, (_, index) => 'test_' + index);
+  const selected = { version: 1 as const, checkIds, configurationRevision: 'a'.repeat(64) };
+  validateWorkerStepCheckPlan(selected);
+  validateWorkerStepCheckResult(selected, 'b'.repeat(64), {
+    version: 1,
+    outcome: 'completed',
+    workspaceFingerprint: 'b'.repeat(64),
+    checkIds,
+    passed: 20,
+    total: 20,
+    results: checkIds.map((id) => ({
+      id,
+      name: id,
+      status: 'passed',
+      exitCode: 0,
+      diagnostic: '',
+    })),
+  });
+});

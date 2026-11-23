@@ -1,4 +1,5 @@
 import { DomainError } from './ports.ts';
+import { z } from 'zod';
 import type { ModelMessage } from '../agent/contracts/model.ts';
 import type { ManagedSession } from './model-ports.ts';
 import type {
@@ -39,6 +40,22 @@ const finalInstruction = (session: Pick<ManagedSession, 'purpose'>, closing = fa
     : closing
       ? closingFinalResponseInstruction
       : finalResponseInstruction;
+
+const responseValidators = new WeakMap<object, z.ZodType>();
+/** A provider without mixed tools/format support may still return the requested JSON directly. */
+function hasStructuredResult(schema: unknown, content: string): boolean {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return false;
+  try {
+    let validator = responseValidators.get(schema);
+    if (!validator) {
+      validator = z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]);
+      responseValidators.set(schema, validator);
+    }
+    return validator.safeParse(JSON.parse(content)).success;
+  } catch {
+    return false;
+  }
+}
 
 /** Last server-observed context use, not a guess based on payload size. */
 function observedContextTokens(session: ManagedSession): number | undefined {
@@ -183,9 +200,12 @@ export function projectManagedRequestContext(
   const messages = structuredClone(session.messages);
   const instruction =
     schema === undefined
-      ? session.purpose === 'coordination'
-        ? 'Use repository tools for the next useful piece of work. When a registered service action is needed, stop repository tool work and give a brief note for the structured decision requested separately. You need not complete the whole goal before requesting an action. Repository commands do not replace service checks or independent review.'
-        : 'Use the available tools when needed to complete the task. When the work is complete, give a brief completion note; the final response is requested separately.'
+      ? 'Use the available repository tools as needed. When ready, return the requested JSON directly, without a completion note. ' +
+        (session.purpose === 'coordination'
+          ? 'Choose one registered service action for the next useful work; the overall goal need not be complete. A finish request obtains service checks and independent review. '
+          : '') +
+        'Response schema: ' +
+        JSON.stringify(state.schema)
       : host.options.provider.structuredOutputMode === 'schema'
         ? 'Return your final answer as JSON matching the response format supplied by the service.'
         : (state.finalizing || state.closing
@@ -443,7 +463,11 @@ export async function afterManagedResponse(
     state.finalizing = true;
     return { kind: 'continue' };
   }
-  if (!state.finalizing && state.separate) {
+  if (
+    !state.finalizing &&
+    state.separate &&
+    !hasStructuredResult(state.schema, response.message.content)
+  ) {
     state.finalizing = true;
     const next: ManagedSession = {
       ...session,

@@ -84,7 +84,7 @@ test('queued mutations publish distinct persisted revisions while failures publi
   assert.notEqual(f.events[0].revision, f.events[1].revision);
   assert.deepEqual(
     f.events.map((change) => change.appliesTo),
-    ['service-restart', 'new-runs'],
+    ['new-runs', 'new-runs'],
   );
   assert.equal(
     f.events[1].revision,

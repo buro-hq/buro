@@ -382,23 +382,20 @@ test('the model updates a working plan and repairs after rejected review in the 
   );
 });
 
-test('premature finish and review return prerequisites instead of accepting a model success claim', async (t) => {
+test('premature finish and review run checks and return failures before accepting a model success claim', async (t) => {
   const f = await fixture(t, { steps: [finish, review, implement, finish, review, finish] });
   const run = await f.execute();
   assert.equal(run.status, 'completed', run.result);
   assert.equal(f.counts().checkpoints, 1);
   assert.equal(f.counts().reviewTurns, 1);
-  assert.ok(f.modelInputs.filter((input) => input.text.includes('CHECKS_REQUIRED')).length >= 2);
-  assert.ok(f.modelInputs.some((input) => input.text.includes('REVIEW_REQUIRED')));
+  assert.ok(f.modelInputs.filter((input) => input.text.includes('\"passed\":0')).length >= 2);
 });
 
-test('a source edit after checks returns stale evidence feedback before any reviewer is dispatched', async (t) => {
+test('a source edit after checks renews evidence before review without an extra coordinator request', async (t) => {
   const f = await fixture(t, {
     steps: [
       implement,
       { ...review, before: (control) => control.write('src/edge.ts', 'edge ok\n') },
-      check,
-      review,
       finish,
     ],
   });
@@ -406,7 +403,7 @@ test('a source edit after checks returns stale evidence feedback before any revi
   assert.equal(run.status, 'completed', run.result);
   assert.equal(f.counts().checks, 2);
   assert.equal(f.counts().reviewTurns, 1);
-  assert.ok(f.modelInputs.some((input) => input.text.includes('VERIFICATION_REVISION_CHANGED')));
+  assert.equal(f.counts().coordinatorTurns, 3);
 });
 
 test('a custom catalog executes arbitrary plugin action names through the same acceptance ports', async (t) => {
@@ -516,13 +513,13 @@ test('a composite plugin cannot mutate a stopped run after asking the user', asy
   assert.deepEqual(f.counts(), { coordinatorTurns: 1, checks: 0, reviewTurns: 0, checkpoints: 0 });
 });
 
-test('rejected actions return to the coordinator without a fixed retry or intervention threshold', async (t) => {
+test('failed verification returns to the coordinator without a fixed retry or intervention threshold', async (t) => {
   const f = await fixture(t, { steps: [finish, finish, implement, review, finish] });
   const run = await f.execute();
   assert.equal(run.status, 'completed', run.result);
   assert.equal(run.issue, undefined);
-  assert.deepEqual(f.counts(), { coordinatorTurns: 5, checks: 1, reviewTurns: 1, checkpoints: 1 });
-  assert.equal(f.modelInputs.filter((input) => input.text.includes('CHECKS_REQUIRED')).length, 2);
+  assert.deepEqual(f.counts(), { coordinatorTurns: 5, checks: 3, reviewTurns: 1, checkpoints: 1 });
+  assert.ok(f.modelInputs.filter((input) => input.text.includes('\"passed\":0')).length >= 2);
 });
 
 test('cancellation after an observed coordinator response blocks action dispatch', async (t) => {

@@ -59,7 +59,6 @@ export function validateWorkerStepCheckPlan(plan: WorkerStepCheckPlan) {
     !/^[a-f0-9]{64}$/.test(plan.configurationRevision) ||
     !Array.isArray(plan.checkIds) ||
     !plan.checkIds.length ||
-    plan.checkIds.length > 8 ||
     new Set(plan.checkIds).size !== plan.checkIds.length ||
     plan.checkIds.some((id) => typeof id !== 'string' || !id || id.length > 100)
   )

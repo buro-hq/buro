@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { PrivateJSONFiles } from '../adapters/files/private-json.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -203,12 +204,10 @@ test('first setup remains unselected through saving and restart until the user s
   const pending = await factory.list('p');
   assert.equal(pending.defaultProfile, null);
   assert.equal(pending.selected, undefined);
-  assert.equal(pending.configured?.profiles[0].restartRequired, true);
-  assert.equal(pending.configured?.runtimes[0].restartRequired, true);
-  assert.deepEqual(pending.runtimes, []);
-  await assert.rejects(factory.useProfile('local-team', meta('too-early')), {
-    code: 'RESOURCE_PROFILE_RESTART_REQUIRED',
-  });
+  assert.equal(pending.configured?.profiles[0].restartRequired, false);
+  assert.equal(pending.configured?.runtimes[0].restartRequired, false);
+  assert.equal(pending.runtimes.length, 1);
+  assert.equal(pending.selectionIssue?.code, 'RESOURCE_PROFILE_REQUIRED');
   await factory.dispose();
   const restarted = await f.create();
   assert.equal((await restarted.list('p')).selectionIssue?.code, 'RESOURCE_PROFILE_REQUIRED');
@@ -241,8 +240,8 @@ test('first setup remains unselected through saving and restart until the user s
     (choice) => choice.operationId === 'project.research',
   );
   assert.ok(pendingResearch?.choices.length);
-  assert.ok(pendingResearch.choices.every((choice) => !choice.eligible));
-  assert.throws(() => restarted.selection.forProject('p'), { code: 'CONNECTION_RESTART_REQUIRED' });
+  assert.ok(pendingResearch.choices.every((choice) => choice.eligible));
+  assert.equal(restarted.selection.forProject('p').coordinator.id, 'qwen');
   assert.deepEqual(f.calls, []);
 });
 
@@ -308,4 +307,22 @@ test('a fresh production composition supports global RPC and CLI without models 
   assert.deepEqual(cli.connections, []);
   assert.equal(cli.selectionIssue.code, 'RESOURCE_PROFILE_REQUIRED');
   assert.deepEqual(calls, []);
+});
+
+test('an archived retired provider does not block the currently configured execution resources', async (t) => {
+  const f = await fixture(t);
+  const history = new PrivateJSONFiles(path.join(f.root, 'service/local/resource-generations'));
+  await history.save('a'.repeat(64), {
+    version: 1,
+    defaultProfile: null,
+    receipts: {},
+    connections: [{ id: 'retired', provider: 'removed-provider', config: {} }],
+    runtimes: [],
+    profiles: [],
+  });
+  const resources = await f.create();
+  const current = await resources.list();
+  assert.equal(current.selectionIssue?.code, 'RESOURCE_PROFILE_REQUIRED');
+  assert.deepEqual(current.runtimes, []);
+  assert.deepEqual(f.calls, []);
 });

@@ -198,10 +198,11 @@ test('the explicit next service turn restores ordinary tools without changing th
     [0, 1],
   );
   assert.deepEqual(f.effects, ['read_file']);
-  assert.equal(requests.length, 4); // Planning has no extra phase; normal Ollama work retains one.
+  assert.equal(requests.length, 3); // Direct valid JSON needs no extra serialization request.
   assert.equal(requests[1].tools[0].name, 'read_file');
   assert.equal(requests[1].schema, undefined);
-  assert.deepEqual(requests[3].tools, []);
+  assert.ok(requests[2].tools.length > 0);
+  assert.equal(requests[2].schema, undefined);
 });
 
 test('nonsegmented coordinator checkpoints reject authority rollback and counter or scope resets', async (t) => {

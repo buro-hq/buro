@@ -30,17 +30,17 @@ export function registerBuiltinExecutionActions(catalog: ExecutionActionCatalog)
   });
   catalog.register({
     id: 'review',
-    revision: 'review-v1',
+    revision: 'review-v2',
     description:
-      'Request a fresh independent read-only review of the current result and verified revision. Inspect the actual findings before deciding whether to repair, investigate, delegate or finish.',
+      'Request a fresh independent read-only review. The service runs missing or stale checks first and returns any failures. Inspect actual findings before repairing or finishing.',
     schema: z.strictObject({ result: EnvelopeSchema }),
     execute: (input, operations) => operations.review(input),
   });
   catalog.register({
     id: 'finish',
-    revision: 'finish-v1',
+    revision: 'finish-v2',
     description:
-      'Submit the result for service acceptance. Requires current successful checks, fresh independent approval of exactly this revision and settled effects. Your success claim cannot replace this evidence.',
+      'Submit the candidate for completion. The service obtains missing checks and independent review, then accepts only the verified revision. Failures and findings return for repair. You do not need to call check and review first.',
     schema: z.strictObject({ result: EnvelopeSchema }),
     execute: (input, operations) => operations.finish(input),
   });

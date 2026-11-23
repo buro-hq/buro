@@ -461,8 +461,8 @@ for (const kind of ['ollama', 'deepseek'] as const) {
     assert.deepEqual(JSON.parse(final.text), { ok: true });
     assert.equal(
       resumed.requests.length,
-      kind === 'ollama' ? 2 : 1,
-      'Only the explicit continuation and required final serialization may request generation',
+      1,
+      'Only the explicit continuation requests generation when the result is already valid JSON',
     );
     assert.equal(
       f.selections(),
