@@ -298,9 +298,9 @@ export async function prepareManagedCodingRequest(
       messages,
       tools: definitions,
       schema,
-      limits: state.closing
-        ? { ...limits, maxOutputTokens: Math.min(512, limits.maxOutputTokens) }
-        : limits,
+      // Closing responses may include reasoning. The configured allowance and
+      // request policy also bound this phase.
+      limits,
     },
     host.options.requestPolicy,
   );

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { endpointIsPrivate, modelEndpointURL } from './endpoint-trust.ts';
+import { endpointIsLocal, endpointIsPrivate, modelEndpointURL } from './endpoint-trust.ts';
 import { ResourceIdSchema, type ResourceConnection, type RuntimeDefinition } from './resources.ts';
 
 const modelEndpoint = z
@@ -15,12 +15,19 @@ const modelEndpoint = z
     }
   }, 'Use an HTTP(S) endpoint without credentials, query or fragment.');
 
+export const ModelSamplingConfigSchema = z.strictObject({
+  temperature: z.number().min(0).max(2).optional(),
+  topP: z.number().min(0).max(1).optional(),
+  presencePenalty: z.number().min(-2).max(2).optional(),
+});
+
 export const OllamaConnectionConfigSchema = z
   .strictObject({
     endpoint: modelEndpoint.default('http://127.0.0.1:11434'),
     capacity: z.number().int().min(1).max(8).default(1),
     trust: z.enum(['auto', 'private-network', 'external']).default('auto'),
     think: z.union([z.boolean(), z.string().max(40)]).optional(),
+    sampling: ModelSamplingConfigSchema.optional(),
   })
   .superRefine((config, ctx) => {
     if (config.trust !== 'private-network') return;
@@ -61,6 +68,44 @@ export const DeepSeekConnectionConfigSchema = z
       /* The endpoint field reports malformed URLs. */
     }
   });
+export const OpenAICompatibleConnectionConfigSchema = z
+  .strictObject({
+    endpoint: modelEndpoint.default('http://127.0.0.1:8080/v1'),
+    capacity: z.number().int().min(1).max(8).default(1),
+    trust: z.enum(['auto', 'private-network', 'external']).default('auto'),
+    apiKeyEnv: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]{0,99}$/)
+      .optional(),
+    responseFormat: z.enum(['json_schema', 'json_object', 'instruction']).default('json_schema'),
+    maxTokenField: z.enum(['max_tokens', 'max_completion_tokens']).default('max_tokens'),
+    thinking: z.enum(['enabled', 'disabled']).optional(),
+    reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
+    enableThinking: z.boolean().optional(),
+    sampling: ModelSamplingConfigSchema.optional(),
+  })
+  .superRefine((config, ctx) => {
+    try {
+      const endpoint = modelEndpointURL(config.endpoint);
+      const local = endpointIsLocal(endpoint, config.trust);
+      if (!local && endpoint.protocol !== 'https:')
+        ctx.addIssue({
+          code: 'custom',
+          path: ['endpoint'],
+          message: 'External endpoints require HTTPS.',
+        });
+    } catch (error) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['trust'],
+        message: error instanceof Error ? error.message : 'Invalid endpoint trust.',
+      });
+    }
+  });
+export type OpenAICompatibleConnectionConfig = z.infer<
+  typeof OpenAICompatibleConnectionConfigSchema
+>;
+
 export const ManagedLimitsSchema = z
   .strictObject({
     contextTokens: z.number().int().min(1024).max(262144).default(32768),

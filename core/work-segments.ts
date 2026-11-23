@@ -144,6 +144,26 @@ export const segmentClosingSchema = Object.freeze({
   },
   required: ['status', 'nextTask'],
   additionalProperties: false,
+  anyOf: [
+    {
+      type: 'object',
+      properties: {
+        status: { type: 'string', const: 'continue' },
+        nextTask: { type: 'string', minLength: 1, maxLength: 1000, pattern: '^\\s*\\S[\\s\\S]*$' },
+      },
+      required: ['status', 'nextTask'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: {
+        status: { type: 'string', const: 'complete' },
+        nextTask: { type: 'string', const: '' },
+      },
+      required: ['status', 'nextTask'],
+      additionalProperties: false,
+    },
+  ],
 });
 export const segmentClosingInstruction =
   'Buro is closing this work step. No tools are available in this response. ' +

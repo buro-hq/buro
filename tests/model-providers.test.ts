@@ -138,6 +138,7 @@ test('Ollama discovers installed models and preserves native tools/thinking with
     id: 'local',
     endpoint: 'http://127.0.0.1:11434',
     think: true,
+    sampling: { temperature: 0, topP: 0.8, presencePenalty: 0 },
     fetch: async (url, init) => {
       const route = new URL(String(url)).pathname;
       if (route === '/api/tags')
@@ -152,6 +153,9 @@ test('Ollama discovers installed models and preserves native tools/thinking with
       bodies.push(body);
       assert.equal(body.options.num_ctx, 16000);
       assert.equal(body.options.num_predict, 1024);
+      assert.equal(body.options.temperature, 0);
+      assert.equal(body.options.top_p, 0.8);
+      assert.equal(body.options.presence_penalty, 0);
       assert.equal(body.think, true);
       assert.deepEqual(body.format, body.tools?.length ? undefined : { type: 'object' });
       return bodies.length === 1

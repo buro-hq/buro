@@ -257,6 +257,41 @@ const sequence =
     return steps[index - 1];
   };
 
+test('a reasoning model can close a work step within the configured allowance while smaller explicit limits remain binding', async (t) => {
+  for (const maxOutputTokens of [2048, 256]) {
+    const f = await fixture(t, {
+      limits: { maxOutputTokens },
+      script(input, index) {
+        if (index === 1) return tool('read');
+        if (index === 2) {
+          if (input.maxOutputTokens < 1024)
+            return {
+              ...response(''),
+              finish: 'length',
+              usage: { inputTokens: 10, outputTokens: input.maxOutputTokens },
+            };
+          return { ...closing('complete'), usage: { inputTokens: 10, outputTokens: 1100 } };
+        }
+        assert.equal(index, 3);
+        return response();
+      },
+    });
+    const runtime = f.make();
+    const { threadId } = await f.start(runtime);
+    const turn = runtime.turn(
+      threadId,
+      'Read the assigned input and return the result.',
+      turnOptions(),
+    );
+    if (maxOutputTokens >= 1024) assert.equal((await turn).text, '{"ok":true}');
+    else await assert.rejects(turn, { code: 'MODEL_INCOMPLETE' });
+    assert.equal(f.executed, 1);
+    assert.deepEqual(f.requests[1].tools, []);
+    assert.equal(f.requests[1].maxOutputTokens, maxOutputTokens);
+    assert.equal(f.reservations[1].requestedOutputTokens, maxOutputTokens);
+  }
+});
+
 test('segmented worker preserves logical identity, frozen task, provider continuation and cumulative budget while rotating context', async (t) => {
   const f = await fixture(t, {
     script: sequence(tool('read-1'), closing(), tool('read-2'), closing('complete'), response()),

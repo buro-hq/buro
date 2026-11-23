@@ -18,12 +18,14 @@ import {
   type HttpOptions,
 } from './http.ts';
 import { ProviderFailure } from '../contracts/provider-errors.ts';
+import { samplingParameters, type ModelSamplingSettings } from './sampling.ts';
 
 export type OllamaOptions = HttpOptions & {
   id: string;
   revision: string;
   local: boolean;
   think?: boolean | string;
+  sampling?: ModelSamplingSettings;
 };
 type Options = OllamaOptions;
 const failure = (code: string, message: string) =>
@@ -37,7 +39,11 @@ export class OllamaProvider implements ModelProvider {
   private options: Options;
   private gate: NonNullable<HttpOptions['gate']>;
   constructor(options: Options) {
-    this.options = { ...options, endpoint: endpointURL(options.endpoint).href };
+    this.options = {
+      ...options,
+      endpoint: endpointURL(options.endpoint).href,
+      ...(options.sampling ? { sampling: { ...options.sampling } } : {}),
+    };
     this.id = options.id;
     this.revision = options.revision;
     this.local = options.local;
@@ -178,7 +184,11 @@ export class OllamaProvider implements ModelProvider {
           ...(!input.tools.length ? { format: input.schema } : {}),
           stream: true,
           ...(this.options.think !== undefined ? { think: this.options.think } : {}),
-          options: { num_ctx: input.contextTokens, num_predict: input.maxOutputTokens },
+          options: {
+            ...samplingParameters(this.options.sampling),
+            num_ctx: input.contextTokens,
+            num_predict: input.maxOutputTokens,
+          },
         }),
       });
       let content = '',

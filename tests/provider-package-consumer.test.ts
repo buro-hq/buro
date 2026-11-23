@@ -45,7 +45,7 @@ test('compiled provider entry works in a standalone consumer without repository 
   assert.deepEqual((await fs.readdir(directory)).sort(), ['dist', 'package.json', 'tsconfig.json']);
   const script = `
 import assert from 'node:assert/strict';
-import { OllamaProvider, DeepSeekProvider, ProviderFailure, providerFailureOutcome } from './dist/providers/index.js';
+import { OllamaProvider, DeepSeekProvider, OpenAICompatibleProvider, ProviderFailure, providerFailureOutcome } from './dist/providers/index.js';
 assert.equal(process.env.PATH, '');
 assert.equal(process.env.CODEX_HOME, undefined);
 assert.equal(process.env.DEEPSEEK_API_KEY, undefined);
@@ -62,7 +62,7 @@ const injectedFetch = async (url, init) => {
   throw Error('Unexpected endpoint');
 };
 const identity = { id: 'outside-buro', revision: 'consumer-revision', local: false, fetch: injectedFetch };
-const providers = [new OllamaProvider({ ...identity, endpoint: 'http://127.0.0.1:11434' }), new DeepSeekProvider({ ...identity, endpoint: 'https://provider.invalid', apiKey: () => 'synthetic-consumer-key' })];
+const providers = [new OllamaProvider({ ...identity, endpoint: 'http://127.0.0.1:11434' }), new DeepSeekProvider({ ...identity, endpoint: 'https://provider.invalid', apiKey: () => 'synthetic-consumer-key' }), new OpenAICompatibleProvider({ ...identity, endpoint: 'http://127.0.0.1:8080' })];
 for (const provider of providers) {
   const events = [];
   const result = await provider.complete({ requestId: provider.id, model: 'external-model', messages: [{ role: 'user', content: 'Respond once' }], tools: [], schema: null, contextTokens: 4096, maxOutputTokens: 128, signal: new AbortController().signal, onProgress() {}, onEvent: (event) => events.push(event) });
@@ -72,7 +72,7 @@ for (const provider of providers) {
   assert.equal(events.filter((event) => event.type === 'text.delta').map((event) => event.text).join(''), 'portable');
   assert.deepEqual(events.at(-1), { type: 'response.completed', model: 'external-model', finish: 'stop' });
 }
-assert.equal(requests, 2);
+assert.equal(requests, 3);
 assert.equal(ambientRequests, 0);
 assert.equal(providerFailureOutcome(new ProviderFailure('MODEL_UNAVAILABLE', 'Fixture', { outcome: 'unknown' })), 'unknown');
 console.log('standalone-provider-consumer-ok');

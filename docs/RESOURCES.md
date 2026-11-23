@@ -1,6 +1,6 @@
 # Execution resources
 
-Buro supports the native Codex client and managed sessions through Ollama or the DeepSeek model API. Managed sessions use Buro's repository tools, checkpoints, worker dispatch and independent acceptance. They do not require Codex to be installed.
+Buro supports the native Codex client and managed sessions through Ollama, DeepSeek or an OpenAI-compatible Chat Completions API. Managed sessions use Buro's repository tools, checkpoints, worker dispatch and independent acceptance. They do not require Codex to be installed.
 
 The self-hosted GPU route uses the Ollama HTTP API directly on a Windows RTX host, with an explicitly trusted private-network endpoint; Buro does not manage or require SSH tunnels. The Mac retains repositories, tools and checks. See [remote Ollama setup and measured evidence](REMOTE-OLLAMA.md). The local machine has optional `rtx-local` / `rtx-hybrid` profiles; model connections and runtimes load at daemon startup. The original machine default is preserved.
 
@@ -19,6 +19,27 @@ API endpoints must use HTTP(S), with no embedded credentials, query or fragment.
 - `external`: treat the endpoint as remote, including a loopback address.
 
 Trust describes the configured service boundary. It does not download a model, test connectivity or authorize cloud-backed Ollama models.
+
+The built-in `openai-compatible` provider connects to Chat Completions servers such as llama.cpp, ik_llama.cpp, TabbyAPI and LM Studio. Choose it in **Add API connection** and enter its configuration in the JSON editor. Include the server's API base path, usually `/v1`:
+
+```json
+{
+  "endpoint": "http://127.0.0.1:8080/v1",
+  "capacity": 1,
+  "trust": "auto",
+  "responseFormat": "json_schema",
+  "maxTokenField": "max_tokens",
+  "enableThinking": false
+}
+```
+
+Authentication is optional. Set `apiKeyEnv` to an environment-variable reference only when the server requires a bearer key; a missing configured key fails before dispatch. LAN HTTP endpoints require explicit `private-network` trust; external endpoints require HTTPS. This uses the same locality rules as Ollama.
+
+`responseFormat` selects native `json_schema` output (default), `json_object`, or instruction-only guidance. Tool turns and tools-free structured turns are separate. `maxTokenField` can instead be `max_completion_tokens`. Optional reasoning controls are sent only when configured: `enableThinking` maps to llama.cpp's `chat_template_kwargs.enable_thinking`, `thinking` sends the enabled/disabled vendor object, and `reasoningEffort` sends low/medium/high. Select the controls supported by the server and model; compatibility is verified by discovery and the bounded model diagnostic, not inferred from the server name. Context capacity remains a server launch setting.
+
+Ollama and OpenAI-compatible connection JSON can also include optional `sampling`, for example `{"temperature":0.7,"topP":0.8,"presencePenalty":1.5}`. Omitted settings retain the server's defaults; explicit zero values are preserved. Sampling changes invalidate the provider binding like other model settings. Different connections to the same endpoint can configure reasoning and sampling for separate roles while sharing endpoint capacity.
+
+The configured runtime output allowance includes reasoning tokens. Work-step closing uses that allowance and the available context headroom; it does not impose a separate 512-token ceiling.
 
 Saving a connection requires a Buro service restart to apply it. The interface shows the saved address, active API address and **Restart required** badge. New work using a changed connection, model discovery and diagnostics are blocked until restart; work already owned by the current service retains its active provider. Saving never silently replaces a provider under a running conversation. After restart, an old run whose frozen resource revision no longer matches stops with a configuration error rather than moving to the new endpoint.
 

@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { z } from 'zod';
 import {
   assertSegmentScope,
   contextWorkSegmentPolicy,
   decideWorkSegment,
   resolveWorkSegmentPolicy,
   parseSegmentClosing,
+  segmentClosingSchema,
   segmentMessages,
   segmentActionReceipts,
   validateSegmentEvidence,
@@ -36,6 +38,30 @@ const evidence = (files: SegmentEvidence['files'] = []): SegmentEvidence => ({
   headCommit: 'a'.repeat(40),
   workspaceFingerprint: 'b'.repeat(64),
   files,
+});
+
+test('the advertised closing schema rejects the invalid complete/nextTask pair observed in a live model run', () => {
+  const schema = z.fromJSONSchema(JSON.parse(JSON.stringify(segmentClosingSchema)));
+  for (const value of [
+    { status: 'complete', nextTask: '' },
+    { status: 'continue', nextTask: 'Run the remaining checks' },
+    { status: 'continue', nextTask: 'x'.repeat(1000) },
+  ]) {
+    assert.equal(schema.safeParse(value).success, true);
+    assert.deepEqual(parseSegmentClosing(JSON.stringify(value)), value);
+  }
+  for (const value of [
+    { status: 'complete', nextTask: 'Run checks to verify the fixes' },
+    { status: 'continue', nextTask: '' },
+    { status: 'continue', nextTask: ' \n\t' },
+    { status: 'continue', nextTask: 'x'.repeat(1001) },
+    { status: 'complete', nextTask: '', accepted: true },
+  ]) {
+    assert.equal(schema.safeParse(value).success, false);
+    assert.throws(() => parseSegmentClosing(JSON.stringify(value)), {
+      code: 'INVALID_WORK_SEGMENT',
+    });
+  }
 });
 
 test('configured policies cannot change revisions, return invalid decisions or mutate their inputs', () => {

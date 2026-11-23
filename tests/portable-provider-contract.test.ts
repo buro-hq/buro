@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OllamaProvider } from '../agent/providers/ollama.ts';
 import { DeepSeekProvider } from '../agent/providers/deepseek.ts';
+import { OpenAICompatibleProvider } from '../agent/providers/openai-compatible.ts';
 import { RequestGate } from '../agent/providers/http.ts';
 import { ProviderFailure } from '../agent/contracts/provider-errors.ts';
 import type { ModelProvider, ModelStreamEvent } from '../agent/contracts/model.ts';
 
-type Kind = 'ollama' | 'deepseek';
+type Kind = 'ollama' | 'deepseek' | 'openai-compatible';
 type Input = Parameters<ModelProvider['complete']>[0];
 const privateReasoning = 'PRIVATE_PORTABLE_REASONING';
 const encoder = new TextEncoder();
@@ -38,6 +39,7 @@ function provider(kind: Kind, fetch: typeof globalThis.fetch, gate?: RequestGate
     fetch,
     gate,
   };
+  if (kind === 'openai-compatible') return new OpenAICompatibleProvider(options);
   return kind === 'ollama'
     ? new OllamaProvider(options)
     : new DeepSeekProvider({ ...options, apiKey: () => 'SYNTHETIC_PORTABLE_KEY' });
@@ -81,7 +83,7 @@ const outcome = (code: string, expected: ProviderFailure['outcome']) => (error: 
   return true;
 };
 
-for (const kind of ['ollama', 'deepseek'] as const) {
+for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
   test(
     `${kind}: actual UTF-8 stream deltas arrive before completion without exposing reasoning`,
     { timeout: 5000 },

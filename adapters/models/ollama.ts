@@ -10,8 +10,14 @@ import type { ModelContext, ModelMessage, ModelProvider } from '../../agent/cont
 import { OllamaProvider as NeutralOllamaProvider } from '../../agent/providers/ollama.ts';
 import { providerOperation } from './provider-failures.ts';
 import type { HttpOptions } from './http.ts';
+import type { ModelSamplingSettings } from '../../agent/providers/sampling.ts';
 
-type Options = HttpOptions & { id: string; think?: boolean | string; trust?: EndpointTrust };
+type Options = HttpOptions & {
+  id: string;
+  think?: boolean | string;
+  trust?: EndpointTrust;
+  sampling?: ModelSamplingSettings;
+};
 /** Buro owns identity, data policy and preflight; portable code owns the actual model protocol. */
 export class OllamaProvider implements ModelProvider {
   readonly structuredToolMode = 'separate-turn' as const;
@@ -32,7 +38,11 @@ export class OllamaProvider implements ModelProvider {
         error instanceof Error ? error.message : 'Invalid model endpoint.',
       );
     }
-    this.options = { ...options, endpoint: url.href };
+    this.options = {
+      ...options,
+      endpoint: url.href,
+      ...(options.sampling ? { sampling: { ...options.sampling } } : {}),
+    };
     this.id = options.id;
     this.revision = createHash('sha256')
       .update(
@@ -41,6 +51,7 @@ export class OllamaProvider implements ModelProvider {
           url.href,
           options.think ?? 'model-default',
           ...(options.trust && options.trust !== 'auto' ? [options.trust] : []),
+          ...(options.sampling ? ['sampling', options.sampling] : []),
         ]),
       )
       .digest('hex');
