@@ -441,9 +441,9 @@ function validateSegmentCheckpoint(session: ManagedSession) {
       ...session.actions.slice(0, archive.handoff.completedActions),
       ...(session.rejectedToolBatches || [])
         .filter(
-          (batch) =>
-            batch.turnId === archive.anchor.turnId &&
-            batch.requestedAtRequest <= archive.endedAtRequest,
+          // A context window may contain several settled service turns. Match receipts
+          // by the actual archived call chain, not the most recently refreshed anchor.
+          (batch) => batch.requestedAtRequest <= archive.endedAtRequest,
         )
         .flatMap((batch) =>
           (batch.response.message.toolCalls || []).map((call, index) => ({

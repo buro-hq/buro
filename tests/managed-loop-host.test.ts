@@ -10,6 +10,7 @@ import { ManagedLoopHost } from '../core/managed-loop-host.ts';
 import { failManagedTurn } from '../core/managed-host-effects.ts';
 import { assertManagedReconciled } from '../core/managed-session-authority.ts';
 import { initializeManagedCodingContext } from '../core/managed-coding-context.ts';
+import { rejectedToolBatchMessages } from '../core/managed-tool-feedback.ts';
 import { testBoundedWorkSegmentPolicy as boundedWorkSegmentPolicy } from './fixtures/work-segment-policy.ts';
 import { DomainError, type ProjectRegistry } from '../core/ports.ts';
 import { recordTurnOutcome } from '../core/run-reconciliation.ts';
@@ -53,6 +54,7 @@ async function fixture(
     maxTurn?: number;
     maxSession?: number;
     readOnly?: boolean;
+    coordinator?: boolean;
   } = {},
 ) {
   const directory = await fs.realpath(
@@ -86,9 +88,9 @@ async function fixture(
     providerRevision: 'v1',
     toolRevision: 'fixture-tools-v1',
     requestedModel: 'small-model',
-    purpose: options.segmented ? 'implementation' : 'coordination',
+    purpose: options.segmented && !options.coordinator ? 'implementation' : 'coordination',
     scope,
-    ...(options.segmented
+    ...(options.segmented && !options.coordinator
       ? { assignment: { roleId: 'builder', scope: structuredClone(scope.writeScope) } }
       : {}),
     scopeRevisions: [
@@ -218,7 +220,7 @@ async function fixture(
           answer('{"status":"continue","nextTask":"Finish the existing assignment"}'))
         : complete(packet);
   }
-  await sessions.save(session);
+  await sessions.save(state.session);
   return {
     directory,
     sessions,
@@ -774,4 +776,84 @@ test('a completed unadmitted generation cannot borrow an older action with ident
   const forged = structuredClone(durable);
   forged.generation!.admittedActionIds = ['historical-action'];
   await assert.rejects(async () => f.sessions.save(forged), { code: 'INVALID_CHECKPOINT' });
+});
+
+test('a coordinator archives rejected chains from earlier service turns while rejecting future receipt proofs', async (t) => {
+  const f = await fixture(t, { segmented: true, coordinator: true });
+  let requests = 0;
+  f.host.options.provider.complete = async () => {
+    requests++;
+    if (f.state.closing)
+      return answer('{"status":"continue","nextTask":"Continue the current service observations"}');
+    if ([1, 3, 6].includes(requests)) {
+      const result = answer('', 1);
+      result.message.toolCalls![0].id = 'service-call-' + requests;
+      if (requests !== 3) result.message.toolCalls![0].name = 'not_offered';
+      return result;
+    }
+    return answer('{"done":true}');
+  };
+  const runner = new PiAgentLoopRunner();
+  assert.deepEqual(await runner.run(f.bridge, f.controller.signal), { kind: 'complete' });
+  assert.equal(f.state.session.rejectedToolBatches?.length, 1);
+  assert.equal(f.state.session.workSegments?.archives.length, 0);
+  const firstTurn = f.state.turnId;
+  const startNext = async (turnId: string) => {
+    f.state.session.status = 'ready';
+    await f.host.commit(f.state.session);
+    Object.assign(f.state, {
+      turnId,
+      round: 0,
+      calls: 0,
+      activeBatch: undefined,
+      responseSettled: false,
+      effectDispatched: false,
+      generationDispatched: false,
+      dispatchedActions: new Set<string>(),
+      closing: false,
+      finalizing: false,
+      segmentCompleteEmitted: false,
+    });
+    await initializeManagedCodingContext(f.state, f.host, 'Current service observation');
+    f.state.session.status = 'running';
+    f.state.session.turnAuthorities!.push({
+      turnId,
+      toolPolicy: 'normal',
+      startedAtRequest: f.state.session.requests,
+      scopeRevision: f.state.session.scopeRevisions.at(-1)!.revision,
+    });
+    f.state.session.messages.push({ role: 'user', content: 'Current service observation' });
+    await f.host.commit(f.state.session);
+    return new ManagedLoopHost(f.state, f.host);
+  };
+  const second = await startNext('T-second-service');
+  assert.equal(f.state.session.workSegments!.anchor.turnId, 'T-second-service');
+  assert.equal(f.state.session.workSegments!.active.startedAtRequest, 0);
+  assert.equal(f.state.session.workSegments!.archives.length, 0);
+  assert.deepEqual(await runner.run(second, f.controller.signal), { kind: 'yield' });
+  const archived = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+  assert.equal(archived.workSegments!.archives[0].anchor.turnId, 'T-second-service');
+  assert.equal(archived.rejectedToolBatches![0].turnId, firstTurn);
+  assert.ok(
+    archived.workSegments!.archives[0].messages.some(
+      (message) => message.toolCallId === 'service-call-1',
+    ),
+  );
+  assert.deepEqual(await runner.run(second, f.controller.signal), { kind: 'complete' });
+  assert.equal(requests, 5);
+  const third = await startNext('T-third-service');
+  assert.deepEqual(await runner.run(third, f.controller.signal), { kind: 'complete' });
+  const complete = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+  assert.equal(complete.requests, 7);
+  assert.equal(complete.rejectedToolBatches!.length, 2);
+  assert.equal(complete.actions.length, 1);
+  assert.equal(f.effects(), 1);
+  const forged = structuredClone(complete);
+  const future = forged.rejectedToolBatches![1];
+  assert.ok(future.requestedAtRequest > forged.workSegments!.archives[0].endedAtRequest);
+  forged.workSegments!.archives[0].messages.splice(-1, 0, ...rejectedToolBatchMessages(future));
+  await fs.writeFile(path.join(f.directory, forged.id + '.json'), JSON.stringify(forged));
+  await assert.rejects(new FileManagedSessions(f.directory).load(forged.id), {
+    code: 'INVALID_CHECKPOINT',
+  });
 });
