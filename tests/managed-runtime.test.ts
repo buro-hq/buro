@@ -1209,7 +1209,7 @@ test('interrupt intent survives cancellation and concurrent turns cannot share a
   });
   const { threadId } = await f.start(runtime);
   const turn = runtime.turn(threadId, 'Wait', turnOptions());
-  const rejected = assert.rejects(turn, { code: 'GENERATION_RECONCILIATION_REQUIRED' });
+  const rejected = assert.rejects(turn, { name: 'AbortError' });
   await ready;
   await assert.rejects(runtime.turn(threadId, 'Other', turnOptions()), { code: 'SESSION_BUSY' });
   await runtime.interrupt(threadId, turnId);

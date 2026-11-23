@@ -24,6 +24,7 @@ export type OpenAICompatibleOptions = HttpOptions & {
   maxTokenField?: 'max_tokens' | 'max_completion_tokens';
   reasoningEffort?: 'low' | 'medium' | 'high';
   enableThinking?: boolean;
+  reasoningBudgetTokens?: number;
   thinking?: 'enabled' | 'disabled';
   structuredToolMode?: 'combined' | 'separate-turn';
   sampling?: ModelSamplingSettings;
@@ -45,6 +46,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private options: Options;
   private gate: NonNullable<HttpOptions['gate']>;
   constructor(options: Options) {
+    if (
+      options.reasoningBudgetTokens !== undefined &&
+      (!Number.isSafeInteger(options.reasoningBudgetTokens) || options.reasoningBudgetTokens < -1)
+    )
+      throw failure(
+        'INVALID_PROVIDER_CONFIGURATION',
+        'Reasoning budget must be -1 or a nonnegative integer.',
+        'not-dispatched',
+      );
     const endpoint = endpointURL(options.endpoint);
     this.options = {
       ...options,
@@ -135,6 +145,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
             : {}),
           [this.options.maxTokenField ?? 'max_tokens']: input.maxOutputTokens,
           ...samplingParameters(this.options.sampling),
+          ...(this.options.reasoningBudgetTokens !== undefined
+            ? { reasoning_budget_tokens: this.options.reasoningBudgetTokens }
+            : {}),
           ...(this.options.thinking ? { thinking: { type: this.options.thinking } } : {}),
           ...(this.options.reasoningEffort
             ? { reasoning_effort: this.options.reasoningEffort }

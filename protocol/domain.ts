@@ -146,7 +146,7 @@ export type Agent = {
     paths: string[];
     envelope?: import('./worker-tasks.ts').WorkerEnvelopeV1;
     knownFailure?: {
-      code: 'MODEL_INCOMPLETE' | 'MODEL_CONTEXT_EXHAUSTED';
+      code: 'MODEL_INCOMPLETE' | 'MODEL_CONTEXT_EXHAUSTED' | 'MODEL_RESPONSE_LOST';
       scopeVerified: true;
     };
   };

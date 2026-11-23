@@ -118,6 +118,18 @@ export class ManagedAgentRuntime implements RegisteredRuntime {
     return { threadId: next.id };
   }
 
+  async canRetry(threadId: string) {
+    this.assertOpen();
+    if (this.active.has(threadId) || this.resuming.has(threadId)) return false;
+    const session = await this.session(threadId);
+    try {
+      assertManagedReconciled(session);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async submit(threadId: string, text: string) {
     const result = await this.turn(threadId, text, {
       schema: {},

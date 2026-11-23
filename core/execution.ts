@@ -949,7 +949,22 @@ ${installation.output || installation.error || ''}`,
     for (const project of this.env.projects.list())
       for (const run of this.env.projects.get(project.id).snapshot().runs) {
         if (terminal(run)) continue;
-        if (run.pendingTurn) {
+        if (
+          run.pendingTurn &&
+          !run.reconciliation &&
+          (await this.env.runtime.canRetry?.(run.pendingTurn.threadId).catch(() => false))
+        ) {
+          await this.update(project.id, run.id, (current) => {
+            if (current.pendingTurn?.id === run.pendingTurn!.id && !current.reconciliation)
+              current.pendingTurn = undefined;
+          });
+          await this.finish(
+            project.id,
+            run.id,
+            'interrupted',
+            'The service stopped before receiving the model reply. Saved work is preserved and can be retried.',
+          );
+        } else if (run.pendingTurn) {
           await this.update(project.id, run.id, (current) => {
             current.reconciliation = retainRunReconciliation(
               current.reconciliation,

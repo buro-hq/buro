@@ -177,21 +177,18 @@ test('one atomic checkpoint retains archived tool results, opaque continuation a
   assert.equal((await fs.stat(f.filename)).mode & 0o777, 0o600);
 });
 
-test('a failed rollover rename leaves the old context intact, cleans its temporary file and permits an explicit retry', async (t) => {
+test('a failed rollover journal write leaves the old context intact and permits an explicit retry', async (t) => {
   const f = await fixture(t),
     original = checkpoint();
   await f.sessions.save(original);
-  const next = rotated(original),
-    rename = fs.rename.bind(fs);
-  const mock = t.mock.method(
-    fs,
-    'rename',
-    async (from: Parameters<typeof fs.rename>[0], to: Parameters<typeof fs.rename>[1]) => {
-      if (String(to) === f.filename) throw Error('simulated atomic rename failure');
-      return rename(from, to);
-    },
-  );
-  await assert.rejects(f.sessions.save(next), /simulated atomic rename failure/);
+  const next = rotated(original);
+  const handle = await fs.open(f.filename, 'r');
+  const prototype = Object.getPrototypeOf(handle);
+  await handle.close();
+  const mock = t.mock.method(prototype, 'sync', async () => {
+    throw Error('simulated journal sync failure');
+  });
+  await assert.rejects(f.sessions.save(next), /simulated journal sync failure/);
   mock.mock.restore();
   assert.deepEqual(await f.sessions.load(original.id), original);
   assert.deepEqual(await fs.readdir(f.directory), ['M-test.json']);

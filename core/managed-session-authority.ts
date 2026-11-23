@@ -395,7 +395,11 @@ export function assertManagedEffectsSettled(session: ManagedSession) {
       'WORKER_CHECK_RECONCILIATION_REQUIRED',
       'A saved service check has an unknown outcome. It cannot be automatically repeated.',
     );
-  if (session.generation && session.generation.outcome !== 'completed')
+  if (
+    session.generation &&
+    session.generation.outcome !== 'completed' &&
+    session.generation.response
+  )
     throw new DomainError(
       'GENERATION_RECONCILIATION_REQUIRED',
       'A saved model generation has an unknown outcome. It cannot be automatically repeated.',

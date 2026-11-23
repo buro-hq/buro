@@ -270,7 +270,10 @@ export async function runWorkerAssignments(options: {
     } catch (error) {
       let failure = error;
       let knownFailure:
-        | { code: 'MODEL_INCOMPLETE' | 'MODEL_CONTEXT_EXHAUSTED'; scopeVerified: true }
+        | {
+            code: 'MODEL_INCOMPLETE' | 'MODEL_CONTEXT_EXHAUSTED' | 'MODEL_RESPONSE_LOST';
+            scopeVerified: true;
+          }
         | undefined;
       if (
         !signal.aborted &&
@@ -278,7 +281,9 @@ export async function runWorkerAssignments(options: {
         error === failedTurn &&
         before &&
         error instanceof DomainError &&
-        (error.code === 'MODEL_INCOMPLETE' || error.code === 'MODEL_CONTEXT_EXHAUSTED')
+        (error.code === 'MODEL_INCOMPLETE' ||
+          error.code === 'MODEL_CONTEXT_EXHAUSTED' ||
+          error.code === 'MODEL_RESPONSE_LOST')
       ) {
         try {
           const after = await workspaces.changes(workspace.path, workspace.base);

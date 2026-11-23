@@ -79,7 +79,13 @@ export type ManagedSession = {
   /** Atomic private archive and active context; never part of a public session DTO. */
   workSegments?: ManagedWorkSegments;
   workerStepChecks?: ManagedWorkerStepChecks;
-  /** Segmented sessions fail closed after an unknown generation, including a lost closing reply. */
+  /** Unreceived requests discarded on an explicit fresh attempt; token/cost outcome stays unknown. */
+  discardedGenerations?: {
+    requestId: string;
+    requestedAtRequest: number;
+    outcome: 'pending' | 'unknown';
+  }[];
+  /** Only a complete durable response may authorize tools. */
   generation?: {
     requestId: string;
     outcome: 'pending' | 'completed' | 'unknown';

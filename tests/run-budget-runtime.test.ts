@@ -252,7 +252,7 @@ test('an unknown provider outcome remains charged and cannot disappear through a
     runtime.turn(worker.threadId, 'Work.', turn()),
     (error: unknown) =>
       error instanceof DomainError &&
-      error.code === 'GENERATION_RECONCILIATION_REQUIRED' &&
+      error.code === 'MODEL_RESPONSE_LOST' &&
       error.cause instanceof Error &&
       error.cause.message === 'Lost provider stream',
   );
@@ -445,6 +445,6 @@ test('private session files retain purpose and reject a writable reviewer checkp
   const saved = (await sessions.load(reviewer.threadId))!;
   assert.equal(saved.purpose, 'review');
   saved.scope.readOnly = false;
-  assert.throws(() => sessions.save(saved), /reviewer/i);
+  await assert.rejects(sessions.save(saved), { code: 'INVALID_CHECKPOINT' });
   assert.equal((await sessions.load(reviewer.threadId))!.scope.readOnly, true);
 });

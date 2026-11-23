@@ -119,6 +119,8 @@ export interface AgentRuntime {
     options: { schema: unknown; signal: AbortSignal; timeoutMs: number; toolPolicy?: 'none' },
   ): Promise<{ turnId: string; text: string; model?: string }>;
   subscribe?(listener: (event: RuntimeEvent) => void): () => void;
+  /** Read-only host observation: no unresolved repository/check effects prevent an explicit retry. */
+  canRetry?(threadId: string): Promise<boolean>;
   release?(threadId: string): Promise<void>;
   dispose(): Promise<void>;
 }

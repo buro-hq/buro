@@ -362,12 +362,11 @@ for (const boundary of ['generation', 'action'] as const)
     const reopened = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
     assert.deepEqual(reopened.generation, before.generation);
     assert.deepEqual(reopened.actions, before.actions);
-    assert.throws(() => assertManagedReconciled(reopened), {
-      code:
-        boundary === 'generation'
-          ? 'GENERATION_RECONCILIATION_REQUIRED'
-          : 'ACTION_RECONCILIATION_REQUIRED',
-    });
+    if (boundary === 'action')
+      assert.throws(() => assertManagedReconciled(reopened), {
+        code: 'ACTION_RECONCILIATION_REQUIRED',
+      });
+    else assert.doesNotThrow(() => assertManagedReconciled(reopened));
     assert.equal(isKnownTurnRejection(failure), false);
     assert.equal(f.providerCalls(), 0);
     assert.equal(f.effects(), 0);
@@ -562,8 +561,8 @@ for (const known of [false, true])
     await assert.rejects(failManagedTurn(f.state, f.host, failure), (error: unknown) => {
       if (known) assert.equal(error, failure);
       else {
-        assert.ok(error instanceof UnresolvedEffectError);
-        assert.equal(error.code, 'GENERATION_RECONCILIATION_REQUIRED');
+        assert.ok(error instanceof DomainError);
+        assert.equal(error.code, 'MODEL_RESPONSE_LOST');
         assert.equal(error.cause, failure);
       }
       return true;
@@ -579,15 +578,13 @@ for (const known of [false, true])
         sessions: new FileManagedSessions(f.directory),
       });
       t.after(() => runtime.dispose());
-      await assert.rejects(
-        runtime.resume({
-          projectId: 'p',
-          runId: 'R-owner',
-          threadId: durable.id,
-          workspace: f.directory,
-          instructions: 'Continue',
-        }),
-        { code: 'GENERATION_RECONCILIATION_REQUIRED' },
-      );
+      await runtime.resume({
+        projectId: 'p',
+        runId: 'R-owner',
+        threadId: durable.id,
+        workspace: f.directory,
+        instructions: 'Continue',
+      });
+      assert.equal(await runtime.canRetry(durable.id), true);
     }
   });

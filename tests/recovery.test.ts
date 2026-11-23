@@ -46,7 +46,12 @@ async function fixture(t: any) {
     turns: { id: string; text: string }[] = [],
     resumed: string[] = [];
   let count = 0;
-  const options = { rejectReview: false, environmentFailure: false, invalidPlan: false };
+  const options = {
+    rejectReview: false,
+    environmentFailure: false,
+    invalidPlan: false,
+    retryableModel: false,
+  };
   const runtime = {
     id: 'fixture',
     async start(input: any) {
@@ -61,6 +66,9 @@ async function fixture(t: any) {
     },
     async submit() {
       return { turnId: 't' };
+    },
+    async canRetry() {
+      return options.retryableModel;
     },
     async interrupt() {},
     async release() {},
@@ -376,6 +384,32 @@ test('restart retains a pending host turn as an owning-run reconciliation requir
     { code: 'RUN_RECONCILIATION_REQUIRED' },
   );
   assert.equal(f.turns.length, calls);
+});
+
+test('restart clears a proven model-only pending turn without replaying inference or work', async (t) => {
+  const f = await fixture(t);
+  const completed = await f.start();
+  await f.store.transact('simulate-crash', 'simulate-crash', (doc) => {
+    const run = doc.runs.find((candidate) => candidate.id === completed.id)!;
+    run.status = 'running';
+    run.commit = undefined;
+    run.pendingTurn = {
+      version: 1,
+      id: 'OT-unobserved',
+      threadId: run.threadId,
+      runtimeId: 'fixture',
+      startedAt: new Date().toISOString(),
+    };
+    return { result: null, change: { type: 'run.changed', run, goal: doc.goals[0] } };
+  });
+  f.options.retryableModel = true;
+  const calls = f.turns.length;
+  await f.engine.recover();
+  const stopped = f.engine.get('p', completed.id);
+  assert.equal(stopped.status, 'interrupted');
+  assert.equal(stopped.reconciliation, undefined);
+  assert.equal(stopped.pendingTurn, undefined);
+  assert.equal(f.turns.length, calls, 'Recovery only inspects host receipts.');
 });
 
 function verificationProfile(command: string, outputPaths: string[] = []): ProjectProfile {

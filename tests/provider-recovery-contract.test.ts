@@ -374,7 +374,8 @@ function assertInterrupted(events: RuntimeEvent[], status: 'failed' | 'interrupt
 }
 function unknownGenerationCause(expected: { code?: string; name?: string }) {
   return (error: any) => {
-    assert.equal(error.code, 'GENERATION_RECONCILIATION_REQUIRED');
+    if (expected.name === 'AbortError') assert.equal(error.name, 'AbortError');
+    else assert.equal(error.code, 'MODEL_RESPONSE_LOST');
     assert.ok(error.cause, 'Keep the original observed transport cause');
     if (expected.code) assert.equal(error.cause.code, expected.code);
     if (expected.name) assert.equal(error.cause.name, expected.name);
@@ -386,7 +387,9 @@ for (const kind of ['ollama', 'deepseek'] as const) {
   test(`${kind}: partial and complete tool frames without a terminal marker never dispatch an edit`, async (t) => {
     for (const call of ['partial', 'full'] as const) {
       const f = await fixture(t, kind);
-      const rig = f.make(() => response(wire(kind, { call, terminal: false })));
+      const rig = f.make((_body, _signal, index) =>
+        response(wire(kind, index === 0 ? { call, terminal: false } : {})),
+      );
       const started = await rig.start();
       await assert.rejects(
         rig.router.turn(started.threadId, 'Edit the fixture', turnOptions()),
@@ -407,10 +410,11 @@ for (const kind of ['ollama', 'deepseek'] as const) {
       assert.equal(f.edits(), 0);
       assert.equal(await f.read(), 'export const value=1;\n');
       assertInterrupted(rig.events, 'failed');
-      await assert.rejects(rig.router.turn(started.threadId, 'Do not replay', turnOptions()), {
-        code: 'GENERATION_RECONCILIATION_REQUIRED',
-      });
-      assert.equal(rig.requests.length, 1);
+      const retried = await rig.router.turn(started.threadId, 'Explicit retry', turnOptions());
+      assert.deepEqual(JSON.parse(retried.text), { ok: true });
+      assert.equal(rig.requests.length, 2);
+      assert.equal(f.edits(), 0);
+      assert.equal((await rig.sessions.load(started.nativeId))?.discardedGenerations?.length, 1);
     }
   });
 
@@ -500,7 +504,7 @@ for (const kind of ['ollama', 'deepseek'] as const) {
     assertPrivate(resumed.events);
   });
 
-  test(`${kind}: a lost follow-up stream retains the completed edit but blocks generation replay after reopening`, async (t) => {
+  test(`${kind}: a lost follow-up stream permits an explicit retry after reopening without repeating the completed edit`, async (t) => {
     const f = await fixture(t, kind);
     const first = f.make((_body, _signal, index) =>
       response(wire(kind, index === 0 ? { call: 'full' } : { terminal: false })),
@@ -521,25 +525,21 @@ for (const kind of ['ollama', 'deepseek'] as const) {
     assert.equal(await f.read(), 'export const value=2;\n');
     await first.close();
     f.pinSavedRoutes();
-    const reopened = f.make(() => {
-      throw Error('Unknown requests must not reach HTTP');
-    });
+    const reopened = f.make(() => response(wire(kind)));
     assert.deepEqual(await reopened.routes.load(started.threadId), route);
-    await assert.rejects(
-      reopened.router.resume({
-        projectId: 'p',
-        threadId: started.threadId,
-        runId: 'R-fixture',
-        workspace: f.root,
-        instructions: 'A new session must not hide an unknown outcome.',
-      }),
-      { code: 'GENERATION_RECONCILIATION_REQUIRED' },
-    );
-    await assert.rejects(reopened.router.turn(started.threadId, 'Do not replay', turnOptions()), {
-      code: 'THREAD_NOT_FOUND',
+    assert.equal(await reopened.router.canRetry(started.threadId), true);
+    await reopened.router.resume({
+      projectId: 'p',
+      threadId: started.threadId,
+      runId: 'R-fixture',
+      workspace: f.root,
+      instructions: 'Retry the model reply from saved tool results.',
     });
-    assert.equal((await reopened.sessions.load(started.nativeId))?.generation?.outcome, 'unknown');
-    assert.equal(reopened.requests.length, 0);
+    assert.equal(reopened.requests.length, 0, 'Resume does not infer automatically.');
+    const retried = await reopened.router.turn(started.threadId, 'Explicit retry', turnOptions());
+    assert.deepEqual(JSON.parse(retried.text), { ok: true });
+    assert.equal((await reopened.sessions.load(started.nativeId))?.discardedGenerations?.length, 1);
+    assert.equal(reopened.requests.length, 1);
     assert.equal(f.edits(), 1);
     assert.equal(f.selections(), 1);
     assert.equal(await f.read(), 'export const value=2;\n');

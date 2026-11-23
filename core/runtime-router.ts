@@ -351,6 +351,15 @@ export class RuntimeRouter implements AgentRuntime {
       this.pending.delete(work);
     }
   }
+  async canRetry(threadId: string) {
+    this.assertOpen();
+    const route = this.loaded.get(threadId) || (await this.options.routes.load(threadId));
+    if (!route || route.status !== 'ready' || !route.externalThreadId) return false;
+    const runtime = this.adapter(route);
+    return runtime.capabilities.hostToolLifecycle && runtime.canRetry
+      ? runtime.canRetry(route.externalThreadId)
+      : false;
+  }
   start(input: Parameters<AgentRuntime['start']>[0]) {
     return this.operation(() => this.startSession(input));
   }

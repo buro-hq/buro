@@ -203,24 +203,21 @@ test('frozen review authority is bound to its owning run, base and view and neve
   assert.equal(f.effects(), 0);
 });
 
-test('explicit resume cannot erase an unknown generation or pending tool effect', () => {
+test('explicit resume preserves an unreceived request and cannot erase a pending tool effect', () => {
   const f = fixture();
   const session = prepareManagedSession(f.options, f.input, 'M-owned');
   session.turnAuthorities = [
     { turnId: 'T', toolPolicy: 'normal', startedAtRequest: 0, scopeRevision: 1 },
   ];
   session.generation = { requestId: 'pending', outcome: 'unknown' };
-  assert.throws(
-    () =>
-      prepareManagedResume(f.options, session, {
-        projectId: 'p',
-        runId: 'R',
-        workspace: '/writer',
-        threadId: session.id,
-        instructions: 'Continue',
-      }),
-    { code: 'GENERATION_RECONCILIATION_REQUIRED' },
-  );
+  const resumed = prepareManagedResume(f.options, session, {
+    projectId: 'p',
+    runId: 'R',
+    workspace: '/writer',
+    threadId: session.id,
+    instructions: 'Continue',
+  });
+  assert.deepEqual(resumed.generation, session.generation);
   session.generation.outcome = 'completed';
   session.actions.push({
     id: 'A',

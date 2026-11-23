@@ -154,7 +154,7 @@ test('Ollama metadata failure settles the private generation as not dispatched a
   assert.equal(f.toolCalls(), 0);
 });
 
-test('a known-looking DeepSeek stream error remains durably unknown after a visible delta and cannot replay after reopening', async (t) => {
+test('a streamed model failure keeps its unknown accounting while permitting a deliberate retry after reopening', async (t) => {
   const f = await fixture(t);
   let requests = 0;
   const create = () =>
@@ -203,7 +203,7 @@ test('a known-looking DeepSeek stream error remains durably unknown after a visi
   await assert.rejects(
     first.runtime.turn(started.threadId, 'Respond as JSON.', options()),
     (error: any) => {
-      assert.equal(error.code, 'GENERATION_RECONCILIATION_REQUIRED');
+      assert.equal(error.code, 'MODEL_RESPONSE_LOST');
       assert.equal(error.cause.code, 'MODEL_REQUEST_REJECTED');
       assert.equal(error.cause.cause.outcome, 'unknown');
       return true;
@@ -235,20 +235,19 @@ test('a known-looking DeepSeek stream error remains durably unknown after a visi
 
   const reopened = f.make(create());
   assert.deepEqual(await reopened.sessions.load(started.threadId), checkpoint);
-  await assert.rejects(
-    reopened.runtime.resume({
-      projectId: 'p',
-      runId: 'R-fixture',
-      workspace: f.root,
-      threadId: started.threadId,
-      instructions: 'Must not repeat unknown work.',
-    }),
-    { code: 'GENERATION_RECONCILIATION_REQUIRED' },
-  );
-  await assert.rejects(reopened.runtime.turn(started.threadId, 'Must not replay.', options()), {
-    code: 'GENERATION_RECONCILIATION_REQUIRED',
+  await reopened.runtime.resume({
+    projectId: 'p',
+    runId: 'R-fixture',
+    workspace: f.root,
+    threadId: started.threadId,
+    instructions: 'Explicit continuation.',
   });
   assert.equal(requests, 1);
+  assert.equal(await reopened.runtime.canRetry(started.threadId), true);
+  await assert.rejects(reopened.runtime.turn(started.threadId, 'Explicit retry.', options()), {
+    code: 'MODEL_RESPONSE_LOST',
+  });
+  assert.equal(requests, 2);
   assert.equal(f.toolCalls(), 0);
-  assert.deepEqual(await reopened.sessions.load(started.threadId), checkpoint);
+  assert.equal((await reopened.sessions.load(started.threadId))?.discardedGenerations?.length, 1);
 });

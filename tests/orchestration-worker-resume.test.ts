@@ -258,13 +258,14 @@ test('repeated settled delegation resumes the actual routed managed author with 
   assert.equal(f.service.get('p', f.runId).managedBudget?.used.requests, 2);
 });
 
-test('a lost resumed managed outcome remains unresolved and never becomes a replacement or another request', async (t) => {
+test('a lost resumed model reply permits a deliberate retry on the same worker without duplicating its assignment', async (t) => {
   const f = await fixture(t, true);
   await f.dispatch();
-  await assert.rejects(f.dispatch());
-  assert.ok(f.service.get('p', f.runId).reconciliation);
-  await assert.rejects(f.dispatch(), { code: 'RUN_RECONCILIATION_REQUIRED' });
-  assert.equal(f.histories.length, 2);
+  await assert.rejects(f.dispatch(), { code: 'MODEL_RESPONSE_LOST' });
+  assert.equal(f.service.get('p', f.runId).reconciliation, undefined);
+  assert.equal(f.histories.length, 2, 'No automatic retry.');
+  await f.dispatch();
+  assert.equal(f.histories.length, 3);
   assert.equal(
     f.service.get('p', f.runId).agents.filter((agent) => agent.assignment?.grantId === f.grant.id)
       .length,

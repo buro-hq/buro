@@ -161,3 +161,30 @@ test('sampling is validated and changes the frozen provider identity for both lo
       new Provider({ ...base, sampling: { temperature: 0 } }).revision,
     );
 });
+
+test('the local reasoning budget is explicit, preserves zero and participates in connection identity', async () => {
+  const revisions = new Set<string>();
+  for (const budget of [undefined, -1, 0, 1024]) {
+    const provider = new OpenAICompatibleProvider({
+      id: 'local',
+      endpoint: 'http://127.0.0.1:8080/v1',
+      enableThinking: true,
+      ...(budget !== undefined ? { reasoningBudgetTokens: budget } : {}),
+      fetch: async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.reasoning_budget_tokens, budget);
+        assert.equal(Object.hasOwn(body, 'reasoning_budget_tokens'), budget !== undefined);
+        assert.equal(body.max_tokens, 128, 'Reasoning budget does not silently reduce output.');
+        return wire();
+      },
+    });
+    revisions.add(provider.revision);
+    await provider.complete(input());
+  }
+  assert.equal(revisions.size, 4);
+  for (const reasoningBudgetTokens of [-2, 0.5, Infinity])
+    assert.equal(
+      OpenAICompatibleConnectionConfigSchema.safeParse({ reasoningBudgetTokens }).success,
+      false,
+    );
+});

@@ -464,7 +464,7 @@ test('failed cancellation persistence still aborts inference and cleanup observe
   });
   const { threadId } = await f.start(runtime);
   const turn = runtime.turn(threadId, 'Wait', turnOptions());
-  const rejected = assert.rejects(turn, { code: 'GENERATION_RECONCILIATION_REQUIRED' });
+  const rejected = assert.rejects(turn, { name: 'AbortError' });
   await entering;
   await assert.rejects(runtime.interrupt(threadId, turnId), /disk failed/);
   await rejected;

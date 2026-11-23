@@ -31,6 +31,7 @@ export class RuntimeCatalog implements RuntimeRegistry {
       ...(adapter.resume ? { resume: adapter.resume.bind(adapter) } : {}),
       ...(adapter.turn ? { turn: adapter.turn.bind(adapter) } : {}),
       ...(adapter.subscribe ? { subscribe: adapter.subscribe.bind(adapter) } : {}),
+      ...(adapter.canRetry ? { canRetry: adapter.canRetry.bind(adapter) } : {}),
       ...(adapter.release ? { release: adapter.release.bind(adapter) } : {}),
     };
     this.adapters.set(adapter.id, Object.freeze(registered));

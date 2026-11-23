@@ -82,6 +82,7 @@ export const OpenAICompatibleConnectionConfigSchema = z
     thinking: z.enum(['enabled', 'disabled']).optional(),
     reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
     enableThinking: z.boolean().optional(),
+    reasoningBudgetTokens: z.number().int().min(-1).max(Number.MAX_SAFE_INTEGER).optional(),
     sampling: ModelSamplingConfigSchema.optional(),
   })
   .superRefine((config, ctx) => {

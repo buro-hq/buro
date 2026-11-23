@@ -372,15 +372,12 @@ test('failed or unavailable evidence cannot be presented as a passed check and u
 test('failed feedback persistence preserves the completed check and never consumes a partial repair step', async (t) => {
   const f = await prepare(t),
     next = feedback(f.checked),
-    rename = fs.rename.bind(fs);
-  const mock = t.mock.method(
-    fs,
-    'rename',
-    async (from: Parameters<typeof fs.rename>[0], to: Parameters<typeof fs.rename>[1]) => {
-      if (String(to) === f.filename) throw Error('feedback checkpoint unavailable');
-      return rename(from, to);
-    },
-  );
+    handle = await fs.open(f.filename, 'r');
+  const prototype = Object.getPrototypeOf(handle);
+  await handle.close();
+  const mock = t.mock.method(prototype, 'sync', async () => {
+    throw Error('feedback checkpoint unavailable');
+  });
   await assert.rejects(f.sessions.save(next), /feedback checkpoint unavailable/);
   mock.mock.restore();
   assert.deepEqual(await f.sessions.load(next.id), f.checked);

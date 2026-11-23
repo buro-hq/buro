@@ -207,7 +207,9 @@ export async function runGoalOrchestration(
           agent?.completedAt &&
           agent.status === 'failed' &&
           (error.code === 'WORKER_FAILED' ||
-            ((error.code === 'MODEL_INCOMPLETE' || error.code === 'MODEL_CONTEXT_EXHAUSTED') &&
+            ((error.code === 'MODEL_INCOMPLETE' ||
+              error.code === 'MODEL_CONTEXT_EXHAUSTED' ||
+              error.code === 'MODEL_RESPONSE_LOST') &&
               agent.assignment?.knownFailure?.scopeVerified))
         )
           return {

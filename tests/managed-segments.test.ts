@@ -442,7 +442,7 @@ test('a lost closing response remains charged and unknown across a fresh runtime
   const runtime = f.make();
   const { threadId } = await f.start(runtime);
   await assert.rejects(runtime.turn(threadId, 'Work', turnOptions()), {
-    code: 'GENERATION_RECONCILIATION_REQUIRED',
+    code: 'MODEL_RESPONSE_LOST',
   });
   assert.equal(f.reservations.length, 2);
   assert.equal(f.observations.at(-1)?.outcome, 'unknown');
@@ -450,22 +450,20 @@ test('a lost closing response remains charged and unknown across a fresh runtime
   await runtime.release(threadId);
   const reopened = f.make();
   await assert.rejects(reopened.turn(threadId, 'Continue', turnOptions()), {
-    code: 'GENERATION_RECONCILIATION_REQUIRED',
+    code: 'MODEL_RESPONSE_LOST',
   });
-  await assert.rejects(
-    reopened.resume({
-      projectId: 'p',
-      runId: 'R-owner',
-      workspace: '/fixture',
-      threadId,
-      instructions: 'Continue',
-    }),
-    { code: 'GENERATION_RECONCILIATION_REQUIRED' },
-  );
-  assert.equal(f.requests.length, 2);
+  await reopened.resume({
+    projectId: 'p',
+    runId: 'R-owner',
+    workspace: '/fixture',
+    threadId,
+    instructions: 'Continue',
+  });
+  assert.equal(f.requests.length, 3);
+  assert.equal((await f.files.load(threadId))?.discardedGenerations?.length, 1);
 });
 
-test('a pending generation checkpoint survives process replacement and cannot be replayed', async (t) => {
+test('a pending generation checkpoint survives process replacement and an explicit retry cannot execute its unsaved tool proposal', async (t) => {
   let rejectPendingSave = true;
   const f = await fixture(t, {
     script: sequence(tool('read-1'), closing()),
@@ -480,15 +478,15 @@ test('a pending generation checkpoint survives process replacement and cannot be
   const runtime = f.make();
   const { threadId } = await f.start(runtime);
   await assert.rejects(runtime.turn(threadId, 'Work', turnOptions()), {
-    code: 'GENERATION_RECONCILIATION_REQUIRED',
+    code: 'MODEL_RESPONSE_LOST',
   });
   assert.equal(f.executed, 0, 'A terminal reply must be checkpointed before its requested tool');
   assert.equal((await f.files.load(threadId))?.generation?.outcome, 'pending');
   await runtime.release(threadId);
-  await assert.rejects(f.make().turn(threadId, 'Continue', turnOptions()), {
-    code: 'GENERATION_RECONCILIATION_REQUIRED',
-  });
-  assert.equal(f.requests.length, 1);
+  await f.make().turn(threadId, 'Continue explicitly', turnOptions());
+  assert.equal(f.requests.length, 2);
+  assert.equal(f.executed, 0);
+  assert.equal((await f.files.load(threadId))?.discardedGenerations?.length, 1);
 });
 
 test('an ambiguous tool outcome prevents closing, rollover and replay after reopening', async (t) => {

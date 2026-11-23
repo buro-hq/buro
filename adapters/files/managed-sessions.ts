@@ -1,6 +1,5 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import { CheckpointJournal } from './checkpoint-journal.ts';
 import { z } from 'zod';
 import { WorkScopeSchema } from '../../protocol/work-scope.ts';
 import { DomainError } from '../../core/ports.ts';
@@ -215,6 +214,15 @@ const schema = z
     intermediateNotes: z.array(z.number().int().nonnegative()).optional(),
     workSegments: workSegments.optional(),
     workerStepChecks: workerStepChecks.optional(),
+    discardedGenerations: z
+      .array(
+        z.strictObject({
+          requestId: z.string().min(1).max(256),
+          requestedAtRequest: z.number().int().positive(),
+          outcome: z.enum(['pending', 'unknown']),
+        }),
+      )
+      .optional(),
     generation: z
       .strictObject({
         requestId: z.string().min(1).max(256),
@@ -279,7 +287,7 @@ const schema = z
       });
   });
 
-const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+const same = isDeepStrictEqual;
 function invalidSegment(message: string): never {
   throw new DomainError('INVALID_CHECKPOINT', message);
 }
@@ -332,7 +340,7 @@ function validateWorkerCheckCheckpoint(session: ManagedSession) {
     requested = entry.requestedAtRequest;
   }
 }
-function validateSegmentCheckpoint(session: ManagedSession) {
+function validateSegmentCheckpoint(session: ManagedSession, previous?: ManagedSession) {
   assertManagedSessionProvenance(session);
   if (
     session.scope.verificationViewId !== undefined ||
@@ -349,9 +357,19 @@ function validateSegmentCheckpoint(session: ManagedSession) {
         'A verification scope requires a read-only service reviewer and frozen source identity.',
       );
   }
+  const discarded = session.discardedGenerations || [];
+  if (
+    new Set(discarded.map((item) => item.requestId)).size !== discarded.length ||
+    discarded.some(
+      (item) =>
+        item.requestedAtRequest >= session.requests ||
+        item.requestId === session.generation?.requestId,
+    )
+  )
+    invalidSegment('Discarded model requests must remain distinct historical attempts.');
   validateTurnAuthorities(session);
   validateWorkerCheckCheckpoint(session);
-  validateRejectedToolBatches(session);
+  validateRejectedToolBatches(session, previous);
   const generation = session.generation;
   if (generation?.admittedActionIds) {
     const calls = generation.response?.message.toolCalls || [];
@@ -406,6 +424,13 @@ function validateSegmentCheckpoint(session: ManagedSession) {
     completed = 0;
   const feedbackReceipts = new Set<string>();
   for (const [position, archive] of state.archives.entries()) {
+    if (archive === previous?.workSegments?.archives[position]) {
+      ended = archive.endedAtRequest;
+      completed = archive.handoff.completedActions;
+      if (archive.handoff.checkFeedback)
+        feedbackReceipts.add(archive.handoff.checkFeedback.receiptId);
+      continue;
+    }
     validateAnchor(archive.anchor);
     validateSegmentEvidence(archive.handoff.evidence);
     validateNotes(archive.messages, archive.intermediateNotes);
@@ -643,7 +668,7 @@ function validateTurnAuthorityTransition(previous: ManagedSession, next: Managed
   }
 }
 
-function validateRejectedToolBatches(session: ManagedSession) {
+function validateRejectedToolBatches(session: ManagedSession, previous?: ManagedSession) {
   const ids = new Set(session.actions.map((action) => action.call.id));
   const requests = new Set<string>();
   let requestedAt = 0;
@@ -651,7 +676,16 @@ function validateRejectedToolBatches(session: ManagedSession) {
     session.messages,
     ...(session.workSegments?.archives.map((archive) => archive.messages) || []),
   ];
-  for (const batch of session.rejectedToolBatches || []) {
+  for (const [position, batch] of (session.rejectedToolBatches || []).entries()) {
+    if (batch === previous?.rejectedToolBatches?.[position]) {
+      for (const call of batch.response.message.toolCalls || []) {
+        if (ids.has(call.id)) invalidSegment('A rejected tool call identity cannot be reused.');
+        ids.add(call.id);
+      }
+      requests.add(batch.requestId);
+      requestedAt = batch.requestedAtRequest;
+      continue;
+    }
     const authority = session.turnAuthorities?.find((turn) => turn.turnId === batch.turnId);
     const calls = batch.response.message.toolCalls || [];
     const chain = rejectedToolBatchMessages(batch);
@@ -738,6 +772,27 @@ function validateRejectedToolTransition(previous: ManagedSession, next: ManagedS
 
 function validateTransition(previous: ManagedSession | undefined, next: ManagedSession) {
   if (!previous) return;
+  if (!same(previous.scopeRevisions, next.scopeRevisions.slice(0, previous.scopeRevisions.length)))
+    invalidSegment('Issued scope history cannot be rewritten.');
+  if (
+    next.actions.length < previous.actions.length ||
+    previous.actions.some((action, index) => {
+      const candidate = next.actions[index];
+      return (
+        action.id !== candidate.id ||
+        action.turnId !== candidate.turnId ||
+        !same(action.call, candidate.call) ||
+        (action.status !== 'pending' && !same(action, candidate))
+      );
+    })
+  )
+    invalidSegment('Recorded tool actions cannot be erased or rewritten.');
+  if (
+    (previous.workSegments?.archives.length || 0) === (next.workSegments?.archives.length || 0) &&
+    !same(previous.messages, next.messages.slice(0, previous.messages.length))
+  )
+    invalidSegment('Active conversation history is append-only.');
+
   if (previous.toolRevision !== next.toolRevision)
     invalidSegment('A saved session cannot change its tool configuration.');
   validateWorkerCheckTransition(previous, next);
@@ -794,24 +849,42 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
         );
     }
   }
+  const discardedBefore = previous.discardedGenerations || [],
+    discardedAfter = next.discardedGenerations || [];
+  if (!same(discardedBefore, discardedAfter.slice(0, discardedBefore.length)))
+    invalidSegment('Discarded request history cannot be rewritten.');
+  const added = discardedAfter.slice(discardedBefore.length);
+  const discarded =
+    added.length === 1 &&
+    previous.generation &&
+    !previous.generation.response &&
+    previous.generation.outcome !== 'completed' &&
+    added[0].requestId === previous.generation.requestId &&
+    added[0].outcome === previous.generation.outcome &&
+    added[0].requestedAtRequest === previous.requests &&
+    next.requests === previous.requests + 1 &&
+    next.generation?.outcome === 'pending' &&
+    next.generation.requestId !== previous.generation.requestId;
+  if (added.length && !discarded)
+    invalidSegment('Only a fresh request can discard an unreceived model response.');
   if (previous.generation) {
     const before = previous.generation,
       after = next.generation;
     if (
       !after ||
-      (before.outcome === 'unknown' && !same(before, after)) ||
+      (before.outcome === 'unknown' && !same(before, after) && !discarded) ||
       (before.requestId === after.requestId &&
         before.response &&
         !same(before.response, after.response)) ||
       (before.requestId === after.requestId &&
         before.rejectionCode &&
         before.rejectionCode !== after.rejectionCode) ||
-      (before.outcome === 'pending' && before.requestId !== after.requestId) ||
+      (before.outcome === 'pending' && before.requestId !== after.requestId && !discarded) ||
       (before.requestId === after.requestId &&
         before.outcome === 'completed' &&
         after.outcome !== 'completed') ||
       (before.requestId !== after.requestId &&
-        (before.outcome !== 'completed' ||
+        ((before.outcome !== 'completed' && !discarded) ||
           after.outcome !== 'pending' ||
           next.requests <= previous.requests))
     )
@@ -967,77 +1040,128 @@ function validateTransition(previous: ManagedSession | undefined, next: ManagedS
   }
 }
 
-/** Private checkpoints live separately from public project state and exported events. */
+// Historical rows are parsed once, then reused by identity while validating new journal data.
+const incrementalSchema = z.object({
+  ...schema.shape,
+  messages: z.array(z.unknown()),
+  actions: z.array(z.unknown()),
+  scopeRevisions: z.array(z.unknown()).min(1),
+  turnAuthorities: z.array(z.unknown()).optional(),
+  rejectedToolBatches: z.array(z.unknown()).optional(),
+  workSegments: z.object({ ...workSegments.shape, archives: z.array(z.unknown()) }).optional(),
+  workerStepChecks: z
+    .object({ ...workerStepChecks.shape, entries: z.array(z.unknown()) })
+    .optional(),
+});
+function rows<S>(values: unknown[], previous: S[] | undefined, element: z.ZodType<S>): S[] {
+  return values.map((value, index) =>
+    previous && same(value, previous[index]) ? previous[index] : element.parse(value),
+  );
+}
+function normalizeNew(value: unknown, previous?: unknown): any {
+  if (value === previous) return value;
+  if (typeof value === 'number' && !Number.isFinite(value)) return null;
+  if (value instanceof Date) return value.toJSON();
+  if (value instanceof Map || value instanceof Set) return {};
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index++)
+      value[index] =
+        value[index] === undefined
+          ? null
+          : normalizeNew(value[index], Array.isArray(previous) ? previous[index] : undefined);
+  } else if (value && typeof value === 'object') {
+    for (const key of Object.keys(value)) {
+      const item = (value as Record<string, unknown>)[key];
+      if (item === undefined) delete (value as Record<string, unknown>)[key];
+      else
+        Object.defineProperty(value, key, {
+          value: normalizeNew(
+            item,
+            previous && typeof previous === 'object'
+              ? (previous as Record<string, unknown>)[key]
+              : undefined,
+          ),
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+    }
+  }
+  return value;
+}
+function parseCheckpoint(value: unknown, previous?: ManagedSession): ManagedSession {
+  if (!previous) {
+    const parsed = schema.parse(value);
+    validateSegmentCheckpoint(parsed);
+    return normalizeNew(parsed);
+  }
+  const raw = incrementalSchema.parse(value);
+  const next = {
+    ...raw,
+    messages: rows(raw.messages, previous.messages, message),
+    actions: rows(raw.actions, previous.actions, schema.shape.actions.element),
+    scopeRevisions: rows(
+      raw.scopeRevisions,
+      previous.scopeRevisions,
+      schema.shape.scopeRevisions.element,
+    ),
+    ...(raw.turnAuthorities
+      ? {
+          turnAuthorities: rows(
+            raw.turnAuthorities,
+            previous.turnAuthorities,
+            schema.shape.turnAuthorities.unwrap().element,
+          ),
+        }
+      : {}),
+    ...(raw.rejectedToolBatches
+      ? {
+          rejectedToolBatches: rows(
+            raw.rejectedToolBatches,
+            previous.rejectedToolBatches,
+            schema.shape.rejectedToolBatches.unwrap().element,
+          ),
+        }
+      : {}),
+    ...(raw.workSegments
+      ? {
+          workSegments: {
+            ...raw.workSegments,
+            archives: rows(
+              raw.workSegments.archives,
+              previous.workSegments?.archives,
+              workSegments.shape.archives.element,
+            ),
+          },
+        }
+      : {}),
+    ...(raw.workerStepChecks
+      ? {
+          workerStepChecks: {
+            ...raw.workerStepChecks,
+            entries: rows(
+              raw.workerStepChecks.entries,
+              previous.workerStepChecks?.entries,
+              workerStepChecks.shape.entries.element,
+            ),
+          },
+        }
+      : {}),
+  } as ManagedSession;
+  validateNotes(next.messages, next.intermediateNotes);
+  validateSegmentCheckpoint(next, previous);
+  return normalizeNew(next, previous);
+}
+/** Private append journal, with legacy snapshot import and data-only recovery. */
 export class FileManagedSessions implements ManagedSessionStore {
-  private directory: string;
-  private queue: Promise<unknown> = Promise.resolve();
+  private journal: CheckpointJournal<ManagedSession>;
   constructor(directory: string) {
-    this.directory = path.resolve(directory);
+    this.journal = new CheckpointJournal(directory, parseCheckpoint, validateTransition);
   }
-  private filename(id: string) {
-    if (!/^M-[A-Za-z0-9_-]{1,160}$/.test(id))
-      throw new DomainError('INVALID_SESSION_ID', 'Invalid managed session ID.');
-    return path.join(this.directory, id + '.json');
-  }
-  private async prepare() {
-    let current = path.parse(this.directory).root;
-    for (const part of this.directory.slice(current.length).split(path.sep).filter(Boolean)) {
-      current = path.join(current, part);
-      try {
-        if ((await fs.lstat(current)).isSymbolicLink())
-          throw new DomainError('UNSAFE_CHECKPOINT', 'Checkpoint storage cannot contain symlinks.');
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      }
-    }
-    await fs.mkdir(this.directory, { recursive: true, mode: 0o700 });
-    if ((await fs.realpath(this.directory)) !== this.directory)
-      throw new DomainError('UNSAFE_CHECKPOINT', 'Checkpoint storage cannot contain symlinks.');
-    await fs.chmod(this.directory, 0o700);
-  }
-  async load(id: string) {
-    const filename = this.filename(id);
-    await this.queue;
-    await this.prepare();
-    return this.read(filename, id);
-  }
-  private async read(filename: string, id: string) {
-    try {
-      if ((await fs.lstat(filename)).isSymbolicLink())
-        throw new DomainError('UNSAFE_CHECKPOINT', 'A checkpoint cannot be a symlink.');
-      const session = schema.parse(JSON.parse(await fs.readFile(filename, 'utf8')));
-      if (session.id !== id)
-        throw new DomainError('INVALID_CHECKPOINT', 'Checkpoint identity mismatch.');
-      validateSegmentCheckpoint(session);
-      return session as ManagedSession;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-      throw error;
-    }
+  load(id: string) {
+    return this.journal.load(id);
   }
   save(session: ManagedSession) {
-    const filename = this.filename(session.id);
-    const next = schema.parse(structuredClone(session));
-    validateSegmentCheckpoint(next);
-    const bytes = JSON.stringify(next);
-    const work = this.queue.then(async () => {
-      await this.prepare();
-      validateTransition(await this.read(filename, next.id), next);
-      const temp = filename + '.' + randomUUID() + '.tmp';
-      try {
-        const handle = await fs.open(temp, 'wx', 0o600);
-        try {
-          await handle.writeFile(bytes);
-          await handle.sync();
-        } finally {
-          await handle.close();
-        }
-        await fs.rename(temp, filename);
-      } finally {
-        await fs.rm(temp, { force: true }).catch(() => {});
-      }
-    });
-    this.queue = work.catch(() => {});
-    return work;
+    return this.journal.save(session);
   }
 }

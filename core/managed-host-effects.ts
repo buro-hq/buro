@@ -79,6 +79,14 @@ export async function generateManagedBatch(
       'INVALID_RUN_BUDGET',
       'The run budget returned an invalid output reservation.',
     );
+  if (session.generation && session.generation.outcome !== 'completed') {
+    session.discardedGenerations ||= [];
+    session.discardedGenerations.push({
+      requestId: session.generation.requestId,
+      requestedAtRequest: session.requests,
+      outcome: session.generation.outcome,
+    });
+  }
   session.requests++;
   state.responseSettled = false;
   state.generationDispatched = false;
@@ -409,12 +417,6 @@ export async function failManagedTurn(
         { ...reference, operationId: unresolvedCheck.id },
         error,
       );
-    if (durable.generation && durable.generation.outcome !== 'completed')
-      throw new UnresolvedEffectError(
-        'GENERATION_RECONCILIATION_REQUIRED',
-        { ...reference, operationId: durable.generation.requestId },
-        error,
-      );
     const unresolvedAction = durable.actions.find((action) => action.status !== 'completed');
     if (unresolvedAction)
       throw new UnresolvedEffectError(
@@ -422,6 +424,27 @@ export async function failManagedTurn(
         { ...reference, operationId: unresolvedAction.id },
         error,
       );
+    if (durable.generation && durable.generation.outcome !== 'completed') {
+      if (
+        durable.generation.response ||
+        durable.generation.requestId !== `${state.turnId}:${state.round}`
+      )
+        throw new UnresolvedEffectError(
+          'GENERATION_RECONCILIATION_REQUIRED',
+          { ...reference, operationId: durable.generation.requestId },
+          error,
+        );
+      // An incomplete model stream never reaches host tool dispatch. Its billing is still unknown.
+      const lost =
+        host.signal.aborted || session.cancelRequested
+          ? new DOMException('Interrupted', 'AbortError')
+          : new DomainError(
+              'MODEL_RESPONSE_LOST',
+              'The model response was not received. Saved work is preserved; retry the request.',
+            );
+      lost.cause = error;
+      throw observedTurnFailure(lost);
+    }
   }
   throw observedTurnFailure(error);
 }

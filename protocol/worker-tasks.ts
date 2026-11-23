@@ -13,7 +13,7 @@ export const WorkerRefinementSchema = WorkerTaskSchema.pick({ objective: true, i
 export const workerRefinementOutputSchema = z.toJSONSchema(WorkerRefinementSchema);
 
 export const WorkerKnownFailureSchema = z.strictObject({
-  code: z.enum(['MODEL_INCOMPLETE', 'MODEL_CONTEXT_EXHAUSTED']),
+  code: z.enum(['MODEL_INCOMPLETE', 'MODEL_CONTEXT_EXHAUSTED', 'MODEL_RESPONSE_LOST']),
   scopeVerified: z.literal(true),
 });
 

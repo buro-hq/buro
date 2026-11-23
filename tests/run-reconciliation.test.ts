@@ -209,12 +209,12 @@ function managedFixture(
   return { runtime, records };
 }
 
-test('first ambiguous request is typed and durable for nonsegmented coordination and critic sessions', async (t) => {
-  for (const purpose of ['planning', 'review'] as const) {
+test('an unreceived model response remains unknown but permits an explicit retry in coordinator and critic sessions', async (t) => {
+  for (const purpose of ['coordination', 'review'] as const) {
     let requests = 0;
     const f = managedFixture(async () => {
-      requests++;
-      throw Error('Lost response');
+      if (++requests === 1) throw Error('Lost response');
+      return { model: 'fixture', finish: 'stop', message: { role: 'assistant', content: '{}' } };
     });
     t.after(() => f.runtime.dispose());
     const { threadId } = await f.runtime.start({
@@ -223,27 +223,20 @@ test('first ambiguous request is typed and durable for nonsegmented coordination
       purpose,
       readOnly: purpose === 'review',
     });
+    const options = { schema: {}, signal: new AbortController().signal, timeoutMs: 1000 };
     await assert.rejects(
-      f.runtime.turn(threadId, 'Work', {
-        schema: {},
-        signal: new AbortController().signal,
-        timeoutMs: 1000,
-      }),
-      (error: unknown) =>
-        error instanceof UnresolvedEffectError &&
-        error.code === 'GENERATION_RECONCILIATION_REQUIRED' &&
-        error.reference.backendSessionId === threadId,
+      f.runtime.turn(threadId, 'Work', options),
+      (error) =>
+        error instanceof DomainError &&
+        error.code === 'MODEL_RESPONSE_LOST' &&
+        isKnownTurnRejection(error),
     );
+    assert.equal(requests, 1, 'No automatic retry.');
     assert.equal(f.records.get(threadId)?.generation?.outcome, 'unknown');
-    await assert.rejects(
-      f.runtime.turn(threadId, 'Do not replay', {
-        schema: {},
-        signal: new AbortController().signal,
-        timeoutMs: 1000,
-      }),
-      { code: 'GENERATION_RECONCILIATION_REQUIRED' },
-    );
-    assert.equal(requests, 1);
+    assert.equal(await f.runtime.canRetry(threadId), true);
+    assert.equal((await f.runtime.turn(threadId, 'Explicit retry', options)).text, '{}');
+    assert.equal(requests, 2);
+    assert.equal(f.records.get(threadId)?.discardedGenerations?.length, 1);
   }
 });
 
@@ -297,7 +290,7 @@ test('an observed model rejection settles the request and permits a later delibe
   assert.equal(requests, 2);
 });
 
-test('an explicitly unknown streamed rejection retains the generation boundary and never permits replay', async (t) => {
+test('an explicitly unknown streamed rejection retains unknown accounting across a deliberate fresh attempt', async (t) => {
   let requests = 0;
   const f = managedFixture(async () => {
     requests++;
@@ -307,13 +300,14 @@ test('an explicitly unknown streamed rejection retains the generation boundary a
   const { threadId } = await f.runtime.start({ projectId: 'p', instructions: 'Fixture' });
   const options = { schema: {}, signal: new AbortController().signal, timeoutMs: 1000 };
   await assert.rejects(f.runtime.turn(threadId, 'Work', options), {
-    code: 'GENERATION_RECONCILIATION_REQUIRED',
+    code: 'MODEL_RESPONSE_LOST',
   });
   assert.equal(f.records.get(threadId)?.generation?.outcome, 'unknown');
   await assert.rejects(f.runtime.turn(threadId, 'Do not replay', options), {
-    code: 'GENERATION_RECONCILIATION_REQUIRED',
+    code: 'MODEL_RESPONSE_LOST',
   });
-  assert.equal(requests, 1);
+  assert.equal(requests, 2);
+  assert.equal(f.records.get(threadId)?.discardedGenerations?.length, 1);
 });
 
 test('confirmed model preflight failures settle the generation without blocking a later explicit attempt', async (t) => {

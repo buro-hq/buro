@@ -493,7 +493,7 @@ test('an unknown generation is rethrown unchanged and cannot be retried by the s
   await assert.rejects(f.bridge.generate(packet.id), (error) => error === failure);
   await assert.rejects(f.bridge.generate(packet.id), { code: 'INVALID_LOOP_PHASE' });
   await assert.rejects(failManagedTurn(f.state, f.host, failure), {
-    code: 'GENERATION_RECONCILIATION_REQUIRED',
+    code: 'MODEL_RESPONSE_LOST',
     cause: failure,
   });
   assert.equal(calls, 1);
