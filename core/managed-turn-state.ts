@@ -26,6 +26,7 @@ export type ManagedTurnState = {
     actionIds: string[];
     nextAction: number;
     inFlight?: string;
+    disposition?: 'tools-rejected';
   };
 };
 

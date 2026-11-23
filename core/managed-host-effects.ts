@@ -5,6 +5,8 @@ import {
   UnresolvedEffectError,
 } from './run-reconciliation.ts';
 import { toolEffectAllowed } from './tool-contributions.ts';
+import { rejectedToolBatchMessages, undispatchedToolResult } from './managed-tool-feedback.ts';
+import { assertManagedEffectsSettled } from './managed-session-authority.ts';
 import type {
   ManagedModelCompletion,
   ManagedPreparedRequest,
@@ -159,27 +161,79 @@ export async function generateManagedBatch(
     );
   if (response.finish === 'tools' && !requested.length)
     throw new DomainError('MODEL_INVALID_RESPONSE', 'The model requested tools without calls.');
-  const known = new Set(session.actions.map((action) => action.call.id));
+  const known = new Set([
+    ...session.actions.map((action) => action.call.id),
+    ...(session.rejectedToolBatches || []).flatMap((batch) =>
+      (batch.response.message.toolCalls || []).map((call) => call.id),
+    ),
+  ]);
   for (const call of requested) {
-    if (!call.id || known.has(call.id))
+    if (typeof call.id !== 'string' || !call.id || known.has(call.id))
       throw new DomainError(
         'DUPLICATE_TOOL_CALL',
         'A tool call ID was reused. No repeated action was dispatched.',
       );
     known.add(call.id);
-  }
-  // Validate the whole batch before reserving or publishing any action intent.
-  if (
-    requested.some(
-      (call) =>
-        !advertised.has(call.name) ||
-        !toolEffectAllowed(host.options.tools.effect(call.name), session.scope),
+    if (
+      typeof call.name !== 'string' ||
+      !call.name ||
+      !call.arguments ||
+      typeof call.arguments !== 'object' ||
+      Array.isArray(call.arguments)
     )
+      throw new DomainError(
+        'MODEL_INVALID_RESPONSE',
+        'A tool call requires a name and object arguments.',
+      );
+  }
+  // A registered but forbidden effect is an authority failure, never correction feedback.
+  if (
+    requested.some((call) => {
+      try {
+        return !toolEffectAllowed(host.options.tools.effect(call.name), session.scope);
+      } catch (error) {
+        if (
+          !advertised.has(call.name) &&
+          error instanceof DomainError &&
+          error.code === 'TOOL_UNAVAILABLE'
+        )
+          return false;
+        throw error;
+      }
+    })
   )
     throw new DomainError(
       'TOOL_POLICY_VIOLATION',
       'The model requested a tool that this turn did not authorize.',
     );
+  // Unknown function names are repairable protocol proposals, not authority to invoke them.
+  // Reject the WHOLE batch, including otherwise-valid calls, before any tool intent exists.
+  if (requested.some((call) => !advertised.has(call.name))) {
+    if (state.noTools || state.finalizing || state.closing)
+      throw new DomainError('TOOL_POLICY_VIOLATION', 'The model requested an unauthorized tool.');
+    assertManagedEffectsSettled(session);
+    host.check();
+    const rejection = {
+      requestId,
+      turnId: state.turnId,
+      scopeRevision: session.scopeRevisions.at(-1)!.revision,
+      requestedAtRequest: session.requests,
+      availableTools: [...advertised],
+      response: structuredClone(response),
+    };
+    const next = structuredClone(session);
+    next.rejectedToolBatches = [...(next.rejectedToolBatches || []), rejection];
+    next.messages.push(...rejectedToolBatchMessages(rejection));
+    await host.commit(next);
+    host.check();
+    state.activeBatch = {
+      requestId,
+      actionIds: [],
+      nextAction: 0,
+      disposition: 'tools-rejected',
+    };
+    return { response: structuredClone(response), actionIds: [] };
+  }
   if (
     limits.maxToolCallsPerTurn !== undefined &&
     state.calls + requested.length > limits.maxToolCallsPerTurn
@@ -203,6 +257,7 @@ export async function generateManagedBatch(
     status: 'pending' as const,
   }));
   session.actions.push(...actions);
+  if (actions.length) session.generation!.admittedActionIds = actions.map((action) => action.id);
   if (session.generation) session.generation.outcome = 'completed';
   await host.commit(session);
   const actionIds = actions.map((action) => action.id);
@@ -308,10 +363,7 @@ export async function failManagedTurn(
       if (state.dispatchedActions.has(action.id)) action.status = 'unknown';
       else {
         action.status = 'completed';
-        action.result = {
-          content: 'Tool was not dispatched because the turn stopped before execution.',
-          isError: true,
-        };
+        action.result = structuredClone(undispatchedToolResult);
         session.messages.push({
           role: 'tool',
           content: action.result.content,

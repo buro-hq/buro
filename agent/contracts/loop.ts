@@ -14,7 +14,7 @@ export type AgentLoopRequest = {
 };
 
 /**
- * Returned only after the host has durably admitted the entire action batch.
+ * Returned only after the host has durably admitted or rejected the entire action batch.
  * Actions require a complete tools response. An incomplete response without
  * actions remains the host's advance decision, never an implicit SDK retry.
  */
@@ -22,6 +22,8 @@ export type AgentLoopBatch = {
   id: string;
   response: ModelCompletion;
   actions: { id: string; call: ModelToolCall }[];
+  /** The host durably rejected every proposed tool, without admitting any action. */
+  disposition?: 'tools-rejected';
 };
 
 export type AgentLoopActionResult = { content: string; isError?: boolean };

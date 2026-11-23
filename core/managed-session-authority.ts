@@ -389,7 +389,7 @@ export function managedBudgetOwner(options: ManagedRuntimeOptions, session: Mana
   assertManagedRunWorkspace(run, session);
   return { projectId: scope.projectId, ownerRunId };
 }
-export function assertManagedReconciled(session: ManagedSession) {
+export function assertManagedEffectsSettled(session: ManagedSession) {
   if (session.workerStepChecks?.entries.some((entry) => entry.status !== 'completed'))
     throw new DomainError(
       'WORKER_CHECK_RECONCILIATION_REQUIRED',
@@ -404,5 +404,29 @@ export function assertManagedReconciled(session: ManagedSession) {
     throw new DomainError(
       'ACTION_RECONCILIATION_REQUIRED',
       'A saved tool action has an unknown outcome. It cannot be automatically repeated.',
+    );
+}
+export function assertManagedReconciled(session: ManagedSession) {
+  assertManagedEffectsSettled(session);
+  const generation = session.generation;
+  const calls = generation?.response?.message.toolCalls || [];
+  const admitted = generation?.admittedActionIds;
+  const provenAdmission =
+    admitted?.length === calls.length &&
+    calls.every((call, index) =>
+      session.actions.some(
+        (action) =>
+          action.id === admitted[index] && JSON.stringify(action.call) === JSON.stringify(call),
+      ),
+    );
+  const provenRejection = session.rejectedToolBatches?.some(
+    (batch) =>
+      batch.requestId === generation?.requestId &&
+      JSON.stringify(batch.response) === JSON.stringify(generation?.response),
+  );
+  if (calls.length && !provenAdmission && !provenRejection)
+    throw new DomainError(
+      'GENERATION_RECONCILIATION_REQUIRED',
+      'A completed tool proposal has no durable admission or rejection. Reconcile it before continuing.',
     );
 }

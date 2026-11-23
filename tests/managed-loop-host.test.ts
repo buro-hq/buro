@@ -47,7 +47,13 @@ const answer = (content: string, tools = 0): ManagedModelCompletion => ({
 });
 async function fixture(
   t: any,
-  options: { separate?: boolean; segmented?: boolean; maxTurn?: number; maxSession?: number } = {},
+  options: {
+    separate?: boolean;
+    segmented?: boolean;
+    maxTurn?: number;
+    maxSession?: number;
+    readOnly?: boolean;
+  } = {},
 ) {
   const directory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), 'managed-loop-host-')),
@@ -66,7 +72,7 @@ async function fixture(
     runId: 'R-owner',
     sessionId: 'M-fixture',
     workspace: directory,
-    readOnly: false,
+    readOnly: !!options.readOnly,
     writeScope: { mode: 'advisory', plannedPaths: ['src/'], protectedPaths: ['checks/'] },
     materials: [],
     commands: [],
@@ -489,4 +495,283 @@ test('an unknown generation is rethrown unchanged and cannot be retried by the s
     'unknown',
   );
   assert.equal(f.bridge.result, undefined);
+});
+
+test('Pi continues after a rejected mixed batch using durable feedback and the same frozen tools and final schema', async (t) => {
+  const f = await fixture(t);
+  const first = answer('Request a service decision', 2);
+  first.message.continuation = { private: 'preserve rejected provider continuation' };
+  first.message.toolCalls![1].name = 'delegate';
+  first.message.toolCalls![1].arguments = { worker: {} };
+  let requests = 0;
+  f.host.options.provider.complete = async (packet) => {
+    requests++;
+    assert.deepEqual(
+      packet.tools.map((tool) => tool.name),
+      ['edit_file'],
+    );
+    assert.deepEqual(packet.schema, f.state.schema);
+    if (requests === 1) return first;
+    const saved = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+    assert.equal(saved.rejectedToolBatches?.length, 1);
+    assert.deepEqual(saved.rejectedToolBatches![0].response, first);
+    assert.deepEqual(saved.actions, []);
+    assert.equal(saved.usage.requestsWithUsage, 1);
+    assert.equal(saved.messages.filter((message) => message.role === 'tool').length, 2);
+    assert.deepEqual(
+      packet.messages.find((message) => message.toolCalls?.length),
+      first.message,
+    );
+    assert.equal(JSON.parse(packet.messages.at(-1)!.content).error, 'UNADVERTISED_TOOL');
+    return answer('{"decision":{"action":"delegate","input":{"worker":{}}}}');
+  };
+  assert.deepEqual(await new PiAgentLoopRunner().run(f.bridge, f.controller.signal), {
+    kind: 'complete',
+  });
+  assert.equal(JSON.parse(f.bridge.result!.text).decision.action, 'delegate');
+  assert.equal(requests, 2);
+  assert.equal(f.effects(), 0, 'Even the valid first edit in the rejected batch must not execute');
+  const saved = (await f.sessions.load(f.state.session.id))!;
+  assert.equal(saved.requests, 2);
+  assert.deepEqual(saved.usage, { requestsWithUsage: 2, inputTokens: 24, outputTokens: 16 });
+  assert.equal(saved.rejectedToolBatches?.length, 1);
+  assert.deepEqual(saved.actions, []);
+});
+
+test('feedback permits a newly identified allowed tool but cannot reuse any rejected call identity', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  f.host.options.provider.complete = async () => {
+    requests++;
+    const result = answer('', 1);
+    if (requests === 1) result.message.toolCalls![0].name = 'not_offered';
+    else result.message.toolCalls![0].id = 'fresh-allowed-call';
+    if (requests === 3) return answer('{"done":true}');
+    return result;
+  };
+  assert.deepEqual(await new PiAgentLoopRunner().run(f.bridge, f.controller.signal), {
+    kind: 'complete',
+  });
+  assert.equal(requests, 3);
+  assert.equal(f.effects(), 1);
+  const saved = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+  assertManagedReconciled(saved);
+  assert.equal(saved.rejectedToolBatches?.length, 1);
+  assert.equal(saved.actions.length, 1);
+  assert.equal(saved.actions[0].call.id, 'fresh-allowed-call');
+  assert.deepEqual(saved.usage, { requestsWithUsage: 3, inputTokens: 36, outputTokens: 24 });
+  const forged = structuredClone(saved);
+  forged.rejectedToolBatches!.push(structuredClone(forged.rejectedToolBatches![0]));
+  await assert.rejects(async () => f.sessions.save(forged), { code: 'INVALID_CHECKPOINT' });
+});
+
+test('a crash before feedback commit preserves the actual response and blocks replay on reopen', async (t) => {
+  const f = await fixture(t);
+  f.host.options.provider.complete = async () => {
+    const result = answer('', 1);
+    result.message.toolCalls![0].name = 'not_offered';
+    return result;
+  };
+  const save = f.host.options.sessions.save.bind(f.host.options.sessions);
+  f.host.options.sessions.save = async (next) => {
+    if (next.rejectedToolBatches?.length) throw new Error('Injected feedback commit failure');
+    await save(next);
+  };
+  const packet = await f.bridge.prepare();
+  await assert.rejects(f.bridge.generate(packet.id), /Injected feedback commit failure/);
+  const durable = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+  assert.equal(durable.generation?.outcome, 'completed');
+  assert.equal(durable.generation?.response?.message.toolCalls?.[0].name, 'not_offered');
+  assert.equal(durable.generation?.response?.usage?.inputTokens, 12);
+  assert.equal(durable.rejectedToolBatches, undefined);
+  assert.deepEqual(durable.actions, []);
+  assert.throws(() => assertManagedReconciled(durable), {
+    code: 'GENERATION_RECONCILIATION_REQUIRED',
+  });
+  const reopened = new ManagedLoopHost(
+    { ...f.state, session: durable, activeBatch: undefined },
+    f.host,
+  );
+  await assert.rejects(reopened.prepare(), { code: 'GENERATION_RECONCILIATION_REQUIRED' });
+  assert.equal(f.effects(), 0);
+});
+
+test('committed feedback survives reopen without dispatch or a repeated completed generation', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  f.host.options.provider.complete = async () => {
+    requests++;
+    const result = answer('', 1);
+    result.message.toolCalls![0].name = 'not_offered';
+    return result;
+  };
+  const packet = await f.bridge.prepare(),
+    batch = await f.bridge.generate(packet.id);
+  const durable = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+  assertManagedReconciled(durable);
+  const reopened = new ManagedLoopHost(
+    { ...f.state, session: durable, activeBatch: undefined },
+    f.host,
+  );
+  const repeated = await reopened.prepare();
+  await assert.rejects(reopened.generate(repeated.id), { code: 'INVALID_GENERATION_REQUEST' });
+  assert.equal(requests, 1);
+  assert.equal(f.effects(), 0);
+  assert.deepEqual(batch.actions, []);
+  const saved = (await f.sessions.load(f.state.session.id))!;
+  assert.equal(saved.rejectedToolBatches?.length, 1);
+  assert.equal(saved.messages.filter((message) => message.role === 'tool').length, 1);
+});
+
+for (const boundary of [
+  'cancelled',
+  'unknown-generation',
+  'duplicate-call',
+  'tools-free',
+  'read-only-write',
+  'closing',
+  'forbidden-effect',
+] as const)
+  test(`unadvertised-tool feedback cannot bypass ${boundary}`, async (t) => {
+    const f = await fixture(t, { readOnly: boundary === 'read-only-write' });
+    let requests = 0;
+    f.host.options.provider.complete = async () => {
+      requests++;
+      if (boundary === 'unknown-generation') throw new Error('lost provider outcome');
+      const result = answer('', boundary === 'duplicate-call' ? 2 : 1);
+      result.message.toolCalls![0].name =
+        boundary === 'read-only-write' ? 'edit_file' : 'not_offered';
+      if (boundary === 'duplicate-call')
+        result.message.toolCalls![1].id = result.message.toolCalls![0].id;
+      if (boundary === 'cancelled') f.controller.abort();
+      return result;
+    };
+    if (boundary === 'tools-free') f.state.noTools = true;
+    if (boundary === 'closing') f.state.closing = true;
+    if (boundary === 'forbidden-effect') f.host.options.tools.effect = () => 'command';
+    await assert.rejects(new PiAgentLoopRunner().run(f.bridge, f.controller.signal));
+    assert.equal(requests, 1);
+    const saved = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+    assert.equal(saved.rejectedToolBatches, undefined);
+    assert.deepEqual(saved.actions, []);
+    assert.equal(f.effects(), 0);
+  });
+
+test('a rejected call ID remains consumed when a later allowed proposal reuses it', async (t) => {
+  const f = await fixture(t);
+  let requests = 0;
+  f.host.options.provider.complete = async () => {
+    const result = answer('', 1);
+    if (++requests === 1) result.message.toolCalls![0].name = 'not_offered';
+    return result;
+  };
+  await assert.rejects(new PiAgentLoopRunner().run(f.bridge, f.controller.signal), {
+    code: 'DUPLICATE_TOOL_CALL',
+  });
+  assert.equal(requests, 2);
+  assert.equal(f.effects(), 0);
+  const saved = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+  assert.equal(saved.rejectedToolBatches?.length, 1);
+  assert.deepEqual(saved.actions, []);
+});
+
+test('a rejected tool chain is archived with its own rejection receipt across real context rotation', async (t) => {
+  const f = await fixture(t, { segmented: true });
+  let requests = 0;
+  f.host.options.provider.complete = async () => {
+    requests++;
+    if (f.state.closing)
+      return answer('{"status":"continue","nextTask":"Finish the original assignment"}');
+    if (requests > 2) return answer('{"done":true}');
+    const result = answer('', 1);
+    if (requests === 1) result.message.toolCalls![0].name = 'not_offered';
+    else result.message.toolCalls![0].id = 'allowed-after-rejection';
+    return result;
+  };
+  const runner = new PiAgentLoopRunner();
+  assert.deepEqual(await runner.run(f.bridge, f.controller.signal), { kind: 'yield' });
+  const archived = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+  assert.equal(archived.workSegments?.archives.length, 1);
+  assert.equal(archived.rejectedToolBatches?.length, 1);
+  const messages = archived.workSegments!.archives[0].messages;
+  assert.equal(messages.filter((message) => message.toolCallId === 'call-0').length, 1);
+  assert.equal(
+    messages.filter((message) => message.toolCallId === 'allowed-after-rejection').length,
+    1,
+  );
+  assert.equal(f.effects(), 1);
+  assert.deepEqual(await runner.run(f.bridge, f.controller.signal), { kind: 'complete' });
+  const complete = (await f.sessions.load(f.state.session.id))!;
+  assert.equal(complete.requests, 4);
+  assert.equal(complete.rejectedToolBatches?.length, 1);
+  assert.equal(complete.actions.length, 1);
+  assertManagedReconciled(complete);
+  const corrupted = structuredClone(complete);
+  corrupted.workSegments!.archives[0].messages.find(
+    (message) => message.toolCallId === 'call-0',
+  )!.content = 'invented tool success';
+  await fs.writeFile(path.join(f.directory, complete.id + '.json'), JSON.stringify(corrupted));
+  await assert.rejects(new FileManagedSessions(f.directory).load(complete.id), {
+    code: 'INVALID_CHECKPOINT',
+  });
+});
+
+test('read-only normal work can correct an unknown function without gaining write permissions', async (t) => {
+  const f = await fixture(t, { readOnly: true });
+  const file = path.join(f.directory, 'source.txt');
+  await fs.writeFile(file, 'unchanged');
+  f.host.options.tools.definitions = () => [
+    { name: 'read_file', description: 'Read', parameters: { type: 'object' } },
+  ];
+  let requests = 0,
+    reads = 0;
+  f.host.options.tools.execute = async (call, scope) => {
+    assert.equal(scope.readOnly, true);
+    assert.equal(call.name, 'read_file');
+    reads++;
+    return { content: await fs.readFile(file, 'utf8') };
+  };
+  f.host.options.provider.complete = async (packet) => {
+    requests++;
+    assert.deepEqual(
+      packet.tools.map((tool) => tool.name),
+      ['read_file'],
+    );
+    if (requests === 3) return answer('{"verdict":"approved"}');
+    const result = answer('', 1);
+    result.message.toolCalls![0].name = requests === 1 ? 'not_offered' : 'read_file';
+    result.message.toolCalls![0].id = 'read-only-call-' + requests;
+    return result;
+  };
+  assert.deepEqual(await new PiAgentLoopRunner().run(f.bridge, f.controller.signal), {
+    kind: 'complete',
+  });
+  assert.equal(requests, 3);
+  assert.equal(reads, 1);
+  assert.equal(await fs.readFile(file, 'utf8'), 'unchanged');
+  const saved = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+  assert.equal(saved.scope.readOnly, true);
+  assert.equal(saved.rejectedToolBatches?.length, 1);
+  assert.equal(saved.actions.length, 1);
+});
+
+test('a completed unadmitted generation cannot borrow an older action with identical call bytes', async (t) => {
+  const f = await fixture(t);
+  const packet = await f.bridge.prepare(),
+    batch = await f.bridge.generate(packet.id);
+  await f.bridge.execute(batch.id, batch.actions[0].id);
+  const durable = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
+  assertManagedReconciled(durable);
+  for (const requestId of ['another-turn:0', 'T-fixture:1']) {
+    const unadmitted = structuredClone(durable);
+    unadmitted.requests++;
+    unadmitted.generation!.requestId = requestId;
+    delete unadmitted.generation!.admittedActionIds;
+    assert.throws(() => assertManagedReconciled(unadmitted), {
+      code: 'GENERATION_RECONCILIATION_REQUIRED',
+    });
+  }
+  const forged = structuredClone(durable);
+  forged.generation!.admittedActionIds = ['historical-action'];
+  await assert.rejects(async () => f.sessions.save(forged), { code: 'INVALID_CHECKPOINT' });
 });

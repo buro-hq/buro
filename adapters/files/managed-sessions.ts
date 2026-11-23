@@ -5,6 +5,10 @@ import { z } from 'zod';
 import { WorkScopeSchema } from '../../protocol/work-scope.ts';
 import { DomainError } from '../../core/ports.ts';
 import { assertManagedSessionProvenance } from '../../core/managed-session-authority.ts';
+import {
+  rejectedToolBatchMessages,
+  undispatchedToolResult,
+} from '../../core/managed-tool-feedback.ts';
 import type { ManagedSession, ManagedSessionStore } from '../../core/model-ports.ts';
 import {
   parseSegmentClosing,
@@ -50,6 +54,14 @@ const message = z.object({
   toolCallId: z.string().optional(),
   toolName: z.string().optional(),
   continuation: z.unknown().optional(),
+});
+const completion = z.strictObject({
+  message: message.extend({ role: z.literal('assistant') }),
+  model: z.string(),
+  usage: z
+    .object({ inputTokens: z.number().optional(), outputTokens: z.number().optional() })
+    .optional(),
+  finish: z.enum(['stop', 'tools', 'length', 'failed']),
 });
 const anchor = z.strictObject({
   turnId: z.string().min(1),
@@ -208,18 +220,22 @@ const schema = z
       .strictObject({
         requestId: z.string().min(1).max(256),
         outcome: z.enum(['pending', 'completed', 'unknown']),
-        response: z
-          .strictObject({
-            message: message.extend({ role: z.literal('assistant') }),
-            model: z.string(),
-            usage: z
-              .object({ inputTokens: z.number().optional(), outputTokens: z.number().optional() })
-              .optional(),
-            finish: z.enum(['stop', 'tools', 'length', 'failed']),
-          })
-          .optional(),
+        response: completion.optional(),
+        admittedActionIds: z.array(z.string().min(1)).min(1).optional(),
         rejectionCode: z.string().optional(),
       })
+      .optional(),
+    rejectedToolBatches: z
+      .array(
+        z.strictObject({
+          requestId: z.string().min(1).max(256),
+          turnId: z.string().min(1).max(256),
+          scopeRevision: z.number().int().positive(),
+          requestedAtRequest: z.number().int().positive(),
+          availableTools: z.array(z.string().min(1)),
+          response: completion,
+        }),
+      )
       .optional(),
     status: z.enum(['ready', 'running', 'interrupted', 'failed']),
     cancelRequested: z.boolean().optional(),
@@ -336,6 +352,29 @@ function validateSegmentCheckpoint(session: ManagedSession) {
   }
   validateTurnAuthorities(session);
   validateWorkerCheckCheckpoint(session);
+  validateRejectedToolBatches(session);
+  const generation = session.generation;
+  if (generation?.admittedActionIds) {
+    const calls = generation.response?.message.toolCalls || [];
+    if (
+      generation.outcome !== 'completed' ||
+      generation.response?.finish !== 'tools' ||
+      !calls.length ||
+      generation.admittedActionIds.length !== calls.length ||
+      new Set(generation.admittedActionIds).size !== calls.length ||
+      calls.some(
+        (call, index) =>
+          !session.actions.some(
+            (action) =>
+              action.id === generation.admittedActionIds![index] && same(action.call, call),
+          ),
+      ) ||
+      session.rejectedToolBatches?.some((batch) => batch.requestId === generation.requestId)
+    )
+      invalidSegment(
+        'A tool admission marker must identify exactly its completed generation batch.',
+      );
+  }
   const state = session.workSegments;
   if (!state) return;
   validateSegmentLimits(state.limits);
@@ -398,7 +437,23 @@ function validateSegmentCheckpoint(session: ManagedSession) {
       new Set(archive.handoff.availableTools).size !== archive.handoff.availableTools.length
     )
       invalidSegment('The handoff tool names must be unique.');
-    const pending = new Map<string, ManagedSession['actions'][number]>();
+    const receipts = [
+      ...session.actions.slice(0, archive.handoff.completedActions),
+      ...(session.rejectedToolBatches || [])
+        .filter(
+          (batch) =>
+            batch.turnId === archive.anchor.turnId &&
+            batch.requestedAtRequest <= archive.endedAtRequest,
+        )
+        .flatMap((batch) =>
+          (batch.response.message.toolCalls || []).map((call, index) => ({
+            call,
+            status: 'completed' as const,
+            result: { content: rejectedToolBatchMessages(batch)[index + 1].content, isError: true },
+          })),
+        ),
+    ];
+    const pending = new Map<string, (typeof receipts)[number]>();
     const seen = new Set<string>();
     for (const item of archive.messages) {
       if (item.role === 'tool') {
@@ -416,9 +471,7 @@ function validateSegmentCheckpoint(session: ManagedSession) {
       if (item.toolCalls?.length) {
         if (item.role !== 'assistant') invalidSegment('Only an assistant may request tools.');
         for (const requested of item.toolCalls) {
-          const action = session.actions
-            .slice(0, archive.handoff.completedActions)
-            .find((entry) => entry.call.id === requested.id);
+          const action = receipts.find((entry) => entry.call.id === requested.id);
           if (
             !action ||
             action.status !== 'completed' ||
@@ -591,11 +644,157 @@ function validateTurnAuthorityTransition(previous: ManagedSession, next: Managed
   }
 }
 
+function validateRejectedToolBatches(session: ManagedSession) {
+  const ids = new Set(session.actions.map((action) => action.call.id));
+  const requests = new Set<string>();
+  let requestedAt = 0;
+  const histories = [
+    session.messages,
+    ...(session.workSegments?.archives.map((archive) => archive.messages) || []),
+  ];
+  for (const batch of session.rejectedToolBatches || []) {
+    const authority = session.turnAuthorities?.find((turn) => turn.turnId === batch.turnId);
+    const calls = batch.response.message.toolCalls || [];
+    const chain = rejectedToolBatchMessages(batch);
+    if (
+      !authority ||
+      authority.toolPolicy !== 'normal' ||
+      authority.scopeRevision !== batch.scopeRevision ||
+      requests.has(batch.requestId) ||
+      batch.requestedAtRequest <= requestedAt ||
+      batch.requestedAtRequest > session.requests ||
+      batch.response.finish !== 'tools' ||
+      !calls.length ||
+      new Set(batch.availableTools).size !== batch.availableTools.length ||
+      !calls.some((call) => !batch.availableTools.includes(call.name)) ||
+      calls.some(
+        (call) =>
+          !call.id ||
+          !call.name ||
+          !call.arguments ||
+          typeof call.arguments !== 'object' ||
+          Array.isArray(call.arguments),
+      ) ||
+      !histories.some((messages) =>
+        messages.some((_, index) => same(messages.slice(index, index + chain.length), chain)),
+      )
+    )
+      invalidSegment(
+        'A rejected tool proposal must retain its completed response and correlated feedback.',
+      );
+    for (const call of calls) {
+      if (ids.has(call.id)) invalidSegment('A rejected tool call identity cannot be reused.');
+      ids.add(call.id);
+    }
+    requests.add(batch.requestId);
+    requestedAt = batch.requestedAtRequest;
+  }
+}
+
+function validateRejectedToolTransition(previous: ManagedSession, next: ManagedSession) {
+  const before = previous.rejectedToolBatches || [],
+    after = next.rejectedToolBatches || [];
+  if (
+    after.length < before.length ||
+    after.length > before.length + 1 ||
+    !same(before, after.slice(0, before.length))
+  )
+    invalidSegment('Rejected tool receipts are append-only.');
+  if (after.length === before.length) return;
+  const batch = after.at(-1)!,
+    generation = previous.generation;
+  const authority = previous.turnAuthorities?.at(-1);
+  if (
+    previous.cancelRequested ||
+    next.cancelRequested ||
+    previous.status !== 'running' ||
+    next.status !== 'running' ||
+    !generation ||
+    generation.outcome !== 'completed' ||
+    generation.requestId !== batch.requestId ||
+    !same(generation, next.generation) ||
+    generation.admittedActionIds ||
+    !same(generation.response, batch.response) ||
+    authority?.turnId !== batch.turnId ||
+    authority.toolPolicy !== 'normal' ||
+    batch.scopeRevision !== previous.scopeRevisions.at(-1)!.revision ||
+    batch.requestedAtRequest !== previous.requests ||
+    next.requests !== previous.requests ||
+    !same(previous.scopeRevisions, next.scopeRevisions) ||
+    !same(previous.actions, next.actions) ||
+    next.actions.some((action) => action.status !== 'completed') ||
+    next.workerStepChecks?.entries.some((entry) => entry.status !== 'completed') ||
+    !same(next.messages, [...previous.messages, ...rejectedToolBatchMessages(batch)]) ||
+    next.usage.requestsWithUsage - previous.usage.requestsWithUsage !==
+      (batch.response.usage ? 1 : 0) ||
+    next.usage.inputTokens - previous.usage.inputTokens !==
+      (batch.response.usage?.inputTokens || 0) ||
+    next.usage.outputTokens - previous.usage.outputTokens !==
+      (batch.response.usage?.outputTokens || 0)
+  )
+    invalidSegment(
+      'Tool feedback requires one completed generation and no dispatched or unsettled batch.',
+    );
+}
+
 function validateTransition(previous: ManagedSession | undefined, next: ManagedSession) {
   if (!previous) return;
   if (previous.toolRevision !== next.toolRevision)
     invalidSegment('A saved session cannot change its tool configuration.');
   validateWorkerCheckTransition(previous, next);
+  validateRejectedToolTransition(previous, next);
+  if (
+    previous.generation &&
+    next.generation &&
+    previous.generation.requestId === next.generation.requestId
+  ) {
+    const before = previous.generation!,
+      after = next.generation!;
+    if (before.admittedActionIds && !same(before.admittedActionIds, after.admittedActionIds))
+      invalidSegment('A generation cannot rewrite its admitted batch.');
+    if (!before.admittedActionIds && after.admittedActionIds) {
+      const added = next.actions.slice(previous.actions.length),
+        calls = before.response?.message.toolCalls || [];
+      const authority = previous.turnAuthorities?.at(-1);
+      const undispatched =
+        ['failed', 'interrupted'].includes(next.status) &&
+        added.every(
+          (action) => action.status === 'completed' && same(action.result, undispatchedToolResult),
+        );
+      const appended = [
+        before.response?.message,
+        ...(undispatched
+          ? added.map((action) => ({
+              role: 'tool',
+              content: action.result!.content,
+              toolCallId: action.call.id,
+              toolName: action.call.name,
+            }))
+          : []),
+      ];
+      if (
+        (!undispatched && (previous.cancelRequested || next.cancelRequested)) ||
+        before.outcome !== 'completed' ||
+        !same(before.response, after.response) ||
+        !calls.length ||
+        added.length !== calls.length ||
+        !same(
+          after.admittedActionIds,
+          added.map((action) => action.id),
+        ) ||
+        added.some(
+          (action, index) =>
+            (!undispatched && (action.status !== 'pending' || action.result)) ||
+            action.turnId !== authority?.turnId ||
+            !same(action.call, calls[index]),
+        ) ||
+        !same(next.messages, [...previous.messages, ...appended])
+      )
+        invalidSegment(
+          'An admission marker requires the exact new intent batch for its completed generation.',
+        );
+    }
+  }
   if (previous.generation) {
     const before = previous.generation,
       after = next.generation;

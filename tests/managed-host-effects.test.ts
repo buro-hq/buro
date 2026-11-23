@@ -185,24 +185,22 @@ async function fixture(t: any) {
   };
 }
 
-test('the second forbidden tool invalidates the entire batch before any action intent or effect', async (t) => {
+test('an unadvertised second tool rejects the entire batch with durable feedback and no action intent', async (t) => {
   const f = await fixture(t);
   f.host.options.provider.complete = async () => response(['edit_file', 'hidden_command']);
-  let failure: unknown;
-  try {
-    await generateManagedBatch(f.state, f.host, f.request);
-  } catch (error) {
-    failure = error;
-  }
-  assert.ok(failure instanceof DomainError);
-  assert.equal(failure.code, 'TOOL_POLICY_VIOLATION');
+  const batch = await generateManagedBatch(f.state, f.host, f.request);
   const durable = (await new FileManagedSessions(f.directory).load(f.state.session.id))!;
   assert.equal(durable.generation?.outcome, 'completed');
   assert.equal(durable.generation?.response?.message.toolCalls?.length, 2);
   assert.deepEqual(durable.actions, []);
+  assert.equal(durable.rejectedToolBatches?.length, 1);
+  assert.equal(durable.messages.at(-1)?.toolName, 'hidden_command');
+  assert.equal(durable.messages.filter((message) => message.role === 'tool').length, 2);
+  assert.equal(JSON.parse(durable.messages.at(-1)!.content).error, 'UNADVERTISED_TOOL');
+  assert.equal(f.state.activeBatch?.disposition, 'tools-rejected');
+  assert.deepEqual(batch.actionIds, []);
   assert.equal(f.effects(), 0);
-  await assert.rejects(failManagedTurn(f.state, f.host, failure), (error) => error === failure);
-  assert.equal(isKnownTurnRejection(failure), true);
+  assertManagedReconciled(durable);
   assert.equal(
     f.events.some((event) => event.type === 'tool.started'),
     false,

@@ -113,7 +113,12 @@ export class ManagedLoopHost implements AgentLoopHost {
       });
       this.#prepared = undefined;
       this.#phase = actions.length ? 'tools' : 'advance';
-      return { id: this.#batchId, response: structuredClone(batch.response), actions };
+      return {
+        id: this.#batchId,
+        response: structuredClone(batch.response),
+        actions,
+        ...(canonical.disposition ? { disposition: canonical.disposition } : {}),
+      };
     });
   }
 

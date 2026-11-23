@@ -242,7 +242,14 @@ export class PiAgentLoopRunner implements AgentLoopRunner {
           typeof value.id !== 'string' ||
           !value.id ||
           (value.actions.length > 0 && value.response.finish !== 'tools') ||
-          (value.actions.length === 0 && value.response.finish === 'tools')
+          (value.actions.length === 0 &&
+            value.response.finish === 'tools' &&
+            value.disposition !== 'tools-rejected') ||
+          (value.disposition !== undefined &&
+            (value.disposition !== 'tools-rejected' ||
+              value.actions.length !== 0 ||
+              value.response.finish !== 'tools' ||
+              !value.response.message.toolCalls?.length))
         )
           throw new AgentLoopFailure();
         const admittedNames = new Set(request.tools.map((definition) => definition.name));

@@ -150,14 +150,20 @@ test('a none turn rejects every tool before reservation, intent journal and brok
   assert.equal(saved.usage.requestsWithUsage, 1);
 });
 
-test('ordinary turns also reject a tool missing from their actual advertised definitions', async (t) => {
-  const f = await fixture(t, async () => call('run_hidden_command'));
-  await assert.rejects(f.runtime.turn(f.threadId, 'Work', turnOptions()), {
-    code: 'TOOL_POLICY_VIOLATION',
+test('ordinary turns return unadvertised-tool feedback before requesting a corrected response', async (t) => {
+  let requests = 0;
+  const f = await fixture(t, async (input) => {
+    if (++requests === 1) return call('run_hidden_command');
+    assert.equal(JSON.parse(input.messages.at(-1)!.content).error, 'UNADVERTISED_TOOL');
+    return answer();
   });
-  assert.deepEqual(f.reservations, ['generation']);
+  await f.runtime.turn(f.threadId, 'Work', turnOptions());
+  assert.equal(requests, 2);
+  assert.deepEqual(f.reservations, ['generation', 'generation']);
   assert.deepEqual(f.effects, []);
-  assert.deepEqual((await f.sessions.load(f.threadId))!.actions, []);
+  const saved = (await f.sessions.load(f.threadId))!;
+  assert.deepEqual(saved.actions, []);
+  assert.equal(saved.rejectedToolBatches?.length, 1);
 });
 
 test('the explicit next service turn restores ordinary tools without changing the frozen scope', async (t) => {

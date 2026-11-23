@@ -142,13 +142,24 @@ const turnOptions = () => ({
   timeoutMs: 10000,
 });
 
-test('managed execution reads, edits and checks a real worktree, then independently accepts without Codex', async (t) => {
+test('managed execution recovers an unadvertised function proposal, then delegates, checks and independently accepts real changes', async (t) => {
   const f = await fixture(t);
+  let rejectedProposal = false;
   const model = provider(async (input) => {
     const lastUser = input.messages.map((m) => m.role).lastIndexOf('user');
     const prompt = input.messages[lastUser].content;
     const toolMessages = input.messages.slice(lastUser + 1).filter((m) => m.role === 'tool');
     if (input.messages[0].content.includes('You own the goal.')) {
+      if (!rejectedProposal) {
+        rejectedProposal = true;
+        assert.equal(
+          input.tools.some((tool) => tool.name === 'delegate'),
+          false,
+        );
+        return response([
+          { id: 'misplaced-decision', name: 'delegate', arguments: { worker: {} } },
+        ]);
+      }
       const result = {
         status: 'success',
         summary: 'Changed value to two',

@@ -331,6 +331,7 @@ export async function afterManagedResponse(
     );
   host.assertReconciled(session);
   const response = structuredClone(generation.response);
+  if (batch.disposition === 'tools-rejected') return { kind: 'continue' };
   const requested = response.message.toolCalls || [];
   if (requested.length) {
     if (session.workSegments) {

@@ -4,6 +4,7 @@ import type { ManagedWorkSegments } from './work-segments.ts';
 import type { ManagedWorkerStepChecks } from './worker-step-checks.ts';
 import type {
   ModelMessage,
+  ModelCompletion,
   ModelToolCall,
   ModelUsage,
   ToolDefinition,
@@ -25,6 +26,15 @@ export type ToolScope = {
 };
 export type ToolResult = { content: string; isError?: boolean; exitCode?: number | null };
 export type ToolEffect = 'read' | 'write' | 'command';
+/** A completed model proposal rejected before any tool intent, reservation or dispatch. */
+export type RejectedToolBatch = {
+  requestId: string;
+  turnId: string;
+  scopeRevision: number;
+  requestedAtRequest: number;
+  availableTools: string[];
+  response: ModelCompletion;
+};
 export interface ToolBroker {
   readonly revision: string;
   effect(name: string): ToolEffect;
@@ -80,6 +90,8 @@ export type ManagedSession = {
       usage?: ModelUsage;
       finish: 'stop' | 'tools' | 'length' | 'failed';
     };
+    /** Exact batch admitted atomically with these new tool intents; absent means unadmitted. */
+    admittedActionIds?: string[];
     rejectionCode?: string;
   };
   status: 'ready' | 'running' | 'interrupted' | 'failed';
@@ -93,6 +105,7 @@ export type ManagedSession = {
     status: 'pending' | 'completed' | 'unknown';
     result?: ToolResult;
   }[];
+  rejectedToolBatches?: RejectedToolBatch[];
 };
 export interface ManagedSessionStore {
   load(id: string): Promise<ManagedSession | undefined>;
