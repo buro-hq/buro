@@ -110,6 +110,7 @@ export class NativeSandbox implements CommandSandbox {
         '(version 1)(allow default)(deny file-write*)(deny file-read-data)(allow file-read-data (literal "/"))' +
         [...reads].map((value) => `(allow file-read-data (subpath ${literal(value)}))`).join('') +
         writable.map((value) => `(allow file-write* (subpath ${literal(value)}))`).join('') +
+        `(deny file-write* (subpath ${literal(path.join(workspace, '.git'))}))` +
         [...protectedPaths]
           .map(
             (value) =>
@@ -121,6 +122,8 @@ export class NativeSandbox implements CommandSandbox {
           .map((value) => `(deny file-write-unlink (literal ${literal(value)}))`)
           .join('') +
         '(allow file-write* (literal "/dev/null"))(deny file-link)(deny file-mount)(deny file-unmount)' +
+        '(deny process-info*)(allow process-info* (target self))(allow process-info* (target children))(allow process-info* (target same-sandbox))' +
+        '(deny signal)(allow signal (target self))(allow signal (target children))(allow signal (target same-sandbox))(deny appleevent-send)' +
         (input.allowNetwork ? '' : '(deny network*)');
       return {
         executable: '/usr/bin/sandbox-exec',
@@ -131,10 +134,16 @@ export class NativeSandbox implements CommandSandbox {
     }
     if (process.platform !== 'linux')
       throw new Error('This host does not provide a supported command sandbox.');
-    const args = ['--die-with-parent', ...(!input.allowNetwork ? ['--unshare-net'] : [])];
+    const args = [
+      '--die-with-parent',
+      '--unshare-pid',
+      ...(!input.allowNetwork ? ['--unshare-net'] : []),
+    ];
     for (const value of reads) if (value !== '/dev') args.push('--ro-bind', value, value);
     args.push('--proc', '/proc', '--dev', '/dev');
     for (const value of writable) args.push('--bind', value, value);
+    const gitMetadata = path.join(workspace, '.git');
+    if (existsSync(gitMetadata)) args.push('--ro-bind', gitMetadata, gitMetadata);
     async function inspect(directory: string): Promise<void> {
       input.signal.throwIfAborted();
       for (const entry of await fs.readdir(directory, { withFileTypes: true })) {

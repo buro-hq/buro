@@ -215,3 +215,61 @@ test('a native adapter cannot hide an unexpected tool failure by returning a suc
   assert.equal(result.error, 'Unexpected tool fault');
   assert.equal((await app.sessions.get({ id: created.sessionId }))!.status, 'failed');
 });
+
+test('the configured DeepSeek transport enables thinking without imposing a final-answer schema', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-deepseek-transport-'));
+  let requests = 0;
+  const app = await createApplication({
+    directory,
+    fetch: async (_url, options) => {
+      requests++;
+      const body = JSON.parse(String(options?.body));
+      assert.deepEqual(body.thinking, { type: 'enabled' });
+      assert.equal(body.temperature, 0.5);
+      assert.equal(body.max_tokens, 8192);
+      assert.equal(body.response_format, undefined);
+      assert.equal(body.chat_template_kwargs, undefined);
+      const chunk = {
+        model: 'flash-fixture',
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'private-fixture-reasoning', content: 'Done' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 12, completion_tokens: 5 },
+      };
+      return new Response('data: ' + JSON.stringify(chunk) + '\n\ndata: [DONE]\n\n', {
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    },
+  });
+  t.after(async () => {
+    await app.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  const saved = await app.modelConfigurations.save({
+    configuration: {
+      name: 'Flash fixture',
+      model: 'flash-fixture',
+      transport: 'deepseek',
+      endpoint: 'https://fixture.invalid/v1',
+      local: false,
+      sampling: { temperature: 0.5 },
+    },
+    apiKey: 'fixture-not-a-real-key',
+  });
+  assert.equal(saved.ok, true);
+  const created = await app.sessions.create();
+  const result = await app.sessions.run({
+    sessionId: created.sessionId,
+    input: 'Task',
+    workspace: directory,
+  });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(requests, 1);
+  const session = (await app.sessions.get({ id: created.sessionId }))!;
+  assert.deepEqual(session.usage, { inputTokens: 12, outputTokens: 5 });
+  assert.ok(!JSON.stringify(session).includes('private-fixture-reasoning'));
+});

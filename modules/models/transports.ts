@@ -1,5 +1,6 @@
 import { OpenAICompatibleProvider } from '../../agent/providers/openai-compatible.ts';
 import { OllamaProvider } from '../../agent/providers/ollama.ts';
+import { DeepSeekProvider } from '../../agent/providers/deepseek.ts';
 import { RequestGate } from '../../agent/providers/http.ts';
 import type { ModelTransport } from './model-configuration.ts';
 import { ModelBackend } from '../engines/model-backend.ts';
@@ -58,6 +59,26 @@ export function modelTransports(
           reasoningEffort: config.reasoningEffort,
           capacity: config.capacity,
           privatePaths: input.privatePaths,
+        });
+      },
+    },
+    {
+      id: 'deepseek',
+      create({ configuration: config, apiKey }) {
+        return new ModelBackend({
+          provider: new DeepSeekProvider({
+            id: config.id,
+            revision: config.revision,
+            local: config.local,
+            endpoint: config.endpoint ?? '',
+            fetch: request,
+            apiKey: () => apiKey,
+            gate: new RequestGate(config.capacity ?? 2),
+            thinking: config.thinking === false ? 'disabled' : 'enabled',
+            reasoningEffort: config.reasoningEffort,
+            reasoningBudgetTokens: config.reasoningBudgetTokens,
+            sampling: config.sampling,
+          }),
         });
       },
     },

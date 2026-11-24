@@ -23,6 +23,12 @@ interface ActiveSession {
   waitingFor?: string;
 }
 
+function reportedTokens(input: { previous?: number; current?: number }): number | undefined {
+  return input.previous === undefined && input.current === undefined
+    ? undefined
+    : (input.previous ?? 0) + (input.current ?? 0);
+}
+
 /** Runs one common model/tool loop for any task and any agent description. */
 export class SessionService implements Sessions {
   private store: SessionStore;
@@ -470,10 +476,19 @@ export class SessionService implements Sessions {
     modelId: string;
   }): Session {
     const { session, response } = input;
-    const usage = {
-      inputTokens: (session.usage?.inputTokens ?? 0) + (response.usage?.inputTokens ?? 0),
-      outputTokens: (session.usage?.outputTokens ?? 0) + (response.usage?.outputTokens ?? 0),
-    };
+    const usage =
+      session.usage || response.usage
+        ? {
+            inputTokens: reportedTokens({
+              previous: session.usage?.inputTokens,
+              current: response.usage?.inputTokens,
+            }),
+            outputTokens: reportedTokens({
+              previous: session.usage?.outputTokens,
+              current: response.usage?.outputTokens,
+            }),
+          }
+        : undefined;
     const { continuation: _continuation, ...message } = response.message;
     return {
       ...session,

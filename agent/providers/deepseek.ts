@@ -1,14 +1,15 @@
 import { ProviderFailure } from '../contracts/provider-errors.ts';
 import { endpointURL, type HttpOptions } from './http.ts';
-import { OpenAICompatibleProvider } from './openai-compatible.ts';
+import { OpenAICompatibleProvider, type OpenAICompatibleOptions } from './openai-compatible.ts';
 
-export type DeepSeekOptions = HttpOptions & {
-  id: string;
-  revision: string;
-  local: boolean;
-  apiKey: () => string | undefined;
-  thinking?: 'enabled' | 'disabled';
-};
+export type DeepSeekOptions = HttpOptions &
+  Pick<OpenAICompatibleOptions, 'sampling' | 'reasoningBudgetTokens' | 'reasoningEffort'> & {
+    id: string;
+    revision: string;
+    local: boolean;
+    apiKey: () => string | undefined;
+    thinking?: 'enabled' | 'disabled';
+  };
 
 /** DeepSeek keeps its required authentication and API dialect over the shared SSE transport. */
 export class DeepSeekProvider extends OpenAICompatibleProvider {
