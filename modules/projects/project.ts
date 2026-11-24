@@ -10,6 +10,13 @@ export interface Project {
 /** Stores project identities without owning task or execution records. */
 export interface ProjectStore extends RecordStore<Project> {}
 
+/** Missing or inaccessible source directories are ordinary connection outcomes. */
+export interface ProjectResult {
+  ok: boolean;
+  project?: Project;
+  error?: string;
+}
+
 /** Project operations expose identities and paths, not a mutable application aggregate. */
 export interface Projects {
   /** Lists connected source directories. */
@@ -17,7 +24,7 @@ export interface Projects {
   /** Returns one connected directory. */
   get(input: { id: string }): Promise<Project | undefined>;
   /** Connects a source directory. */
-  connect(input: { root: string; name?: string }): Promise<Project>;
+  connect(input: { root: string; name?: string }): Promise<ProjectResult>;
   /** Removes the connection without deleting files. */
   disconnect(input: { id: string }): Promise<void>;
 }

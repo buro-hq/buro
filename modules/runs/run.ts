@@ -43,7 +43,11 @@ export interface Runs {
   /** Returns a saved attempt. */
   get(input: { id: string }): Promise<Run | undefined>;
   /** Starts independent work. */
-  start(input: { taskId: string; options?: RunOptions; previousRunId?: string }): Promise<RunResult>;
+  start(input: {
+    taskId: string;
+    options?: RunOptions;
+    previousRunId?: string;
+  }): Promise<RunResult>;
   /** Continues saved work in a new attempt. */
   retry(input: { id: string; options?: RunOptions }): Promise<RunResult>;
   /** Requests cancellation. */

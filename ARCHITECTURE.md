@@ -13,7 +13,9 @@ The latest user decisions supersede the older design below. The new implementati
 - Configuration consists of application defaults and explicit Run overrides. There is no project/scenario/role precedence hierarchy.
 - The application remains one process. First-party features are ordinary modules, with public interfaces suitable for future extraction into plugins.
 
-The new execution slice is covered by behavior tests using SQLite, JSON, portable model transports and actual Git worktrees. Remaining integration includes model configuration, real tools, generic delegation, application transport, UI/CLI callers, and the clean-state cutover. Old runtime state must be preserved in a private archive before cutover.
+The new execution slice is covered by behavior tests using SQLite, JSON, portable model transports and actual Git worktrees. Application composition, global model configuration, sandboxed file/command tools, generic collaboration and a typed local WebSocket API are implemented. Connection settings and credentials are one atomic private record; API views and notifications exclude credentials and private continuation.
+
+Remaining integration includes UI/CLI callers, result inspection/application, context attachments, native agent backends and the clean-state cutover. Production still starts the older application. Old runtime state must be preserved in a private archive before the production switch; unused implementations and obsolete API callers should then be removed rather than maintained through compatibility overloads.
 
 ## Previous design, retained during migration
 

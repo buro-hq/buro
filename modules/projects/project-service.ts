@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { Notifications } from '../events/notifications.ts';
-import type { Project, ProjectStore, Projects } from './project.ts';
+import type { Project, ProjectResult, ProjectStore, Projects } from './project.ts';
 
 /** Owns connected directories; connecting never starts setup, inference or a run. */
 export class ProjectService implements Projects {
@@ -26,15 +26,31 @@ export class ProjectService implements Projects {
   }
 
   /** Connects a real directory; an already connected directory returns its current identity. */
-  async connect(input: { root: string; name?: string }): Promise<Project> {
-    const root = await fs.realpath(input.root);
-    if (!(await fs.stat(root)).isDirectory()) throw new Error('A project must be a directory.');
-    const existing = (await this.store.list()).find(project => project.root === root);
-    if (existing) return existing;
-    const project: Project = { id: randomUUID(), root, name: input.name ?? path.basename(root) };
+  async connect(input: { root: string; name?: string }): Promise<ProjectResult> {
+    let root: string;
+    try {
+      root = await fs.realpath(input.root);
+      if (!(await fs.stat(root)).isDirectory())
+        return { ok: false, error: 'A project must be a directory.' };
+    } catch (error) {
+      if (
+        ['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM'].includes(
+          (error as NodeJS.ErrnoException).code ?? '',
+        )
+      )
+        return { ok: false, error: 'The project directory is missing or inaccessible.' };
+      throw error;
+    }
+    const existing = (await this.store.list()).find((project) => project.root === root);
+    if (existing) return { ok: true, project: existing };
+    const project: Project = {
+      id: createHash('sha256').update(root).digest('hex'),
+      root,
+      name: input.name ?? path.basename(root),
+    };
     await this.store.save(project);
     this.events.publish({ type: 'project.connected', data: project });
-    return project;
+    return { ok: true, project };
   }
 
   /** Disconnects the project record while preserving its files and historical workspaces. */

@@ -15,7 +15,9 @@ export class TaskService implements Tasks {
 
   /** Lists tasks, optionally restricted to one project. */
   async list(input: { projectId?: string } = {}): Promise<Task[]> {
-    return (await this.store.list()).filter(task => !input.projectId || task.projectId === input.projectId);
+    return (await this.store.list()).filter(
+      (task) => !input.projectId || task.projectId === input.projectId,
+    );
   }
 
   /** Returns one task, or undefined for a missing ID. */

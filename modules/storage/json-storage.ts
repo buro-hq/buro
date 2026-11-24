@@ -26,7 +26,7 @@ export class JsonStorage implements StorageEngine {
 
   /** Waits for every module's pending writes. */
   async close(): Promise<void> {
-    await Promise.all([...this.stores.values()].map(store => store.flush()));
+    await Promise.all([...this.stores.values()].map((store) => store.flush()));
   }
 }
 
@@ -64,7 +64,7 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
   }
 
   async get(id: string): Promise<T | undefined> {
-    return (await this.list()).find(record => record.id === id);
+    return (await this.list()).find((record) => record.id === id);
   }
 
   async list(): Promise<T[]> {
@@ -74,15 +74,28 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
 
   async save(record: T): Promise<void> {
     const copy = structuredClone(record);
-    await this.write(records => {
-      const index = records.findIndex(item => item.id === copy.id);
+    await this.write((records) => {
+      const index = records.findIndex((item) => item.id === copy.id);
       if (index < 0) return [...records, copy];
-      return records.map((item, position) => position === index ? copy : item);
+      return records.map((item, position) => (position === index ? copy : item));
     });
   }
 
   async delete(id: string): Promise<void> {
-    await this.write(records => records.filter(record => record.id !== id));
+    await this.write((records) => records.filter((record) => record.id !== id));
+  }
+
+  async patch(input: { id: string; changes: Partial<Omit<T, 'id'>> }): Promise<T | undefined> {
+    const changes = structuredClone(input.changes);
+    let updated: T | undefined;
+    await this.write((records) =>
+      records.map((record) => {
+        if (record.id !== input.id) return record;
+        updated = { ...record, ...changes, id: record.id };
+        return updated;
+      }),
+    );
+    return updated ? structuredClone(updated) : undefined;
   }
 
   async flush(): Promise<void> {

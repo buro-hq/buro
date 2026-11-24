@@ -4,7 +4,7 @@ import type { ModelProvider, ModelMessage } from '../../agent/contracts/model.ts
 export interface AdapterState {
   id: string;
   sessionId: string;
-  index: number;
+  messageId: string;
   modelId: string;
   providerRevision: string;
   continuation: unknown;
@@ -40,8 +40,21 @@ export interface Models {
   list(): ModelInfo[];
   /** Changes the default for new sessions. */
   select(input: { id: string }): boolean;
+  /** Removes a model from future routing; stored conversations remain. */
+  remove(input: { id: string }): void;
   /** Saves a response's private adapter state. */
-  remember(input: { sessionId: string; index: number; modelId: string; continuation: unknown }): Promise<void>;
+  remember(input: {
+    sessionId: string;
+    messageId: string;
+    modelId: string;
+    providerRevision: string;
+    continuation: unknown;
+  }): Promise<void>;
   /** Attaches state owned by the selected adapter to a detached request view. */
-  context(input: { sessionId: string; modelId: string; messages: ModelMessage[] }): Promise<ModelMessage[]>;
+  context(input: {
+    sessionId: string;
+    modelId: string;
+    providerRevision: string;
+    messages: (ModelMessage & { id?: string })[];
+  }): Promise<ModelMessage[]>;
 }

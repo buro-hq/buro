@@ -22,7 +22,9 @@ export class EventBus implements Notifications {
       try {
         const pending = listener(structuredClone(notification));
         if (pending) void pending.catch(this.report);
-      } catch (error) { this.report(error); }
+      } catch (error) {
+        this.report(error);
+      }
     }
   }
 }

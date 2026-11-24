@@ -1,0 +1,115 @@
+import { z } from 'zod';
+import type { Application } from '../application/application.ts';
+import type { ApiMethods } from './contract.ts';
+
+const id = z.object({ id: z.string() });
+const empty = z.object({});
+const task = z.object({ projectId: z.string(), title: z.string(), description: z.string() });
+const runOptions = z.object({
+  modelId: z.string().optional(),
+  instructions: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+  readOnly: z.boolean().optional(),
+  base: z.string().optional(),
+});
+const configuration = z.object({
+  id: z.string().optional(),
+  name: z.string(),
+  transport: z.string(),
+  endpoint: z.string(),
+  model: z.string(),
+  contextTokens: z.number().int().positive().optional(),
+  outputTokens: z.number().int().positive().optional(),
+  local: z.boolean().optional(),
+  thinking: z.boolean().optional(),
+  reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
+  reasoningBudgetTokens: z.number().int().min(-1).optional(),
+  capacity: z.number().int().positive().optional(),
+  sampling: z
+    .object({
+      temperature: z.number().nonnegative().optional(),
+      topP: z.number().min(0).max(1).optional(),
+      presencePenalty: z.number().optional(),
+    })
+    .optional(),
+});
+
+function method<P, R>(
+  schema: z.ZodType<P>,
+  execute: (params: P) => R | Promise<R>,
+): (input: unknown) => Promise<R> {
+  return async (input) => await execute(schema.parse(input));
+}
+
+/** Validates untrusted command input once, at the application transport boundary. */
+export function apiMethods(app: Application): {
+  [K in keyof ApiMethods]: (params: unknown) => Promise<ApiMethods[K]['result']>;
+} {
+  return {
+    'projects.list': method(empty, () => app.projects.list()),
+    'projects.get': method(id, (input) => app.projects.get(input)),
+    'projects.connect': method(
+      z.object({ root: z.string(), name: z.string().optional() }),
+      (input) => app.projects.connect(input),
+    ),
+    'projects.disconnect': method(id, (input) => app.projects.disconnect(input)),
+    'tasks.list': method(z.object({ projectId: z.string().optional() }), (input) =>
+      app.tasks.list(input),
+    ),
+    'tasks.get': method(id, (input) => app.tasks.get(input)),
+    'tasks.create': method(task, (input) => app.tasks.create(input)),
+    'tasks.update': method(task.extend({ id: z.string() }), (input) => app.tasks.update(input)),
+    'tasks.delete': method(id, (input) => app.tasks.delete(input)),
+    'runs.list': method(
+      z.object({ projectId: z.string().optional(), taskId: z.string().optional() }),
+      (input) => app.runs.list(input),
+    ),
+    'runs.get': method(id, (input) => app.runs.get(input)),
+    'runs.start': method(
+      z.object({ taskId: z.string(), options: runOptions.optional() }),
+      (input) => app.runs.start(input),
+    ),
+    'runs.retry': method(z.object({ id: z.string(), options: runOptions.optional() }), (input) =>
+      app.runs.retry(input),
+    ),
+    'runs.cancel': method(id, (input) => app.runs.cancel(input)),
+    'sessions.list': method(z.object({ runId: z.string().optional() }), (input) =>
+      app.sessions.list(input),
+    ),
+    'sessions.get': method(id, (input) => app.sessions.get(input)),
+    'sessions.model': method(z.object({ sessionId: z.string(), modelId: z.string() }), (input) =>
+      app.sessions.switchModel(input),
+    ),
+    'activity.list': method(
+      z.object({ sessionId: z.string().optional(), runId: z.string().optional() }),
+      (input) => app.activity.list(input),
+    ),
+    'agents.list': method(empty, () => app.agents.list()),
+    'agents.save': method(
+      z.object({
+        id: z.string().optional(),
+        name: z.string(),
+        description: z.string(),
+        instructions: z.string(),
+        tools: z.array(z.string()).optional(),
+      }),
+      (input) => app.agents.save(input),
+    ),
+    'agents.delete': method(id, (input) => app.agents.delete(input)),
+    'models.list': method(empty, () => app.modelConfigurations.list()),
+    'models.save': method(
+      z.object({
+        configuration,
+        apiKey: z.string().nullable().optional(),
+        default: z.boolean().optional(),
+      }),
+      (input) => app.modelConfigurations.save(input),
+    ),
+    'models.default': method(id, (input) => app.modelConfigurations.select(input)),
+    'models.delete': method(id, (input) => app.modelConfigurations.delete(input)),
+    'settings.get': method(empty, () => app.settings.get()),
+    'settings.update': method(z.object({ instructions: z.string().optional() }), (input) =>
+      app.settings.update(input),
+    ),
+  };
+}

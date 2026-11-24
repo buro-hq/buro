@@ -9,7 +9,8 @@ export class SqliteStorage implements StorageEngine {
 
   /** Opens an existing database or creates a private database at the supplied path. */
   constructor(input: { filename: string }) {
-    if (input.filename !== ':memory:') mkdirSync(path.dirname(input.filename), { recursive: true, mode: 0o700 });
+    if (input.filename !== ':memory:')
+      mkdirSync(path.dirname(input.filename), { recursive: true, mode: 0o700 });
     this.database = new DatabaseSync(input.filename);
     this.database.exec(`
       PRAGMA journal_mode=WAL;
@@ -29,16 +30,38 @@ export class SqliteStorage implements StorageEngine {
     const database = this.database;
     return {
       async get(id) {
-        const row = database.prepare('SELECT data FROM records WHERE namespace=? AND id=?').get(namespace, id);
-        return row ? JSON.parse(String(row.data)) as T : undefined;
+        const row = database
+          .prepare('SELECT data FROM records WHERE namespace=? AND id=?')
+          .get(namespace, id);
+        return row ? (JSON.parse(String(row.data)) as T) : undefined;
       },
       async list() {
-        return database.prepare('SELECT data FROM records WHERE namespace=? ORDER BY rowid').all(namespace)
-          .map(row => JSON.parse(String(row.data)) as T);
+        return database
+          .prepare('SELECT data FROM records WHERE namespace=? ORDER BY rowid')
+          .all(namespace)
+          .map((row) => JSON.parse(String(row.data)) as T);
       },
       async save(record) {
-        database.prepare('INSERT INTO records(namespace,id,data) VALUES (?,?,?) ON CONFLICT(namespace,id) DO UPDATE SET data=excluded.data')
+        database
+          .prepare(
+            'INSERT INTO records(namespace,id,data) VALUES (?,?,?) ON CONFLICT(namespace,id) DO UPDATE SET data=excluded.data',
+          )
           .run(namespace, record.id, JSON.stringify(record));
+      },
+      async patch(input) {
+        const row = database
+          .prepare('SELECT data FROM records WHERE namespace=? AND id=?')
+          .get(namespace, input.id);
+        if (!row) return undefined;
+        const next = {
+          ...JSON.parse(String(row.data)),
+          ...structuredClone(input.changes),
+          id: input.id,
+        } as T;
+        database
+          .prepare('UPDATE records SET data=? WHERE namespace=? AND id=?')
+          .run(JSON.stringify(next), namespace, input.id);
+        return structuredClone(next);
       },
       async delete(id) {
         database.prepare('DELETE FROM records WHERE namespace=? AND id=?').run(namespace, id);

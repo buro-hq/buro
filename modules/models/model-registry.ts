@@ -14,28 +14,49 @@ export class ModelRegistry implements Models {
   }
 
   /** Retains adapter-owned state without adding private data to messages or notifications. */
-  async remember(input: { sessionId: string; index: number; modelId: string; continuation: unknown }): Promise<void> {
+  async remember(input: {
+    sessionId: string;
+    messageId: string;
+    modelId: string;
+    providerRevision: string;
+    continuation: unknown;
+  }): Promise<void> {
     if (input.continuation === undefined || !this.adapterState) return;
-    const model = this.models.get(input.modelId);
-    if (!model) return;
-    await this.adapterState.save({ ...input, id: `${input.sessionId}:${input.index}`,
-      providerRevision: model.provider.revision });
+    await this.adapterState.save({ ...input, id: `${input.sessionId}:${input.messageId}` });
   }
 
   /** Attaches only private continuation owned by the currently selected adapter. */
-  async context(input: { sessionId: string; modelId: string; messages: ModelMessage[] }): Promise<ModelMessage[]> {
-    const model = this.models.get(input.modelId);
-    if (!model || !this.adapterState) return structuredClone(input.messages);
-    return Promise.all(input.messages.map(async (message, index) => {
-      const state = await this.adapterState!.get(`${input.sessionId}:${index}`);
-      return state?.modelId === input.modelId && state.providerRevision === model.provider.revision
-        ? { ...structuredClone(message), continuation: state.continuation } : structuredClone(message);
-    }));
+  async context(input: {
+    sessionId: string;
+    modelId: string;
+    providerRevision: string;
+    messages: (ModelMessage & { id?: string })[];
+  }): Promise<ModelMessage[]> {
+    if (!this.adapterState) return structuredClone(input.messages);
+    return Promise.all(
+      input.messages.map(async (message) => {
+        const state = message.id
+          ? await this.adapterState!.get(`${input.sessionId}:${message.id}`)
+          : undefined;
+        return state?.modelId === input.modelId && state.providerRevision === input.providerRevision
+          ? { ...structuredClone(message), continuation: state.continuation }
+          : structuredClone(message);
+      }),
+    );
   }
 
   /** Adds or replaces a model; the first registered model becomes the default. */
   register(input: Model & { default?: boolean }): void {
-    const { default: selected, ...model } = input;
+    const {
+      default: selected,
+      id,
+      name,
+      provider,
+      model: modelId,
+      contextTokens,
+      outputTokens,
+    } = input;
+    const model: Model = { id, name, provider, model: modelId, contextTokens, outputTokens };
     this.models.set(model.id, model);
     if (!this.defaultId || selected) this.defaultId = model.id;
   }
@@ -48,9 +69,16 @@ export class ModelRegistry implements Models {
 
   /** Returns safe metadata for model selectors, tools and clients. */
   list(): ModelInfo[] {
-    return [...this.models.values()].map(({ id, name, model, provider, contextTokens, outputTokens }) => ({
-      id, name, model, providerId: provider.id, contextTokens, outputTokens,
-    }));
+    return [...this.models.values()].map(
+      ({ id, name, model, provider, contextTokens, outputTokens }) => ({
+        id,
+        name,
+        model,
+        providerId: provider.id,
+        contextTokens,
+        outputTokens,
+      }),
+    );
   }
 
   /** Selects the application default without changing existing sessions. */
@@ -58,5 +86,11 @@ export class ModelRegistry implements Models {
     if (!this.models.has(input.id)) return false;
     this.defaultId = input.id;
     return true;
+  }
+
+  /** Removes a transport and selects another default when needed. */
+  remove(input: { id: string }): void {
+    this.models.delete(input.id);
+    if (this.defaultId === input.id) this.defaultId = this.models.keys().next().value;
   }
 }

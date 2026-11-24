@@ -7,6 +7,7 @@ export interface ToolContext {
   projectId?: string;
   workspace: string;
   readOnly?: boolean;
+  tools?: string[];
   signal: AbortSignal;
 }
 
@@ -32,7 +33,12 @@ export interface Tools {
   /** Describes tools available to this invocation. */
   definitions(input?: { names?: string[]; readOnly?: boolean }): ToolDefinition[];
   /** Executes one advertised action and returns expected failures as feedback. */
-  execute(input: { name: string; arguments: unknown; context: ToolContext; names?: string[] }): Promise<ToolResult>;
+  execute(input: {
+    name: string;
+    arguments: unknown;
+    context: ToolContext;
+    names?: string[];
+  }): Promise<ToolResult>;
 }
 
 /** An expected tool failure that should be shown to the agent as feedback. */
