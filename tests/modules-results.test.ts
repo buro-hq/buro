@@ -48,10 +48,9 @@ test('initial dirty source becomes the baseline; results preserve binary/mode ch
     model: 'fixture',
     contextTokens: 32768,
     outputTokens: 8192,
-    provider: {
+    backend: {
       id: 'fixture',
       revision: 'one',
-      local: true,
       async complete() {
         return {
           model: 'fixture',
@@ -115,10 +114,9 @@ test('an invalid base is an ordinary start result and does not leave an idle ses
     model: 'fixture',
     contextTokens: 32768,
     outputTokens: 8192,
-    provider: {
+    backend: {
       id: 'fixture',
       revision: 'one',
-      local: true,
       async complete() {
         throw new Error('Must not request inference');
       },

@@ -52,15 +52,17 @@ export class SqliteStorage implements StorageEngine {
         const row = database
           .prepare('SELECT data FROM records WHERE namespace=? AND id=?')
           .get(namespace, input.id);
-        if (!row) return undefined;
+        if (!row && !input.initial) return undefined;
         const next = {
-          ...JSON.parse(String(row.data)),
+          ...(row ? JSON.parse(String(row.data)) : structuredClone(input.initial)),
           ...structuredClone(input.changes),
           id: input.id,
         } as T;
         database
-          .prepare('UPDATE records SET data=? WHERE namespace=? AND id=?')
-          .run(JSON.stringify(next), namespace, input.id);
+          .prepare(
+            'INSERT INTO records(namespace,id,data) VALUES (?,?,?) ON CONFLICT(namespace,id) DO UPDATE SET data=excluded.data',
+          )
+          .run(namespace, input.id, JSON.stringify(next));
         return structuredClone(next);
       },
       async delete(id) {

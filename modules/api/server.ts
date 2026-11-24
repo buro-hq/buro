@@ -1,7 +1,8 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
+import { timingSafeEqual } from 'node:crypto';
 import type { Application } from '../application/application.ts';
-import type { ApiNotification, ApiResponse } from './contract.ts';
+import type { ApiNotification, ApiResponse, ApiAuthenticated } from './contract.ts';
 import { apiMethods } from './dispatch.ts';
 
 /** A local transport owns sockets, not application state or execution decisions. */
@@ -32,6 +33,7 @@ const allowedOrigin = (origin?: string) => {
 /** Starts a loopback-only API using ordinary feature methods and detached notifications. */
 export async function startApiServer(input: {
   application: Application;
+  token: string;
   port?: number;
   report?: (error: unknown) => void;
 }): Promise<ApiServer> {
@@ -53,11 +55,13 @@ export async function startApiServer(input: {
     throw error;
   }
   const pending = new Set<Promise<void>>();
-  const send = (socket: WebSocket, message: ApiResponse | ApiNotification) => {
+  const authenticated = new WeakSet<WebSocket>();
+  const send = (socket: WebSocket, message: ApiResponse | ApiNotification | ApiAuthenticated) => {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
   };
   const unsubscribe = app.events.subscribe((notification) => {
-    for (const socket of server.clients) send(socket, { type: 'notification', notification });
+    for (const socket of server.clients)
+      if (authenticated.has(socket)) send(socket, { type: 'notification', notification });
   });
   server.on('connection', (socket) => {
     socket.on('error', (error) => input.report?.(error));
@@ -65,7 +69,26 @@ export async function startApiServer(input: {
       const work = (async () => {
         let id = 'invalid';
         try {
-          const parsed = request.parse(JSON.parse(bytes.toString()));
+          const body: unknown = JSON.parse(bytes.toString());
+          if (!authenticated.has(socket)) {
+            const auth = z
+              .object({ type: z.literal('authenticate'), token: z.string() })
+              .safeParse(body);
+            const actual = Buffer.from(auth.success ? auth.data.token : '');
+            const expected = Buffer.from(input.token);
+            if (
+              !auth.success ||
+              actual.length !== expected.length ||
+              !timingSafeEqual(actual, expected)
+            ) {
+              socket.close(1008, 'Authentication required');
+              return;
+            }
+            authenticated.add(socket);
+            send(socket, { type: 'authenticated' });
+            return;
+          }
+          const parsed = request.parse(body);
           id = parsed.id;
           const invoke = Object.hasOwn(methods, parsed.method)
             ? methods[parsed.method as keyof typeof methods]

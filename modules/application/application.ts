@@ -2,6 +2,7 @@ import type { Agents } from '../agents/agent.ts';
 import type { Notifications } from '../events/notifications.ts';
 import type { ModelConfigurations } from '../models/model-configuration.ts';
 import type { Models } from '../models/model.ts';
+import type { Materials } from '../materials/material.ts';
 import type { Projects } from '../projects/project.ts';
 import type { Runs } from '../runs/run.ts';
 import type { Results } from '../results/result.ts';
@@ -16,6 +17,7 @@ export interface Application {
   agents: Agents;
   events: Notifications;
   models: Models;
+  materials: Materials;
   modelConfigurations: ModelConfigurations;
   projects: Projects;
   runs: Runs;

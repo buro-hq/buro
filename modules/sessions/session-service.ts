@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { ModelCompletion } from '../../agent/contracts/model.ts';
+import type { ModelCompletion, ModelToolCall } from '../../agent/contracts/model.ts';
 import type { Notifications } from '../events/notifications.ts';
 import type { Models } from '../models/model.ts';
-import type { ToolContext, Tools } from '../tools/tool.ts';
+import type { ToolContext, Tools, ToolResult } from '../tools/tool.ts';
 import type { ActivityHistory } from './activity.ts';
 import { conversationContext } from './context.ts';
 import { settledHistory } from './history.ts';
@@ -168,6 +168,11 @@ export class SessionService implements Sessions {
 
   /** Executes model requests and tool calls until the agent returns a result or the caller stops it. */
   async run(input: SessionTurn): Promise<SessionResult> {
+    input = {
+      ...input,
+      tools: input.tools ? [...input.tools] : undefined,
+      schema: structuredClone(input.schema),
+    };
     if (this.active.has(input.sessionId))
       return { ok: false, sessionId: input.sessionId, error: 'This session is already running.' };
     const controller = new AbortController();
@@ -226,7 +231,7 @@ export class SessionService implements Sessions {
         const privateMessages = await this.models.context({
           sessionId: session.id,
           modelId: model.id,
-          providerRevision: model.provider.revision,
+          providerRevision: model.backend.revision,
           messages: session.messages,
         });
         const context = conversationContext({
@@ -235,25 +240,67 @@ export class SessionService implements Sessions {
           outputTokens: model.outputTokens,
           toolTokens: Math.ceil(JSON.stringify(definitions).length / 4),
         });
-        const messages = model.provider.contextMessages?.(context) ?? context;
-        const response = await model.provider.complete({
-          requestId,
-          model: model.model,
-          messages,
-          tools: definitions,
-          schema: input.schema,
-          maxOutputTokens: model.outputTokens,
-          contextTokens: model.contextTokens,
+        const messages = model.backend.contextMessages?.(context) ?? context;
+        const toolContext: ToolContext = {
+          sessionId: session.id,
+          runId: session.runId,
+          workspace: input.workspace,
+          projectId: input.projectId,
+          readOnly: input.readOnly,
+          tools: input.tools,
           signal: controller.signal,
-          onProgress() {},
-          onEvent: (event) => {
-            if (event.type === 'text.delta')
-              this.events.publish({
-                type: 'session.text',
-                data: { sessionId: session!.id, requestId, text: event.text },
+        };
+        let callbacks: Promise<void> = Promise.resolve();
+        let response: ModelCompletion;
+        try {
+          response = await model.backend.complete({
+            sessionId: session.id,
+            workspace: input.workspace,
+            readOnly: input.readOnly,
+            executeTool: (call) => {
+              const operation = callbacks.then(async () => {
+                session = {
+                  ...session!,
+                  messages: [
+                    ...session!.messages,
+                    {
+                      id: randomUUID(),
+                      role: 'assistant',
+                      content: '',
+                      toolCalls: [call],
+                      modelId: model.id,
+                    },
+                  ],
+                };
+                await this.save(session);
+                const executed = await this.performTool({ session, call, context: toolContext });
+                session = executed.session;
+                return executed.result;
               });
-          },
-        });
+              callbacks = operation.then(() => {});
+              void callbacks.catch(() => {});
+              return operation;
+            },
+            requestId,
+            model: model.model,
+            messages,
+            tools: definitions,
+            schema: input.schema,
+            maxOutputTokens: model.outputTokens,
+            contextTokens: model.contextTokens,
+            signal: controller.signal,
+            onProgress() {},
+            onEvent: (event) => {
+              if (event.type === 'text.delta')
+                this.events.publish({
+                  type: 'session.text',
+                  data: { sessionId: session!.id, requestId, text: event.text },
+                });
+            },
+          });
+        } finally {
+          await callbacks;
+        }
         // Correlation IDs are a transport boundary, not an agent policy. Invalid batches
         // cannot be executed or appended as an ambiguous tool exchange.
         const calls = response.message.toolCalls ?? [];
@@ -284,11 +331,37 @@ export class SessionService implements Sessions {
           sessionId: session.id,
           messageId,
           modelId: model.id,
-          providerRevision: model.provider.revision,
+          providerRevision: model.backend.revision,
           continuation: response.message.continuation,
         });
         session = this.withResponse({ session, response, messageId, modelId: model.id });
         await this.save(session);
+        const switched = this.active.get(session.id)?.modelId;
+        if (switched && switched !== model.id) {
+          session = {
+            ...session,
+            modelId: switched,
+            messages: [
+              ...session.messages,
+              ...calls.map((call) => ({
+                id: randomUUID(),
+                role: 'tool' as const,
+                toolCallId: call.id,
+                toolName: call.name,
+                content:
+                  'The model changed before this proposal was dispatched. No action was performed.',
+              })),
+              {
+                id: randomUUID(),
+                role: 'user',
+                content:
+                  'Continue this task with the selected model using the saved files and observed work. Inspect current state rather than repeating completed actions.',
+              },
+            ],
+          };
+          await this.save(session);
+          continue;
+        }
         if (response.finish === 'length' || (calls.length > 0 && response.finish === 'stop')) {
           session = {
             ...session,
@@ -323,43 +396,8 @@ export class SessionService implements Sessions {
             sessionId: session.id,
             text: response.message.content,
           });
-        const toolContext: ToolContext = {
-          sessionId: session.id,
-          runId: session.runId,
-          workspace: input.workspace,
-          projectId: input.projectId,
-          readOnly: input.readOnly,
-          tools: input.tools,
-          signal: controller.signal,
-        };
         for (const call of calls) {
-          controller.signal.throwIfAborted();
-          const action = await this.activity.append({
-            sessionId: session.id,
-            runId: session.runId,
-            type: 'tool.started',
-            data: { call },
-          });
-          const result = await this.tools.execute({
-            name: call.name,
-            arguments: call.arguments,
-            context: toolContext,
-            names: input.tools,
-          });
-          await this.activity.append({
-            sessionId: session.id,
-            runId: session.runId,
-            type: 'tool.completed',
-            data: { actionId: action.id, call, result },
-          });
-          session = {
-            ...session,
-            messages: [
-              ...session.messages,
-              { role: 'tool', content: result.content, toolCallId: call.id, toolName: call.name },
-            ],
-          };
-          await this.save(session);
+          session = (await this.performTool({ session, call, context: toolContext })).session;
         }
       }
     } catch (error) {
@@ -381,6 +419,48 @@ export class SessionService implements Sessions {
       this.active.delete(input.sessionId);
       resolveSettled();
     }
+  }
+
+  private async performTool(input: {
+    session: Session;
+    call: ModelToolCall;
+    context: ToolContext;
+  }): Promise<{ session: Session; result: ToolResult }> {
+    const { session, call, context } = input;
+    context.signal.throwIfAborted();
+    const action = await this.activity.append({
+      sessionId: session.id,
+      runId: session.runId,
+      type: 'tool.started',
+      data: { call },
+    });
+    const result = await this.tools.execute({
+      name: call.name,
+      arguments: call.arguments,
+      context,
+      names: context.tools,
+    });
+    await this.activity.append({
+      sessionId: session.id,
+      runId: session.runId,
+      type: 'tool.completed',
+      data: { actionId: action.id, call, result },
+    });
+    const next: Session = {
+      ...session,
+      messages: [
+        ...session.messages,
+        {
+          id: randomUUID(),
+          role: 'tool',
+          content: result.content,
+          toolCallId: call.id,
+          toolName: call.name,
+        },
+      ],
+    };
+    await this.save(next);
+    return { session: next, result };
   }
 
   private withResponse(input: {

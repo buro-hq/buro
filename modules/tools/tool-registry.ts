@@ -7,7 +7,11 @@ export class ToolRegistry implements Tools {
 
   /** Registers or replaces one tool without changing unrelated tools. */
   register(tool: Tool): void {
-    this.tools.set(tool.definition.name, { ...tool, definition: structuredClone(tool.definition) });
+    this.tools.set(tool.definition.name, {
+      effect: tool.effect,
+      definition: structuredClone(tool.definition),
+      execute: tool.execute.bind(tool),
+    });
   }
 
   /** Lists tools selected for this invocation, excluding effects forbidden by its access. */
@@ -37,7 +41,10 @@ export class ToolRegistry implements Tools {
     try {
       return await tool.execute({
         arguments: structuredClone(input.arguments),
-        context: input.context,
+        context: {
+          ...input.context,
+          tools: input.context.tools ? [...input.context.tools] : undefined,
+        },
       });
     } catch (error) {
       if (error instanceof ToolFailure) return { content: error.message, isError: true };

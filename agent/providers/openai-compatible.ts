@@ -22,7 +22,7 @@ export type OpenAICompatibleOptions = HttpOptions & {
   apiKey?: () => string | undefined;
   responseFormat?: 'json_schema' | 'json_object' | 'instruction';
   maxTokenField?: 'max_tokens' | 'max_completion_tokens';
-  reasoningEffort?: 'low' | 'medium' | 'high';
+  reasoningEffort?: string;
   enableThinking?: boolean;
   reasoningBudgetTokens?: number;
   thinking?: 'enabled' | 'disabled';

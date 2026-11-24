@@ -6,12 +6,14 @@ import path from 'node:path';
 import { createApplication } from '../modules/application/create-application.ts';
 import { startApiServer } from '../modules/api/server.ts';
 import { ApiClient } from '../modules/api/client.ts';
+import { apiCredential } from '../modules/api/credentials.ts';
 
 test('the feature API validates external inputs, persists edits, sends safe notifications and reconnects without replay', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-feature-api-'));
   const app = await createApplication({ directory });
-  const server = await startApiServer({ application: app, port: 0 });
-  const client = new ApiClient({ url: `ws://127.0.0.1:${server.port}` });
+  const token = 'test-local-api-token';
+  const server = await startApiServer({ application: app, port: 0, token });
+  const client = new ApiClient({ url: `ws://127.0.0.1:${server.port}`, token });
   t.after(async () => {
     client.close();
     await server.close();
@@ -22,6 +24,11 @@ test('the feature API validates external inputs, persists edits, sends safe noti
   client.subscribe((notification) => {
     notifications.push(notification);
   });
+  const untrusted = new ApiClient({ url: `ws://127.0.0.1:${server.port}`, token: 'wrong-token' });
+  const previous = await app.settings.get();
+  await assert.rejects(untrusted.call('settings.update', { instructions: 'Untrusted change' }));
+  untrusted.close();
+  assert.equal((await app.settings.get()).instructions, previous.instructions);
   assert.deepEqual(await client.call('projects.list', {}), []);
   const missing = await client.call('projects.connect', { root: path.join(directory, 'missing') });
   assert.equal(missing.ok, false);
@@ -65,6 +72,10 @@ test('the feature API validates external inputs, persists edits, sends safe noti
     socket.onopen = () => resolve();
     socket.onerror = reject;
   });
+  await new Promise<void>((resolve) => {
+    socket.onmessage = () => resolve();
+    socket.send(JSON.stringify({ type: 'authenticate', token }));
+  });
   t.after(() => {
     socket.close();
   });
@@ -82,4 +93,12 @@ test('the feature API validates external inputs, persists edits, sends safe noti
     false,
   );
   assert.equal((await raw('__proto__', {})).ok, false);
+});
+
+test('concurrent local clients receive the same complete private API credential', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-api-credential-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const tokens = await Promise.all(Array.from({ length: 8 }, () => apiCredential({ directory })));
+  assert.ok(tokens.every((token) => token === tokens[0] && token.length === 64));
+  assert.equal((await fs.stat(path.join(directory, 'private', 'api-token'))).mode & 0o077, 0);
 });

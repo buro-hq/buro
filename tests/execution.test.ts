@@ -738,11 +738,11 @@ test('Git checkpoints preserve original branch and next worktree begins at accep
   await fs.writeFile(path.join(two.path, '.git'), 'tampered');
   await assert.rejects(adapter.changes(two.path, two.base), /control data/);
 });
-test('CLI discovers servers under the same disabled-plugin config and verifies every MCP is off', async (t) => {
+test('native CLI starts in its workspace with external tools excluded from its process configuration', async (t) => {
   const f = await fixture(t),
     executable = path.resolve('tests/fixtures/configured-codex.mjs');
   await fs.chmod(executable, 0o755);
-  const probe = path.join(f.directory, 'discovery-cwd.txt'),
+  const probe = path.join(f.directory, 'launch-cwd.txt'),
     workspace = path.join(f.directory, 'worktree');
   await fs.mkdir(workspace);
   const previous = process.env.PROJECT_CLI_PROBE_OUTPUT;
@@ -760,7 +760,6 @@ test('CLI discovers servers under the same disabled-plugin config and verifies e
   const started = await runtime.start({ projectId: 'p', workspace, instructions: 'fixture' });
   assert.equal(started.threadId, 'fixture-thread');
   assert.deepEqual((await fs.readFile(probe, 'utf8')).trim().split('\n'), [
-    await fs.realpath(workspace),
     await fs.realpath(workspace),
   ]);
 });

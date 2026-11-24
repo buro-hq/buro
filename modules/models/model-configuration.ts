@@ -1,5 +1,5 @@
 import type { ModelSamplingSettings } from '../../agent/providers/sampling.ts';
-import type { ModelProvider } from '../../agent/contracts/model.ts';
+import type { SessionBackend } from '../engines/backend.ts';
 import type { RecordStore } from '../storage/record-store.ts';
 
 /** Public settings for one application-wide model connection. */
@@ -7,13 +7,13 @@ export interface ModelConfiguration {
   id: string;
   name: string;
   transport: string;
-  endpoint: string;
+  endpoint?: string;
   model: string;
   contextTokens: number;
   outputTokens: number;
   local: boolean;
   thinking?: boolean;
-  reasoningEffort?: 'low' | 'medium' | 'high';
+  reasoningEffort?: string;
   reasoningBudgetTokens?: number;
   sampling?: ModelSamplingSettings;
   capacity?: number;
@@ -31,7 +31,7 @@ export interface ModelConnection {
 export interface ModelTransport {
   id: string;
   /** Constructs a transport with its own credential resolver. */
-  create(input: { configuration: ModelConfiguration; apiKey?: string }): ModelProvider;
+  create(input: { configuration: ModelConfiguration; apiKey?: string }): SessionBackend;
 }
 
 /** Safe connection metadata, including availability without credentials. */
@@ -43,7 +43,7 @@ export interface ModelConfigurationView extends ModelConfiguration {
 /** Editable connection settings with working defaults. */
 export interface ModelConfigurationInput {
   configuration: Partial<Omit<ModelConfiguration, 'revision'>> &
-    Pick<ModelConfiguration, 'name' | 'transport' | 'endpoint' | 'model'>;
+    Pick<ModelConfiguration, 'name' | 'transport' | 'model'>;
   apiKey?: string | null;
   default?: boolean;
 }

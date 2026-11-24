@@ -1,7 +1,5 @@
-import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { EnvironmentExecutors, Launch } from '../environments/executors.ts';
-const exec = promisify(execFile);
 import readline from 'node:readline';
 import type { AgentRuntime, ProjectRegistry, RuntimeEvent } from '../../core/ports.ts';
 import { DomainError } from '../../core/ports.ts';
@@ -128,14 +126,12 @@ export class CodexRuntime implements AgentRuntime {
         : { executable: argv[0], args: argv.slice(1), cwd: root, env: process.env };
     const baseArgs = this.options.args
       ? [...codexModelArguments(this.options), ...this.options.args]
-      : await hardenedCodexArguments(
-          this.options.executable || 'codex',
-          root,
-          launch,
-          verificationVariables || world?.variables,
-          !!world?.container,
-          this.options,
-        );
+      : hardenedCodexArguments({
+          variables: verificationVariables || world?.variables,
+          container: !!world?.container,
+          model: this.options.model,
+          reasoningEffort: this.options.reasoningEffort,
+        });
     const args = [
       ...baseArgs,
       ...verificationArguments,
@@ -615,17 +611,16 @@ function codexModelArguments(options: Pick<RuntimeOptions, 'model' | 'reasoningE
 }
 
 /** Shared native CLI hardening and explicit model pin for direct and orchestrated runs. */
-export async function hardenedCodexArguments(
-  executable: string,
-  cwd: string,
-  launch: (argv: string[]) => Launch,
-  variables?: Record<string, string>,
-  container = false,
-  modelOptions: Pick<RuntimeOptions, 'model' | 'reasoningEffort'> = {},
-) {
-  const modelArguments = codexModelArguments(modelOptions);
+export function hardenedCodexArguments(
+  input: Pick<RuntimeOptions, 'model' | 'reasoningEffort'> & {
+    variables?: Record<string, string>;
+    container?: boolean;
+  } = {},
+): string[] {
+  const modelArguments = codexModelArguments(input);
   const config: Record<string, unknown> = {
     'features.multi_agent': false,
+    mcp_servers: {},
     'agents.enabled': false,
     'features.apps': false,
     'apps._default.enabled': false,
@@ -638,39 +633,19 @@ export async function hardenedCodexArguments(
     'features.goals': false,
     web_search: 'disabled',
     'shell_environment_policy.inherit': 'none',
-    'shell_environment_policy.set.PATH': container
+    'shell_environment_policy.set.PATH': input.container
       ? '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
       : process.env.PATH || '/usr/bin:/bin',
     ...Object.fromEntries(
-      Object.entries(variables || {}).map(([key, value]) => [
+      Object.entries(input.variables || {}).map(([key, value]) => [
         `shell_environment_policy.set.${key}`,
         value,
       ]),
     ),
   };
-  const flags = () => [
+  return [
     ...modelArguments,
     ...Object.entries(config).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]),
+    'app-server',
   ];
-  const list = async () => {
-    const spec = launch([executable, ...flags(), 'mcp', 'list', '--json']);
-    const result = await exec(spec.executable, spec.args, {
-      cwd: spec.cwd,
-      env: spec.env,
-      encoding: 'utf8',
-      timeout: 15000,
-      maxBuffer: 1024 * 1024,
-    });
-    return JSON.parse(result.stdout);
-  };
-  const servers = await list();
-  if (!Array.isArray(servers)) throw Error('Could not verify MCP configuration.');
-  for (const server of servers) {
-    if (typeof server.name !== 'string' || !/^[A-Za-z0-9_-]+$/.test(server.name))
-      throw Error('Unsupported MCP server name.');
-    config[`mcp_servers.${server.name}.enabled`] = false;
-  }
-  if (!(await list()).every((server: any) => server.enabled === false))
-    throw Error('Could not disable MCP for isolated execution.');
-  return [...flags(), 'app-server'];
 }

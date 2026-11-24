@@ -8,6 +8,9 @@ import { fileTools } from '../files/file-tools.ts';
 import { ModelCatalog } from '../models/model-catalog.ts';
 import { ModelRegistry } from '../models/model-registry.ts';
 import { modelTransports } from '../models/transports.ts';
+import { MaterialService } from '../materials/material-service.ts';
+import { materialTools } from '../materials/material-tools.ts';
+import type { MaterialLoader } from '../materials/material.ts';
 import type { ModelTransport } from '../models/model-configuration.ts';
 import { ProjectService } from '../projects/project-service.ts';
 import { RunService } from '../runs/run-service.ts';
@@ -28,6 +31,7 @@ export async function createApplication(input: {
   directory: string;
   storage?: StorageEngine;
   transports?: ModelTransport[];
+  materialLoaders?: MaterialLoader[];
   fetch?: typeof fetch;
   report?: (error: unknown) => void;
 }): Promise<Application> {
@@ -42,11 +46,17 @@ export async function createApplication(input: {
     models,
     settings,
     events,
-    transports: input.transports ?? modelTransports({ fetch: input.fetch }),
+    transports:
+      input.transports ?? modelTransports({ fetch: input.fetch, privatePaths: [privateDirectory] }),
   });
   const projects = new ProjectService({ store: storage.records('projects'), events });
   const tasks = new TaskService({ store: storage.records('tasks'), events });
   const agents = new AgentService({ store: storage.records('agents'), events });
+  const materials = new MaterialService({
+    store: storage.records('materials'),
+    events,
+    loaders: input.materialLoaders,
+  });
   const activity = new ActivityLog({ store: storage.records('activity') });
   const tools = new ToolRegistry();
   const sessions = new SessionService({
@@ -71,9 +81,11 @@ export async function createApplication(input: {
     sessions,
     workspaces,
     settings,
+    materials,
     events,
   });
   const results = new ResultService({ runs, projects, changes: new GitChanges(), events });
+  for (const tool of materialTools({ materials, runs })) tools.register(tool);
   try {
     await modelConfigurations.initialize();
     await sessions.recover();
@@ -87,6 +99,7 @@ export async function createApplication(input: {
     agents,
     events,
     models,
+    materials,
     modelConfigurations,
     projects,
     tasks,

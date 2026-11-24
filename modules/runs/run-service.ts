@@ -5,6 +5,7 @@ import type { Tasks } from '../tasks/task.ts';
 import type { Sessions } from '../sessions/session.ts';
 import type { Workspaces } from '../workspaces/workspace.ts';
 import type { Settings } from '../settings/settings.ts';
+import type { Materials } from '../materials/material.ts';
 import type { Run, RunStore, RunOptions, RunResult, Runs } from './run.ts';
 
 /** A run is one isolated attempt. Sessions own their tool loop and report their own result. */
@@ -16,6 +17,7 @@ export class RunService implements Runs {
   private workspaces: Workspaces;
   private events: Notifications;
   private settings: Settings;
+  private materials: Materials;
   private jobs = new Map<string, { controller: AbortController; promise: Promise<void> }>();
 
   /** Connects feature APIs through ordinary calls, without a workflow engine or role catalog. */
@@ -27,6 +29,7 @@ export class RunService implements Runs {
     workspaces: Workspaces;
     events: Notifications;
     settings: Settings;
+    materials: Materials;
   }) {
     this.store = input.store;
     this.tasks = input.tasks;
@@ -35,6 +38,7 @@ export class RunService implements Runs {
     this.workspaces = input.workspaces;
     this.events = input.events;
     this.settings = input.settings;
+    this.materials = input.materials;
   }
 
   /** Lists attempts, optionally restricted to one task or project. */
@@ -69,6 +73,7 @@ export class RunService implements Runs {
       return { ok: false, error: 'Stop the current attempt before starting its successor.' };
     const history = previous ? await this.sessions.get({ id: previous.sessionId }) : undefined;
     const settings = await this.settings.get();
+    const materials = await this.materials.list({ projectId: project.id, taskId: task.id });
     const id = randomUUID();
     const created = await this.sessions.create({
       runId: id,
@@ -110,23 +115,30 @@ export class RunService implements Runs {
       previousRunId: previous?.id,
       options: structuredClone(input.options ?? {}),
     };
-    await this.save(run);
     const controller = new AbortController();
     const prompt = [
       task.title,
       task.description,
+      materials.length
+        ? 'Attached context (read text ranges with material_read):\n' + JSON.stringify(materials)
+        : '',
       previous
         ? 'Continue from the saved files and previous conversation. This is a new attempt. Inspect the current state rather than repeating completed actions.'
         : '',
     ]
       .filter(Boolean)
       .join('\n\n');
-    const promise = this.execute({
-      run,
-      prompt,
-      options: input.options ?? {},
-      signal: controller.signal,
-    }).finally(() => this.jobs.delete(id));
+    let release!: (start: boolean) => void;
+    const ready = new Promise<boolean>((resolve) => {
+      release = resolve;
+    });
+    const promise = ready
+      .then((start) =>
+        start
+          ? this.execute({ run, prompt, options: input.options ?? {}, signal: controller.signal })
+          : undefined,
+      )
+      .finally(() => this.jobs.delete(id));
     this.jobs.set(id, { controller, promise });
     // Keep background failures observed; callers can still see them through wait/close.
     void promise.catch((error) =>
@@ -135,6 +147,13 @@ export class RunService implements Runs {
         data: { runId: id, error: error instanceof Error ? error.message : String(error) },
       }),
     );
+    try {
+      await this.save(run);
+      release(true);
+    } catch (error) {
+      release(false);
+      throw error;
+    }
     return { ok: true, run: structuredClone(run) };
   }
 
@@ -144,10 +163,11 @@ export class RunService implements Runs {
     if (!run) return { ok: false, error: 'Run not found.' };
     if (this.jobs.has(run.id))
       return { ok: false, error: 'Stop the current attempt before starting its successor.' };
+    const { modelId: _initialModel, base: _initialBase, ...retained } = run.options ?? {};
     return this.start({
       taskId: run.taskId,
       previousRunId: run.id,
-      options: { ...run.options, ...input.options },
+      options: { ...retained, ...input.options },
     });
   }
 

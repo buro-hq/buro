@@ -85,16 +85,25 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
     await this.write((records) => records.filter((record) => record.id !== id));
   }
 
-  async patch(input: { id: string; changes: Partial<Omit<T, 'id'>> }): Promise<T | undefined> {
+  async patch(input: {
+    id: string;
+    changes: Partial<Omit<T, 'id'>>;
+    initial?: T;
+  }): Promise<T | undefined> {
     const changes = structuredClone(input.changes);
+    const initial = structuredClone(input.initial);
     let updated: T | undefined;
-    await this.write((records) =>
-      records.map((record) => {
+    await this.write((records) => {
+      if (!records.some((record) => record.id === input.id) && initial) {
+        updated = { ...initial, ...changes, id: input.id };
+        return [...records, updated];
+      }
+      return records.map((record) => {
         if (record.id !== input.id) return record;
         updated = { ...record, ...changes, id: record.id };
         return updated;
-      }),
-    );
+      });
+    });
     return updated ? structuredClone(updated) : undefined;
   }
 

@@ -9,6 +9,7 @@ import { JsonStorage } from '../modules/storage/json-storage.ts';
 import { EventBus } from '../modules/events/event-bus.ts';
 import type { Notification } from '../modules/events/notifications.ts';
 import { ModelRegistry } from '../modules/models/model-registry.ts';
+import { ModelBackend } from '../modules/engines/model-backend.ts';
 import { ToolRegistry } from '../modules/tools/tool-registry.ts';
 import { ActivityLog } from '../modules/sessions/activity.ts';
 import { SessionService } from '../modules/sessions/session-service.ts';
@@ -22,6 +23,7 @@ import { sessionTools } from '../modules/agents/session-tools.ts';
 import { SandboxedCommands } from '../modules/commands/sandboxed-commands.ts';
 import { fileTools } from '../modules/files/file-tools.ts';
 import { SettingsService } from '../modules/settings/settings-service.ts';
+import { MaterialService } from '../modules/materials/material-service.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -67,7 +69,7 @@ function fixture(t: { after(callback: () => Promise<void>): void }) {
       model: id,
       contextTokens: 32768,
       outputTokens: 8192,
-      provider: { id, revision: id + '-v1', local: true, complete },
+      backend: new ModelBackend({ provider: { id, revision: id + '-v1', local: true, complete } }),
     });
   }
   return { storage, models, tools, activity, sessions, observations, model, events };
@@ -287,6 +289,10 @@ async function projectFixture(t: { after(callback: () => Promise<void>): void })
   const projects = new ProjectService({ store: f.storage.records('projects'), events: f.events });
   const tasks = new TaskService({ store: f.storage.records('tasks'), events: f.events });
   const settings = new SettingsService({ store: f.storage.records('settings'), events: f.events });
+  const materials = new MaterialService({
+    store: f.storage.records('materials'),
+    events: f.events,
+  });
   const runs = new RunService({
     store: f.storage.records('runs'),
     projects,
@@ -294,6 +300,7 @@ async function projectFixture(t: { after(callback: () => Promise<void>): void })
     sessions: f.sessions,
     workspaces: new GitWorkspaces({ directory: path.join(directory, 'workspaces') }),
     settings,
+    materials,
     events: f.events,
   });
   t.after(async () => {
@@ -383,13 +390,11 @@ test('recovery marks an abandoned run interrupted and a new attempt does not rep
   const previous = (await f.runs.start({ taskId: f.task.id })).run!;
   await f.runs.wait({ id: previous.id });
   const session = (await f.sessions.get({ id: previous.sessionId }))!;
-  await f.storage
-    .records('sessions')
-    .save({
-      ...session,
-      status: 'running',
-      messages: [...session.messages, tool('external-action').message],
-    });
+  await f.storage.records('sessions').save({
+    ...session,
+    status: 'running',
+    messages: [...session.messages, tool('external-action').message],
+  });
   await f.storage.records('runs').save({ ...previous, status: 'running' });
   let actions = 0;
   f.tools.register({
@@ -458,6 +463,55 @@ test('ambiguous tool IDs are a response failure, never authority to perform acti
   });
   assert.equal(result.ok, false);
   assert.equal(writes, 0);
+});
+
+test('cancelling a newly announced run takes effect before its first model request', async (t) => {
+  const f = await projectFixture(t);
+  let requests = 0;
+  f.model('local', async () => {
+    requests++;
+    return reply('Must not run');
+  });
+  f.events.subscribe((notification) => {
+    if (
+      notification.type === 'run.updated' &&
+      (notification.data as { status: string }).status === 'running'
+    )
+      f.runs.cancel({ id: (notification.data as { id: string }).id });
+  });
+  const started = (await f.runs.start({ taskId: f.task.id })).run!;
+  assert.equal((await f.runs.wait({ id: started.id }))!.status, 'interrupted');
+  assert.equal(requests, 0);
+});
+
+test('retry keeps the last selected model and original baseline unless the caller explicitly replaces them', async (t) => {
+  const f = await projectFixture(t);
+  f.model('initial', async () => reply('Initial result'));
+  f.model('selected', async () => reply('Selected model result'));
+  const first = (
+    await f.runs.start({ taskId: f.task.id, options: { modelId: 'initial', base: 'HEAD' } })
+  ).run!;
+  await f.runs.wait({ id: first.id });
+  await f.sessions.switchModel({ sessionId: first.sessionId, modelId: 'selected' });
+  await fs.writeFile(path.join(f.root, 'later.txt'), 'Later source work');
+  await exec('git', ['add', 'later.txt'], { cwd: f.root });
+  await exec(
+    'git',
+    [
+      '-c',
+      'core.hooksPath=/dev/null',
+      '-c',
+      'commit.gpgsign=false',
+      'commit',
+      '-qm',
+      'Later source work',
+    ],
+    { cwd: f.root },
+  );
+  const next = (await f.runs.retry({ id: first.id })).run!;
+  assert.equal(next.base, first.base);
+  assert.equal((await f.runs.wait({ id: next.id }))!.result, 'Selected model result');
+  await assert.rejects(fs.stat(path.join(next.workspace, 'later.txt')), { code: 'ENOENT' });
 });
 
 test('a collaborator can use another model, return feedback and retain explicit read-only access on follow-up', async (t) => {

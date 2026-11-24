@@ -51,12 +51,12 @@ export class ModelRegistry implements Models {
       default: selected,
       id,
       name,
-      provider,
+      backend,
       model: modelId,
       contextTokens,
       outputTokens,
     } = input;
-    const model: Model = { id, name, provider, model: modelId, contextTokens, outputTokens };
+    const model: Model = { id, name, backend, model: modelId, contextTokens, outputTokens };
     this.models.set(model.id, model);
     if (!this.defaultId || selected) this.defaultId = model.id;
   }
@@ -70,11 +70,11 @@ export class ModelRegistry implements Models {
   /** Returns safe metadata for model selectors, tools and clients. */
   list(): ModelInfo[] {
     return [...this.models.values()].map(
-      ({ id, name, model, provider, contextTokens, outputTokens }) => ({
+      ({ id, name, model, backend, contextTokens, outputTokens }) => ({
         id,
         name,
         model,
-        providerId: provider.id,
+        backendId: backend.id,
         contextTokens,
         outputTokens,
       }),

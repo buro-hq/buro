@@ -50,7 +50,6 @@ test('application restarts with persisted feature records, default model and pri
       return {
         id: configuration.id,
         revision: configuration.revision,
-        local: true,
         async complete(input) {
           requests.push(input.messages);
           return {
@@ -156,5 +155,18 @@ for (const backend of ['sqlite', 'json']) {
     ]);
     assert.deepEqual(await records.get('one'), { id: 'one', first: 1, second: 2 });
     assert.equal(await records.patch({ id: 'missing', changes: { first: 3 } }), undefined);
+    await Promise.all([
+      records.patch({
+        id: 'new',
+        initial: { id: 'new', first: 0, second: 0 },
+        changes: { first: 1 },
+      }),
+      records.patch({
+        id: 'new',
+        initial: { id: 'new', first: 0, second: 0 },
+        changes: { second: 2 },
+      }),
+    ]);
+    assert.deepEqual(await records.get('new'), { id: 'new', first: 1, second: 2 });
   });
 }

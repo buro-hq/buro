@@ -101,16 +101,16 @@ export class ModelCatalog implements ModelConfigurations {
       return { ok: false, error: 'API key contains invalid characters.' };
     const apiKey = input.apiKey === undefined ? previous?.apiKey : input.apiKey || undefined;
     // Construct before persisting so invalid endpoints do not become active settings.
-    let provider;
+    let backend;
     try {
-      provider = transport.create({ configuration, apiKey });
+      backend = transport.create({ configuration, apiKey });
     } catch (error) {
       if (isProviderFailure(error) && error.outcome === 'not-dispatched')
         return { ok: false, error: error.message };
       throw error;
     }
     await this.store.save({ id: configuration.id, configuration, apiKey });
-    this.models.register({ ...configuration, provider, default: input.default });
+    this.models.register({ ...configuration, backend, default: input.default });
     if (input.default || !(await this.settings.get()).defaultModelId)
       await this.settings.update({ defaultModelId: configuration.id });
     const view = { ...configuration, hasApiKey: !!apiKey, available: true };
@@ -120,9 +120,9 @@ export class ModelCatalog implements ModelConfigurations {
 
   /** Selects a default for new sessions; existing conversations retain their model. */
   async select(input: { id: string }): Promise<boolean> {
-    if (!this.models.select(input)) return false;
+    if (!this.models.get(input)) return false;
     await this.settings.update({ defaultModelId: input.id });
-    return true;
+    return this.models.select(input);
   }
 
   /** Removes a connection and its private credential; history remains available. */
@@ -141,7 +141,7 @@ export class ModelCatalog implements ModelConfigurations {
     if (!configuration || !transport) return;
     this.models.register({
       ...configuration,
-      provider: transport.create({ configuration, apiKey: connection?.apiKey }),
+      backend: transport.create({ configuration, apiKey: connection?.apiKey }),
     });
   }
 }

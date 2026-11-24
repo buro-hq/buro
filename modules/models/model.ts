@@ -1,4 +1,5 @@
-import type { ModelProvider, ModelMessage } from '../../agent/contracts/model.ts';
+import type { ModelMessage } from '../../agent/contracts/model.ts';
+import type { SessionBackend } from '../engines/backend.ts';
 
 /** Private transport state belongs to its model adapter, not public history. */
 export interface AdapterState {
@@ -14,7 +15,7 @@ export interface AdapterState {
 export interface Model {
   id: string;
   name: string;
-  provider: ModelProvider;
+  backend: SessionBackend;
   model: string;
   contextTokens: number;
   outputTokens: number;
@@ -24,7 +25,7 @@ export interface Model {
 export interface ModelInfo {
   id: string;
   name: string;
-  providerId: string;
+  backendId: string;
   model: string;
   contextTokens: number;
   outputTokens: number;

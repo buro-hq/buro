@@ -1,9 +1,10 @@
-import type { ApiMethods, ApiNotification, ApiResponse } from './contract.ts';
+import type { ApiMethods, ApiNotification, ApiResponse, ApiAuthenticated } from './contract.ts';
 import type { Notification } from '../events/notifications.ts';
 
 /** One socket client for browser, CLI and automation, without mutable domain projections. */
 export class ApiClient {
   private url: string;
+  private token: string;
   private socket?: WebSocket;
   private ready?: Promise<void>;
   private pending = new Map<
@@ -14,8 +15,9 @@ export class ApiClient {
   private sequence = 0;
 
   /** Selects the local daemon without connecting until explicitly requested. */
-  constructor(input: { url?: string } = {}) {
+  constructor(input: { url?: string; token: string }) {
     this.url = input.url ?? 'ws://127.0.0.1:4341';
+    this.token = input.token;
   }
 
   /** Opens one shared connection or joins the connection already being established. */
@@ -24,8 +26,13 @@ export class ApiClient {
     const socket = new WebSocket(this.url);
     this.socket = socket;
     this.ready = new Promise<void>((resolve, reject) => {
-      socket.onopen = () =>
-        this.socket === socket ? resolve() : reject(new Error('Connection was replaced.'));
+      socket.onopen = () => {
+        if (this.socket !== socket) {
+          reject(new Error('Connection was replaced.'));
+          return;
+        }
+        socket.send(JSON.stringify({ type: 'authenticate', token: this.token }));
+      };
       socket.onerror = () => reject(new Error('The Buro API is unavailable.'));
       socket.onclose = () => {
         reject(new Error('The Buro API connection closed.'));
@@ -39,7 +46,14 @@ export class ApiClient {
       socket.onmessage = (event) => {
         if (this.socket !== socket) return;
         try {
-          const message = JSON.parse(String(event.data)) as ApiResponse | ApiNotification;
+          const message = JSON.parse(String(event.data)) as
+            | ApiResponse
+            | ApiNotification
+            | ApiAuthenticated;
+          if ('type' in message && message.type === 'authenticated') {
+            resolve();
+            return;
+          }
           if ('type' in message && message.type === 'notification') {
             for (const listener of this.listeners) {
               try {

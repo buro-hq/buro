@@ -16,13 +16,13 @@ const configuration = z.object({
   id: z.string().optional(),
   name: z.string(),
   transport: z.string(),
-  endpoint: z.string(),
+  endpoint: z.string().optional(),
   model: z.string(),
   contextTokens: z.number().int().positive().optional(),
   outputTokens: z.number().int().positive().optional(),
   local: z.boolean().optional(),
   thinking: z.boolean().optional(),
-  reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
+  reasoningEffort: z.string().optional(),
   reasoningBudgetTokens: z.number().int().min(-1).optional(),
   capacity: z.number().int().positive().optional(),
   sampling: z
@@ -80,6 +80,28 @@ export function apiMethods(app: Application): {
       z.object({ runId: z.string(), revision: z.string().optional() }),
       (input) => app.results.apply(input),
     ),
+    'materials.list': method(
+      z.object({ projectId: z.string(), taskId: z.string().optional() }),
+      (input) => app.materials.list(input),
+    ),
+    'materials.upload': method(
+      z.object({
+        projectId: z.string(),
+        taskId: z.string().optional(),
+        name: z.string(),
+        contentBase64: z.string(),
+      }),
+      (input) => app.materials.upload(input),
+    ),
+    'materials.read': method(
+      id.extend({
+        line: z.number().int().positive().optional(),
+        count: z.number().int().positive().optional(),
+      }),
+      (input) => app.materials.read(input),
+    ),
+    'materials.download': method(id, (input) => app.materials.download(input)),
+    'materials.delete': method(id, (input) => app.materials.delete(input)),
     'sessions.list': method(z.object({ runId: z.string().optional() }), (input) =>
       app.sessions.list(input),
     ),

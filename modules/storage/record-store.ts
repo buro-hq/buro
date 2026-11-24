@@ -12,7 +12,11 @@ export interface RecordStore<T extends StoredRecord> {
   /** Inserts or replaces one record without changing the caller's object. */
   save(record: T): Promise<void>;
   /** Merges fields into the latest saved record without replacing unrelated concurrent updates. */
-  patch(input: { id: string; changes: Partial<Omit<T, 'id'>> }): Promise<T | undefined>;
+  patch(input: {
+    id: string;
+    changes: Partial<Omit<T, 'id'>>;
+    initial?: T;
+  }): Promise<T | undefined>;
   /** Removes one record, including when it has already been removed. */
   delete(id: string): Promise<void>;
 }

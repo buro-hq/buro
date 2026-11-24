@@ -273,7 +273,7 @@ test('native Codex explicitly rejects tools-free authority before lookup or proc
   await runtime.dispose();
 });
 
-test('native inspection requests a real read-only session and pins the same model before discovery and app-server', async (t) => {
+test('native inspection requests a real read-only session and launches the explicitly selected model', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-codex-pin-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const executable = path.join(directory, 'codex-fixture.mjs');
@@ -339,16 +339,17 @@ else {
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line) as string[]);
-  assert.equal(argv.length, 3);
-  for (const args of argv) {
+  const serverArgs = argv.find((args) => args.includes('app-server'));
+  assert.ok(serverArgs);
+  for (const args of [serverArgs]) {
     assert.ok(args.includes('model="gpt-6.1-sol"'));
     assert.ok(args.includes('model_reasoning_effort="high"'));
     assert.ok(args.includes('features.multi_agent=false'));
     assert.ok(args.includes('features.hooks=false'));
     assert.ok(args.includes('features.apps=false'));
+    assert.ok(args.includes('mcp_servers={}'));
     assert.equal(args.includes('--yolo'), false);
   }
-  assert.equal(argv[2].at(-1), 'app-server');
   const rpc = (await fs.readFile(requests, 'utf8'))
     .trim()
     .split('\n')

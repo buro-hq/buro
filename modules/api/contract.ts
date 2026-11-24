@@ -8,6 +8,7 @@ import type {
 import type { Project, ProjectResult } from '../projects/project.ts';
 import type { Run, RunOptions, RunResult } from '../runs/run.ts';
 import type { ResultOutcome } from '../results/result.ts';
+import type { Material, MaterialOutcome } from '../materials/material.ts';
 import type { Activity } from '../sessions/activity.ts';
 import type { Session } from '../sessions/session.ts';
 import type { ApplicationSettings } from '../settings/settings.ts';
@@ -31,6 +32,17 @@ export interface ApiMethods {
   'runs.cancel': { params: { id: string }; result: void };
   'results.inspect': { params: { runId: string }; result: ResultOutcome };
   'results.apply': { params: { runId: string; revision?: string }; result: ResultOutcome };
+  'materials.list': { params: { projectId: string; taskId?: string }; result: Material[] };
+  'materials.upload': {
+    params: { projectId: string; taskId?: string; name: string; contentBase64: string };
+    result: MaterialOutcome;
+  };
+  'materials.read': {
+    params: { id: string; line?: number; count?: number };
+    result: MaterialOutcome;
+  };
+  'materials.download': { params: { id: string }; result: MaterialOutcome };
+  'materials.delete': { params: { id: string }; result: void };
   'sessions.list': { params: { runId?: string }; result: Session[] };
   'sessions.get': { params: { id: string }; result: Session | undefined };
   'sessions.model': { params: { sessionId: string; modelId: string }; result: boolean };
@@ -65,4 +77,9 @@ export interface ApiResponse {
 export interface ApiNotification {
   type: 'notification';
   notification: Notification;
+}
+
+/** Local clients authenticate before reading state or dispatching a command. */
+export interface ApiAuthenticated {
+  type: 'authenticated';
 }
