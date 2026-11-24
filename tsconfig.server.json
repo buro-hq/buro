@@ -12,5 +12,5 @@
     "types": ["node"],
     "erasableSyntaxOnly": true
   },
-  "include": ["agent", "core", "protocol", "plugins", "adapters", "daemon", "clients", "cli"]
+  "include": ["agent", "core", "modules", "protocol", "plugins", "adapters", "daemon", "clients", "cli"]
 }

@@ -1,4 +1,21 @@
-# Buro target architecture
+# Buro architecture
+
+## Current refactor: 25 November 2026
+
+The latest user decisions supersede the older design below. The new implementation lives in `modules/`. It is being integrated; the production daemon and UI still use the previous implementation until the application cutover is complete.
+
+- Feature modules own their records and expose interfaces. Ordinary API calls execute work; detached notifications announce committed changes. Modules do not share a mutable application snapshot.
+- `Task` is user intent, `Run` is an isolated attempt, and `Session` is a portable conversation. They refer to each other by ID.
+- SQLite stores current state. JSON is an interchangeable storage implementation. Activity is diagnostic history, not a prerequisite for rebuilding state.
+- One common model/tool loop serves arbitrary agent descriptions. Names and roles do not select privileged behavior. Reviews and tests are tools the agent can choose; completion has no mandatory universal acceptance gate.
+- Each Run receives its own worktree. A retry creates new Run and Session identities, carrying saved files and public history; it does not replay an unfinished low-level action.
+- Changing a model preserves the Session. Private provider continuation is stored separately and attached only to its owning model adapter and revision.
+- Configuration consists of application defaults and explicit Run overrides. There is no project/scenario/role precedence hierarchy.
+- The application remains one process. First-party features are ordinary modules, with public interfaces suitable for future extraction into plugins.
+
+The new execution slice is covered by behavior tests using SQLite, JSON, portable model transports and actual Git worktrees. Remaining integration includes model configuration, real tools, generic delegation, application transport, UI/CLI callers, and the clean-state cutover. Old runtime state must be preserved in a private archive before cutover.
+
+## Previous design, retained during migration
 
 Status: agreed implementation direction, 20 November 2026. [VISION.md](VISION.md) owns the product model. This document describes the target; [GOAL-EXECUTION-POC.md](GOAL-EXECUTION-POC.md) describes current execution.
 
