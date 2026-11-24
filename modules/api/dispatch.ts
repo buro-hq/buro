@@ -73,6 +73,13 @@ export function apiMethods(app: Application): {
       app.runs.retry(input),
     ),
     'runs.cancel': method(id, (input) => app.runs.cancel(input)),
+    'results.inspect': method(z.object({ runId: z.string() }), (input) =>
+      app.results.inspect(input),
+    ),
+    'results.apply': method(
+      z.object({ runId: z.string(), revision: z.string().optional() }),
+      (input) => app.results.apply(input),
+    ),
     'sessions.list': method(z.object({ runId: z.string().optional() }), (input) =>
       app.sessions.list(input),
     ),

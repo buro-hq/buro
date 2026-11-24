@@ -7,6 +7,7 @@ import type {
 } from '../models/model-configuration.ts';
 import type { Project, ProjectResult } from '../projects/project.ts';
 import type { Run, RunOptions, RunResult } from '../runs/run.ts';
+import type { ResultOutcome } from '../results/result.ts';
 import type { Activity } from '../sessions/activity.ts';
 import type { Session } from '../sessions/session.ts';
 import type { ApplicationSettings } from '../settings/settings.ts';
@@ -28,6 +29,8 @@ export interface ApiMethods {
   'runs.start': { params: { taskId: string; options?: RunOptions }; result: RunResult };
   'runs.retry': { params: { id: string; options?: RunOptions }; result: RunResult };
   'runs.cancel': { params: { id: string }; result: void };
+  'results.inspect': { params: { runId: string }; result: ResultOutcome };
+  'results.apply': { params: { runId: string; revision?: string }; result: ResultOutcome };
   'sessions.list': { params: { runId?: string }; result: Session[] };
   'sessions.get': { params: { id: string }; result: Session | undefined };
   'sessions.model': { params: { sessionId: string; modelId: string }; result: boolean };

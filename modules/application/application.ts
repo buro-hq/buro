@@ -4,6 +4,7 @@ import type { ModelConfigurations } from '../models/model-configuration.ts';
 import type { Models } from '../models/model.ts';
 import type { Projects } from '../projects/project.ts';
 import type { Runs } from '../runs/run.ts';
+import type { Results } from '../results/result.ts';
 import type { ActivityHistory } from '../sessions/activity.ts';
 import type { Sessions } from '../sessions/session.ts';
 import type { Settings } from '../settings/settings.ts';
@@ -18,6 +19,7 @@ export interface Application {
   modelConfigurations: ModelConfigurations;
   projects: Projects;
   runs: Runs;
+  results: Results;
   sessions: Sessions;
   activity: ActivityHistory;
   settings: Settings;

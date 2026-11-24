@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { safeGit } from '../../adapters/processes/safe-git.ts';
+import { captureGitTree } from './git-snapshot.ts';
 import type { Workspace, WorkspaceResult, Workspaces } from './workspace.ts';
 
 /** Isolates run files using Git worktrees; only Git bookkeeping is serialized per repository. */
@@ -59,6 +60,37 @@ export class GitWorkspaces implements Workspaces {
         try {
           if (input.previous)
             await this.copyChanges({ previous: input.previous, target: workspace });
+          else if (input.base === undefined) {
+            await this.copyChanges({
+              previous: { path: root, source: root, base },
+              target: workspace,
+            });
+            const tree = await captureGitTree({ workspace: workspace.path, base });
+            const initialTree = (
+              await safeGit(['rev-parse', `${base}^{tree}`], { cwd: workspace.path })
+            ).stdout.trim();
+            if (tree !== initialTree) {
+              const baseline = (
+                await safeGit(
+                  [
+                    '-c',
+                    'user.name=Buro',
+                    '-c',
+                    'user.email=buro@localhost',
+                    'commit-tree',
+                    tree,
+                    '-p',
+                    base,
+                    '-m',
+                    'Buro workspace baseline',
+                  ],
+                  { cwd: workspace.path },
+                )
+              ).stdout.trim();
+              await safeGit(['reset', '--hard', baseline], { cwd: workspace.path });
+              workspace.base = baseline;
+            }
+          }
         } catch (error) {
           await safeGit(['worktree', 'remove', '--force', target], { cwd: root }).catch(() => {});
           throw error;

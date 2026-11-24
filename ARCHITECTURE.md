@@ -15,7 +15,9 @@ The latest user decisions supersede the older design below. The new implementati
 
 The new execution slice is covered by behavior tests using SQLite, JSON, portable model transports and actual Git worktrees. Application composition, global model configuration, sandboxed file/command tools, generic collaboration and a typed local WebSocket API are implemented. Connection settings and credentials are one atomic private record; API views and notifications exclude credentials and private continuation.
 
-Remaining integration includes UI/CLI callers, result inspection/application, context attachments, native agent backends and the clean-state cutover. Production still starts the older application. Old runtime state must be preserved in a private archive before the production switch; unused implementations and obsolete API callers should then be removed rather than maintained through compatibility overloads.
+Result inspection and application are also implemented as a separate module. Initial uncommitted source files become the isolated workspace baseline; result patches contain subsequent changes, preserve binary files and executable modes, and do not alter the source index. Applying a result is explicit and preserves unrelated edits. An optional revision ties the action to the view the caller inspected.
+
+Remaining integration includes UI/CLI callers, context attachments, native agent backends and the clean-state cutover. Production still starts the older application. Old runtime state must be preserved in a private archive before the production switch; unused implementations and obsolete API callers should then be removed rather than maintained through compatibility overloads.
 
 ## Previous design, retained during migration
 

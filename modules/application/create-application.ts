@@ -11,6 +11,8 @@ import { modelTransports } from '../models/transports.ts';
 import type { ModelTransport } from '../models/model-configuration.ts';
 import { ProjectService } from '../projects/project-service.ts';
 import { RunService } from '../runs/run-service.ts';
+import { ResultService } from '../results/result-service.ts';
+import { GitChanges } from '../results/git-changes.ts';
 import { ActivityLog } from '../sessions/activity.ts';
 import { SessionService } from '../sessions/session-service.ts';
 import { SettingsService } from '../settings/settings-service.ts';
@@ -71,6 +73,7 @@ export async function createApplication(input: {
     settings,
     events,
   });
+  const results = new ResultService({ runs, projects, changes: new GitChanges(), events });
   try {
     await modelConfigurations.initialize();
     await sessions.recover();
@@ -88,6 +91,7 @@ export async function createApplication(input: {
     projects,
     tasks,
     runs,
+    results,
     sessions,
     activity,
     settings,
