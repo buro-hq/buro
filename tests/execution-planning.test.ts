@@ -13,7 +13,7 @@ import { FileProjectStore } from '../adapters/files/project-store.ts';
 import { GoalService } from '../core/services.ts';
 import { executionPolicy } from '../core/project-settings.ts';
 import { DomainError, type AgentRuntime } from '../core/ports.ts';
-import { UnresolvedEffectError } from '../core/run-reconciliation.ts';
+import { UnresolvedEffectError, observedTurnFailure } from '../core/run-reconciliation.ts';
 import { EnvelopeSchema } from '../protocol/execution.ts';
 import type { ProjectProfile } from '../protocol/domain.ts';
 import type { WorkspaceRevision } from '../core/workspace-revision.ts';
@@ -747,4 +747,51 @@ test('unchanged failed checks are reported as no progress without imposing a ret
       .split('\nReuse only')[0],
   );
   assert.equal(state.progress.unchangedObservations, 2);
+});
+
+test('a settled incomplete coordinator response continues from saved work when the runtime proves retry is safe', async (t) => {
+  let writes = 0;
+  const f = await fixture(t, {
+    steps: [
+      {
+        ...implement,
+        before: async (control) => {
+          writes++;
+          await implement.before!(control);
+        },
+      },
+      {
+        output: decision('check'),
+        before: () => {
+          throw observedTurnFailure(new DomainError('MODEL_INCOMPLETE', 'Output limit reached'));
+        },
+      },
+      finish,
+    ],
+  });
+  f.service.env.runtime.canRetry = async () => true;
+  const run = await f.execute();
+  assert.equal(run.status, 'completed', run.result);
+  assert.equal(writes, 1);
+  assert.match(f.modelInputs[2].text, /MODEL_INCOMPLETE/);
+  assert.match(f.modelInputs[2].text, /do not restart or repeat completed work/);
+  assert.equal(f.counts().checkpoints, 1);
+});
+
+test('an incomplete response without proof of a settled retry stops instead of repeating the coordinator', async (t) => {
+  const f = await fixture(t, {
+    steps: [
+      {
+        output: decision('check'),
+        before: () => {
+          throw observedTurnFailure(new DomainError('MODEL_INCOMPLETE', 'Output limit reached'));
+        },
+      },
+    ],
+  });
+  f.service.env.runtime.canRetry = async () => false;
+  const run = await f.execute();
+  assert.equal(run.status, 'failed');
+  assert.equal(f.modelInputs.length, 1);
+  assert.equal(f.counts().checkpoints, 0);
 });

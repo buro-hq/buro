@@ -7,7 +7,7 @@ import { materialInstructions } from '../protocol/context.ts';
 import { operationIds } from './operation-catalog.ts';
 import { sessionResource } from '../protocol/resources.ts';
 import { DomainError } from './ports.ts';
-import { assertRunReconciled } from './run-reconciliation.ts';
+import { assertRunReconciled, isKnownTurnRejection } from './run-reconciliation.ts';
 import { terminal, isWorkerRoleId } from './execution-ports.ts';
 import { workerResourcePool } from './assignment-resources.ts';
 import { checkContext } from './agent-context.ts';
@@ -409,6 +409,18 @@ export async function runGoalOrchestration(
     } catch (error) {
       if (terminal(service.get(projectId, runId))) return;
       assertCurrent(service, ctx);
+      if (
+        error instanceof DomainError &&
+        error.code === 'MODEL_INCOMPLETE' &&
+        isKnownTurnRejection(error) &&
+        (await service.env.runtime.canRetry?.(root.threadId).catch(() => false))
+      ) {
+        feedback =
+          'The previous model response ended before a complete decision was returned (MODEL_INCOMPLETE). ' +
+          'No service action was accepted from that incomplete response. Completed tool results and source edits remain saved. ' +
+          'Use the current state below and return one concise next service action; do not restart or repeat completed work.';
+        continue;
+      }
       if (!(error instanceof DomainError) || !correctable.has(error.code)) throw error;
       lastRejectedProposal = proposal;
       if (error.code === 'VERIFICATION_REVISION_CHANGED') checked = undefined;
