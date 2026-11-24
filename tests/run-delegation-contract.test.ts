@@ -344,6 +344,34 @@ async function fixture(
 }
 
 for (const kind of ['file', 'sqlite'] as const) {
+  test(`${kind}: repair assignments update the same role and runtime while retaining prior records across reopen`, async (t) => {
+    const f = await fixture(t, kind, { createRole: true, nondefaultCoordinator: true });
+    const original = await f.delegate();
+    const repair = {
+      ...candidate('reuse'),
+      instructions: 'Fix the edge case reported by the independent reviewer.',
+      runtimeId: f.pinnedCoordinator.id,
+      runtimeReason: 'Use the alternate model for the repair.',
+      assignment: { ...candidate().assignment!, objective: 'Repair the reviewed edge case.' },
+    };
+    const next = await f.delegate(repair, original.role.version);
+    assert.notEqual(next.id, original.id);
+    assert.equal(next.previousAssignmentId, original.id);
+    assert.equal(next.instructions, repair.instructions);
+    assert.deepEqual(next.role, original.role);
+    assert.equal(next.resource.resource.id, f.pinnedCoordinator.id);
+    assert.equal((await f.runs().assignments(f.runId)).length, 1);
+    assert.deepEqual(await f.delegate(repair, original.role.version), next);
+    await f.reopen();
+    assert.deepEqual(await f.runs().assignment(f.runId, original.role.id), next);
+    const changes = (await f.events()).filter(
+      (event: any) => event.type === 'run.worker-delegated',
+    );
+    assert.equal(changes.length, 2);
+    assert.deepEqual(changes[0].assignment, original);
+    assert.deepEqual(changes[1].assignment, next);
+  });
+
   test(`${kind}: action coordinator admission requires structured scoped writing, not readonly planning`, async (t) => {
     const f = await fixture(t, kind, { writerOnly: true });
     const context = await f.runs().delegationContext(f.runId);

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { RelativePathSchema } from './projects-paths.ts';
+import { AssignmentResourceSchema } from './resources.ts';
 
 /** Declared check output directories, never a grant to rewrite the source tree. */
 export const CheckOutputPathSchema = RelativePathSchema.transform((value) =>
@@ -99,6 +100,7 @@ export const VerificationEvidenceSchema = z
       .refine((value) => Number.isFinite(Date.parse(value)), 'An observed review time is required.')
       .optional(),
     reviewerSessionId: z.string().min(1).optional(),
+    reviewerResource: AssignmentResourceSchema.optional(),
   })
   .superRefine((evidence, ctx) => {
     if ((evidence.reviewedAt === undefined) !== (evidence.reviewerSessionId === undefined))

@@ -26,6 +26,8 @@ export type RunWorkerAssignment = {
   attemptId: string;
   role: Role;
   origin: 'created' | 'reused';
+  previousAssignmentId?: string;
+  instructions?: string;
   paths: string[];
   task?: WorkerTask;
   resource: AssignmentResource;

@@ -73,7 +73,8 @@ export function createDocumentRunDelegationRows(
       if (
         !run ||
         Object.hasOwn(doc.runAssignments ?? {}, assignment.id) ||
-        Object.hasOwn(doc.runAssignmentHeads?.[assignment.runId] ?? {}, assignment.role.id)
+        doc.runAssignmentHeads?.[assignment.runId]?.[assignment.role.id] !==
+          assignment.previousAssignmentId
       )
         throw conflict();
       doc.runAssignments ??= {};
@@ -85,23 +86,23 @@ export function createDocumentRunDelegationRows(
         writable: false,
         configurable: false,
       });
-      Object.defineProperty(doc.runAssignmentHeads[assignment.runId], assignment.role.id, {
-        value: assignment.id,
-        enumerable: true,
-        writable: false,
-        configurable: false,
-      });
-      run.roleSnapshots = [...(run.roleSnapshots ?? []), structuredClone(assignment.role)];
+      doc.runAssignmentHeads[assignment.runId] = {
+        ...doc.runAssignmentHeads[assignment.runId],
+        [assignment.role.id]: assignment.id,
+      };
+      run.roleSnapshots = [
+        ...(run.roleSnapshots ?? []).filter((role) => role.id !== assignment.role.id),
+        structuredClone(assignment.role),
+      ];
       run.roleOrigins = { ...run.roleOrigins, [assignment.role.id]: assignment.origin };
       run.roleAssignments = { ...run.roleAssignments, [assignment.role.id]: [...assignment.paths] };
       run.assignmentResources = {
         ...run.assignmentResources,
         [assignment.role.id]: structuredClone(assignment.resource),
       };
-      run.workerTasks = {
-        ...run.workerTasks,
-        ...(assignment.task ? { [assignment.role.id]: structuredClone(assignment.task) } : {}),
-      };
+      run.workerTasks = { ...run.workerTasks };
+      if (assignment.task) run.workerTasks[assignment.role.id] = structuredClone(assignment.task);
+      else delete run.workerTasks[assignment.role.id];
     });
   return {
     insertAssignment,
@@ -159,8 +160,15 @@ export function validateDocumentRunDelegations(previous: ProjectDocument, next: 
     if (!after.runAssignments?.[id] || !isDeepStrictEqual(original, after.runAssignments[id]))
       throw invalid();
   for (const [runId, heads] of Object.entries(before.runAssignmentHeads ?? {}))
-    for (const [roleId, id] of Object.entries(heads))
-      if (after.runAssignmentHeads?.[runId]?.[roleId] !== id) throw invalid();
+    for (const [roleId, id] of Object.entries(heads)) {
+      let next = after.runAssignmentHeads?.[runId]?.[roleId];
+      const seen = new Set<string>();
+      while (next && next !== id && !seen.has(next)) {
+        seen.add(next);
+        next = after.runAssignments?.[next]?.previousAssignmentId;
+      }
+      if (next !== id) throw invalid();
+    }
   for (const [id, value] of Object.entries(after.runAssignments ?? {})) {
     const assignment = validateRunWorkerAssignment(value);
     const head = after.runHeads?.[assignment.runId];
@@ -186,11 +194,21 @@ export function validateDocumentRunDelegations(previous: ProjectDocument, next: 
       head.admissionId !== assignment.admissionId ||
       context.runId !== assignment.runId ||
       context.admissionId !== assignment.admissionId ||
-      after.runAssignmentHeads?.[assignment.runId]?.[assignment.role.id] !== id ||
       !role ||
       !isDeepStrictEqual(validateProjectRole(role), assignment.role)
     )
       throw invalid();
+    if (assignment.previousAssignmentId) {
+      const prior = after.runAssignments?.[assignment.previousAssignmentId];
+      if (
+        !prior ||
+        prior.id === id ||
+        prior.runId !== assignment.runId ||
+        prior.admissionId !== assignment.admissionId ||
+        !isDeepStrictEqual(prior.role, assignment.role)
+      )
+        throw invalid();
+    }
   }
   for (const [runId, heads] of Object.entries(after.runAssignmentHeads ?? {})) {
     const run = after.runs.find((run) => run.id === runId),

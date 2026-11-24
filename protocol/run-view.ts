@@ -38,7 +38,9 @@ export function mergeRunWorkerAssignment(
       [assignment.role.id]: structuredClone(assignment.resource),
     },
     workerTasks: {
-      ...run.workerTasks,
+      ...Object.fromEntries(
+        Object.entries(run.workerTasks ?? {}).filter(([id]) => id !== assignment.role.id),
+      ),
       ...(assignment.task ? { [assignment.role.id]: structuredClone(assignment.task) } : {}),
     },
     events: [...run.events, ...entries.map(({ runId: _runId, ...entry }) => entry)],

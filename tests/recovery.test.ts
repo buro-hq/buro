@@ -545,7 +545,10 @@ test('editing a stopped goal is versioned; repair resumes the original coordinat
   f.options.rejectReview = false;
   const after = await f.resume(before.id, 'repair');
   assert.equal(after.status, 'completed', after.result);
-  assert.deepEqual(f.resumed, [before.threadId]);
+  assert.deepEqual(f.resumed, [
+    before.threadId,
+    before.agents.find((agent) => agent.session?.roleId === 'builder')!.threadId,
+  ]);
   assert.equal(after.threadId, before.threadId);
   assert.equal(after.title, 'Updated goal');
   assert.equal(after.workerTasks, undefined);

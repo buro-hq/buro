@@ -150,6 +150,8 @@ export class RuntimeRouter implements AgentRuntime {
     if (!owner || !operation) return undefined;
     const explicit = owner.operationResources?.[operation.id]?.[roleId];
     if (explicit) return explicit;
+    if (operation.id === operationIds.review && owner.verificationEvidence?.reviewerResource)
+      return owner.verificationEvidence.reviewerResource;
     if (operation.id === operationIds.coordination || operation.id === operationIds.review)
       return owner.roleResources?.[roleId];
     return undefined;

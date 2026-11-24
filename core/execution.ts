@@ -7,7 +7,8 @@ import type { ExecutionPhase } from './project-runs.ts';
 import { runWorkerAssignments } from './worker-assignments.ts';
 import { ManagedBudgetErrorCodeSchema } from '../protocol/run-budget.ts';
 import { sessionResource } from '../protocol/resources.ts';
-import { operationIds } from './operation-catalog.ts';
+import { operationIds, serviceOperationContext } from './operation-catalog.ts';
+import { resolveRoleResource, type RoleResourceProposal } from './role-routing.ts';
 import type { WorkflowRoleResolver } from './workflow-roles.ts';
 import { projectRunAutonomy } from './autonomy-policy.ts';
 import { recordableRuntimeEvent } from './runtime-events.ts';
@@ -750,6 +751,8 @@ ${installation.output || installation.error || ''}`,
         notesForNextAgent: '',
       };
       const checked = await this.checkRun(ctx);
+      // Recheck is a finalization request; diagnostic review is an explicit coordinator action.
+      await this.checkedRun(ctx, checked, true);
       await this.reviewRun(ctx, checked, envelope);
       await this.acceptRun(ctx, checked, envelope);
       return;
@@ -1292,10 +1295,15 @@ ${installation.output || installation.error || ''}`,
   }
 
   /** Reuse current service evidence or obtain it without asking the model to order prerequisites. */
-  async ensureChecks(ctx: ExecutionContext, checked?: CheckedRun, openView = false) {
+  async ensureChecks(
+    ctx: ExecutionContext,
+    checked?: CheckedRun,
+    openView = false,
+    requirePassing = true,
+  ) {
     if (checked) {
       try {
-        await this.checkedRun(ctx, checked, openView);
+        await this.checkedRun(ctx, checked, openView, requirePassing);
         return checked;
       } catch (error) {
         if (
@@ -1343,7 +1351,12 @@ ${installation.output || installation.error || ''}`,
   }
 
   /** Resolve host-issued evidence, never revision/check assertions supplied by an action. */
-  private async checkedRun(ctx: ExecutionContext, checked: CheckedRun, openView = false) {
+  private async checkedRun(
+    ctx: ExecutionContext,
+    checked: CheckedRun,
+    openView = false,
+    requirePassing = true,
+  ) {
     const run = this.assertExecutionContext(ctx);
     const issued = this.checkedRuns.get(checked);
     if (!issued || issued.projectId !== ctx.projectId || issued.runId !== ctx.runId)
@@ -1354,10 +1367,11 @@ ${installation.output || installation.error || ''}`,
     if (
       !result.revision ||
       !result.view ||
-      !result.scope ||
-      !result.specsUnchanged ||
-      !result.checks.total ||
-      result.checks.passed !== result.checks.total
+      (requirePassing &&
+        (!result.scope ||
+          !result.specsUnchanged ||
+          !result.checks.total ||
+          result.checks.passed !== result.checks.total))
     )
       throw new DomainError(
         'CHECKS_REQUIRED',
@@ -1406,9 +1420,10 @@ ${installation.output || installation.error || ''}`,
     ctx: ExecutionContext,
     checked: CheckedRun,
     envelope: ReturnType<typeof EnvelopeSchema.parse>,
+    proposal: RoleResourceProposal = {},
   ) {
     const { projectId, runId, workspace, policy, threads } = ctx;
-    const result = await this.checkedRun(ctx, checked, true);
+    const result = await this.checkedRun(ctx, checked, true, false);
     const { revision, view, changes, checks } = result;
     const run = this.get(projectId, runId);
     await this.phase(
@@ -1420,16 +1435,28 @@ ${installation.output || installation.error || ''}`,
     const reviewerRole = run.roleSnapshots?.find((role) => role.id === 'reviewer');
     if (!reviewerRole)
       throw new DomainError('INVALID_ASSIGNMENT', 'The reviewer role snapshot is missing.');
+    const reviewerResource =
+      proposal.runtimeId != null
+        ? resolveRoleResource(run.resources!, reviewerRole, {
+            ...serviceOperationContext(
+              operationIds.review,
+              policy.profile,
+              policy.scope.mode === 'strict',
+            ),
+            proposal,
+          })
+        : run.roleResources?.reviewer;
     const reviewerSession = {
       id: 'S-' + this.env.id(),
       roleId: reviewerRole.id,
       roleVersion: reviewerRole.version,
-      ...sessionResource(run.resources, 'review', this.env.runtime.id, run.roleResources?.reviewer),
+      ...sessionResource(run.resources, 'review', this.env.runtime.id, reviewerResource),
       parentId: run.coordinatorSession?.id,
     };
     await this.update(projectId, runId, (current) => {
       current.review = undefined;
       current.independentReviewer = false;
+      current.verificationEvidence!.reviewerResource = reviewerResource;
       current.agents.push({
         session: reviewerSession,
         threadId: reviewerSession.id,

@@ -35,7 +35,24 @@ export const projectRunDelegationSchema = `
     PRIMARY KEY(run_id,role_id),
     UNIQUE(run_id,ordinal)
   );
-  ${['run_assignments', 'run_assignment_heads', 'run_assignment_paths']
+  CREATE TABLE IF NOT EXISTS run_assignment_context (
+    assignment_id TEXT PRIMARY KEY NOT NULL REFERENCES run_assignments(assignment_id),
+    previous_assignment_id TEXT REFERENCES run_assignments(assignment_id),
+    instructions TEXT
+  );
+  DROP TRIGGER IF EXISTS immutable_run_assignment_heads_update;
+  CREATE TRIGGER IF NOT EXISTS advance_run_assignment_head
+    BEFORE UPDATE ON run_assignment_heads
+    WHEN NEW.run_id != OLD.run_id OR NEW.role_id != OLD.role_id OR NEW.ordinal != OLD.ordinal
+      OR NOT EXISTS (
+        SELECT 1 FROM run_assignment_context x JOIN run_assignments a ON a.assignment_id=x.assignment_id
+        WHERE x.assignment_id=NEW.assignment_id AND x.previous_assignment_id=OLD.assignment_id
+          AND a.run_id=OLD.run_id AND a.role_id=OLD.role_id
+      )
+    BEGIN SELECT RAISE(ABORT,'Assignment heads must advance to a retained successor'); END;
+  CREATE TRIGGER IF NOT EXISTS immutable_run_assignment_heads_delete
+    BEFORE DELETE ON run_assignment_heads BEGIN SELECT RAISE(ABORT,'Run delegation records are immutable'); END;
+  ${['run_assignments', 'run_assignment_context', 'run_assignment_paths']
     .map(
       (table) => `
   CREATE TRIGGER IF NOT EXISTS immutable_${table}_update
@@ -72,6 +89,13 @@ export function createSqliteRunDelegationRows(
         assignment.runId,
       );
       const ordinal = Number(count?.total ?? 0);
+      const prior = database.get(
+        'run.assignment.head',
+        'SELECT assignment_id,ordinal FROM run_assignment_heads WHERE run_id=? AND role_id=?',
+        assignment.runId,
+        assignment.role.id,
+      );
+      if (prior?.assignment_id !== assignment.previousAssignmentId) throw invalid();
       const inserted = database.run(
         'run.assignment.insert',
         'INSERT INTO run_assignments(assignment_id,run_id,admission_id,attempt_id,ordinal,role_id,role_version,role_json,origin,task_json,resource_json) SELECT ?,run_id,admission_id,attempt_id,?,?,?,?,?,?,? FROM run_current WHERE run_id=? AND admission_id=? AND attempt_id=?',
@@ -96,13 +120,21 @@ export function createSqliteRunDelegationRows(
           ordinal,
           path,
         );
+      if (assignment.instructions !== undefined || assignment.previousAssignmentId)
+        database.run(
+          'run.assignment.context.insert',
+          'INSERT INTO run_assignment_context(assignment_id,previous_assignment_id,instructions) VALUES (?,?,?)',
+          assignment.id,
+          assignment.previousAssignmentId ?? null,
+          assignment.instructions ?? null,
+        );
       database.run(
         'run.assignment.head.insert',
-        'INSERT INTO run_assignment_heads(run_id,role_id,assignment_id,ordinal) VALUES (?,?,?,?)',
+        'INSERT INTO run_assignment_heads(run_id,role_id,assignment_id,ordinal) VALUES (?,?,?,?) ON CONFLICT(run_id,role_id) DO UPDATE SET assignment_id=excluded.assignment_id',
         assignment.runId,
         assignment.role.id,
         assignment.id,
-        ordinal,
+        prior ? Number(prior.ordinal) : ordinal,
       );
     });
   const rows: Pick<
@@ -174,7 +206,7 @@ export function createSqliteRunDelegationRows(
     assignment: (runId, roleId) => {
       const row = database.get(
         'run.assignment',
-        'SELECT a.assignment_id,a.run_id,a.admission_id,a.attempt_id,a.role_id,a.role_version,a.role_json,a.origin,a.task_json,a.resource_json FROM run_assignment_heads h JOIN run_assignments a ON a.assignment_id=h.assignment_id WHERE h.run_id=? AND h.role_id=?',
+        'SELECT a.assignment_id,a.run_id,a.admission_id,a.attempt_id,a.role_id,a.role_version,a.role_json,a.origin,a.task_json,a.resource_json,x.previous_assignment_id,x.instructions FROM run_assignment_heads h JOIN run_assignments a ON a.assignment_id=h.assignment_id LEFT JOIN run_assignment_context x ON x.assignment_id=a.assignment_id WHERE h.run_id=? AND h.role_id=?',
         runId,
         roleId,
       );
@@ -193,6 +225,10 @@ export function createSqliteRunDelegationRows(
         attemptId: row.attempt_id,
         role: JSON.parse(String(row.role_json)),
         origin: row.origin,
+        ...(row.instructions == null ? {} : { instructions: row.instructions }),
+        ...(row.previous_assignment_id == null
+          ? {}
+          : { previousAssignmentId: row.previous_assignment_id }),
         paths: paths.map(({ path }) => path),
         ...(row.task_json === null ? {} : { task: JSON.parse(String(row.task_json)) }),
         resource: JSON.parse(String(row.resource_json)),

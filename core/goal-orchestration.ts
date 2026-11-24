@@ -78,6 +78,7 @@ export async function runGoalOrchestration(
     'Respect the saved scope and protected files. Service checks and fresh independent review must approve the exact final revision. ' +
     'Do not claim a tool result, check or review you did not observe. Ask the user when information is missing.\n' +
     'When the candidate is ready, request finish. The service runs missing checks and independent review before acceptance, and returns real failures for repair. You may request checks or review earlier when useful. A repository command result does not replace service verification.\n' +
+    'A reviewer can help diagnose failing tests. Repeated unchanged check results require investigation or repair, not another identical check by default. Reassign the same specialist with updated assignment instructions/task when needed; select another available runtime for the next assignment if its result warrants it. Workers can request a runtime change in notesForNextAgent.\n' +
     'Project context: ' +
     (policy.context || '') +
     materialInstructions(run.contextMaterials || [], workspace.path, true) +
@@ -235,26 +236,11 @@ export async function runGoalOrchestration(
         accepted: false,
       });
     },
-    async review({ result }) {
+    async review({ result, runtimeId, runtimeReason }) {
       assertCurrent(service, ctx);
-      checked = await service.ensureChecks(ctx, checked, true);
-      if (
-        !checked.scope ||
-        !checked.specsUnchanged ||
-        !checked.checks.total ||
-        checked.checks.passed !== checked.checks.total
-      )
-        return {
-          ...observed({
-            checks: checkContext(checked.checks),
-            scopePreserved: checked.scope,
-            specsUnchanged: checked.specsUnchanged,
-            accepted: false,
-          }),
-          isError: true,
-        };
-      const review = await service.reviewRun(ctx, checked, result);
-      return observed({ review, accepted: false });
+      checked = await service.ensureChecks(ctx, checked, true, false);
+      const review = await service.reviewRun(ctx, checked, result, { runtimeId, runtimeReason });
+      return observed({ review, checks: checkContext(checked.checks), accepted: false });
     },
     async finish({ result }) {
       assertCurrent(service, ctx);
@@ -301,6 +287,7 @@ export async function runGoalOrchestration(
   };
   let feedback = 'Goal: ' + run.title + '\nChoose useful work from the available actions.';
   let lastRejectedProposal: unknown;
+  let lastObservation: { signature: string; action: string; repetitions: number } | undefined;
   while (true) {
     if (terminal(service.get(projectId, runId))) return;
     run = assertCurrent(service, ctx);
@@ -317,6 +304,16 @@ export async function runGoalOrchestration(
       checks: checkContext(run.acceptance),
       review: run.review,
       continuation: run.continuation,
+      ...(lastObservation && lastObservation.repetitions > 1
+        ? {
+            progress: {
+              action: lastObservation.action,
+              unchangedObservations: lastObservation.repetitions,
+              guidance:
+                'The same action has returned unchanged evidence. Investigate the failure, repair the code, request diagnostic review, or reassign work/model. Repeating checks alone does not repair it.',
+            },
+          }
+        : {}),
       assignments: expectedAssignments.map((item) => ({
         id: item.id,
         roleId: item.role.id,
@@ -384,6 +381,18 @@ export async function runGoalOrchestration(
       const result = await actions.invoke(proposal, operations);
       if (terminal(service.get(projectId, runId))) return;
       assertCurrent(service, ctx);
+      let observation: unknown = result.content;
+      try {
+        observation = JSON.parse(result.content);
+      } catch {}
+      const signature = JSON.stringify([choice.action, observation], (key, value) =>
+        ['durationMs', 'checkedAt', 'reviewedAt'].includes(key) ? undefined : value,
+      );
+      lastObservation = {
+        signature,
+        action: choice.action,
+        repetitions: lastObservation?.signature === signature ? lastObservation.repetitions + 1 : 1,
+      };
       feedback =
         'Service observation for ' +
         choice.action +
@@ -391,6 +400,11 @@ export async function runGoalOrchestration(
         ': ' +
         result.content +
         (result.exitCode !== undefined ? '\nService exit code: ' + result.exitCode : '') +
+        (lastObservation.repetitions > 1
+          ? '\nThis action returned unchanged evidence ' +
+            lastObservation.repetitions +
+            ' times. Use investigation, repair, review or reassignment to make progress; rerun only when it serves a concrete diagnostic purpose.'
+          : '') +
         '\nChoose the next useful work from the actual evidence. Repository tools remain available.';
     } catch (error) {
       if (terminal(service.get(projectId, runId))) return;

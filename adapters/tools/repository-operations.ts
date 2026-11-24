@@ -117,7 +117,13 @@ export class BoundedRepositoryOperations implements RepositoryToolOperations {
   private async read(scope: ToolScope, relative: string) {
     const filename = await this.filename(scope, relative, false, true);
     const stat = await fs.stat(filename);
-    if (!stat.isFile()) throw new DomainError('TOOL_LIMIT', 'This tool reads text files only.');
+    if (!stat.isFile())
+      throw new DomainError(
+        'TOOL_LIMIT',
+        stat.isDirectory()
+          ? 'This path is a directory. Use list_files with this path to inspect its contents, then read_file on a file.'
+          : 'This tool reads text files only.',
+      );
     const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
     let text: string;
     try {

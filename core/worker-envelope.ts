@@ -8,6 +8,7 @@ import {
 } from '../protocol/worker-tasks.ts';
 import { DomainError } from './ports.ts';
 import { planPathAllowed, type ExecutionPolicy } from './execution-ports.ts';
+import { workerResourcePool } from './assignment-resources.ts';
 
 export const DEFAULT_WORKER_ENVELOPE_BYTES = 128 * 1024;
 const CHECK_DIAGNOSTIC_BYTES = 2048;
@@ -100,7 +101,7 @@ export function workerPrompt(envelope: WorkerEnvelopeV1) {
     JSON.stringify(envelope) +
     '\nInspect the listed inputs and relevant read-only materials when needed. Complete only this task. ' +
     scopeInstructions +
-    ' Do not repeat completed external actions. Return the formal execution result with concrete changes, evidence and limitations; the service runs independent acceptance.'
+    ' This is the current assignment, including any repair instructions. Reinspect current files and fix the reported failures even if a previous assignment ended. Do not repeat completed external actions. Return the formal execution result with concrete changes, evidence and limitations; the service runs independent acceptance. If another available runtime is needed, name it and explain why in notesForNextAgent so the coordinator can reassign the next task.'
   );
 }
 
@@ -220,6 +221,17 @@ export function buildWorkerEnvelope(options: {
       }),
     },
     materials,
+    ...(options.assignment?.instructions !== undefined
+      ? { assignmentInstructions: options.assignment.instructions }
+      : {}),
+    ...(run.resources
+      ? {
+          availableRuntimes: workerResourcePool(run.resources).map(({ id, model }) => ({
+            id,
+            ...(model ? { model } : {}),
+          })),
+        }
+      : {}),
     ...(run.continuation ? { clarification: run.continuation.instructions } : {}),
   };
   const maximum = options.maxBytes ?? DEFAULT_WORKER_ENVELOPE_BYTES;

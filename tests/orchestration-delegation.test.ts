@@ -382,16 +382,22 @@ for (const kind of ['file', 'sqlite'] as const) {
     assert.equal(await f.store().entities.role('three'), undefined);
   });
 
-  test(`${kind}: an existing assignment cannot be retargeted through another coordinator decision`, async (t) => {
+  test(`${kind}: a revised task advances the same role assignment and preserves its predecessor`, async (t) => {
     const f = await fixture(t, kind),
       input = await f.proposal('builder'),
       original = await f.delegate(input);
     const changed = { ...(await f.proposal('builder')), expectedRoleVersion: 1 };
-    changed.worker.assignment!.objective = 'A different task';
-    const before = await f.events();
-    await assert.rejects(f.delegate(changed, 'retarget'), { code: 'ASSIGNMENT_EXISTS' });
-    assert.deepEqual(await f.events(), before);
-    assert.deepEqual(await f.runs().assignment(f.runId, 'builder'), original);
+    changed.assignmentId = original.id + '-repair';
+    changed.worker.action = 'reuse';
+    changed.worker.assignment!.objective = 'A refined repair task';
+    const next = await f.delegate(changed, 'retarget');
+    assert.notEqual(next.id, original.id);
+    assert.equal(next.previousAssignmentId, original.id);
+    assert.equal(next.task?.objective, 'A refined repair task');
+    assert.deepEqual(next.role, original.role);
+    assert.deepEqual(await f.runs().assignment(f.runId, 'builder'), next);
+    await f.reopen();
+    assert.deepEqual(await f.runs().assignment(f.runId, 'builder'), next);
   });
 
   test(`${kind}: genuine stop and repair inherit exact assignment IDs without a plan and do not resurrect compact tasks after a goal edit`, async (t) => {

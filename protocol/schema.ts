@@ -379,6 +379,8 @@ export const RunWorkerAssignmentSchema = z.strictObject({
   attemptId: z.string().min(1),
   role: role.strict(),
   origin: z.enum(['created', 'reused']),
+  previousAssignmentId: z.string().min(1).optional(),
+  instructions: z.string().optional(),
   paths: z.array(z.string()),
   task: WorkerTaskSchema.optional(),
   resource: AssignmentResourceSchema,

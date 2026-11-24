@@ -383,3 +383,61 @@ test('a failed result session metadata write releases the already started backen
   assert.equal(f.calls.get('second')!.turns, 0);
   assert.deepEqual(f.calls.get('second')!.releases, ['same-wire']);
 });
+
+test('a review-specific model decision routes the fresh reviewer without changing the run defaults', async (t) => {
+  const f = fixture(t),
+    run = f.state.runs[0];
+  const reviewerRole = {
+    ...f.state.roles.find((r) => r.id === 'reviewer')!,
+    runtimePreference: { mode: 'auto' as const },
+  };
+  const context = serviceOperationContext(operationIds.review, undefined, false);
+  run.status = 'running';
+  run.roleSnapshots = [reviewerRole];
+  run.roleResources = { reviewer: resolveRoleResource(f.resources, reviewerRole, context) };
+  const selected = resolveRoleResource(f.resources, reviewerRole, {
+    ...context,
+    proposal: {
+      runtimeId: 'second',
+      runtimeReason: 'Independent review benefits from another model.',
+    },
+  });
+  run.verificationView = {
+    version: 1,
+    id: 'review-selection',
+    projectId: 'p',
+    runId: 'R',
+    sourceWorkspace: '/writer',
+    readRoot: '/frozen',
+    outputRoot: '/outputs',
+    base: run.baseCommit!,
+    tree: 'c'.repeat(40),
+    outputPaths: [],
+  };
+  run.verificationEvidence = {
+    version: 1,
+    viewId: 'review-selection',
+    base: run.baseCommit!,
+    tree: 'c'.repeat(40),
+    checkIds: [],
+    checkedAt: '2026-01-01T00:00:00Z',
+    reviewerResource: selected,
+  };
+  const review = await f.router.start({
+    projectId: 'p',
+    runId: 'R',
+    workspace: '/frozen',
+    purpose: 'review',
+    roleId: 'reviewer',
+    readOnly: true,
+    instructions: 'Review actual candidate.',
+  });
+  assert.equal(f.routes.get(review.threadId)!.resource.id, 'second');
+  assert.equal(f.calls.get('second')!.starts[0].readOnly, true);
+  assert.equal(run.roleResources.reviewer.resource.id, 'first');
+  await f.router.turn(review.threadId, 'Read the candidate.', {
+    schema: {},
+    signal: new AbortController().signal,
+    timeoutMs: 1000,
+  });
+});

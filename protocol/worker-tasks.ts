@@ -76,5 +76,9 @@ export const WorkerEnvelopeSchema = z.strictObject({
     }),
   ),
   clarification: z.string().optional(),
+  assignmentInstructions: z.string().optional(),
+  availableRuntimes: z
+    .array(z.strictObject({ id: z.string(), model: z.string().optional() }))
+    .optional(),
 });
 export type WorkerEnvelopeV1 = z.infer<typeof WorkerEnvelopeSchema>;

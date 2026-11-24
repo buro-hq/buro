@@ -8,9 +8,9 @@ import { WorkerTaskSchema } from '../../protocol/worker-tasks.ts';
 export function registerBuiltinExecutionActions(catalog: ExecutionActionCatalog): void {
   catalog.register({
     id: 'delegate',
-    revision: 'delegate-v1',
+    revision: 'delegate-v2',
     description:
-      'Assign a focused task to one specialist when useful. Reuse an existing worker role or propose a reusable role. Respect resource preferences and file permissions. Wait for the actual result before deciding what to do next.',
+      'Assign a focused task or repair to a specialist. Reuse the same role with updated assignment instructions, task, paths or runtime when useful; previous assignments are retained. Creating a role defines its lasting expertise; instructions on reuse apply to this assignment. Respect resource preferences and file permissions. Wait for the actual result before deciding what to do next.',
     schema: z.strictObject({
       worker: WorkerProposalSchema.extend({
         runtimeId: ResourceIdSchema.nullable(),
@@ -30,10 +30,14 @@ export function registerBuiltinExecutionActions(catalog: ExecutionActionCatalog)
   });
   catalog.register({
     id: 'review',
-    revision: 'review-v2',
+    revision: 'review-v3',
     description:
-      'Request a fresh independent read-only review. The service runs missing or stale checks first and returns any failures. Inspect actual findings before repairing or finishing.',
-    schema: z.strictObject({ result: EnvelopeSchema }),
+      'Request a fresh independent read-only review, including when checks fail and a reviewer can help diagnose the problem. Choose an available reviewer runtime or null for the default. Inspect actual findings before repairing or finishing. Review alone does not accept the result.',
+    schema: z.strictObject({
+      result: EnvelopeSchema,
+      runtimeId: ResourceIdSchema.nullable().default(null),
+      runtimeReason: z.string().trim().max(1000).default(''),
+    }),
     execute: (input, operations) => operations.review(input),
   });
   catalog.register({

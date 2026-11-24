@@ -47,7 +47,7 @@ async function fixture(t: { after(action: () => Promise<void>): void }, loseSeco
   const routes = new FileRuntimeRoutes(path.join(root, 'private-routes'));
   const histories: ModelMessage[][] = [];
   let serial = 0;
-  const managed = new ManagedAgentRuntime({
+  const managedOptions: ConstructorParameters<typeof ManagedAgentRuntime>[0] = {
     id: 'managed',
     model: 'controlled-model',
     projects,
@@ -97,6 +97,12 @@ async function fixture(t: { after(action: () => Promise<void>): void }, loseSeco
       maxToolCallsPerTurn: 8,
       maxSessionRequests: 16,
     },
+  };
+  const managed = new ManagedAgentRuntime(managedOptions);
+  const alternate = new ManagedAgentRuntime({
+    ...managedOptions,
+    id: 'alternate',
+    model: 'alternate-model',
   });
   const resource = {
     id: managed.id,
@@ -107,20 +113,22 @@ async function fixture(t: { after(action: () => Promise<void>): void }, loseSeco
     configurationRevision: 'configuration-v1',
     capabilities: managed.capabilities,
   };
+  const alternateResource = { ...resource, id: alternate.id, model: 'alternate-model' };
   const resources = {
     profileId: 'controlled',
     policy: 'local-only' as const,
     coordinator: resource,
     worker: resource,
     reviewer: resource,
-    workerPool: [resource],
+    workerPool: [resource, alternateResource],
   };
   const selection = { forProject: () => structuredClone(resources) };
   const registry = new RuntimeCatalog();
   registry.register(managed);
+  registry.register(alternate);
   const router = new RuntimeRouter({
     registry,
-    resources: [resource],
+    resources: [resource, alternateResource],
     routes,
     selection,
     projects,
@@ -179,7 +187,7 @@ async function fixture(t: { after(action: () => Promise<void>): void }, loseSeco
   await service.phase('p', runId, 'preparing', 'Prepare real bound workspace');
   await service.bindPreparedWorkspace('p', runId, workspace);
   const input = await store.runs.delegationContext(runId);
-  const grant = await store.runs.transaction({ id: 'delegate', fingerprint: 'delegate' }, (tx) =>
+  let grant = await store.runs.transaction({ id: 'delegate', fingerprint: 'delegate' }, (tx) =>
     tx.delegateWorker({
       runId,
       assignmentId: 'A-worker',
@@ -227,7 +235,43 @@ async function fixture(t: { after(action: () => Promise<void>): void }, loseSeco
           10000,
         ),
     );
-  return { service, store, sessions, routes, runId, grant, histories, dispatch };
+  return {
+    service,
+    store,
+    sessions,
+    routes,
+    runId,
+    grant,
+    histories,
+    dispatch,
+    async reassign(runtimeId: string, objective: string) {
+      grant = await store.runs.transaction(
+        { id: 'repair-' + ++serial, fingerprint: objective },
+        (tx) =>
+          tx.delegateWorker({
+            runId,
+            assignmentId: 'repair-assignment-' + serial,
+            now: 'repair',
+            expectedAttemptId: service.get('p', runId).attemptId!,
+            expectedInput: tx.delegationContext(runId),
+            expectedRoleVersion: grant.role.version,
+            worker: {
+              roleId: grant.role.id,
+              action: 'reuse',
+              title: '',
+              description: '',
+              kind: 'implementation',
+              instructions: 'Repair exactly the reviewer finding: ' + objective,
+              paths: grant.paths,
+              runtimeId,
+              runtimeReason: 'Selected for the next repair assignment.',
+              assignment: { ...grant.task!, objective },
+            },
+          }),
+      );
+      return grant;
+    },
+  };
 }
 
 test('repeated settled delegation resumes the actual routed managed author with its history and same grant', async (t) => {
@@ -271,4 +315,28 @@ test('a lost resumed model reply permits a deliberate retry on the same worker w
       .length,
     1,
   );
+});
+
+test('review feedback and a new task reach the same managed worker; another model starts a fresh child session with handoff', async (t) => {
+  const f = await fixture(t);
+  await f.dispatch();
+  const first = structuredClone(f.service.get('p', f.runId).agents.at(-1)!);
+  const repair = await f.reassign('managed', 'Handle whitespace-only input reported by reviewer.');
+  assert.equal(repair.previousAssignmentId, f.grant.id);
+  await f.dispatch();
+  const same = f.service.get('p', f.runId).agents.at(-1)!;
+  assert.equal(same.threadId, first.threadId);
+  assert.equal(same.assignment?.grantId, repair.id);
+  const current = f.histories[1].filter((m) => m.role === 'user').at(-1)!.content;
+  assert.match(current, /Handle whitespace-only input reported by reviewer/);
+  assert.match(current, /Repair exactly the reviewer finding/);
+  assert.ok(f.histories[1].some((m) => m.role === 'assistant' && m.content.includes('pass-1')));
+  await f.reassign('alternate', 'Use the alternate model to repair the edge case.');
+  await f.dispatch();
+  const switched = f.service.get('p', f.runId).agents.at(-1)!;
+  assert.notEqual(switched.threadId, first.threadId);
+  assert.equal(switched.session?.runtimeId, 'alternate');
+  assert.equal(switched.session?.parentId, same.session?.id);
+  assert.match(f.histories[2].filter((m) => m.role === 'user').at(-1)!.content, /pass-2/);
+  assert.equal(f.service.get('p', f.runId).agents.length, 2);
 });

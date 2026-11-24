@@ -73,22 +73,46 @@ export function delegateRunWorker(
       ),
       policy.scope.mode === 'strict' ? { strictPlannedWrites: true } : {},
     );
+    if (input.expectedRoleVersion !== grant.role.version)
+      throw new DomainError('ROLE_CHANGED', 'The role changed during the delegation decision.');
     if (
-      input.expectedRoleVersion !== grant.role.version ||
-      JSON.stringify(worker.paths) !== JSON.stringify(grant.paths) ||
-      JSON.stringify(worker.assignment ? validateWorkerTask(worker.assignment) : undefined) !==
-        JSON.stringify(grant.task ? validateWorkerTask(grant.task) : undefined) ||
-      JSON.stringify(resource) !== JSON.stringify(grant.resource) ||
-      (worker.action === 'create' &&
-        ['title', 'description', 'instructions', 'kind'].some(
-          (key) => worker[key as 'title'] !== grant.role[key as 'title'],
-        ))
+      worker.action === 'create' &&
+      ['title', 'description', 'instructions', 'kind'].some(
+        (key) => worker[key as 'title'] !== grant.role[key as 'title'],
+      )
     )
       throw new DomainError(
         'ASSIGNMENT_EXISTS',
-        'This role already has a different immutable assignment. Delegate a distinct role instead.',
+        'This role already exists. Reuse it with the next task and assignment instructions.',
       );
-    return grant;
+    const task = worker.assignment == null ? undefined : validateWorkerTask(worker.assignment);
+    if (
+      JSON.stringify(worker.paths) === JSON.stringify(grant.paths) &&
+      JSON.stringify(task) === JSON.stringify(grant.task) &&
+      JSON.stringify(resource) === JSON.stringify(grant.resource) &&
+      worker.instructions === grant.instructions
+    )
+      return grant;
+    const next = validateRunWorkerAssignment({
+      ...grant,
+      id: input.assignmentId,
+      attemptId: current.attemptId,
+      previousAssignmentId: grant.id,
+      instructions: worker.instructions,
+      paths: worker.paths,
+      task,
+      resource,
+    });
+    // Role identity is stable; each new task/model choice gets its own retained record.
+    resolveWorkerRole(
+      { ...worker, action: 'reuse' },
+      [grant.role],
+      policy,
+      input.now,
+      context.workflow,
+    );
+    storage.insertAssignment(next);
+    return next;
   }
   if (
     policy.maxWorkers !== undefined &&
@@ -128,6 +152,7 @@ export function delegateRunWorker(
     attemptId: current.attemptId,
     role: assignedRole,
     origin: worker.action === 'create' ? 'created' : 'reused',
+    instructions: worker.instructions,
     paths: worker.paths,
     ...(worker.assignment == null ? {} : { task: worker.assignment }),
     resource,

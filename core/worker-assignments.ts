@@ -116,7 +116,7 @@ export async function runWorkerAssignments(options: {
     });
     const previous = [...run.agents]
       .reverse()
-      .find((agent) => agent.assignment?.grantId === grant.id);
+      .find((agent) => agent.assignment && agent.session?.roleId === role.id);
     if (previous && (!previous.completedAt || !['completed', 'failed'].includes(previous.status)))
       throw new DomainError(
         'SESSION_RECONCILIATION_REQUIRED',
@@ -128,9 +128,13 @@ export async function runWorkerAssignments(options: {
       decision?.resource.capabilities.resumeSessions &&
       (previous.session.result || previous.assignment?.knownFailure?.scopeVerified) &&
       previous.assignment?.knownFailure?.code !== 'MODEL_CONTEXT_EXHAUSTED' &&
-      JSON.stringify(previous.assignment?.envelope?.task) === JSON.stringify(envelope.task) &&
+      previous.session.runtimeId === decision.resource.id &&
+      previous.session.providerId === decision.resource.providerId &&
+      previous.session.model === decision.resource.model &&
+      previous.session.configurationRevision === decision.resource.configurationRevision &&
       JSON.stringify(previous.assignment?.envelope?.scope) === JSON.stringify(envelope.scope)
     );
+    const previousResult = previous?.session?.result && structuredClone(previous.session.result);
     const session: AgentSession = resume
       ? structuredClone(previous!.session!)
       : {
@@ -235,7 +239,15 @@ export async function runWorkerAssignments(options: {
       });
       let response: unknown;
       try {
-        response = await options.ask(threadId, workerPrompt(envelope), envelopeOutputSchema);
+        response = await options.ask(
+          threadId,
+          workerPrompt(envelope) +
+            (previousResult
+              ? '\nPrevious assignment result (historical; act on the current assignment above): ' +
+                JSON.stringify(previousResult)
+              : ''),
+          envelopeOutputSchema,
+        );
       } catch (error) {
         failedTurn = error;
         throw error;

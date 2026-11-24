@@ -10,7 +10,11 @@ export type ExecutionResult = z.infer<typeof EnvelopeSchema>;
 export interface ExecutionActionOperations {
   delegate(input: { worker: WorkerProposal }): Promise<ToolResult>;
   check(input: Record<string, never>): Promise<ToolResult>;
-  review(input: { result: ExecutionResult }): Promise<ToolResult>;
+  review(input: {
+    result: ExecutionResult;
+    runtimeId?: string | null;
+    runtimeReason?: string;
+  }): Promise<ToolResult>;
   finish(input: { result: ExecutionResult }): Promise<ToolResult>;
   askUser(input: { question: string }): Promise<ToolResult>;
   plan(input: { summary: string; steps: { step: string; owner: string }[] }): Promise<ToolResult>;

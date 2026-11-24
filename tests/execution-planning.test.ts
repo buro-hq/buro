@@ -48,6 +48,7 @@ async function fixture(
     rejectReviews?: number;
     requireEdge?: boolean;
     nativeStyle?: boolean;
+    allowFailingReview?: boolean;
   },
 ) {
   const directory = await fs.realpath(
@@ -134,9 +135,11 @@ async function fixture(
         assert.notEqual(started.workspace, workspace.path);
         assert.equal(
           await fs.readFile(path.join(started.workspace!, 'src/value.ts'), 'utf8'),
-          'export const value=2;\n',
+          options.allowFailingReview ? await read('src/value.ts') : 'export const value=2;\n',
         );
-        const reject = reviewTurns <= (options.rejectReviews || 0);
+        const reject =
+          reviewTurns <= (options.rejectReviews || 0) ||
+          (options.allowFailingReview && (await read('src/value.ts')) === original);
         if (options.rejectReviews) {
           const edge = await fs
             .readFile(path.join(started.workspace!, 'src/edge.ts'), 'utf8')
@@ -150,13 +153,23 @@ async function fixture(
           turnId: 'review-turn-' + reviewTurns,
           text: JSON.stringify({
             verdict: reject ? 'changes_requested' : 'approved',
-            blockingFindings: reject ? ['The required edge case is missing.'] : [],
+            blockingFindings: reject
+              ? [
+                  options.allowFailingReview
+                    ? 'The value must be two.'
+                    : 'The required edge case is missing.',
+                ]
+              : [],
             summary: reject ? 'Repair the edge case' : 'Verified actual sources',
           }),
         };
       }
       if (started.purpose === 'implementation') {
-        if (started.assignment?.roleId === 'edge_author') await write('src/edge.ts', 'edge ok\n');
+        if (
+          started.assignment?.roleId === 'edge_author' ||
+          text.includes('Repair the reviewed edge case in the same worker.')
+        )
+          await write('src/edge.ts', 'edge ok\n');
         else await write('src/value.ts', 'export const value=2;\n');
         return { turnId: 'worker-' + ++serial, text: JSON.stringify(result()) };
       }
@@ -294,7 +307,9 @@ async function fixture(
 }
 
 const check: ModelStep = { output: decision('check') };
-const review: ModelStep = { output: decision('review', { result: result() }) };
+const review: ModelStep = {
+  output: decision('review', { result: result(), runtimeId: null, runtimeReason: '' }),
+};
 const finish: ModelStep = { output: decision('finish', { result: result() }) };
 const implement: ModelStep = {
   ...check,
@@ -382,12 +397,19 @@ test('the model updates a working plan and repairs after rejected review in the 
   );
 });
 
-test('premature finish and review run checks and return failures before accepting a model success claim', async (t) => {
-  const f = await fixture(t, { steps: [finish, review, implement, finish, review, finish] });
+test('diagnostic review runs on failing checks, returns findings and requires a fresh passing revision before acceptance', async (t) => {
+  const f = await fixture(t, {
+    allowFailingReview: true,
+    steps: [finish, review, implement, finish],
+  });
   const run = await f.execute();
   assert.equal(run.status, 'completed', run.result);
   assert.equal(f.counts().checkpoints, 1);
-  assert.equal(f.counts().reviewTurns, 1);
+  assert.equal(f.counts().reviewTurns, 2);
+  assert.match(
+    f.modelInputs.filter((i) => !i.text.startsWith('Review goal:'))[2].text,
+    /The value must be two/,
+  );
   assert.ok(f.modelInputs.filter((input) => input.text.includes('\"passed\":0')).length >= 2);
 });
 
@@ -673,4 +695,56 @@ test('the coordinator adds a specialist after observed failure without an initia
   );
   await f.reopen();
   assert.deepEqual(await f.store().runs.assignment(f.runId, 'builder'), first);
+});
+
+test('a delegated author receives review findings and a revised assignment, repairs in the same session and gets fresh approval', async (t) => {
+  const worker = specialist('builder');
+  const repair = {
+    ...worker,
+    action: 'reuse' as const,
+    instructions: 'Repair the reviewed edge case in the same worker.',
+    assignment: {
+      ...worker.assignment!,
+      objective: 'Repair the reviewed edge case in the same worker.',
+    },
+  };
+  const f = await fixture(t, {
+    rejectReviews: 1,
+    steps: [
+      { output: decision('delegate', { worker }) },
+      review,
+      { output: decision('delegate', { worker: repair }) },
+      review,
+      finish,
+    ],
+  });
+  const run = await f.execute();
+  assert.equal(run.status, 'completed', run.result);
+  assert.equal(f.counts().reviewTurns, 2);
+  assert.equal(f.counts().checkpoints, 1);
+  assert.equal(f.starts.filter((s) => s.purpose === 'implementation').length, 1);
+  const latest = (await f.store().runs.assignments(f.runId))[0];
+  assert.ok(latest.previousAssignmentId);
+  const author = f.starts.find((s) => s.purpose === 'implementation')!;
+  const turns = f.modelInputs.filter(
+    (i) => i.threadId === run.agents.find((a) => a.name === 'builder')!.threadId,
+  );
+  assert.equal(turns.length, 2);
+  assert.match(turns[1].text, /The required edge case is missing/);
+  assert.match(turns[1].text, /Repair the reviewed edge case in the same worker/);
+  assert.equal(author.assignment?.roleId, 'builder');
+  assert.equal(run.review?.verdict, 'approved');
+});
+
+test('unchanged failed checks are reported as no progress without imposing a retry limit', async (t) => {
+  const f = await fixture(t, { steps: [check, check, implement, finish] });
+  const run = await f.execute();
+  assert.equal(run.status, 'completed', run.result);
+  assert.match(f.modelInputs[2].text, /unchanged evidence 2 times/);
+  const state = JSON.parse(
+    f.modelInputs[2].text
+      .split('Current service-owned execution state: ')[1]
+      .split('\nReuse only')[0],
+  );
+  assert.equal(state.progress.unchangedObservations, 2);
 });
