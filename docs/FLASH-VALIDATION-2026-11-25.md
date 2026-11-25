@@ -33,3 +33,18 @@ Raw local reports are retained under `artifacts/model-evaluation/2026-11-25T01-4
 The independent verifier does not control run completion. Agent completion saves the run result. The evaluation command separately exits with a failing status when its behavioral or task-specific file checks fail; its regression test demonstrates a model claiming completion without making the required fix.
 
 Final repository checks: 105 tests passed, type checking and production build passed, and formatting passed. No real PR was published by these checks.
+
+## Rerun after connection, subscription and history changes
+
+Both scenarios were repeated on revision `84f4301a27bfe33054b3fdd9314ee25bfc4bca16`, with harness hash `467fb053cb04ec99d93ff00e431dcebe3f0ff94efef7413d132d03819da07fb3`. The saved connection ID is `deepseek-flash-thinking`; the requested/reported model remains `deepseek-flash`. Thinking, context and output allowances are unchanged.
+
+| Scenario | Final public / independent | Run wall time | Requests | Helpers | Reported output tokens | Output tokens / whole-run second |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Original ready-queue task | 3/3 · 5/5 | 18.20 s | 7 | 0 | 2,486 | 136.6 |
+| Independent review, repair and follow-up | 3/3 · 5/5 | 76.66 s | 23 | 1 | 12,466 | 162.6 |
+
+The queue solution uses the dependency filter and stable sort directly, without index decoration. The review solution removes the incorrect ID tiebreaker and explains stable sorting. Only the requested source files changed. The review helper completed an initial review and a second user turn in the same session; both it and the main conversation finished. Private continuation was observed, with no HTTP retry or output-length terminal in either run.
+
+These remain individual synthetic samples. The shorter review run does not isolate an improvement caused by storage or establish a general speedup. Throughput still includes thinking and overlapping sessions rather than decoder timing.
+
+The reports are under `artifacts/model-evaluation/2026-11-25T10-49-10-893Z-queue/report.json` and `artifacts/model-evaluation/2026-11-25T10-49-38-559Z-review/report.json`. The updated repository suite passes 117 tests, including paged UI history. The 15 preexisting local histories retained identical message bytes after migration; SQLite integrity and metadata/message counts are consistent after the real runs, with no active sessions or runs remaining.
