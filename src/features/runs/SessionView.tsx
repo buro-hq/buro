@@ -23,6 +23,7 @@ export function SessionView(input: { session: Session }): ReactElement {
         )
           setStream((previous) => previous + data.text);
         if (notice.type === 'session.updated' && data.id === input.session.id) setStream('');
+        if (notice.type === 'session.retry' && data.sessionId === input.session.id) setStream('');
       }),
     [client, input.session.id],
   );

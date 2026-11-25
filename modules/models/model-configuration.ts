@@ -18,6 +18,7 @@ export interface ModelConfiguration {
   reasoningBudgetTokens?: number;
   sampling?: ModelSamplingSettings;
   capacity?: number;
+  retries?: number;
   revision: string;
 }
 
@@ -46,10 +47,11 @@ export interface ModelConfigurationView extends ModelConfiguration {
 export type ModelConfigurationDraft = Partial<
   Omit<
     ModelConfiguration,
-    'revision' | 'capacity' | 'reasoningEffort' | 'reasoningBudgetTokens' | 'sampling'
+    'revision' | 'capacity' | 'retries' | 'reasoningEffort' | 'reasoningBudgetTokens' | 'sampling'
   >
 > & {
   capacity?: number | null;
+  retries?: number | null;
   reasoningEffort?: string | null;
   reasoningBudgetTokens?: number | null;
   sampling?: ModelSamplingSettings | null;

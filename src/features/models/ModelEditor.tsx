@@ -44,6 +44,7 @@ export function ModelEditor(input: {
     [outputTokens, setOutputTokens] = useState<string | number>(input.model?.outputTokens ?? 8192),
     [effort, setEffort] = useState(input.model?.reasoningEffort ?? ''),
     [capacity, setCapacity] = useState<string | number>(input.model?.capacity ?? ''),
+    [retries, setRetries] = useState<string | number>(input.model?.retries ?? ''),
     [advanced, setAdvanced] = useState(false),
     [asDefault, setAsDefault] = useState(false),
     [catalogue, setCatalogue] = useState<AvailableModel[]>([]);
@@ -60,6 +61,7 @@ export function ModelEditor(input: {
       outputTokens: Number(outputTokens),
       reasoningEffort: effort.trim() || null,
       capacity: capacity === '' ? null : Number(capacity),
+      retries: retries === '' ? null : Number(retries),
     };
   }
   const credential = () => (removeKey ? null : key || undefined);
@@ -203,6 +205,13 @@ export function ModelEditor(input: {
               value={capacity}
               onChange={setCapacity}
               min={1}
+              allowDecimal={false}
+            />
+            <NumberInput
+              label={t('HTTP retries · two when empty')}
+              value={retries}
+              onChange={setRetries}
+              min={0}
               allowDecimal={false}
             />
           </Stack>

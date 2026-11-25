@@ -8,6 +8,144 @@ import { createApplication } from '../modules/application/create-application.ts'
 import { CodexBackend } from '../modules/engines/codex-backend.ts';
 import { ToolRegistry } from '../modules/tools/tool-registry.ts';
 import type { Tool, ToolContext } from '../modules/tools/tool.ts';
+import { ModelBackend } from '../modules/engines/model-backend.ts';
+import { OpenAICompatibleProvider } from '../agent/providers/openai-compatible.ts';
+
+test('a broken HTTP generation is retried before its proposed tool can execute, and the completed edit runs once', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-http-retry-')),
+    app = await createApplication({ directory });
+  t.after(async () => {
+    await app.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  const writes: unknown[] = [],
+    notices: string[] = [];
+  let requests = 0;
+  const frame = (delta: unknown, finish: string | null = null) =>
+    'data: ' +
+    JSON.stringify({ model: 'fixture', choices: [{ index: 0, delta, finish_reason: finish }] }) +
+    '\n\n';
+  const call = (argumentsValue: string) => ({
+    tool_calls: [
+      {
+        index: 0,
+        id: 'save-once',
+        type: 'function',
+        function: { name: 'save', arguments: argumentsValue },
+      },
+    ],
+  });
+  const provider = new OpenAICompatibleProvider({
+    id: 'fixture',
+    revision: 'one',
+    local: true,
+    endpoint: 'http://127.0.0.1:1/v1',
+    fetch: async () => {
+      requests++;
+      if (requests === 1) {
+        let sent = false;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (!sent) {
+                sent = true;
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    frame({ content: 'Unfinished text', ...call('{"partial":true}') }),
+                  ),
+                );
+              } else controller.error(new TypeError('Fixture connection lost'));
+            },
+          }),
+        );
+      }
+      return new Response(
+        requests === 2
+          ? frame(call('{"ready":true}'), 'tool_calls') + 'data: [DONE]\n\n'
+          : frame({ content: 'Done' }, 'stop') + 'data: [DONE]\n\n',
+      );
+    },
+  });
+  app.models.register({
+    id: 'fixture',
+    name: 'Fixture',
+    model: 'fixture',
+    contextTokens: 32768,
+    outputTokens: 8192,
+    backend: new ModelBackend({ provider, retries: 1, retryDelayMs: 0 }),
+  });
+  app.tools.register({
+    effect: 'write',
+    definition: {
+      name: 'save',
+      description: 'Save once',
+      parameters: { type: 'object', properties: { ready: { type: 'boolean' } } },
+    },
+    async execute(input) {
+      writes.push(input.arguments);
+      return { content: 'Saved' };
+    },
+  });
+  app.events.subscribe((notice) => {
+    notices.push(notice.type);
+  });
+  const session = await app.sessions.create(),
+    result = await app.sessions.run({
+      sessionId: session.sessionId,
+      input: 'Save once',
+      workspace: directory,
+    });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.text, 'Done');
+  assert.equal(requests, 3);
+  assert.deepEqual(writes, [{ ready: true }]);
+  assert.equal(notices.filter((type) => type === 'session.retry').length, 1);
+  const saved = (await app.sessions.get({ id: session.sessionId }))!;
+  assert.ok(!saved.messages.some((message) => message.content === 'Unfinished text'));
+  assert.equal(saved.messages.filter((message) => message.role === 'tool').length, 1);
+});
+
+test('cancellation stops HTTP retry backoff and authentication failures are not retried', async () => {
+  for (const mode of ['cancel', 'auth']) {
+    let requests = 0;
+    const controller = new AbortController(),
+      provider = new OpenAICompatibleProvider({
+        id: 'fixture',
+        revision: 'one',
+        local: true,
+        endpoint: 'http://127.0.0.1:1/v1',
+        fetch: async () => {
+          requests++;
+          if (mode === 'auth') return new Response('', { status: 401 });
+          throw new TypeError('Fixture connection lost');
+        },
+      });
+    const backend = new ModelBackend({ provider, retries: 2, retryDelayMs: 10000 });
+    await assert.rejects(
+      backend.complete({
+        sessionId: 'fixture',
+        workspace: '.',
+        executeTool: async () => {
+          throw new Error('No tool may run');
+        },
+        requestId: 'fixture',
+        model: 'fixture',
+        messages: [{ role: 'user', content: 'Answer' }],
+        tools: [],
+        schema: null,
+        maxOutputTokens: 128,
+        contextTokens: 4096,
+        signal: controller.signal,
+        onProgress() {},
+        onRetry() {
+          controller.abort();
+        },
+      }),
+      mode === 'auth' ? { code: 'MODEL_AUTH_FAILED' } : { name: 'AbortError' },
+    );
+    assert.equal(requests, 1);
+  }
+});
 
 test('native discovery reads all catalogue pages without starting a model turn', async () => {
   const backend = new CodexBackend({

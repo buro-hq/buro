@@ -159,5 +159,6 @@
   "idle": "idle",
   "user": "user",
   "assistant": "assistant",
-  "tool": "tool"
+  "tool": "tool",
+  "HTTP retries · two when empty": "HTTP retries · two when empty"
 }

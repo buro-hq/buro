@@ -196,6 +196,11 @@ export class ModelCatalog implements ModelConfigurations {
       return { ok: false, error: 'Endpoint capacity must be a positive integer.' };
     if (input.apiKey !== undefined && input.apiKey !== null && /[\r\n\0]/.test(input.apiKey))
       return { ok: false, error: 'API key contains invalid characters.' };
+    if (
+      configuration.retries !== undefined &&
+      (!Number.isSafeInteger(configuration.retries) || configuration.retries < 0)
+    )
+      return { ok: false, error: 'HTTP retries must be a nonnegative integer.' };
     const apiKey = input.apiKey === undefined ? previous?.apiKey : input.apiKey || undefined;
     // Construct before persisting so invalid endpoints do not become active settings.
     let backend;

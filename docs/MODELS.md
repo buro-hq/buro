@@ -35,3 +35,5 @@ Thinking controls depend on the endpoint and model. `reasoningEffort` and `reaso
 `capacity` controls concurrent requests to a connection. Defaults are conservative for a local model and allow parallel cloud/native requests. Context and output allowances are explicit; context must leave room for the requested output. Saved history is retained when its request view is reduced to fit context.
 
 `ModelTransport` implementations register through application composition and appear in the interface through `models.transports`. Backends, sessions and tools do not route by role name, parameter count or a particular model family.
+
+`retries` controls safe HTTP generation retries for interrupted streams or temporary endpoint failures; the default is two retries with short backoff. Set it to `0` to disable them. Authentication, billing and invalid requests are not retried. Tool effects run only after a complete validated response, and native backend tool execution is not replayed by this HTTP adapter. Pending retries stop immediately when the session is cancelled.

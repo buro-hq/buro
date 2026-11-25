@@ -17,6 +17,7 @@ export function modelTransports(
       name: 'OpenAI compatible',
       create({ configuration: config, apiKey }) {
         return new ModelBackend({
+          retries: config.retries,
           provider: new OpenAICompatibleProvider({
             id: config.id,
             revision: config.revision,
@@ -38,6 +39,7 @@ export function modelTransports(
       name: 'Ollama',
       create({ configuration: config }) {
         return new ModelBackend({
+          retries: config.retries,
           provider: new OllamaProvider({
             id: config.id,
             revision: config.revision,
@@ -70,6 +72,7 @@ export function modelTransports(
       name: 'DeepSeek',
       create({ configuration: config, apiKey }) {
         return new ModelBackend({
+          retries: config.retries,
           provider: new DeepSeekProvider({
             id: config.id,
             revision: config.revision,

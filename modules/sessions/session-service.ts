@@ -305,6 +305,11 @@ export class SessionService implements Sessions {
             contextTokens: model.contextTokens,
             signal: controller.signal,
             onProgress() {},
+            onRetry: (retry) =>
+              this.events.publish({
+                type: 'session.retry',
+                data: { sessionId: session!.id, runId: session!.runId, requestId, ...retry },
+              }),
             onEvent: (event) => {
               if (event.type === 'text.delta')
                 this.events.publish({

@@ -19,6 +19,8 @@ interface RequestMeasurement {
   privateContinuationObserved?: boolean;
   finish?: string;
   failed?: boolean;
+  retries?: { attempt: number; errorCode: string; delayMs: number }[];
+  failureCode?: string;
 }
 
 /** Observes a backend without changing requests, tools, continuation or completion behavior. */
@@ -43,7 +45,13 @@ class MeasuredBackend implements SessionBackend {
       };
     this.requests.push(measurement);
     try {
-      const response = await this.backend.complete(input);
+      const response = await this.backend.complete({
+        ...input,
+        onRetry: (retry) => {
+          (measurement.retries ??= []).push(retry);
+          input.onRetry?.(retry);
+        },
+      });
       Object.assign(measurement, {
         reportedModel: response.model,
         inputTokens: response.usage?.inputTokens,
@@ -54,6 +62,10 @@ class MeasuredBackend implements SessionBackend {
       return response;
     } catch (error) {
       measurement.failed = true;
+      measurement.failureCode =
+        error instanceof Error && 'code' in error && typeof error.code === 'string'
+          ? error.code
+          : undefined;
       throw error;
     } finally {
       measurement.wallSeconds = (performance.now() - started) / 1000;
@@ -291,6 +303,10 @@ try {
     verification,
     changedFiles: changes.files,
     requests: backend.requests,
+    physicalGenerationAttempts: backend.requests.reduce(
+      (total, request) => total + 1 + (request.retries?.length ?? 0),
+      0,
+    ),
     reportedOutputTokens: outputTokens,
     reportedOutputTokensPerWallSecond:
       outputTokens === undefined ? undefined : outputTokens / wallSeconds,

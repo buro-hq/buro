@@ -150,7 +150,11 @@ export async function request(options: HttpOptions, route: string, init: Request
     });
   } catch (error) {
     if (init.signal?.aborted) throw aborted('unknown');
-    throw failure('MODEL_UNAVAILABLE', 'The configured model endpoint could not be reached.');
+    throw new ProviderFailure(
+      'MODEL_UNAVAILABLE',
+      'The configured model endpoint could not be reached.',
+      { outcome: 'unknown', cause: error },
+    );
   }
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
@@ -216,7 +220,11 @@ export async function* lines(response: Response, onProgress: () => void) {
       throw new ProviderFailure(error.code, error.message, { outcome: 'unknown', cause: error });
     }
     if (error instanceof DOMException && error.name === 'AbortError') throw aborted('unknown');
-    throw failure('MODEL_STREAM_INTERRUPTED', 'The model response stream was interrupted.');
+    throw new ProviderFailure(
+      'MODEL_STREAM_INTERRUPTED',
+      'The model response stream was interrupted.',
+      { outcome: 'unknown', cause: error },
+    );
   } finally {
     if (!finished) await reader.cancel().catch(() => {});
     reader.releaseLock();

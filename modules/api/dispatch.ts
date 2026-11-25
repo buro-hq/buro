@@ -25,6 +25,7 @@ const configuration = z.object({
   reasoningEffort: z.string().nullable().optional(),
   reasoningBudgetTokens: z.number().int().min(-1).nullable().optional(),
   capacity: z.number().int().positive().nullable().optional(),
+  retries: z.number().int().nonnegative().nullable().optional(),
   sampling: z
     .object({
       temperature: z.number().nonnegative().optional(),

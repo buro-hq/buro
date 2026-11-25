@@ -14,6 +14,8 @@ export interface BackendRequest extends ModelRequest {
   sessionId: string;
   workspace: string;
   readOnly?: boolean;
+  /** Observes a safe transport retry; it never authorizes repeating a tool effect. */
+  onRetry?: (retry: { attempt: number; errorCode: string; delayMs: number }) => void;
   /** Dispatches a native backend's tools through the host's history and access boundary. */
   executeTool(call: ModelToolCall): Promise<ToolResult>;
 }
