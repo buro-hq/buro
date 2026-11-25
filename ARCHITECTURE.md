@@ -31,7 +31,7 @@ flowchart LR
 | Project | A connected source directory |
 | Task | User intent, editable independently of attempts |
 | Run | One isolated attempt, workspace and root session ID |
-| Session | Portable messages, selected model, explicit access and result |
+| Session | Portable messages, shared background, selected model, explicit access and result |
 | Agent | An optional reusable description and instructions |
 | Model connection | Transport configuration and its private credential |
 | Material | A retained file and optional extracted text |
@@ -42,7 +42,7 @@ SQLite stores current feature records in separate namespaces. A replaceable JSON
 
 ## Execution
 
-`SessionService` contains an ordinary model/tool loop. A session may call tools, start collaborators, read their feedback, switch models and return a result. There are no reserved agent names, required role counts, fixed phase sequences, automatic review requirements or score thresholds.
+`SessionService` contains an ordinary model/tool loop. A session may call tools, start collaborators, read their feedback, switch models and return a result. Shared work context is labeled as background; the current assignment stays in conversation messages. Session parent links describe collaboration, while a continued attempt is linked through its run. There are no reserved agent names, required role counts, fixed phase sequences, automatic review requirements or score thresholds.
 
 HTTP transports and the native Codex adapter implement `SessionBackend`. All tool effects pass through the same broker. Private reasoning and adapter continuation are stored separately from portable public messages, keyed by model revision and message identity. Context projection does not alter saved history.
 

@@ -382,7 +382,7 @@ test('retry carries saved files and history into a new attempt and preserves exp
     'preserved untracked file',
   );
   assert.equal((await f.runs.wait({ id: retry.id }))!.status, 'completed');
-  assert.equal((await f.sessions.get({ id: retry.sessionId }))!.parentId, first.sessionId);
+  assert.equal((await f.sessions.get({ id: retry.sessionId }))!.parentId, undefined);
 });
 
 test('recovery marks an abandoned run interrupted and a new attempt does not replay an unknown tool outcome', async (t) => {

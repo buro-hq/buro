@@ -131,7 +131,6 @@ export class RunService implements Runs {
       instructions: input.options?.instructions ?? history?.instructions ?? settings.instructions,
       access: { tools: input.options?.tools, readOnly: input.options?.readOnly },
       messages: history?.messages,
-      parentId: history?.id,
     });
     if (!created.ok) return { ok: false, error: created.error };
     let workspace;

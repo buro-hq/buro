@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { sessionInstructions } from './instructions.ts';
 import type { ModelCompletion, ModelToolCall } from '../../agent/contracts/model.ts';
 import type { Notifications } from '../events/notifications.ts';
 import type { Models } from '../models/model.ts';
@@ -70,12 +71,7 @@ export class SessionService implements Sessions {
       messages: [
         {
           role: 'system' as const,
-          content: [
-            input.instructions,
-            input.context ? 'Shared work context:\n' + input.context : undefined,
-          ]
-            .filter(Boolean)
-            .join('\n\n'),
+          content: sessionInstructions(input),
         },
         ...(input.messages ?? [])
           .filter((message) => message.role !== 'system')
