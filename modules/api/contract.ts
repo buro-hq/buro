@@ -14,7 +14,7 @@ import type { Run, RunOptions, RunResult } from '../runs/run.ts';
 import type { ResultOutcome } from '../results/result.ts';
 import type { Material, MaterialOutcome } from '../materials/material.ts';
 import type { Activity } from '../sessions/activity.ts';
-import type { Session } from '../sessions/session.ts';
+import type { Session, SessionHistory, SessionHistoryQuery } from '../sessions/session.ts';
 import type { ApplicationSettings } from '../settings/settings.ts';
 import type { Task, TaskInput } from '../tasks/task.ts';
 
@@ -39,6 +39,7 @@ export interface ApiQueries {
   'materials.download': { params: { id: string }; result: MaterialOutcome };
   'sessions.list': { params: { runId?: string }; result: Session[] };
   'sessions.get': { params: { id: string }; result: Session | undefined };
+  'sessions.messages': { params: SessionHistoryQuery; result: SessionHistory };
   'activity.list': { params: { sessionId?: string; runId?: string }; result: Activity[] };
   'agents.list': { params: {}; result: Agent[] };
   'models.list': { params: {}; result: ModelConfigurationView[] };

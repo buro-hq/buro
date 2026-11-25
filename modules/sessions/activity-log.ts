@@ -23,10 +23,6 @@ export class ActivityLog implements ActivityHistory {
 
   /** Returns the observations belonging to a session or run. */
   async list(input: { sessionId?: string; runId?: string } = {}): Promise<Activity[]> {
-    return (await this.store.list()).filter(
-      (activity) =>
-        (!input.sessionId || activity.sessionId === input.sessionId) &&
-        (!input.runId || activity.runId === input.runId),
-    );
+    return this.store.list({ where: input });
   }
 }

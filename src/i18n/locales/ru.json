@@ -131,6 +131,7 @@
   "Run": "Запуск",
   "Start a goal to see its agents here.": "Запустите задачу, чтобы увидеть ее агентов.",
   "Waiting for the first response": "Ожидание первого ответа",
+  "Load earlier messages": "Показать предыдущие сообщения",
   "Open conversation": "Открыть диалог",
   "Disconnect": "Отключить",
   "Run a foreground server command. PORT and HOST are assigned automatically.": "Запустите сервер в основном процессе команды. PORT и HOST назначаются автоматически.",

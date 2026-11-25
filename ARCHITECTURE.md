@@ -40,6 +40,8 @@ flowchart LR
 
 SQLite stores current feature records in separate namespaces. A replaceable JSON implementation exposes the same record API. Records returned to callers are detached values. Diagnostic activity is separate from state and is never replayed to reconstruct it. Application-directory ownership is acquired before recovery.
 
+Conversation headers and individual messages share a module-owned namespace so each append commits the header and new messages atomically. Normal execution does not rewrite earlier messages. Session lists return metadata; `sessions.messages` reads bounded chronological pages using stable positions. SQLite filters and indexes selections before deserializing records. The JSON reference adapter preserves the contract but still rewrites its namespace file. Existing histories are migrated once, preserving message IDs and private continuation records. Execution loads only the selected conversation, in pages, before projecting model context.
+
 ## Execution
 
 `SessionService` contains an ordinary model/tool loop. A session may call tools, start collaborators, read their feedback, switch models and return a result. Shared work context is labeled as background; the current assignment stays in conversation messages. Session parent links describe collaboration, while a continued attempt is linked through its run. There are no reserved agent names, required role counts, fixed phase sequences, automatic review requirements or score thresholds.
@@ -58,4 +60,4 @@ After a process exit, running work is marked interrupted. Continuing creates a n
 
 Composition is in `modules/application/create-application.ts`. Storage engines, model transports, tools, material loaders and result publishers are replaceable through their public interfaces. Feature code does not depend on a plugin container or frozen startup registry. An extension can later be packaged as a plugin while keeping these boundaries.
 
-The browser shares transport and invalidation only. Each feature owns its queries and forms. Reconnection refreshes current records; failed commands are never automatically replayed. The CLI uses the same methods and external validation boundary.
+The browser shares the connection only. Each feature owns its queries, notification subscriptions and forms. Reads coalesce relevant changes on a bounded timer, apply in-flight responses and follow up if state changed during the read. Continuous preview output cannot indefinitely postpone refreshes or invalidate unrelated model/project queries. The transcript initially loads recent messages and can fetch earlier pages without losing live additions. Reconnection refreshes current records; failed commands are never automatically replayed. The CLI uses the same methods and external validation boundary.

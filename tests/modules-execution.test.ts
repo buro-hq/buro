@@ -13,6 +13,7 @@ import { ModelBackend } from '../modules/engines/model-backend.ts';
 import { ToolRegistry } from '../modules/tools/tool-registry.ts';
 import { ActivityLog } from '../modules/sessions/activity-log.ts';
 import { SessionService } from '../modules/sessions/session-service.ts';
+import { ConversationStore } from '../modules/sessions/conversation-store.ts';
 import { TaskService } from '../modules/tasks/task-service.ts';
 import { ProjectService } from '../modules/projects/project-service.ts';
 import { RunService } from '../modules/runs/run-service.ts';
@@ -55,8 +56,9 @@ function fixture(t: { after(callback: () => Promise<void>): void }) {
   const models = new ModelRegistry({ adapterState: storage.records('adapter-state') });
   const tools = new ToolRegistry();
   const activity = new ActivityLog({ store: storage.records('activity') });
+  const conversations = new ConversationStore({ storage });
   const sessions = new SessionService({
-    store: storage.records('sessions'),
+    store: conversations,
     models,
     tools,
     activity,
@@ -73,7 +75,7 @@ function fixture(t: { after(callback: () => Promise<void>): void }) {
       backend: new ModelBackend({ provider: { id, revision: id + '-v1', local: true, complete } }),
     });
   }
-  return { storage, models, tools, activity, sessions, observations, model, events };
+  return { storage, conversations, models, tools, activity, sessions, observations, model, events };
 }
 
 for (const backend of ['sqlite', 'json']) {
@@ -390,8 +392,8 @@ test('recovery marks an abandoned run interrupted and a new attempt does not rep
   f.model('local', async () => reply('Initial'));
   const previous = (await f.runs.start({ taskId: f.task.id })).run!;
   await f.runs.wait({ id: previous.id });
-  const session = (await f.sessions.get({ id: previous.sessionId }))!;
-  await f.storage.records('sessions').save({
+  const session = (await f.conversations.load(previous.sessionId))!;
+  await f.conversations.replace({
     ...session,
     status: 'running',
     messages: [...session.messages, tool('external-action').message],

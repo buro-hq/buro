@@ -52,10 +52,7 @@ export function OfficePage(input: { projectId: string; onRun(id: string): void }
           {sessions.data?.map((session) => {
             const agent = agents.data?.find((candidate) => candidate.id === session.agentId),
               model = models.data?.find((candidate) => candidate.id === session.modelId),
-              latest = session.messages
-                .slice()
-                .reverse()
-                .find((message) => message.role === 'assistant');
+              latest = session.preview;
             return (
               <Paper withBorder p="md" key={session.id}>
                 <Stack gap="sm">
@@ -69,10 +66,7 @@ export function OfficePage(input: { projectId: string; onRun(id: string): void }
                     {model?.name ?? session.modelId}
                   </Text>
                   <Text size="sm" lineClamp={5} style={{ whiteSpace: 'pre-wrap' }}>
-                    {session.error ??
-                      latest?.content ??
-                      latest?.toolCalls?.map((call) => call.name).join(', ') ??
-                      t('Waiting for the first response')}
+                    {session.error ?? latest ?? t('Waiting for the first response')}
                   </Text>
                   <Text size="xs" c="dimmed">
                     {session.id.slice(0, 8)} · {new Date(session.updatedAt).toLocaleTimeString()}

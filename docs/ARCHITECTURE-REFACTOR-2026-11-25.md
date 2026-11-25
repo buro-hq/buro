@@ -33,6 +33,18 @@ The remaining limitation is model efficiency: the explicit review scenario deleg
 
 Code and architecture preferences are saved on the user's Desktop in `buro-code-architecture-preferences.md`. The stopping threshold is actual weekly remaining capacity below 20%; before stopping, finish a tested checkpoint, commit and push it, and record outstanding work.
 
+## Post-review improvements
+
+Concurrent model connection edits previously read stale private rows: rotating a key and renaming a connection together could restore the old key. Configuration mutations now execute in order inside the model catalogue, including default selection and deletion; inference remains independent. SQLite and JSON tests verify the new key survives concurrent edits and restart, and an unexpected failed edit does not block later changes.
+
+The UI no longer shares a global invalidation revision. Each read subscribes to its feature and owner; a fixed refresh window coalesces notifications without repeatedly postponing the timer. In-flight reads finish and update the view, followed by one more read if needed. Continuous output, slow reads, late responses and reconnect handling are covered without replaying commands.
+
+Conversation headers and messages are separate records committed atomically in one namespace. Normal execution appends new messages and updates metadata; it does not rewrite older messages. Public session reads return metadata and `sessions.messages` returns bounded chronological pages. SQLite applies indexed owner/status selection in storage, including activity filters. A selected execution still loads its own history into memory before context projection; the JSON reference adapter still rewrites its namespace file.
+
+Existing histories migrate once, preserving message identities and private adapter state. Migration is idempotent if interrupted after copying. All 15 current local histories were verified byte-for-byte after migration, with a private SQLite backup retained under `artifacts/architecture-refactor/`. The long-history tests cover 1,201 messages, forward/backward windows, restart, deletion, transaction rollback and live bursts spanning several pages. A SQLite audit trigger confirms that repeated model/tool turns never update a previously saved message. Browser coverage checks reopening a recent page and explicitly loading earlier messages.
+
+The updated suite has 117 tests; production build, type checking and formatting pass. The additional code-style quiz and spacing discussion are saved in the Desktop preferences file. These answers are recorded preferences; the existing automatic formatter has not yet been replaced to enforce the new special cases for guard returns and argument objects.
+
 The first explicit review scenario encountered an interrupted API stream before its fix was applied. HTTP generation now retries temporary connection/stream failures with a configurable count, preserving private diagnostic causes and clearing provisional text. A regression test interrupts a partial tool proposal and confirms the resulting edit executes exactly once; cancellation and authentication errors do not repeat it. Native tool execution remains outside that retry mechanism.
 
 A subsequent diagnostic review exposed repeated delegation of the same assignment: the unframed shared context was interpreted as a fresh instruction. That diagnostic was stopped after 82 seconds. Shared background is now explicitly separated from the current assignment, and advisory defaults call for distinct useful subtasks. There is no role-based delegation ban or fixed team size. Attempt ancestry is kept on runs rather than reusing a collaborator parent link.

@@ -139,6 +139,19 @@ export function apiMethods(app: Application): {
       app.sessions.list(input),
     ),
     'sessions.get': method(id, (input) => app.sessions.get(input)),
+    'sessions.messages': method(
+      z
+        .object({
+          sessionId: z.string(),
+          before: z.number().int().nonnegative().optional(),
+          after: z.number().int().min(-1).optional(),
+          limit: z.number().int().min(1).max(250).optional(),
+        })
+        .refine((input) => input.before === undefined || input.after === undefined, {
+          message: 'Use either the before or after cursor.',
+        }),
+      (input) => app.sessions.history(input),
+    ),
     'sessions.model': method(z.object({ sessionId: z.string(), modelId: z.string() }), (input) =>
       app.sessions.switchModel(input),
     ),

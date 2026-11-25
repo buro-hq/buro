@@ -34,6 +34,7 @@ export class ModelCatalog implements ModelConfigurations {
   private factories: Map<string, ModelTransport>;
   private discoveries = new Map<AbortController, Promise<void>>();
   private closing = false;
+  private mutations: Promise<void> = Promise.resolve();
 
   /** Connects safe configuration, private credentials and runtime routing. */
   constructor(input: {
@@ -71,6 +72,7 @@ export class ModelCatalog implements ModelConfigurations {
 
   /** Lists connection settings without disclosing credential contents. */
   async list(): Promise<ModelConfigurationView[]> {
+    await this.mutations;
     return (await this.store.list()).map(({ configuration, apiKey }) => ({
       ...configuration,
       hasApiKey: !!apiKey,
@@ -108,13 +110,14 @@ export class ModelCatalog implements ModelConfigurations {
   async close(): Promise<void> {
     this.closing = true;
     for (const controller of this.discoveries.keys()) controller.abort();
-    await Promise.all([...this.discoveries.values()]);
+    await Promise.all([this.mutations, ...this.discoveries.values()]);
   }
 
   private async readCatalogue(
     input: ModelDiscoveryInput,
     signal: AbortSignal,
   ): Promise<ModelDiscoveryResult> {
+    await this.mutations;
     const previous = input.configuration.id
       ? await this.store.get(input.configuration.id)
       : undefined;
@@ -159,6 +162,14 @@ export class ModelCatalog implements ModelConfigurations {
 
   /** Persists validated boundary input and replaces a transport without changing session identity. */
   async save(input: ModelConfigurationInput): Promise<ModelConfigurationResult> {
+    if (this.closing) return { ok: false, error: 'Model configuration is closed.' };
+    const copy = structuredClone(input);
+    return this.mutate(() => this.saveConfiguration(copy));
+  }
+
+  private async saveConfiguration(
+    input: ModelConfigurationInput,
+  ): Promise<ModelConfigurationResult> {
     const previous = input.configuration.id
       ? await this.store.get(input.configuration.id)
       : undefined;
@@ -213,8 +224,10 @@ export class ModelCatalog implements ModelConfigurations {
     }
     await this.store.save({ id: configuration.id, configuration, apiKey });
     this.models.register({ ...configuration, backend, default: input.default });
-    if (input.default || !(await this.settings.get()).defaultModelId)
+    if (input.default || !(await this.settings.get()).defaultModelId) {
       await this.settings.update({ defaultModelId: configuration.id });
+      this.models.select({ id: configuration.id });
+    }
     const view = { ...configuration, hasApiKey: !!apiKey, available: true };
     this.events.publish({ type: 'model.saved', data: view });
     return { ok: true, configuration: view };
@@ -222,6 +235,12 @@ export class ModelCatalog implements ModelConfigurations {
 
   /** Selects a default for new sessions; existing conversations retain their model. */
   async select(input: { id: string }): Promise<boolean> {
+    if (this.closing) return false;
+    const copy = { ...input };
+    return this.mutate(() => this.selectDefault(copy));
+  }
+
+  private async selectDefault(input: { id: string }): Promise<boolean> {
     if (!this.models.get(input)) return false;
     await this.settings.update({ defaultModelId: input.id });
     return this.models.select(input);
@@ -229,6 +248,12 @@ export class ModelCatalog implements ModelConfigurations {
 
   /** Removes a connection and its private credential; history remains available. */
   async delete(input: { id: string }): Promise<void> {
+    if (this.closing) throw new Error('Model configuration is closed.');
+    const copy = { ...input };
+    return this.mutate(() => this.removeConfiguration(copy));
+  }
+
+  private async removeConfiguration(input: { id: string }): Promise<void> {
     await this.store.delete(input.id);
     this.models.remove(input);
     if ((await this.settings.get()).defaultModelId === input.id)
@@ -245,5 +270,14 @@ export class ModelCatalog implements ModelConfigurations {
       ...configuration,
       backend: transport.create({ configuration, apiKey: connection?.apiKey }),
     });
+  }
+
+  private mutate<T>(work: () => Promise<T>): Promise<T> {
+    const pending = this.mutations.then(work);
+    this.mutations = pending.then(
+      () => {},
+      () => {},
+    );
+    return pending;
   }
 }

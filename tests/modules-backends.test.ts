@@ -100,7 +100,7 @@ test('a broken HTTP generation is retried before its proposed tool can execute, 
   assert.equal(requests, 3);
   assert.deepEqual(writes, [{ ready: true }]);
   assert.equal(notices.filter((type) => type === 'session.retry').length, 1);
-  const saved = (await app.sessions.get({ id: session.sessionId }))!;
+  const saved = await app.sessions.history({ sessionId: session.sessionId });
   assert.ok(!saved.messages.some((message) => message.content === 'Unfinished text'));
   assert.equal(saved.messages.filter((message) => message.role === 'tool').length, 1);
 });
@@ -202,7 +202,7 @@ test('a native JSONL backend uses the common tool broker and keeps its observati
   assert.equal(result.ok, true, result.error);
   assert.equal(result.text, 'Done by native');
   assert.equal(writes, 1);
-  const history = (await app.sessions.get({ id: created.sessionId }))!.messages;
+  const { messages: history } = await app.sessions.history({ sessionId: created.sessionId });
   assert.ok(
     history.some(
       (message) =>

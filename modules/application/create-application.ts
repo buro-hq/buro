@@ -20,6 +20,7 @@ import { ResultService } from '../results/result-service.ts';
 import { GitChanges } from '../results/git-changes.ts';
 import { ActivityLog } from '../sessions/activity-log.ts';
 import { SessionService } from '../sessions/session-service.ts';
+import { ConversationStore } from '../sessions/conversation-store.ts';
 import { SettingsService } from '../settings/settings-service.ts';
 import type { StorageEngine } from '../storage/record-store.ts';
 import { SqliteStorage } from '../storage/sqlite-storage.ts';
@@ -75,10 +76,13 @@ async function composeApplication(scope: {
     events,
     loaders: input.materialLoaders,
   });
-  const activity = new ActivityLog({ store: storage.records('activity') });
+  const activity = new ActivityLog({
+    store: storage.records('activity', { indexes: [['sessionId'], ['runId']] }),
+  });
   const tools = new ToolRegistry();
+  const conversations = new ConversationStore({ storage });
   const sessions = new SessionService({
-    store: storage.records('sessions'),
+    store: conversations,
     models,
     tools,
     activity,
@@ -125,6 +129,7 @@ async function composeApplication(scope: {
   for (const tool of materialTools({ materials, runs })) tools.register(tool);
   try {
     await modelConfigurations.initialize();
+    await conversations.migrate();
     await sessions.recover();
     await runs.recover();
     await previews.recover();

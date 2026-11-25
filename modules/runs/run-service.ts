@@ -130,7 +130,7 @@ export class RunService implements Runs {
       modelId: input.options?.modelId ?? history?.modelId ?? settings.defaultModelId,
       instructions: input.options?.instructions ?? history?.instructions ?? settings.instructions,
       access: { tools: input.options?.tools, readOnly: input.options?.readOnly },
-      messages: history?.messages,
+      sourceSessionId: history?.id,
     });
     if (!created.ok) return { ok: false, error: created.error };
     let workspace;

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sessionInstructions } from './instructions.ts';
-import type { ModelCompletion, ModelToolCall } from '../../agent/contracts/model.ts';
+import type { ModelCompletion, ModelToolCall, ModelMessage } from '../../agent/contracts/model.ts';
 import type { Notifications } from '../events/notifications.ts';
 import type { Models } from '../models/model.ts';
 import type { ToolContext, Tools, ToolResult } from '../tools/tool.ts';
@@ -9,12 +9,16 @@ import { conversationContext } from './context.ts';
 import { settledHistory } from './history.ts';
 import type {
   Session,
+  SessionConversation,
+  SessionHistory,
+  SessionHistoryQuery,
   SessionInput,
   SessionResult,
   SessionStore,
   SessionTurn,
   Sessions,
   SessionWaitResult,
+  SessionMessage,
 } from './session.ts';
 
 interface ActiveSession {
@@ -22,7 +26,15 @@ interface ActiveSession {
   modelId?: string;
   settled: Promise<void>;
   waitingFor?: string;
+  savedMessages: number;
 }
+
+const latestAssistant = (messages: SessionMessage[]): SessionMessage | undefined => {
+  for (let index = messages.length - 1; index >= 0; index--)
+    if (messages[index].role === 'assistant') return messages[index];
+
+  return undefined;
+};
 
 function reportedTokens(input: { previous?: number; current?: number }): number | undefined {
   return input.previous === undefined && input.current === undefined
@@ -59,7 +71,8 @@ export class SessionService implements Sessions {
     const model = this.models.get({ id: input.modelId });
     if (!model) return { ok: false, sessionId: '', error: 'Select an available model.' };
     const now = new Date().toISOString();
-    const session: Session = {
+    const source = input.sourceSessionId ? await this.store.load(input.sourceSessionId) : undefined;
+    const session: SessionConversation = {
       id: randomUUID(),
       runId: input.runId,
       parentId: input.parentId,
@@ -73,10 +86,15 @@ export class SessionService implements Sessions {
           role: 'system' as const,
           content: sessionInstructions(input),
         },
-        ...(input.messages ?? [])
+        ...(input.messages ?? source?.messages ?? [])
           .filter((message) => message.role !== 'system')
-          .map(({ continuation: _private, ...message }) => structuredClone(message)),
+          .map((message) => {
+            const { continuation: _private, ...portable } = message as ModelMessage;
+
+            return structuredClone(portable);
+          }),
       ].map((message) => ({ ...message, id: randomUUID() })),
+      messageCount: 0,
       status: 'idle',
       createdAt: now,
       updatedAt: now,
@@ -85,9 +103,14 @@ export class SessionService implements Sessions {
     return { ok: true, sessionId: session.id };
   }
 
-  /** Returns the session's stored conversation, including completed tool results. */
+  /** Returns session metadata without loading its transcript. */
   async get(input: { id: string }): Promise<Session | undefined> {
     return this.store.get(input.id);
+  }
+
+  /** Returns a bounded page of portable conversation messages. */
+  async history(input: SessionHistoryQuery): Promise<SessionHistory> {
+    return this.store.history(input);
   }
 
   /** Joins an active turn without taking ownership of its execution. */
@@ -125,19 +148,19 @@ export class SessionService implements Sessions {
 
   /** Lists conversations, optionally restricted to one run. */
   async list(input: { runId?: string } = {}): Promise<Session[]> {
-    return (await this.store.list()).filter(
-      (session) => !input.runId || session.runId === input.runId,
-    );
+    return this.store.list(input);
   }
 
   /** Marks abandoned turns interrupted; their files and recorded messages remain authoritative observations. */
   async recover(): Promise<void> {
-    for (const session of await this.store.list())
+    for (const session of await this.store.list({ status: 'running' }))
       if (session.status === 'running' && !this.active.has(session.id))
-        await this.save({
-          ...session,
-          status: 'interrupted',
-          error: 'The previous process stopped. Saved history and files remain available.',
+        await this.store.patch({
+          id: session.id,
+          changes: {
+            status: 'interrupted',
+            error: 'The previous process stopped. Saved history and files remain available.',
+          },
         });
   }
 
@@ -191,14 +214,29 @@ export class SessionService implements Sessions {
     const settled = new Promise<void>((resolve) => {
       resolveSettled = resolve;
     });
-    this.active.set(input.sessionId, { controller, modelId: input.modelId, settled });
+    this.active.set(input.sessionId, {
+      controller,
+      modelId: input.modelId,
+      settled,
+      savedMessages: 0,
+    });
     const abort = () => controller.abort();
     input.signal?.addEventListener('abort', abort, { once: true });
     if (input.signal?.aborted) controller.abort();
-    let session: Session | undefined;
+    let session: SessionConversation | undefined;
     try {
-      session = await this.store.get(input.sessionId);
+      session = await this.store.load(input.sessionId);
       if (!session) return { ok: false, sessionId: input.sessionId, error: 'Session not found.' };
+      const repaired = settledHistory(session.messages).map((message) =>
+        message.id ? message : { ...message, id: randomUUID() },
+      );
+      const changed =
+        repaired.length !== session.messages.length ||
+        repaired.some((message, index) => message.id !== session!.messages[index]?.id);
+
+      if (changed) await this.store.replace({ ...session, messages: repaired });
+
+      this.active.get(session.id)!.savedMessages = repaired.length;
       input = {
         ...input,
         readOnly: input.readOnly || session.access?.readOnly,
@@ -211,7 +249,7 @@ export class SessionService implements Sessions {
         modelId: input.modelId ?? session.modelId,
         status: 'running',
         error: undefined,
-        messages: [...settledHistory(session.messages), { role: 'user', content: input.input }],
+        messages: [...repaired, { role: 'user', content: input.input }],
       };
       await this.save(session);
       let requests = 0;
@@ -443,10 +481,10 @@ export class SessionService implements Sessions {
   }
 
   private async performTool(input: {
-    session: Session;
+    session: SessionConversation;
     call: ModelToolCall;
     context: ToolContext;
-  }): Promise<{ session: Session; result: ToolResult }> {
+  }): Promise<{ session: SessionConversation; result: ToolResult }> {
     const { session, call, context } = input;
     context.signal.throwIfAborted();
     const action = await this.activity.append({
@@ -467,7 +505,7 @@ export class SessionService implements Sessions {
       type: 'tool.completed',
       data: { actionId: action.id, call, result },
     });
-    const next: Session = {
+    const next: SessionConversation = {
       ...session,
       messages: [
         ...session.messages,
@@ -485,11 +523,11 @@ export class SessionService implements Sessions {
   }
 
   private withResponse(input: {
-    session: Session;
+    session: SessionConversation;
     response: ModelCompletion;
     messageId: string;
     modelId: string;
-  }): Session {
+  }): SessionConversation {
     const { session, response } = input;
     const usage =
       session.usage || response.usage
@@ -515,7 +553,8 @@ export class SessionService implements Sessions {
     };
   }
 
-  private async save(session: Session): Promise<void> {
+  private async save(session: SessionConversation): Promise<void> {
+    const active = this.active.get(session.id);
     const next = {
       ...session,
       modelId: this.active.get(session.id)?.modelId ?? session.modelId,
@@ -524,11 +563,32 @@ export class SessionService implements Sessions {
       ),
       updatedAt: new Date().toISOString(),
     };
-    await this.store.save(next);
-    this.events.publish({ type: 'session.updated', data: next });
+    const { messages, ...metadata } = next;
+    const added = messages.slice(active?.savedMessages ?? 0);
+    const latest = latestAssistant(messages);
+    const header: Session = {
+      ...metadata,
+      messageCount: messages.length,
+      preview:
+        latest?.content.slice(0, 500) || latest?.toolCalls?.map(({ name }) => name).join(', '),
+    };
+    await this.store.append({ session: header, messages: added });
+
+    if (active) active.savedMessages = messages.length;
+
+    this.events.publish({ type: 'session.updated', data: header });
+
+    if (added.length)
+      this.events.publish({
+        type: 'session.messages',
+        data: { id: session.id, runId: session.runId, messageCount: messages.length },
+      });
   }
 
-  private async finish(session: Session, result: SessionResult): Promise<SessionResult> {
+  private async finish(
+    session: SessionConversation,
+    result: SessionResult,
+  ): Promise<SessionResult> {
     await this.save({
       ...session,
       status: result.ok ? 'completed' : result.interrupted ? 'interrupted' : 'failed',

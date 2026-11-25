@@ -1,10 +1,11 @@
-import { Badge, Group, Paper, Select, Stack, Text } from '@mantine/core';
+import { Badge, Button, Group, Paper, Select, Stack, Text } from '@mantine/core';
 import { useEffect, useState, type ReactElement } from 'react';
 import type { Session } from '../../../modules/sessions/session.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { t } from '../../i18n/index.ts';
-import { ErrorNotice } from '../common/feedback.tsx';
+import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
+import { useSessionHistory } from './use-session-history.ts';
 
 /** Displays portable conversation history and provisional text separately. */
 export function SessionView(input: { session: Session }): ReactElement {
@@ -12,6 +13,7 @@ export function SessionView(input: { session: Session }): ReactElement {
     models = useApiQuery('models.list', {}),
     action = useOperation();
   const [stream, setStream] = useState('');
+  const history = useSessionHistory({ sessionId: input.session.id });
   useEffect(
     () =>
       client.subscribe((notice) => {
@@ -22,7 +24,7 @@ export function SessionView(input: { session: Session }): ReactElement {
           typeof data.text === 'string'
         )
           setStream((previous) => previous + data.text);
-        if (notice.type === 'session.updated' && data.id === input.session.id) setStream('');
+        if (notice.type === 'session.messages' && data.id === input.session.id) setStream('');
         if (notice.type === 'session.retry' && data.sessionId === input.session.id) setStream('');
       }),
     [client, input.session.id],
@@ -59,7 +61,17 @@ export function SessionView(input: { session: Session }): ReactElement {
           {t('Output')}: {input.session.usage.outputTokens ?? '—'}
         </Text>
       )}
-      {input.session.messages
+      <QueryFeedback loading={history.loading} error={history.error} />
+      {!!history.data?.start && (
+        <Button
+          variant="subtle"
+          loading={history.loadingEarlier}
+          onClick={() => void history.earlier()}
+        >
+          {t('Load earlier messages')}
+        </Button>
+      )}
+      {history.data?.messages
         .filter((message) => message.role !== 'system')
         .map((message, index) => (
           <Paper key={message.id ?? index} withBorder p="md">

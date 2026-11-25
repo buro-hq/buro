@@ -279,6 +279,20 @@ try {
   const outputTokens = backend.requests.some((request) => request.outputTokens !== undefined)
     ? backend.requests.reduce((total, request) => total + (request.outputTokens ?? 0), 0)
     : undefined;
+  const userTurns = new Map<string, number>();
+  for (const session of sessions) {
+    let after = -1;
+    let count = 0;
+    while (after + 1 < session.messageCount) {
+      const page = await app.sessions.history({ sessionId: session.id, after, limit: 250 });
+
+      if (!page.messages.length) break;
+
+      count += page.messages.filter((message) => message.role === 'user').length;
+      after = page.start + page.messages.length - 1;
+    }
+    userTurns.set(session.id, count);
+  }
   const report = {
     version: 1,
     sourceRevision,
@@ -329,7 +343,7 @@ try {
       result: session.result,
       error: session.error,
       usage: session.usage,
-      userTurns: session.messages.filter((message) => message.role === 'user').length,
+      userTurns: userTurns.get(session.id),
     })),
     tools: activities
       .filter((activity) => activity.type === 'tool.completed')

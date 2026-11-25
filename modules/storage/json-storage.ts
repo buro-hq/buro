@@ -1,7 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { RecordStore, StorageEngine, StoredRecord } from './record-store.ts';
+import type {
+  RecordStore,
+  StorageEngine,
+  StoredRecord,
+  RecordQuery,
+  RecordWrite,
+} from './record-store.ts';
+import { selectRecords } from './record-query.ts';
 
 /** Provides the same record contract using one atomic JSON file per feature. */
 export class JsonStorage implements StorageEngine {
@@ -47,7 +54,7 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
     }
   }
 
-  private write(update: (records: T[]) => T[]): Promise<void> {
+  private update(update: (records: T[]) => T[]): Promise<void> {
     const work = this.queue.then(async () => {
       const records = update(await this.read());
       await fs.mkdir(path.dirname(this.filename), { recursive: true, mode: 0o700 });
@@ -67,14 +74,32 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
     return (await this.list()).find((record) => record.id === id);
   }
 
-  async list(): Promise<T[]> {
+  async list(query?: RecordQuery<T>): Promise<T[]> {
     await this.queue;
-    return this.read();
+    return selectRecords({ records: await this.read(), query });
+  }
+
+  async write(input: RecordWrite<T>): Promise<void> {
+    const copy = structuredClone(input);
+    await this.update((records) => {
+      const removed = new Set(
+        copy.delete
+          ? selectRecords({ records, query: { where: copy.delete } }).map(({ id }) => id)
+          : [],
+      );
+      const next = new Map(
+        records.filter(({ id }) => !removed.has(id)).map((record) => [record.id, record]),
+      );
+
+      for (const record of copy.save ?? []) next.set(record.id, record);
+
+      return [...next.values()];
+    });
   }
 
   async save(record: T): Promise<void> {
     const copy = structuredClone(record);
-    await this.write((records) => {
+    await this.update((records) => {
       const index = records.findIndex((item) => item.id === copy.id);
       if (index < 0) return [...records, copy];
       return records.map((item, position) => (position === index ? copy : item));
@@ -82,7 +107,7 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
   }
 
   async delete(id: string): Promise<void> {
-    await this.write((records) => records.filter((record) => record.id !== id));
+    await this.update((records) => records.filter((record) => record.id !== id));
   }
 
   async patch(input: {
@@ -93,7 +118,7 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
     const changes = structuredClone(input.changes);
     const initial = structuredClone(input.initial);
     let updated: T | undefined;
-    await this.write((records) => {
+    await this.update((records) => {
       if (!records.some((record) => record.id === input.id) && initial) {
         updated = { ...initial, ...changes, id: input.id };
         return [...records, updated];

@@ -131,6 +131,7 @@
   "Run": "Run",
   "Start a goal to see its agents here.": "Start a goal to see its agents here.",
   "Waiting for the first response": "Waiting for the first response",
+  "Load earlier messages": "Load earlier messages",
   "Open conversation": "Open conversation",
   "Disconnect": "Disconnect",
   "Run a foreground server command. PORT and HOST are assigned automatically.": "Run a foreground server command. PORT and HOST are assigned automatically.",

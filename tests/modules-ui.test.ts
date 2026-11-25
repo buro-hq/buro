@@ -70,6 +70,21 @@ test(
                       ],
                     },
                   };
+                const observed = request.messages.filter(
+                  (message) => message.role === 'tool',
+                ).length;
+                if (observed < 28)
+                  return {
+                    model: 'fixture',
+                    finish: 'tools',
+                    message: {
+                      role: 'assistant',
+                      content: '',
+                      toolCalls: [
+                        { id: 'observe-' + observed, name: 'fixture_observe', arguments: {} },
+                      ],
+                    },
+                  };
                 assert.equal(
                   await fs.readFile(path.join(request.workspace, 'result.txt'), 'utf8'),
                   'Finished through the common tool loop\n',
@@ -87,6 +102,13 @@ test(
       ],
     });
     t.after(() => app.close());
+    app.tools.register({
+      effect: 'read',
+      definition: { name: 'fixture_observe', description: 'Observe fixture state', parameters: {} },
+      async execute() {
+        return { content: 'Fixture observed' };
+      },
+    });
     const model = await app.modelConfigurations.save({
       configuration: { name: 'Fixture model', transport: 'fixture', model: 'fixture' },
     });
@@ -154,6 +176,21 @@ test(
       page.getByText('The requested file is ready.', { exact: true }).first(),
     ).toBeVisible();
     await expect(page.getByText('Reported tokens', { exact: false })).toBeVisible();
+    // Reopening starts with the recent page; an already open view retains its earlier messages.
+    await page.getByRole('button', { name: 'All runs', exact: true }).click();
+    await page.getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: 'Load earlier messages', exact: true }),
+    ).toBeVisible();
+    const originalTask = page
+      .locator('pre.feature-pre')
+      .filter({ hasText: 'Write result.txt with the requested text' });
+    await expect(originalTask).toHaveCount(0);
+    await page.getByRole('button', { name: 'Load earlier messages', exact: true }).click();
+    await expect(originalTask).toHaveCount(1);
+    await expect(
+      page.getByRole('button', { name: 'Load earlier messages', exact: true }),
+    ).toHaveCount(0);
     await assert.rejects(fs.access(path.join(root, 'result.txt')));
     await page.getByRole('tab', { name: 'Changes', exact: true }).click();
     await expect(page.getByText('A · result.txt', { exact: true })).toBeVisible();
