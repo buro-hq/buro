@@ -60,3 +60,5 @@ The test suite covers portable model streams, thinking and tool calls, feature p
 See [architecture](ARCHITECTURE.md), [model connections](docs/MODELS.md) and the [refactor checkpoint](docs/ARCHITECTURE-REFACTOR-2026-11-25.md). Earlier designs and workflow tests belong to the archived implementation; historical documents are under [docs/archive](docs/archive/README.md).
 
 For an explicitly requested live model check, use `npm run evaluate:model -- queue MODEL_CONNECTION_ID` or `npm run evaluate:model -- review MODEL_CONNECTION_ID` while the daemon is stopped. These create synthetic projects and call the saved model connection. Reports retain the fixture identity, code revision, final independent checks, actual sessions, reported tokens and whole-run time. Token throughput over wall time is separate from provider decode speed.
+
+The [DeepSeek Flash thinking validation](docs/FLASH-VALIDATION-2026-11-25.md) records the live functional checks, collaboration trace, whole-run timings and current limitations.

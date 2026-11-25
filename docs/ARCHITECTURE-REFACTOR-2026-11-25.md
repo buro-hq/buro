@@ -23,11 +23,13 @@ The launcher, daemon, CLI and browser now use the feature APIs. The obsolete Cor
 
 The local state and a source bundle are archived on the Desktop. Four older linked workspaces already referred to missing Git metadata before the move; their files and references are preserved in that archive. The new database starts independently, with the explicitly requested DeepSeek Flash thinking connection selected.
 
-The current suite passes 104 behavioral checks, including real launcher/UI/CLI startup, parallel browser fixtures, shutdown during startup and publication, cancellation of catalogue requests, and restarting a saved attempt after its task is removed. Type checking, production build and formatting pass. Earlier totals counted the retired implementation's tests and do not describe the current suite.
+The current suite passes 105 behavioral checks, including real launcher/UI/CLI startup, parallel browser fixtures, shutdown during startup and publication, cancellation of catalogue requests, and restarting a saved attempt after its task is removed. Type checking, production build and formatting pass. Earlier totals counted the retired implementation's tests and do not describe the current suite.
 
-## Remaining validation
+## Live validation completed
 
-Run the completed application against DeepSeek Flash with thinking on a comparable Qwen task and a review/repair scenario. Inspect finished code, actual collaboration and wall time. Decode speed is reported only if the provider supplies the measurements. The initial Flash pilot passed all 3 public and 5 independent cases in 248 seconds, with one collaborator and 55 model requests. Its review expanded into speculative inputs and produced unnecessary defensive code. The follow-up changes pass the original task context to collaborators, inherit working instructions when no specialization is supplied, and advise simple contract-focused reviews. Workspace-local `.buro` scratch files are now available through file tools and stay out of result patches. The formal queue and review scenarios are rerun after those changes.
+The final DeepSeek Flash thinking runs passed all 3 public and 5 independent cases. The ordinary queue task took 16.48 seconds with 7 requests and no helper; the explicit review/repair scenario took 211.56 seconds with 55 requests and four helpers. Both ran the same final core revision. Their code, actual collaboration, diagnostic failures and measurement limits are recorded in [Flash validation](FLASH-VALIDATION-2026-11-25.md). Decoder timing was unavailable, so no decode speed is claimed.
+
+The remaining limitation is model efficiency: the explicit review scenario delegated more work than this small change needed. It completed correctly, and the runtime imposes no role count or mandatory review gate.
 
 Code and architecture preferences are saved on the user's Desktop in `buro-code-architecture-preferences.md`. The stopping threshold is actual weekly remaining capacity below 20%; before stopping, finish a tested checkpoint, commit and push it, and record outstanding work.
 

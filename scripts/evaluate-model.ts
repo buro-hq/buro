@@ -201,7 +201,10 @@ await safeGit(
 const app = await createApplication({ directory }),
   commands = new SandboxedCommands({ privatePaths: [path.join(directory, 'private')] });
 const stop = () => {
-  void app.stopWork();
+  process.exitCode = 130;
+  void app.stopWork().catch(() => {
+    process.exitCode = 1;
+  });
 };
 process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
@@ -267,6 +270,12 @@ try {
     public: await verify({ commands, workspace: run.workspace, source, cases: publicCases }),
     holdout: await verify({ commands, workspace: run.workspace, source, cases: holdoutCases }),
   };
+  const unexpectedFiles = (changes.files ?? []).filter(
+    (file) => !['src/priority.mjs', 'src/queue.mjs'].includes(file.path),
+  );
+  const scope = { passed: changes.ok && unexpectedFiles.length === 0, unexpectedFiles };
+  const verified =
+    scope.passed && Object.values(verification).every((result) => result.passed === result.total);
   const outputTokens = backend.requests.some((request) => request.outputTokens !== undefined)
     ? backend.requests.reduce((total, request) => total + (request.outputTokens ?? 0), 0)
     : undefined;
@@ -301,6 +310,7 @@ try {
     wallSeconds,
     baseline,
     verification,
+    scope,
     changedFiles: changes.files,
     requests: backend.requests,
     physicalGenerationAttempts: backend.requests.reduce(
@@ -331,6 +341,7 @@ try {
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2) + '\n', {
     mode: 0o600,
   });
+  if (!process.exitCode && (run.status !== 'completed' || !verified)) process.exitCode = 1;
   console.log(
     JSON.stringify({
       finished: true,
