@@ -1,0 +1,89 @@
+{
+  "measuredOn": "2026-11-25",
+  "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+  "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+  "fixtureId": "synthetic-ready-queue-v1",
+  "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+  "hardware": {
+    "gpu": "RTX 3060 12 GB",
+    "ramGB": 32
+  },
+  "configuration": {
+    "transport": "ollama",
+    "thinking": true,
+    "contextTokens": 32768,
+    "outputTokens": 8192,
+    "sampling": {
+      "temperature": 0.6,
+      "topP": 0.95,
+      "presencePenalty": 0
+    },
+    "capacity": 1,
+    "retries": 0,
+    "loadPolicy": "unload before each scenario; wall time includes model loading"
+  },
+  "samples": [
+    {
+      "model": "qwen3.5:9b-q4_K_M",
+      "wallSeconds": 65.099677708,
+      "decodeTokensPerSecond": 54.53471842609964,
+      "outputTokens": 2612,
+      "decodeSeconds": 47.896094,
+      "timedRequests": 7,
+      "modelRequests": 7,
+      "thinkingObservedRequests": 7,
+      "publicPassed": 3,
+      "publicTotal": 3,
+      "holdoutPassed": 5,
+      "holdoutTotal": 5,
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T12-31-37-012Z-queue/report.json"
+    },
+    {
+      "model": "qwen3.6:35b-a3b-q4_K_M",
+      "wallSeconds": 68.55789658299999,
+      "decodeTokensPerSecond": 45.621599024862014,
+      "outputTokens": 1348,
+      "decodeSeconds": 29.547407999999997,
+      "timedRequests": 7,
+      "modelRequests": 7,
+      "thinkingObservedRequests": 7,
+      "publicPassed": 3,
+      "publicTotal": 3,
+      "holdoutPassed": 5,
+      "holdoutTotal": 5,
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T13-04-21-388Z-queue/report.json"
+    }
+  ],
+  "collaborationSamples": [
+    {
+      "model": "qwen3.5:9b-q4_K_M",
+      "scenario": "review",
+      "status": "interrupted",
+      "wallSeconds": 1893.807344208,
+      "collaborators": 9,
+      "modelRequests": 261,
+      "publicPassed": 3,
+      "publicTotal": 3,
+      "holdoutPassed": 4,
+      "holdoutTotal": 5,
+      "stoppedManually": true,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T12-32-44-584Z-review/report.json"
+    },
+    {
+      "model": "qwen3.6:35b-a3b-q4_K_M",
+      "scenario": "review",
+      "status": "completed",
+      "wallSeconds": 647.768538083,
+      "collaborators": 7,
+      "modelRequests": 70,
+      "publicPassed": 3,
+      "publicTotal": 3,
+      "holdoutPassed": 5,
+      "holdoutTotal": 5,
+      "stoppedManually": false,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T13-05-32-721Z-review/report.json"
+    }
+  ]
+}
