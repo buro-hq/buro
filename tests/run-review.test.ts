@@ -67,7 +67,7 @@ const fixture = async (t: { after(callback: () => Promise<void>): void }, option
             const value = await fs.readFile(path.join(request.workspace, 'value.txt'), 'utf8');
             if (request.sessionId === executorId) {
               const corrections = request.messages.some((message) => message.role === 'user' && message.content.includes('Independent review found'));
-              const writeObserved = request.messages.some((message) => message.role === 'tool' && message.toolName === 'write_file' && message.content.includes('value.txt'));
+              const writeObserved = request.messages.some((message) => message.role === 'tool' && message.toolName === 'write_file');
               if (options.readOnly)
                 return answer('Read-only inspection completed.');
 
@@ -149,6 +149,7 @@ const fixture = async (t: { after(callback: () => Promise<void>): void }, option
   });
   const review: ReviewSettings = {
     enabled: true,
+    maxRounds: 2,
     participants: [
       { name: 'Any label', instructions: 'Check behavior.', modelId: 'alternate', tools: ['read_file', 'command', 'ungranted'] },
       { name: 'A different label', instructions: 'Check simplicity.' },
