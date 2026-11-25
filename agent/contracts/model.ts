@@ -46,11 +46,6 @@ export type ModelStreamEvent =
   | { type: 'usage'; usage: ModelUsage }
   /** An observed wire terminal, including incomplete output, never goal acceptance. */
   | { type: 'response.completed'; model: string; finish: ModelFinish };
-export type ModelContext = {
-  phase: 'work' | 'final';
-  /** Host-owned completion-note indexes from the private checkpoint, never model-generated tags. */
-  intermediateMessageIndexes?: readonly number[];
-};
 export interface ModelProvider {
   readonly id: string;
   readonly revision: string;
@@ -60,8 +55,6 @@ export interface ModelProvider {
   readonly structuredOutputMode?: 'schema' | 'instruction';
   /** Lists model identifiers when the transport provides a catalogue. */
   listModels?(signal: AbortSignal): Promise<AvailableModel[]>;
-  /** Provider-specific request view; the host supplies a clone of the full private history. */
-  contextMessages?(messages: readonly ModelMessage[], context?: ModelContext): ModelMessage[];
   complete(input: {
     requestId: string;
     model: string;

@@ -1,6 +1,5 @@
 import type {
   ModelCompletion,
-  ModelMessage,
   ModelProvider,
   ModelToolCall,
   AvailableModel,
@@ -26,8 +25,6 @@ export interface SessionBackend {
   readonly revision: string;
   /** Reads model metadata without starting a generation. */
   listModels?(input: { signal: AbortSignal }): Promise<AvailableModel[]>;
-  /** Projects adapter-owned context without changing shared history. */
-  contextMessages?(messages: readonly ModelMessage[]): ModelMessage[];
   /** Completes a host request, optionally calling registered tools through the callback. */
   complete(input: BackendRequest): Promise<ModelCompletion>;
 }

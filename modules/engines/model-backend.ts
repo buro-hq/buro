@@ -1,6 +1,5 @@
 import type {
   ModelCompletion,
-  ModelMessage,
   ModelProvider,
   AvailableModel,
 } from '../../agent/contracts/model.ts';
@@ -28,11 +27,6 @@ export class ModelBackend implements SessionBackend {
     const hasNonnegativeRetries = this.retries >= 0;
     if (!hasWholeRetries || !hasNonnegativeRetries)
       throw new Error('HTTP retries must be a nonnegative integer.');
-  }
-
-  /** Delegates provider-specific request projection. */
-  contextMessages(messages: readonly ModelMessage[]): ModelMessage[] {
-    return this.provider.contextMessages?.(messages) ?? structuredClone([...messages]);
   }
 
   /** Delegates optional transport metadata discovery. */

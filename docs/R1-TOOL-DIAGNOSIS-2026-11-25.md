@@ -2,7 +2,7 @@
 
 The original R1 14B and 32B connections received native tool definitions but returned no structured calls. Captured API responses already lacked `message.tool_calls`; Buro did not discard a valid call while decoding them. This diagnoses the current integration, not general DeepSeek coding quality.
 
-The deployment is not fixed. A temporary alias saved a replacement template in its configuration but still reported the embedded GGUF template as its effective prompt source. It did not provide a valid test of an active replacement template.
+The current R1 connections are excluded from our working agent comparison. Native function calling was not established, and the proposed JSON tool adapter was removed. No model allowlist or compatibility gate was added to Buro.
 
 ## Method
 
@@ -36,16 +36,34 @@ Ollama documents `template_source` as the source actually used to build the prom
 
 The evidence points to tool-catalog rendering and call parsing in this R1/Ollama configuration. It establishes that definitions were sent, raw structured calls were absent, explicit instructions changed the output, and Buro's tool path worked with the control. It does not establish that R1 can never use tools, nor capture every internal stage of Ollama's prompt construction.
 
-## What needs correction
+## Follow-up experiments and decision
 
-1. Select an actually active tool-aware template or renderer that includes available definitions and preserves tool exchanges.
-2. Match the generated call format to an output parser that returns structured `tool_calls`.
-3. Verify the complete marker exchange, then rerun coding scenarios. If the current Ollama path cannot provide that contract, test the same weights through the installed llama.cpp engine.
+Five further engine-configuration probes explicitly selected renderers/parsers: three used `deepseek3.1` / `deepseek3`, and two used a tool-aware Go template with `qwen3-thinking`. Ollama reported these settings as active. The catalog became visible, but all five responses still contained zero native API tool calls. These configurations did not establish working function calling for the installed weights.
 
-This work belongs at the model/backend boundary. The diagnostic does not require a new role, acceptance policy or admission gate in the session loop. It also does not justify treating arbitrary assistant text as executable instructions.
+An uncommitted schema-constrained JSON protocol prototype dispatched real read-only calls. An early 14B probe repeated calls; a revised probe returned the observed marker with additional prose, failing the original exact-answer criterion. Neither was a coding validation. The 32B experiments were interrupted. At the user's request the prototype, its transport and its tests were removed; no substitute function-calling protocol ships.
+
+It was too strong to attribute the entire failure to connection configuration. A missing catalog is a concrete defect, but fixing it does not prove that the weights reliably use tools. Advertised capabilities and an inherited template are insufficient evidence of model training or agent reliability. The [official R1-0528 card](https://huggingface.co/deepseek-ai/DeepSeek-R1-0528) separately reports tool benchmarks for the full model and reasoning/coding benchmarks for its Qwen3-8B distillation; those full-model tool scores must not be transferred to our smaller models.
+
+Working comparisons now prioritize native tool use, thinking enabled and a practical generation-rate target of at least 15 tokens/s. This is an experiment-selection preference, not an application restriction. Whole-task time and resulting code quality remain separate measurements. See the [local DeepSeek alternatives](DEEPSEEK-LOCAL-OPTIONS-2026-11-25.md).
+
+## Runtime simplification and verification
+
+The old non-thinking Ollama history projection was also removed. It silently blanked selected assistant commentary and carried provenance conditions for intermediate messages. Its unused context metadata and delegation hooks through the provider, backend, session and evaluation wrapper were deleted. Native wire formatting remains in each provider; bounded conversation context remains shared.
+
+Regression checks now cover complete history serialization for all thinking settings and verify that ordinary JSON or call-like text never becomes an executable action. Lint, formatting, type checks, the build and all 122 remaining tests passed.
+
+Three fresh native RTX probes after cleanup each executed one tool and returned its hidden result:
+
+| Connection | Whole probe | Result included | Exact marker-only answer          |
+| ---------- | ----------- | --------------- | --------------------------------- |
+| Qwen 35B   | 36.72 s     | Yes             | No, explanatory sentence          |
+| Qwen 9B    | 17.30 s     | Yes             | Yes                               |
+| Flint 40B  | 26.88 s     | Yes             | No, Markdown and explanatory text |
+
+These probes demonstrate the native exchange after cleanup. They are not new coding-quality scores, and the strict output-format failures remain recorded.
 
 ## Cleanup and evidence
 
-The temporary alias was removed, original 14B/32B tags were preserved, and the prior model server was restored and passed its health check. User connections and the application default were unchanged.
+All temporary R1 aliases were removed, original 14B/32B tags were preserved, and the prior model server was restored and passed its health check. No probe remains running. User connections and the application default were unchanged.
 
 The [sanitized snapshot](assets/architecture/r1-tool-diagnosis.json) records all probes, effective metadata, template analysis and cleanup. Raw requests, reasoning and responses remain under ignored `artifacts/deepseek-tool-diagnosis/`. The [original matrix](RTX-THINKING-VALIDATION-2026-11-25.md) retains its measured outcomes; its R1 rows are not generated-code quality scores. Qwen 35B remains the practical choice from that matrix.

@@ -45,7 +45,7 @@ The Qwen 9B review was stopped manually after over 31 minutes of repeated delega
 
 Flint's root conversation and two collaborators completed, but another collaborator failed with `MODEL_STREAM_INTERRUPTED`. Final code still passed all eight assertions. Retries were disabled, so this run is not evidence of error-free collaboration.
 
-Both DeepSeek connections had thinking enabled and produced thinking data, but neither emitted a structured tool call in either scenario. Their answers described changes, tests and collaborators without performing them. No files changed. The surviving 3/8 and 7/8 assertions already passed before execution; they are not credit for a generated fix. Determining whether a different template, adapter or model configuration improves tool use requires a separate experiment.
+Both DeepSeek connections had thinking enabled and produced thinking data, but neither emitted a structured tool call in either scenario. Their answers described changes, tests and collaborators without performing them. No files changed. The surviving 3/8 and 7/8 assertions already passed before execution; they are not credit for a generated fix. Follow-up configuration experiments did not establish native tool use; the JSON protocol prototype was removed.
 
 ## Reading the timings
 
@@ -57,11 +57,11 @@ The ordinary runs also recorded different memory residency through Ollama's runn
 
 ## Current conclusion
 
-Qwen 35B is the strongest practical candidate in this matrix: both final results passed, and it finished both scenarios substantially sooner than Flint. Its seven-helper review is still expensive for a small change. Qwen 9B remains promising for direct tasks, while reliable coordination needs further work. The current DeepSeek R1 connections did not perform the requested actions; this integration behavior should be investigated before comparing their generated code quality.
+Qwen 35B is the strongest practical candidate in this matrix: both final results passed, and it finished both scenarios substantially sooner than Flint. Its seven-helper review is still expensive for a small change. Qwen 9B remains promising for direct tasks, while reliable coordination needs further work. The current R1 connections are excluded from working agent comparisons. The user's practical speed target is at least 15 generated tokens/s with thinking enabled, alongside result quality and whole-task time; Buro does not enforce this preference as a runtime gate.
 
 The prior model server was restored after the matrix, and its health endpoint responded successfully. Evaluation processes are no longer running.
 
-The [follow-up tool diagnosis](R1-TOOL-DIAGNOSIS-2026-11-25.md) confirms the absence of raw API tool calls, records the positive control and identifies the effective-template problem. R1 deployment remains unresolved; the temporary diagnostic alias was removed.
+The [follow-up tool diagnosis](R1-TOOL-DIAGNOSIS-2026-11-25.md) records the configuration experiments, removal of compatibility workarounds and fresh native checks on Qwen 9B/35B and Flint. All temporary diagnostic aliases were removed.
 
 ## Evidence
 

@@ -344,13 +344,12 @@ export class SessionService implements Sessions {
           providerRevision: model.backend.revision,
           messages: session.messages,
         });
-        const context = conversationContext({
+        const messages = conversationContext({
           messages: privateMessages,
           contextTokens: model.contextTokens,
           outputTokens: model.outputTokens,
           toolTokens: Math.ceil(JSON.stringify(definitions).length / 4),
         });
-        const messages = model.backend.contextMessages?.(context) ?? context;
         const toolContext: ToolContext = {
           sessionId: session.id,
           runId: session.runId,

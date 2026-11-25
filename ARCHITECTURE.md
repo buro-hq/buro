@@ -84,6 +84,8 @@ Qwen 35B completed the review scenario on the same code revision with 8/8 checks
 
 History stores messages, not requests already formatted for one provider. Before a request, the application attaches compatible private adapter continuation and constructs a bounded context view. Private state is associated with the model, backend revision and message identity; switching models does not attach another adapter's continuation. Projection does not alter saved history.
 
+Providers serialize the shared request directly. The previous non-thinking Ollama commentary filter and its extra context-projection hooks were removed. There is no R1 JSON tool emulation or model-name routing in the session loop. Native tool proposals come from the configured backend's protocol; ordinary assistant prose is retained as text.
+
 Context size currently uses an approximate serialized-size estimate. Instructions, the initial and current assignments, and complete tool-call/result exchanges are retained. Large tool results may be shortened in the request view. Exact tokenization, semantic summarization and a repository index are not implemented yet. See [conversationContext](modules/sessions/context.ts) and [ModelRegistry](modules/models/model-registry.ts).
 
 ## 6. Persistence and UI updates

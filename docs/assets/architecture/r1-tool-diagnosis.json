@@ -274,10 +274,164 @@
     }
   ],
   "cleanup": {
-    "temporaryAliasRemoved": true,
-    "originalTagsPreserved": true,
+    "temporaryAliasesRemaining": [],
+    "original14BPreserved": true,
+    "original32BPreserved": true,
+    "jsonPrototypeRemoved": true,
     "priorServerHealth": {
       "status": "ok"
+    },
+    "runtimeChecks": {
+      "testsPassed": 122,
+      "lint": true,
+      "format": true,
+      "typecheck": true,
+      "build": true
     }
+  },
+  "followUpNativeConfigurationProbes": [
+    {
+      "model": "buro-r1-tools:14b",
+      "condition": "action",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 21.583143833,
+      "executedCalls": 0,
+      "rawToolCalls": 0,
+      "exactMarkerReturned": false,
+      "observedMarkerIncluded": false,
+      "thinkingObserved": true
+    },
+    {
+      "model": "buro-r1-tools:14b",
+      "condition": "exposure",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 4.840359625,
+      "executedCalls": 0,
+      "rawToolCalls": 0,
+      "exactMarkerReturned": false,
+      "observedMarkerIncluded": false,
+      "thinkingObserved": true
+    },
+    {
+      "model": "buro-r1-tools:32b",
+      "condition": "action",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 114.981921291,
+      "executedCalls": 0,
+      "rawToolCalls": 0,
+      "exactMarkerReturned": false,
+      "observedMarkerIncluded": false,
+      "thinkingObserved": true
+    },
+    {
+      "model": "buro-r1-json-tools:14b",
+      "condition": "action",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 17.561903416,
+      "executedCalls": 0,
+      "rawToolCalls": 0,
+      "exactMarkerReturned": false,
+      "observedMarkerIncluded": false,
+      "thinkingObserved": true
+    },
+    {
+      "model": "buro-r1-json-tools:32b",
+      "condition": "action",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 97.55249266700001,
+      "executedCalls": 0,
+      "rawToolCalls": 0,
+      "exactMarkerReturned": false,
+      "observedMarkerIncluded": false,
+      "thinkingObserved": true
+    }
+  ],
+  "removedPrototypeExperiments": [
+    {
+      "model": "deepseek-r1:14b",
+      "condition": "json-protocol",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 46.318301332999994,
+      "executedCalls": 3,
+      "rawToolCalls": 0,
+      "exactMarkerReturned": false,
+      "observedMarkerIncluded": false,
+      "thinkingObserved": true
+    },
+    {
+      "model": "deepseek-r1:32b",
+      "condition": "json-protocol",
+      "exitCode": -15,
+      "completed": false
+    },
+    {
+      "model": "deepseek-r1:14b",
+      "condition": "json-protocol-v2",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 30.216724666999998,
+      "executedCalls": 1,
+      "rawToolCalls": 0,
+      "exactMarkerReturned": false,
+      "observedMarkerIncluded": true,
+      "thinkingObserved": true
+    },
+    {
+      "model": "deepseek-r1:32b",
+      "condition": "json-protocol-v2",
+      "exitCode": -15,
+      "completed": false
+    }
+  ],
+  "nativeControlsAfterCleanup": [
+    {
+      "model": "qwen3.6:35b-a3b-q4_K_M",
+      "condition": "action",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 36.723891042000005,
+      "executedCalls": 1,
+      "rawToolCalls": 1,
+      "exactMarkerReturned": false,
+      "observedMarkerIncluded": true,
+      "thinkingObserved": true
+    },
+    {
+      "model": "qwen3.5:9b-q4_K_M",
+      "condition": "action",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 17.296978666999998,
+      "executedCalls": 1,
+      "rawToolCalls": 1,
+      "exactMarkerReturned": true,
+      "observedMarkerIncluded": true,
+      "thinkingObserved": true
+    },
+    {
+      "model": "flint:40b-a2b-q4_1",
+      "condition": "action",
+      "exitCode": 0,
+      "completed": true,
+      "wallSeconds": 26.882310167,
+      "executedCalls": 1,
+      "rawToolCalls": 1,
+      "exactMarkerReturned": false,
+      "observedMarkerIncluded": true,
+      "thinkingObserved": true
+    }
+  ],
+  "selection": {
+    "nativeToolCalling": true,
+    "thinking": true,
+    "targetGenerationTokensPerSecond": 15,
+    "runtimeGateAdded": false,
+    "r1CodingRerun": false
   }
 }

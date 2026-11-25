@@ -36,9 +36,6 @@ class MeasuredBackend implements SessionBackend {
     this.revision = input.backend.revision;
   }
 
-  contextMessages: SessionBackend['contextMessages'] = (messages) =>
-    this.backend.contextMessages?.(messages) ?? structuredClone([...messages]);
-
   async complete(input: BackendRequest): Promise<ModelCompletion> {
     const started = performance.now();
     const measurement: RequestMeasurement = {
