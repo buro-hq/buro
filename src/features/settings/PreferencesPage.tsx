@@ -12,11 +12,10 @@ import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { t, useLocale, setLocale } from '../../i18n/index.ts';
-import { ThemePreview, Panel } from '@/shared/ui';
+import { ThemePreview, Panel, ErrorNotice, QueryFeedback } from '@/shared/ui';
 import { useAppearance } from '../../theme/AppearanceProvider.tsx';
 import { themePresets } from '../../theme/presets.ts';
-import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
-import { useOperation } from '../common/operation.ts';
+import { useOperation } from '@/shared/lib';
 import { ReviewEditor } from '@/features/run-review';
 import type { ReviewSettings } from '#shared/contracts';
 

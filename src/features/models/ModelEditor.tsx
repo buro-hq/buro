@@ -19,8 +19,8 @@ import type {
 } from '../../../modules/models/model-configuration.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { t } from '../../i18n/index.ts';
-import { ErrorNotice } from '../common/feedback.tsx';
-import { useOperation } from '../common/operation.ts';
+import { ErrorNotice } from '@/shared/ui';
+import { useOperation } from '@/shared/lib';
 
 /** Edits a connection without starting inference or replacing an omitted credential. */
 export const ModelEditor = (input: {

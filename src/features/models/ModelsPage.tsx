@@ -2,10 +2,9 @@ import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import { useState, type ReactElement } from 'react';
 import type { ModelConfigurationView } from '../../../modules/models/model-configuration.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
-import { Panel } from '@/shared/ui';
+import { Panel, ErrorNotice, QueryFeedback } from '@/shared/ui';
 import { t } from '../../i18n/index.ts';
-import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
-import { useOperation } from '../common/operation.ts';
+import { useOperation } from '@/shared/lib';
 import { ModelEditor } from './ModelEditor.tsx';
 
 /** Connections are application-wide; choosing a model never requires a project profile. */

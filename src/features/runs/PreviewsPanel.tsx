@@ -2,8 +2,8 @@ import { Badge, Button, Group, Paper, Stack, Text, TextInput } from '@mantine/co
 import { useState, type ReactElement } from 'react';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { t } from '../../i18n/index.ts';
-import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
-import { useOperation } from '../common/operation.ts';
+import { ErrorNotice, QueryFeedback } from '@/shared/ui';
+import { useOperation } from '@/shared/lib';
 
 /** Preview processes remain optional and independent of the attempt's completion. */
 export const PreviewsPanel = (input: { runId: string }): ReactElement => {

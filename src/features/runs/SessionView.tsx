@@ -3,8 +3,8 @@ import { useEffect, useState, type ReactElement } from 'react';
 import type { Session } from '../../../modules/sessions/session.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { t } from '../../i18n/index.ts';
-import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
-import { useOperation } from '../common/operation.ts';
+import { ErrorNotice, QueryFeedback } from '@/shared/ui';
+import { useOperation } from '@/shared/lib';
 import { useSessionHistory } from './use-session-history.ts';
 
 /** Displays portable conversation history and provisional text separately. */

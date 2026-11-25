@@ -3,8 +3,8 @@ import { useState, type ReactElement } from 'react';
 import type { Task } from '../../../modules/tasks/task.ts';
 import { useApplication } from '../../data/application.tsx';
 import { t } from '../../i18n/index.ts';
-import { ErrorNotice } from '../common/feedback.tsx';
-import { useOperation } from '../common/operation.ts';
+import { ErrorNotice } from '@/shared/ui';
+import { useOperation } from '@/shared/lib';
 import { uploadedFile } from '../materials/upload.ts';
 
 /** Saves user intent and optional attachments without imposing an acceptance form. */

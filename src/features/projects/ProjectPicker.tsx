@@ -3,8 +3,8 @@ import { useState, type ReactElement } from 'react';
 import type { Project } from '../../../modules/projects/project.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { t } from '../../i18n/index.ts';
-import { useOperation } from '../common/operation.ts';
-import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
+import { useOperation } from '@/shared/lib';
+import { ErrorNotice, QueryFeedback } from '@/shared/ui';
 
 /** Chooses a source directory without requiring a model, team or execution profile. */
 export const ProjectPicker = (input: {

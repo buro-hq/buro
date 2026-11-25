@@ -12,7 +12,7 @@ Shared is organized by purpose, rather than becoming a second application module
 
 Use [Feature-Sliced Design](https://feature-sliced.design/docs/reference/layers): app, pages, widgets, features, entities and shared. Create only layers and slices with actual responsibilities. Pages may own their page-specific logic; extracting a feature should identify a reusable user action. Slices depend on lower layers through public entry points.
 
-Shared UI uses Atomic Design categories: `src/shared/ui/atoms/`, `molecules/` and further categories when needed. These describe component composition inside shared UI; business actions and domain-specific widgets retain their FSD owners.
+Shared UI uses Atomic Design categories: `src/shared/ui/atoms/`, `molecules/` and further categories when needed. These describe component composition inside shared UI; business actions and domain-specific widgets retain their FSD owners. Generic feedback components (`ErrorNotice`, `QueryFeedback`) and the action state hook (`useOperation`) live in `src/shared/ui/molecules/` and `src/shared/lib/` respectively. Consumers use the public `@/shared/ui` and `@/shared/lib` entries.
 
 ```text
 src/
