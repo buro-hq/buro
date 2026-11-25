@@ -13,6 +13,8 @@ export const ignoredFiles = [
   '**/node_modules/**',
   'dist/**',
   '.buro/**',
+  '.codex/**',
+  '.проект/**',
   '.firecrawl/**',
   'artifacts/**',
   'archive/**',

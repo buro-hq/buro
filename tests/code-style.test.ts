@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import ts from 'typescript';
@@ -207,16 +210,38 @@ test('documented union members keep their comments and leading type separators',
   }), output);
 });
 
-test('formatting and correctness have distinct configurations', async () => {
+test('formatting and correctness have distinct configurations', async (t) => {
   const code = 'Promise.resolve(1);\n';
   assert.equal(await format({
     code,
   }), code);
-  const linter = new ESLint();
-  const [result] = await linter.lintText(code, {
-    filePath: 'src/data/query-subscription.ts',
+  // CI's single-run TypeScript program reads disk; exercise actual files in an isolated project.
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-style-project-'));
+  t.after(() => fs.rm(directory, {
+    recursive: true,
+    force: true,
+  }));
+  await fs.mkdir(path.join(directory, 'src'));
+  const project = path.join(directory, 'tsconfig.json');
+  await fs.writeFile(project, JSON.stringify({
+    compilerOptions: { target: 'ES2022', module: 'ESNext', strict: true, types: [] },
+    include: ['src'],
+  }));
+  await fs.writeFile(path.join(directory, 'src/unsafe.ts'), code);
+  await fs.writeFile(path.join(directory, 'src/safe.ts'), 'void Promise.resolve(1);\n');
+  const linter = new ESLint({
+    cwd: directory,
+    overrideConfigFile: path.resolve('eslint.config.mjs'),
+    overrideConfig: [{
+      files: ['src/**/*.ts'],
+      languageOptions: { parserOptions: { project: [project], tsconfigRootDir: directory } },
+    }],
   });
-  assert.ok(result.messages.some(({ ruleId }) => ruleId === '@typescript-eslint/no-floating-promises'));
+  const results = await linter.lintFiles(['src/*.ts']);
+  const unsafe = results.find((result) => path.basename(result.filePath) === 'unsafe.ts')!;
+  const safe = results.find((result) => path.basename(result.filePath) === 'safe.ts')!;
+  assert.ok(unsafe.messages.some(({ ruleId }) => ruleId === '@typescript-eslint/no-floating-promises'), JSON.stringify(unsafe.messages));
+  assert.deepEqual(safe.messages, []);
 });
 
 test('format owners agree on source and exclude generated and private state', async () => {
@@ -228,7 +253,7 @@ test('format owners agree on source and exclude generated and private state', as
     assert.equal(await formatter.isPathIgnored(file), false, file);
   }
 
-  for (const file of ['.buro/private/state.json', '.firecrawl/result.ts', 'artifacts/check.ts', 'docs/archive/old.ts']) {
+  for (const file of ['.buro/private/state.json', '.codex/settings.json', '.проект/state.ts', '.firecrawl/result.ts', 'artifacts/check.ts', 'docs/archive/old.ts']) {
     assert.equal(await formatter.isPathIgnored(file), true, file);
     assert.equal((await getFileInfo(file, {
       ignorePath: '.prettierignore',
