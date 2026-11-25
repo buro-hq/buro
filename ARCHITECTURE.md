@@ -146,6 +146,12 @@ OpenCode documents fresh context in child sessions. Buro also uses separate coll
 
 OpenHands offers a useful distinction between conversations and workspaces; its distributed infrastructure is not currently needed for Buro's local deployment. Aider's repository map could become an optional capability. Agents SDK helps distinguish tool-like delegation from handoffs; Buro's current `session_start` / `session_wait` is closer to the former. These are our design conclusions from the cited sources.
 
+### External evaluation: SWE-CoWork
+
+[SWE-CoWork](https://arxiv.org/html/2611.20218v1) evaluates 101 assignments with requirements distributed across workplace records and simulated colleagues. F2P measures new requirement test nodes passed; P2P measures preserved behavior. Full task success requires every node in both groups to pass. These are different from Buro's small functional smoke tasks.
+
+The paper uses Codex for GPT-6 Astra and Claude Code for the other models, so its table evaluates model/scaffold combinations. Our design takeaway is to track requirements, evidence and follow-up work, and distinguish claimed completion from verified effects. Its simulated organization does not imply a fixed team size or role sequence for Buro.
+
 ## 10. Performance and observability
 
 Whole-task time includes loading the model, processing context, generation, tools, persistence and waiting for collaborators. Concurrent sessions share the endpoint's configured capacity. Agent counts and tokens/second alone do not measure task completion speed.
@@ -161,7 +167,7 @@ Both use thinking, an RTX 3060 12 GB with 32 GB RAM, revision `88fecc9`, fixture
 
 These are single measurements of a small task without collaborators, confidence intervals or a general quality ranking. The [completed five-model matrix](docs/RTX-THINKING-VALIDATION-2026-11-25.md) also records review outcomes, unchanged DeepSeek results and execution failures. Generation rate is total reported output tokens divided by total `eval_duration` for completed timed responses. All seven requests in each row report timing and observed private continuation. Output tokens divided by whole-task time is a different metric. Ollama durations are converted from nanoseconds to seconds. [Response format](https://docs.ollama.com/api/chat#response-eval-duration).
 
-Private reports remain in ignored `artifacts/model-evaluation/`. Only aggregates and code, harness and fixture hashes are committed. Earlier functional checks and their limits are recorded in [Flash validation](docs/FLASH-VALIDATION-2026-11-25.md).
+Private reports remain in ignored `artifacts/model-evaluation/`. Only aggregates and code, harness and fixture hashes are committed. Earlier functional checks and their limits are recorded in [Flash validation](docs/FLASH-VALIDATION-2026-11-25.md). The [R1 tool diagnosis](docs/R1-TOOL-DIAGNOSIS-2026-11-25.md) separates its connection failures from model coding quality.
 
 ## 11. Next changes
 

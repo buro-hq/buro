@@ -61,6 +61,8 @@ Qwen 35B is the strongest practical candidate in this matrix: both final results
 
 The prior model server was restored after the matrix, and its health endpoint responded successfully. Evaluation processes are no longer running.
 
+The [follow-up tool diagnosis](R1-TOOL-DIAGNOSIS-2026-11-25.md) confirms the absence of raw API tool calls, records the positive control and identifies the effective-template problem. R1 deployment remains unresolved; the temporary diagnostic alias was removed.
+
 ## Evidence
 
 The committed [matrix snapshot](assets/architecture/rtx-matrix.json) contains final and baseline assertions, timings, request/helper/tool counts, file changes, memory observations and source/harness/task hashes for all ten scenarios. Private reports and isolated evaluation state remain under ignored `artifacts/model-evaluation/` and `artifacts/manual-style-rtx/`.

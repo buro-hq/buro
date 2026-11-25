@@ -1,0 +1,283 @@
+{
+  "checkedOn": "2026-11-25",
+  "ollamaVersion": "0.40.16",
+  "thinkingRequested": true,
+  "contextTokens": 8192,
+  "maxOutputTokens": 1024,
+  "endpointCapacity": 1,
+  "retries": 0,
+  "network": "direct LAN without proxy",
+  "cases": [
+    {
+      "model": "buro-probe-r1-14b-tools",
+      "condition": "action",
+      "wallSeconds": 25.6670115,
+      "executedCalls": 0,
+      "exactMarkerReturned": false,
+      "functionNameObserved": false,
+      "requests": [
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 0,
+          "nameObservedInTextOrThinking": false,
+          "nameOutsideDefinitions": false,
+          "plainJsonCallMatchesTool": false,
+          "finish": "stop"
+        }
+      ],
+      "privateReportArtifact": "artifacts/deepseek-tool-diagnosis/runs/buro-probe-r1-14b-tools-action-1795619921146/report.json"
+    },
+    {
+      "model": "buro-probe-r1-14b-tools",
+      "condition": "exposure",
+      "wallSeconds": 14.856980541,
+      "executedCalls": 0,
+      "exactMarkerReturned": false,
+      "functionNameObserved": false,
+      "requests": [
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 0,
+          "nameObservedInTextOrThinking": false,
+          "nameOutsideDefinitions": false,
+          "plainJsonCallMatchesTool": false,
+          "finish": "stop"
+        }
+      ],
+      "privateReportArtifact": "artifacts/deepseek-tool-diagnosis/runs/buro-probe-r1-14b-tools-exposure-1795619946930/report.json"
+    },
+    {
+      "model": "deepseek-r1:14b",
+      "condition": "action",
+      "wallSeconds": 25.9944795,
+      "executedCalls": 0,
+      "exactMarkerReturned": false,
+      "functionNameObserved": false,
+      "requests": [
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 0,
+          "nameObservedInTextOrThinking": false,
+          "nameOutsideDefinitions": false,
+          "plainJsonCallMatchesTool": false,
+          "finish": "stop"
+        }
+      ],
+      "privateReportArtifact": "artifacts/deepseek-tool-diagnosis/runs/deepseek-r1-14b-action-1795619400509/report.json"
+    },
+    {
+      "model": "deepseek-r1:14b",
+      "condition": "catalog",
+      "wallSeconds": 21.291458542,
+      "executedCalls": 0,
+      "exactMarkerReturned": false,
+      "functionNameObserved": true,
+      "requests": [
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 0,
+          "nameObservedInTextOrThinking": true,
+          "nameOutsideDefinitions": true,
+          "plainJsonCallMatchesTool": false,
+          "finish": "stop"
+        }
+      ],
+      "privateReportArtifact": "artifacts/deepseek-tool-diagnosis/runs/deepseek-r1-14b-catalog-1795619799864/report.json"
+    },
+    {
+      "model": "deepseek-r1:14b",
+      "condition": "exposure",
+      "wallSeconds": 26.19309775,
+      "executedCalls": 0,
+      "exactMarkerReturned": false,
+      "functionNameObserved": false,
+      "requests": [
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 0,
+          "nameObservedInTextOrThinking": false,
+          "nameOutsideDefinitions": false,
+          "plainJsonCallMatchesTool": false,
+          "finish": "stop"
+        }
+      ],
+      "privateReportArtifact": "artifacts/deepseek-tool-diagnosis/runs/deepseek-r1-14b-exposure-1795619426620/report.json"
+    },
+    {
+      "model": "deepseek-r1:14b",
+      "condition": "json-call",
+      "wallSeconds": 7.368056792,
+      "executedCalls": 0,
+      "exactMarkerReturned": false,
+      "functionNameObserved": true,
+      "requests": [
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 0,
+          "nameObservedInTextOrThinking": true,
+          "nameOutsideDefinitions": true,
+          "plainJsonCallMatchesTool": true,
+          "finish": "stop"
+        }
+      ],
+      "privateReportArtifact": "artifacts/deepseek-tool-diagnosis/runs/deepseek-r1-14b-json-call-1795619821275/report.json"
+    },
+    {
+      "model": "deepseek-r1:32b",
+      "condition": "action",
+      "wallSeconds": 185.55351125,
+      "executedCalls": 0,
+      "exactMarkerReturned": false,
+      "functionNameObserved": false,
+      "requests": [
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 0,
+          "nameObservedInTextOrThinking": false,
+          "nameOutsideDefinitions": false,
+          "plainJsonCallMatchesTool": false,
+          "finish": "stop"
+        }
+      ],
+      "privateReportArtifact": "artifacts/deepseek-tool-diagnosis/runs/deepseek-r1-32b-action-1795619452975/report.json"
+    },
+    {
+      "model": "deepseek-r1:32b",
+      "condition": "exposure",
+      "wallSeconds": 121.970890541,
+      "executedCalls": 0,
+      "exactMarkerReturned": false,
+      "functionNameObserved": false,
+      "requests": [
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 0,
+          "nameObservedInTextOrThinking": false,
+          "nameOutsideDefinitions": false,
+          "plainJsonCallMatchesTool": false,
+          "finish": "stop"
+        }
+      ],
+      "privateReportArtifact": "artifacts/deepseek-tool-diagnosis/runs/deepseek-r1-32b-exposure-1795619638665/report.json"
+    },
+    {
+      "model": "qwen3.5:9b-q4_K_M",
+      "condition": "action",
+      "wallSeconds": 16.184123708,
+      "executedCalls": 1,
+      "exactMarkerReturned": true,
+      "functionNameObserved": true,
+      "requests": [
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 1,
+          "nameObservedInTextOrThinking": true,
+          "nameOutsideDefinitions": false,
+          "plainJsonCallMatchesTool": false,
+          "finish": "stop"
+        },
+        {
+          "definitionCount": 1,
+          "thinkingRequested": true,
+          "thinkingObserved": true,
+          "rawToolCallCount": 0,
+          "nameObservedInTextOrThinking": false,
+          "nameOutsideDefinitions": false,
+          "plainJsonCallMatchesTool": false,
+          "finish": "stop"
+        }
+      ],
+      "privateReportArtifact": "artifacts/deepseek-tool-diagnosis/runs/qwen3-5-9b-q4-K-M-action-1795619384148/report.json"
+    }
+  ],
+  "effectiveMetadata": [
+    {
+      "model": "deepseek-r1:14b",
+      "capabilities": [
+        "tools",
+        "thinking",
+        "completion"
+      ],
+      "templateSource": "gguf_chat_template",
+      "parser": null,
+      "renderer": null,
+      "configuredOverridePresent": false,
+      "effectiveOverridePresent": false
+    },
+    {
+      "model": "deepseek-r1:32b",
+      "capabilities": [
+        "tools",
+        "thinking",
+        "completion"
+      ],
+      "templateSource": "gguf_chat_template",
+      "parser": null,
+      "renderer": null,
+      "configuredOverridePresent": false,
+      "effectiveOverridePresent": false
+    },
+    {
+      "model": "buro-probe-r1-14b-tools",
+      "capabilities": [
+        "tools",
+        "thinking",
+        "completion"
+      ],
+      "templateSource": "gguf_chat_template",
+      "parser": null,
+      "renderer": null,
+      "configuredOverridePresent": true,
+      "effectiveOverridePresent": false
+    }
+  ],
+  "templateAnalysis": [
+    {
+      "model": "deepseek-r1:14b",
+      "templateHash": "b6835114b7303ddd78919a82e4d9f7d8c26ed0d7dfc36beeb12d524f6144eab1",
+      "undeclaredTemplateInputs": [
+        "add_generation_prompt",
+        "bos_token",
+        "content",
+        "messages"
+      ],
+      "referencesAvailableTools": false
+    },
+    {
+      "model": "deepseek-r1:32b",
+      "templateHash": "b6835114b7303ddd78919a82e4d9f7d8c26ed0d7dfc36beeb12d524f6144eab1",
+      "undeclaredTemplateInputs": [
+        "add_generation_prompt",
+        "bos_token",
+        "content",
+        "messages"
+      ],
+      "referencesAvailableTools": false
+    }
+  ],
+  "cleanup": {
+    "temporaryAliasRemoved": true,
+    "originalTagsPreserved": true,
+    "priorServerHealth": {
+      "status": "ok"
+    }
+  }
+}
