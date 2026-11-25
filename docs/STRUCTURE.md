@@ -1,6 +1,6 @@
 # Folder conventions
 
-These conventions record the completed folder quiz. The migration follows the current RTX evaluation; existing paths have not moved yet.
+These conventions record the completed folder quiz. The first migration moved the shared UI components to `src/shared/ui`, introduced the `@/` browser alias, and added shared review contracts under root `shared/contracts`. Existing feature pages, server filenames and test locations remain to be migrated incrementally.
 
 ## Runtime boundaries
 
@@ -42,6 +42,8 @@ src/
 Small server modules remain flat. Filenames are short within their folder: `models/catalog.ts`, `registry.ts`, `configuration.ts`. Keep distinctions such as different engine backends when shortening would make names ambiguous. Every module has an `index.ts` with explicit public exports; other modules use that entry point.
 
 All filenames use kebab-case, including React components. Component and class symbols retain PascalCase. Use aliases across modules and relative paths inside one module. The UI alias is `@/`; server aliases use Node's native package imports, `#modules/` and `#shared/`, so direct TypeScript execution does not require another loader. Keep SDK-internal imports portable.
+
+The initial native entry point is `#shared/contracts`, backed by an explicit export list. Other server aliases and public module entry points are still planned. Shared UI consumers use `@/shared/ui`; its internal file paths are not a second public API.
 
 ## Tests
 

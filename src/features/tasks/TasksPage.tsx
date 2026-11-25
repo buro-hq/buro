@@ -14,11 +14,11 @@ import type { Task } from '../../../modules/tasks/task.ts';
 import type { RunOptions } from '../../../modules/runs/run.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { t } from '../../i18n/index.ts';
-import { Panel } from '../../components/molecules/Panel.tsx';
+import { Panel } from '@/shared/ui';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 import { TaskEditor } from './TaskEditor.tsx';
-import { ReviewEditor } from '../run-review/index.ts';
+import { ReviewEditor } from '@/features/run-review';
 import type { ReviewSettings } from '#shared/contracts';
 
 /** Owns task editing and explicit run options; it never reconstructs server state from events. */

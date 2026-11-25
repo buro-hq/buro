@@ -76,6 +76,8 @@ Delegation freedom alone does not prevent coordination failures. In the current 
 
 Qwen 35B completed the review scenario on the same code revision with 8/8 checks in 647.8 seconds, using 7 collaborators and 70 requests. Its result was correct on this task, but collaboration remained expensive. Aggregates for both scenarios are in the [measurement snapshot](docs/assets/architecture/rtx-sample.json); these are individual experiments, not a general model ranking.
 
+The subsequent [real UI migration comparison](docs/SHARED-UI-COMPARISON-2026-11-25.md) exposed different limits: Qwen preserved behavior but bypassed a required public API, while Flint repeatedly returned malformed command arguments upstream of Buro and made no changes. Neither original run requested independent agent review. The standalone HTML report includes code differences, sessions, observed actions and the parent's corrections.
+
 ## 5. Backends, models and context
 
 ![A common session backend boundary with HTTP providers and native Codex execution](docs/assets/architecture/backends.png)

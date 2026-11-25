@@ -14,7 +14,7 @@ import {
 import { useState, type ReactElement } from 'react';
 import { useApplication, useApiQuery } from './data/application.tsx';
 import { useLocale, t } from './i18n/index.ts';
-import { BrandMark } from './components/atoms/BrandMark.tsx';
+import { BrandMark } from '@/shared/ui';
 import { ProjectPicker } from './features/projects/ProjectPicker.tsx';
 import { TasksPage } from './features/tasks/TasksPage.tsx';
 import { OfficePage } from './features/runs/OfficePage.tsx';

@@ -12,13 +12,12 @@ import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { t, useLocale, setLocale } from '../../i18n/index.ts';
-import { ThemePreview } from '../../components/atoms/ThemePreview.tsx';
-import { Panel } from '../../components/molecules/Panel.tsx';
+import { ThemePreview, Panel } from '@/shared/ui';
 import { useAppearance } from '../../theme/AppearanceProvider.tsx';
 import { themePresets } from '../../theme/presets.ts';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
-import { ReviewEditor } from '../run-review/index.ts';
+import { ReviewEditor } from '@/features/run-review';
 import type { ReviewSettings } from '#shared/contracts';
 
 const ReviewSettingsEditor = (input: { review: ReviewSettings }): ReactElement => {

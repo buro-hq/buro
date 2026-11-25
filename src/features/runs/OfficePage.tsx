@@ -1,7 +1,7 @@
 import { Badge, Button, Group, Paper, Select, SimpleGrid, Stack, Text } from '@mantine/core';
 import { useState, type ReactElement } from 'react';
 import { useApiQuery } from '../../data/application.tsx';
-import { Panel } from '../../components/molecules/Panel.tsx';
+import { Panel } from '@/shared/ui';
 import { t } from '../../i18n/index.ts';
 import { QueryFeedback } from '../common/feedback.tsx';
 

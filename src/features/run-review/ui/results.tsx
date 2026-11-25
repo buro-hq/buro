@@ -1,7 +1,7 @@
 import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { ReactElement } from 'react';
 import type { RunReviewState } from '#shared/contracts';
-import { t } from '../../../i18n/index.ts';
+import { t } from '@/i18n/index.ts';
 
 const statusLabels: Record<string, string> = {
   pending: 'Review pending',

@@ -1,7 +1,7 @@
 import { Badge, Button, FileInput, Group, Modal, Paper, Stack, Text } from '@mantine/core';
 import { useState, type ReactElement } from 'react';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
-import { Panel } from '../../components/molecules/Panel.tsx';
+import { Panel } from '@/shared/ui';
 import { t } from '../../i18n/index.ts';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';

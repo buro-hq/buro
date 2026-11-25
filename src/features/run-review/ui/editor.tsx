@@ -2,7 +2,7 @@ import { Button, Group, NumberInput, Paper, Select, Stack, Text, Textarea, TextI
 import type { ReactElement } from 'react';
 import type { ReviewSettings, ReviewParticipant } from '#shared/contracts';
 import type { AvailableModel } from '../../../../agent/contracts/model.ts';
-import { t } from '../../../i18n/index.ts';
+import { t } from '@/i18n/index.ts';
 
 /** Controlled team settings, shared by application defaults and explicit run overrides. */
 export interface ReviewEditorProps {

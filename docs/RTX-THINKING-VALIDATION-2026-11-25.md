@@ -63,6 +63,8 @@ The prior model server was restored after the matrix, and its health endpoint re
 
 The [follow-up tool diagnosis](R1-TOOL-DIAGNOSIS-2026-11-25.md) records the configuration experiments, removal of compatibility workarounds and fresh native checks on Qwen 9B/35B and Flint. All temporary diagnostic aliases were removed.
 
+A later [real repository migration](SHARED-UI-COMPARISON-2026-11-25.md) found a public-API requirement missed by Qwen and repeated malformed command arguments from Flint. The earlier synthetic passes do not establish reliable native tool use for every larger task.
+
 ## Evidence
 
 The committed [matrix snapshot](assets/architecture/rtx-matrix.json) contains final and baseline assertions, timings, request/helper/tool counts, file changes, memory observations and source/harness/task hashes for all ten scenarios. Private reports and isolated evaluation state remain under ignored `artifacts/model-evaluation/` and `artifacts/manual-style-rtx/`.

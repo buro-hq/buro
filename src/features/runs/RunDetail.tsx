@@ -8,7 +8,7 @@ import { useOperation } from '../common/operation.ts';
 import { SessionView } from './SessionView.tsx';
 import { PreviewsPanel } from './PreviewsPanel.tsx';
 import { DeliveriesPanel } from './DeliveriesPanel.tsx';
-import { ReviewResults } from '../run-review/index.ts';
+import { ReviewResults } from '@/features/run-review';
 
 const fileStatusLabels: Record<string, string> = {
   A: 'Added',

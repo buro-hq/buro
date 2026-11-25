@@ -1,7 +1,16 @@
 import type { ReactElement } from 'react';
-import type { ThemeColors } from '../../theme/presets';
+/** The colors rendered by this component, independent of application theme implementations. */
+export interface ThemePreviewColors {
+  bg: string;
+  sidebar: string;
+  panel: string;
+  line: string;
+  text: string;
+  muted: string;
+  accent: string;
+}
 /** Shows a preset preview using its actual palette. */
-export const ThemePreview = ({ colors }: { colors: ThemeColors }): ReactElement => (
+export const ThemePreview = ({ colors }: { colors: ThemePreviewColors }): ReactElement => (
   <svg className="theme-preview" viewBox="0 0 72 64" aria-hidden="true">
     <rect width="72" height="64" rx="7" fill={colors.bg} />
     <path d="M7 0h10v64H7a7 7 0 0 1-7-7V7a7 7 0 0 1 7-7" fill={colors.sidebar} />

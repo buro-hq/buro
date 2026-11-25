@@ -2,7 +2,7 @@ import { Button, Group, Modal, Paper, Stack, Text, Textarea, TextInput } from '@
 import { useState, type ReactElement } from 'react';
 import type { Agent } from '../../../modules/agents/agent.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
-import { Panel } from '../../components/molecules/Panel.tsx';
+import { Panel } from '@/shared/ui';
 import { t } from '../../i18n/index.ts';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
