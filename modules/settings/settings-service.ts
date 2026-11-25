@@ -1,6 +1,7 @@
 import type { RecordStore } from '../storage/record-store.ts';
 import type { Notifications } from '../events/notifications.ts';
 import type { ApplicationSettings, Settings } from './settings.ts';
+import { defaultInstructions } from './defaults.ts';
 
 /** Owns application-wide defaults. */
 export class SettingsService implements Settings {
@@ -18,8 +19,7 @@ export class SettingsService implements Settings {
     return (
       (await this.store.get('application')) ?? {
         id: 'application',
-        instructions:
-          'Complete the user’s task in this workspace. Choose tools, collaborators and models for the actual work. You can start helpers with session_start and iterate on their feedback. Use an independent view when it helps quality, and verify the result in a way appropriate to the task. Report the result and any remaining limitations honestly.',
+        instructions: defaultInstructions,
       }
     );
   }

@@ -98,7 +98,8 @@ test('application restarts with persisted feature records, default model and pri
   });
   const started = (await app.runs.start({ taskId: task.id })).run!;
   assert.equal((await app.runs.wait({ id: started.id }))!.status, 'completed');
-  assert.equal(requests[0][0].content, 'Default task instructions');
+  assert.ok(requests[0][0].content.includes('Default task instructions'));
+  assert.ok(requests[0][0].content.includes('Intent'));
   assert.ok(!JSON.stringify(observations).includes(credential));
   assert.ok(!JSON.stringify(observations).includes(continuation));
   await app.close();

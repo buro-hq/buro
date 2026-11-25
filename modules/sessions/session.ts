@@ -9,6 +9,7 @@ export interface Session {
   agentId?: string;
   modelId: string;
   instructions: string;
+  context?: string;
   messages: SessionMessage[];
   status: string;
   createdAt: string;
@@ -47,6 +48,7 @@ export interface SessionResult {
 export interface SessionInput {
   modelId?: string;
   instructions?: string;
+  context?: string;
   runId?: string;
   parentId?: string;
   agentId?: string;

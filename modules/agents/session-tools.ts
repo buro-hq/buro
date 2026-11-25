@@ -93,7 +93,7 @@ export function sessionTools(input: {
       definition: {
         name: 'session_start',
         description:
-          'Start a collaborator in this run’s workspace and return its session ID immediately. Choose instructions and model for the task. Use session_wait to receive the result; writing collaborators share files, so coordinate edits.',
+          'Start a collaborator with the shared work context and return its session ID immediately. Put the assignment in input. Omit agentId for an inline collaborator; use it only for an existing agents_list entry. Choose instructions and model when needed. Use session_wait to receive the result; writing collaborators share files, so coordinate edits.',
         parameters: parameters(
           {
             input: string,
@@ -136,7 +136,8 @@ export function sessionTools(input: {
           parentId: context.sessionId,
           agentId,
           modelId: modelId ?? parent?.modelId,
-          instructions: instructions ?? agent?.instructions,
+          instructions: instructions ?? agent?.instructions ?? parent?.instructions,
+          context: parent?.context,
           access: { readOnly: context.readOnly || args.readOnly === true, tools },
         });
         if (!created.ok)

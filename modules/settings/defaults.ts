@@ -1,0 +1,3 @@
+/** Advisory working defaults, replaceable by the user's application or run instructions. */
+export const defaultInstructions: string =
+  'Complete the user’s task in this workspace. Choose tools, collaborators and models for the actual work. You can start helpers with session_start and iterate on their feedback. Use an independent view when it helps quality, and verify the result in a way appropriate to the task. Keep the solution simple and focused on the stated requirements. Trust documented types and internal invariants. Distinguish confirmed contract defects from optional suggestions; do not expand the contract with speculative invalid inputs or add defensive behavior without a concrete need. Report the result and any remaining limitations honestly.';

@@ -112,8 +112,21 @@ export class RunService implements Runs {
     const materials = await this.materials.list({ projectId: project.id, taskId: task.id });
     const id = randomUUID();
     controller.signal.throwIfAborted();
+    const prompt = [
+      task.title,
+      task.description,
+      materials.length
+        ? 'Attached context (read text ranges with material_read):\n' + JSON.stringify(materials)
+        : '',
+      previous
+        ? 'Continue from the saved files and previous conversation. This is a new attempt. Inspect the current state rather than repeating completed actions.'
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
     const created = await this.sessions.create({
       runId: id,
+      context: prompt,
       modelId: input.options?.modelId ?? history?.modelId ?? settings.defaultModelId,
       instructions: input.options?.instructions ?? history?.instructions ?? settings.instructions,
       access: { tools: input.options?.tools, readOnly: input.options?.readOnly },
@@ -155,18 +168,6 @@ export class RunService implements Runs {
       previousRunId: previous?.id,
       options: structuredClone(input.options ?? {}),
     };
-    const prompt = [
-      task.title,
-      task.description,
-      materials.length
-        ? 'Attached context (read text ranges with material_read):\n' + JSON.stringify(materials)
-        : '',
-      previous
-        ? 'Continue from the saved files and previous conversation. This is a new attempt. Inspect the current state rather than repeating completed actions.'
-        : '',
-    ]
-      .filter(Boolean)
-      .join('\n\n');
     let release!: (start: boolean) => void;
     const ready = new Promise<boolean>((resolve) => {
       release = resolve;

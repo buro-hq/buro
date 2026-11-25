@@ -1,0 +1,120 @@
+{
+  "id": "synthetic-ready-queue-v1",
+  "task": {
+    "title": "Correct ready-task selection and preserve priority zero",
+    "body": "Fix the small dependency-free task queue. selectReady(tasks, completedIds) must return unfinished tasks only when every dependency is completed; tasks without dependencies are ready. Sort ready tasks by descending priority and preserve input order for equal priorities. priorityOf(task) must preserve explicit priority 0 and use priority 2 only when priority is null or missing. Preserve the exported APIs and do not mutate either input. Work only on src/priority.mjs and src/queue.mjs; no dependencies, networking, process spawning, or changes to the protected checks. The public examples are in checks/public.cjs. Inspect the implementation, make the correction, and finish so independent checks can verify it.",
+    "criteria": "The public examples and independent additional cases pass. Only src/priority.mjs and src/queue.mjs change. Both exported APIs and input values are preserved."
+  },
+  "files": {
+    ".gitignore": ".buro/\n",
+    "README.md": "# Ready task queue\n\nDependency-free JavaScript. Run public examples with `node checks/public.cjs`.\n\nA task has id, optional dependsOn (an array of IDs), and optional priority (an integer). Higher priority runs first. Missing or null priority means 2; zero is valid. selectReady must preserve input arrays and task objects.\n",
+    "src/priority.mjs": "export function priorityOf(task) {\n  return task.priority || 2;\n}\n",
+    "src/queue.mjs": "import { priorityOf } from './priority.mjs';\n\nexport function selectReady(tasks, completedIds = []) {\n  const done = new Set(completedIds);\n  return tasks\n    .filter(task => !done.has(task.id) && (task.dependsOn || []).some(id => done.has(id)))\n    .sort((a, b) => priorityOf(b) - priorityOf(a));\n}\n",
+    "checks/public.cjs": "const assert = require('node:assert/strict');\n(async () => {\n  const { priorityOf } = await import('../src/priority.mjs');\n  const { selectReady } = await import('../src/queue.mjs');\n  assert.equal(priorityOf({ priority: 0 }), 0);\n  assert.deepEqual(selectReady([{ id: 'independent', priority: 1 }]).map(t => t.id), ['independent']);\n  assert.deepEqual(selectReady([{ id: 'blocked', dependsOn: ['a', 'b'] }], ['a']).map(t => t.id), []);\n  console.log('Public queue examples passed');\n})().catch(() => { console.error('Public queue examples failed'); process.exitCode = 1; });\n"
+  },
+  "publicCases": [
+    {
+      "name": "explicit-zero",
+      "task": {
+        "priority": 0
+      },
+      "expected": 0
+    },
+    {
+      "name": "independent-task",
+      "tasks": [
+        {
+          "id": "independent",
+          "priority": 1
+        }
+      ],
+      "done": [],
+      "expected": ["independent"]
+    },
+    {
+      "name": "all-dependencies-required",
+      "tasks": [
+        {
+          "id": "blocked",
+          "dependsOn": ["a", "b"]
+        }
+      ],
+      "done": ["a"],
+      "expected": []
+    }
+  ],
+  "holdoutCases": [
+    {
+      "name": "missing-priority",
+      "task": {},
+      "expected": 2
+    },
+    {
+      "name": "null-priority",
+      "task": {
+        "priority": null
+      },
+      "expected": 2
+    },
+    {
+      "name": "zero-below-one",
+      "tasks": [
+        {
+          "id": "zero",
+          "priority": 0
+        },
+        {
+          "id": "one",
+          "priority": 1
+        },
+        {
+          "id": "default"
+        }
+      ],
+      "done": [],
+      "expected": ["default", "one", "zero"]
+    },
+    {
+      "name": "completed-and-ready",
+      "tasks": [
+        {
+          "id": "done",
+          "priority": 5
+        },
+        {
+          "id": "ready",
+          "dependsOn": ["a", "b"],
+          "priority": 1
+        },
+        {
+          "id": "blocked",
+          "dependsOn": ["c"],
+          "priority": 4
+        }
+      ],
+      "done": ["done", "a", "b"],
+      "expected": ["ready"]
+    },
+    {
+      "name": "stable-equal-priorities",
+      "tasks": [
+        {
+          "id": "first",
+          "dependsOn": [],
+          "priority": 2
+        },
+        {
+          "id": "second",
+          "priority": 2
+        },
+        {
+          "id": "third",
+          "dependsOn": ["a"],
+          "priority": 2
+        }
+      ],
+      "done": ["a"],
+      "expected": ["first", "second", "third"]
+    }
+  ]
+}

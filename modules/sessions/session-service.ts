@@ -65,9 +65,18 @@ export class SessionService implements Sessions {
       agentId: input.agentId,
       modelId: model.id,
       instructions: input.instructions ?? '',
+      context: input.context,
       access: structuredClone(input.access),
       messages: [
-        { role: 'system' as const, content: input.instructions ?? '' },
+        {
+          role: 'system' as const,
+          content: [
+            input.instructions,
+            input.context ? 'Shared work context:\n' + input.context : undefined,
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+        },
         ...(input.messages ?? [])
           .filter((message) => message.role !== 'system')
           .map(({ continuation: _private, ...message }) => structuredClone(message)),

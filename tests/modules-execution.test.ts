@@ -17,6 +17,7 @@ import { TaskService } from '../modules/tasks/task-service.ts';
 import { ProjectService } from '../modules/projects/project-service.ts';
 import { RunService } from '../modules/runs/run-service.ts';
 import { GitWorkspaces } from '../modules/workspaces/git-workspaces.ts';
+import { GitChanges } from '../modules/results/git-changes.ts';
 import { conversationContext } from '../modules/sessions/context.ts';
 import { AgentService } from '../modules/agents/agent-service.ts';
 import { sessionTools } from '../modules/agents/session-tools.ts';
@@ -577,6 +578,8 @@ test('a collaborator can use another model, return feedback and retain explicit 
   });
   f.model('helper', async (input) => {
     childRequests++;
+    assert.ok(input.messages[0].content.includes(f.task.title));
+    assert.ok(input.messages[0].content.includes(f.task.description));
     assert.ok(!input.tools.some((definition) => definition.name === 'save'));
     if (childRequests === 1 || childRequests === 3) return tool('save');
     assert.ok(input.messages.at(-1)!.content.includes('read-only'));
@@ -656,6 +659,11 @@ test(
           return tool('read_file', { path: 'result.txt' });
         case 3:
           assert.ok(input.messages.at(-1)!.content.includes('Changed by tool'));
+          return tool('write_file', {
+            path: '.buro/verification.txt',
+            content: 'Temporary verification data',
+          });
+        case 4:
           return reply('Done');
         default:
           throw new Error('Unexpected request');
@@ -668,6 +676,18 @@ test(
       'Changed by tool',
     );
     assert.equal(await fs.readFile(path.join(f.root, 'result.txt'), 'utf8'), 'original');
+    assert.equal(
+      await fs.readFile(path.join(started.workspace, '.buro/verification.txt'), 'utf8'),
+      'Temporary verification data',
+    );
+    const snapshot = await new GitChanges().inspect({
+      workspace: started.workspace,
+      base: started.base,
+    });
+    assert.deepEqual(
+      snapshot.files?.map((file) => file.path),
+      ['result.txt'],
+    );
     const readSecret = await commands.run({
       workspace: started.workspace,
       source: f.root,

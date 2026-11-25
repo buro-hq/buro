@@ -27,6 +27,6 @@ The current suite passes 102 behavioral checks, including real launcher/UI/CLI s
 
 ## Remaining validation
 
-Run the completed application against DeepSeek Flash with thinking on a comparable Qwen task and a review/repair scenario. Inspect finished code, actual collaboration and wall time. Decode speed is reported only if the provider supplies the measurements. No live generation has been run for this implementation at this checkpoint.
+Run the completed application against DeepSeek Flash with thinking on a comparable Qwen task and a review/repair scenario. Inspect finished code, actual collaboration and wall time. Decode speed is reported only if the provider supplies the measurements. The initial Flash pilot passed all 3 public and 5 independent cases in 248 seconds, with one collaborator and 55 model requests. Its review expanded into speculative inputs and produced unnecessary defensive code. The follow-up changes pass the original task context to collaborators, inherit working instructions when no specialization is supplied, and advise simple contract-focused reviews. Workspace-local `.buro` scratch files are now available through file tools and stay out of result patches. The formal queue and review scenarios are rerun after those changes.
 
 Code and architecture preferences are saved on the user's Desktop in `buro-code-architecture-preferences.md`. The stopping threshold is actual weekly remaining capacity below 20%; before stopping, finish a tested checkpoint, commit and push it, and record outstanding work.

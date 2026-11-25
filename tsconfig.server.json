@@ -12,5 +12,5 @@
     "types": ["node"],
     "erasableSyntaxOnly": true
   },
-  "include": ["agent", "modules", "daemon", "cli"]
+  "include": ["agent", "modules", "daemon", "cli", "scripts"]
 }

@@ -9,7 +9,6 @@ try {
   const privateName = (name) =>
     [
       '.git',
-      '.buro',
       '.aws',
       '.ssh',
       '.codex',
