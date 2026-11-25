@@ -1,5 +1,13 @@
 # Architecture refactor checkpoint
 
+## Current checkpoint: 25 November
+
+The manual code-style pass is committed in `19515fc`: named arrows and public contracts, clearer conditions, async control flow and explicit exceptions for serialized Promise tails. The full suite passed 126 tests, including the browser scenario, alongside lint, types, nine formatter checks and production build. Decorative metadata separators were replaced with field descriptions, layout and status badges in `f4bbc94`; lint/types and the browser scenario passed again. Both commits are pushed and their CI checks passed.
+
+`88fecc9` adds optional server-reported timing to portable completions and evaluation reports. Ollama durations are normalized from nanoseconds to seconds; missing or invalid values remain unknown. Forty-seven provider/consumer checks and the full lint/type check passed, and CI passed. The RTX matrix runs from a separate checkout of this revision, using all five selected models with thinking, 32,768 context tokens and 8,192 output tokens. The default user connection and state are unchanged. Measurements and private isolated evaluation state are under `artifacts/manual-style-rtx/`; reports are under `artifacts/model-evaluation/`. No complete five-model comparison is claimed yet.
+
+The folder quiz is complete and saved in the Desktop preferences file. Its conventions and the pending migration are described in [folder conventions](STRUCTURE.md). The folder migration and final real-project smoke task remain after the RTX matrix.
+
 The new implementation lives in `modules/`. Each feature owns its records and exposes an ordinary API. `createApplication` composes the modules in one process. SQLite stores current state; activity is separate diagnostic history. A task describes intent, a run owns an isolated attempt, and sessions own portable conversations.
 
 Sessions share one model/tool loop. Agent descriptions have no reserved names, privileges or phase order. Model selection can change within a session. Collaborators inherit explicit access settings. Completion saves the agent's result without a universal review or scoring gate. Review remains available through ordinary collaborators and tools.
