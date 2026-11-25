@@ -16,7 +16,7 @@ import { ProjectService } from '../projects/project-service.ts';
 import { RunService } from '../runs/run-service.ts';
 import { ResultService } from '../results/result-service.ts';
 import { GitChanges } from '../results/git-changes.ts';
-import { ActivityLog } from '../sessions/activity.ts';
+import { ActivityLog } from '../sessions/activity-log.ts';
 import { SessionService } from '../sessions/session-service.ts';
 import { SettingsService } from '../settings/settings-service.ts';
 import type { StorageEngine } from '../storage/record-store.ts';
@@ -25,6 +25,7 @@ import { TaskService } from '../tasks/task-service.ts';
 import { ToolRegistry } from '../tools/tool-registry.ts';
 import { GitWorkspaces } from '../workspaces/git-workspaces.ts';
 import type { Application } from './application.ts';
+import { ownApplication } from './ownership.ts';
 
 /** Composes one server process with usable defaults and replaceable boundary adapters. */
 export async function createApplication(input: {
@@ -36,8 +37,15 @@ export async function createApplication(input: {
   report?: (error: unknown) => void;
 }): Promise<Application> {
   const privateDirectory = path.resolve(input.directory, 'private');
-  const storage =
-    input.storage ?? new SqliteStorage({ filename: path.join(privateDirectory, 'state.sqlite') });
+  const ownership = ownApplication({ directory: input.directory });
+  let storage: StorageEngine;
+  try {
+    storage =
+      input.storage ?? new SqliteStorage({ filename: path.join(privateDirectory, 'state.sqlite') });
+  } catch (error) {
+    ownership.close();
+    throw error;
+  }
   const events = new EventBus({ report: input.report });
   const settings = new SettingsService({ store: storage.records('settings'), events });
   const models = new ModelRegistry({ adapterState: storage.records('model-continuations') });
@@ -91,7 +99,12 @@ export async function createApplication(input: {
     await sessions.recover();
     await runs.recover();
   } catch (error) {
-    await storage.close();
+    try {
+      await commands.close();
+      await storage.close();
+    } finally {
+      ownership.close();
+    }
     throw error;
   }
   let closing: Promise<void> | undefined;
@@ -118,7 +131,11 @@ export async function createApplication(input: {
           try {
             await commands.close();
           } finally {
-            await storage.close();
+            try {
+              await storage.close();
+            } finally {
+              ownership.close();
+            }
           }
         }
       })());

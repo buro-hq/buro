@@ -8,6 +8,14 @@ const send = (value) => process.stdout.write(JSON.stringify(value) + '\n');
 lines.on('line', (line) => {
   const message = JSON.parse(line);
   if (message.method === 'initialize') send({ id: message.id, result: {} });
+  if (message.method === 'model/list') {
+    send({
+      id: message.id,
+      result: message.params.cursor
+        ? { data: [{ model: 'second', displayName: 'Second model' }], nextCursor: null }
+        : { data: [{ model: 'first', displayName: 'First model' }], nextCursor: 'next-page' },
+    });
+  }
   if (message.method === 'thread/start') {
     if (!message.params.dynamicTools.some((tool) => tool.name === 'save'))
       throw new Error('Missing host tool');

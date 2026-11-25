@@ -300,7 +300,12 @@ export class SessionService implements Sessions {
               if (event.type === 'text.delta')
                 this.events.publish({
                   type: 'session.text',
-                  data: { sessionId: session!.id, requestId, text: event.text },
+                  data: {
+                    sessionId: session!.id,
+                    runId: session!.runId,
+                    requestId,
+                    text: event.text,
+                  },
                 });
             },
           });

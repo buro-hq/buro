@@ -1,0 +1,21 @@
+.feature-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.feature-patch {
+  max-height: 65vh;
+  overflow: auto;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.feature-mobile-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

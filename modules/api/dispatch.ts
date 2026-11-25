@@ -22,15 +22,16 @@ const configuration = z.object({
   outputTokens: z.number().int().positive().optional(),
   local: z.boolean().optional(),
   thinking: z.boolean().optional(),
-  reasoningEffort: z.string().optional(),
-  reasoningBudgetTokens: z.number().int().min(-1).optional(),
-  capacity: z.number().int().positive().optional(),
+  reasoningEffort: z.string().nullable().optional(),
+  reasoningBudgetTokens: z.number().int().min(-1).nullable().optional(),
+  capacity: z.number().int().positive().nullable().optional(),
   sampling: z
     .object({
       temperature: z.number().nonnegative().optional(),
       topP: z.number().min(0).max(1).optional(),
       presencePenalty: z.number().optional(),
     })
+    .nullable()
     .optional(),
 });
 
@@ -126,6 +127,14 @@ export function apiMethods(app: Application): {
     ),
     'agents.delete': method(id, (input) => app.agents.delete(input)),
     'models.list': method(empty, () => app.modelConfigurations.list()),
+    'models.transports': method(empty, () => app.modelConfigurations.transports()),
+    'models.discover': method(
+      z.object({
+        configuration: configuration.partial().extend({ transport: z.string() }),
+        apiKey: z.string().nullable().optional(),
+      }),
+      (input) => app.modelConfigurations.discover(input),
+    ),
     'models.save': method(
       z.object({
         configuration,

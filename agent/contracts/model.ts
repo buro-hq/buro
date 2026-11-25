@@ -15,6 +15,11 @@ export type ModelMessage = {
   continuation?: unknown;
 };
 export type ModelUsage = { inputTokens?: number; outputTokens?: number };
+/** A discoverable model identifier, without connection credentials. */
+export interface AvailableModel {
+  id: string;
+  name?: string;
+}
 export type ModelFinish = 'stop' | 'tools' | 'length' | 'failed';
 /** A complete normalized response, including private host-owned continuation. */
 export type ModelCompletion = {
@@ -45,6 +50,8 @@ export interface ModelProvider {
   readonly structuredToolMode?: 'combined' | 'separate-turn';
   /** Tools-free response grammar is sent natively in schema mode; omitted means instruction guidance. */
   readonly structuredOutputMode?: 'schema' | 'instruction';
+  /** Lists model identifiers when the transport provides a catalogue. */
+  listModels?(signal: AbortSignal): Promise<AvailableModel[]>;
   /** Provider-specific request view; the host supplies a clone of the full private history. */
   contextMessages?(messages: readonly ModelMessage[], context?: ModelContext): ModelMessage[];
   complete(input: {

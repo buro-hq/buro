@@ -11,7 +11,7 @@ import type { Notification } from '../modules/events/notifications.ts';
 import { ModelRegistry } from '../modules/models/model-registry.ts';
 import { ModelBackend } from '../modules/engines/model-backend.ts';
 import { ToolRegistry } from '../modules/tools/tool-registry.ts';
-import { ActivityLog } from '../modules/sessions/activity.ts';
+import { ActivityLog } from '../modules/sessions/activity-log.ts';
 import { SessionService } from '../modules/sessions/session-service.ts';
 import { TaskService } from '../modules/tasks/task-service.ts';
 import { ProjectService } from '../modules/projects/project-service.ts';

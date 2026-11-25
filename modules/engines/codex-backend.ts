@@ -1,4 +1,5 @@
-import type { ModelCompletion, ModelUsage } from '../../agent/contracts/model.ts';
+import type { ModelCompletion, ModelUsage, AvailableModel } from '../../agent/contracts/model.ts';
+import os from 'node:os';
 import { observer, RequestGate } from '../../agent/providers/http.ts';
 import { codexArguments } from './codex-arguments.ts';
 import { JsonlConnection, type RpcMessage } from './jsonl-connection.ts';
@@ -44,6 +45,49 @@ export class CodexBackend implements SessionBackend {
   /** Uses a fresh native thread with portable history; no hidden native checkpoint becomes application state. */
   async complete(input: BackendRequest): Promise<ModelCompletion> {
     return this.gate.run(input.signal, () => this.request(input));
+  }
+
+  /** Reads the native catalogue without creating a model turn. */
+  async listModels(input: { signal: AbortSignal }): Promise<AvailableModel[]> {
+    input.signal.throwIfAborted();
+    const specification = codexArguments({ prefix: this.prefix, deniedPaths: this.privatePaths });
+    const connection = new JsonlConnection({
+      executable: this.executable,
+      args: specification.args,
+      cwd: os.tmpdir(),
+      env: { ...process.env, ...(this.apiKey ? { CODEX_API_KEY: this.apiKey } : {}) },
+    });
+    const abort = () => {
+      void connection.close();
+    };
+    input.signal.addEventListener('abort', abort, { once: true });
+    if (input.signal.aborted) abort();
+    try {
+      await connection.call('initialize', {
+        clientInfo: { name: 'buro', version: '0.1.0' },
+        capabilities: { experimentalApi: true },
+      });
+      connection.send({ method: 'initialized', params: {} });
+      const models: AvailableModel[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = object(await connection.call('model/list', { cursor }));
+        for (const raw of Array.isArray(page.data) ? page.data : []) {
+          const model = object(raw),
+            id = typeof model.model === 'string' ? model.model : model.id;
+          if (typeof id === 'string')
+            models.push({
+              id,
+              name: typeof model.displayName === 'string' ? model.displayName : undefined,
+            });
+        }
+        cursor = typeof page.nextCursor === 'string' ? page.nextCursor : undefined;
+      } while (cursor);
+      return models;
+    } finally {
+      input.signal.removeEventListener('abort', abort);
+      await connection.close();
+    }
   }
 
   private async request(input: BackendRequest): Promise<ModelCompletion> {

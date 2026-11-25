@@ -10,7 +10,20 @@ import type {
   ModelConfigurationView,
   ModelConfigurationResult,
   ModelTransport,
+  ModelDiscoveryInput,
+  ModelDiscoveryResult,
+  ModelConfigurationDraft,
+  ModelConfiguration,
 } from './model-configuration.ts';
+
+function draft(input: ModelConfigurationDraft): Partial<ModelConfiguration> {
+  return Object.fromEntries(
+    Object.entries(structuredClone(input)).map(([key, value]) => [
+      key,
+      value === null ? undefined : value,
+    ]),
+  );
+}
 
 /** Owns persisted connections and activates them through replaceable transport factories. */
 export class ModelCatalog implements ModelConfigurations {
@@ -18,7 +31,7 @@ export class ModelCatalog implements ModelConfigurations {
   private models: Models;
   private settings: Settings;
   private events: Notifications;
-  private transports: Map<string, ModelTransport>;
+  private factories: Map<string, ModelTransport>;
 
   /** Connects safe configuration, private credentials and runtime routing. */
   constructor(input: {
@@ -32,7 +45,7 @@ export class ModelCatalog implements ModelConfigurations {
     this.models = input.models;
     this.settings = input.settings;
     this.events = input.events;
-    this.transports = new Map(input.transports.map((transport) => [transport.id, transport]));
+    this.factories = new Map(input.transports.map((transport) => [transport.id, transport]));
   }
 
   /** Loads stored connections without contacting model endpoints or starting inference. */
@@ -63,6 +76,56 @@ export class ModelCatalog implements ModelConfigurations {
     }));
   }
 
+  /** Extensions appear in clients through the same catalogue as built-in transports. */
+  transports(): { id: string; name: string }[] {
+    return [...this.factories.values()].map(({ id, name }) => ({ id, name: name ?? id }));
+  }
+
+  /** Reads metadata for a draft connection; no placeholder model is persisted. */
+  async discover(input: ModelDiscoveryInput): Promise<ModelDiscoveryResult> {
+    const previous = input.configuration.id
+      ? await this.store.get(input.configuration.id)
+      : undefined;
+    const configuration = {
+      id: input.configuration.id ?? randomUUID(),
+      name: '',
+      model: '',
+      contextTokens: 32768,
+      outputTokens: 8192,
+      thinking: true,
+      local: true,
+      revision: randomUUID(),
+      ...previous?.configuration,
+      ...draft(input.configuration),
+      transport: input.configuration.transport,
+    };
+    const transport = this.factories.get(configuration.transport);
+    if (!transport) return { ok: false, error: 'Model transport is unavailable.' };
+    const apiKey = input.apiKey === undefined ? previous?.apiKey : input.apiKey || undefined;
+    const controller = new AbortController(),
+      timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const backend = transport.create({ configuration, apiKey });
+      if (!backend.listModels)
+        return {
+          ok: false,
+          error: 'This backend does not provide a model catalogue. Enter its model ID directly.',
+        };
+      return { ok: true, models: await backend.listModels({ signal: controller.signal }) };
+    } catch (error) {
+      return {
+        ok: false,
+        error: controller.signal.aborted
+          ? 'Model discovery timed out. You can enter its ID directly.'
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Persists validated boundary input and replaces a transport without changing session identity. */
   async save(input: ModelConfigurationInput): Promise<ModelConfigurationResult> {
     const previous = input.configuration.id
@@ -74,11 +137,14 @@ export class ModelCatalog implements ModelConfigurations {
       local: true,
       thinking: true,
       ...previous?.configuration,
-      ...structuredClone(input.configuration),
+      ...draft(input.configuration),
+      name: input.configuration.name,
+      transport: input.configuration.transport,
+      model: input.configuration.model,
       id: input.configuration.id ?? randomUUID(),
       revision: randomUUID(),
     };
-    const transport = this.transports.get(configuration.transport);
+    const transport = this.factories.get(configuration.transport);
     if (!transport) return { ok: false, error: 'Model transport is unavailable.' };
     if (!configuration.name.trim() || !configuration.model.trim())
       return { ok: false, error: 'Model name and model ID are required.' };
@@ -137,7 +203,7 @@ export class ModelCatalog implements ModelConfigurations {
   private async activate(id: string): Promise<void> {
     const connection = await this.store.get(id);
     const configuration = connection?.configuration;
-    const transport = configuration && this.transports.get(configuration.transport);
+    const transport = configuration && this.factories.get(configuration.transport);
     if (!configuration || !transport) return;
     this.models.register({
       ...configuration,

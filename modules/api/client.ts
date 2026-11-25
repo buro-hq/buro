@@ -1,6 +1,12 @@
 import type { ApiMethods, ApiNotification, ApiResponse, ApiAuthenticated } from './contract.ts';
 import type { Notification } from '../events/notifications.ts';
 
+/** Connection state is transport metadata, not a cached application snapshot. */
+export interface ApiConnection {
+  connected: boolean;
+  authorizationRequired?: boolean;
+}
+
 /** One socket client for browser, CLI and automation, without mutable domain projections. */
 export class ApiClient {
   private url: string;
@@ -12,6 +18,7 @@ export class ApiClient {
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
   private listeners = new Set<(notification: Notification) => void>();
+  private connections = new Set<(connection: ApiConnection) => void>();
   private sequence = 0;
 
   /** Selects the local daemon without connecting until explicitly requested. */
@@ -34,7 +41,7 @@ export class ApiClient {
         socket.send(JSON.stringify({ type: 'authenticate', token: this.token }));
       };
       socket.onerror = () => reject(new Error('The Buro API is unavailable.'));
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         reject(new Error('The Buro API connection closed.'));
         if (this.socket !== socket) return;
         this.ready = undefined;
@@ -42,6 +49,7 @@ export class ApiClient {
         for (const entry of this.pending.values())
           entry.reject(new Error('Connection lost. Read current state before retrying a command.'));
         this.pending.clear();
+        this.notifyConnection({ connected: false, authorizationRequired: event.code === 1008 });
       };
       socket.onmessage = (event) => {
         if (this.socket !== socket) return;
@@ -52,6 +60,7 @@ export class ApiClient {
             | ApiAuthenticated;
           if ('type' in message && message.type === 'authenticated') {
             resolve();
+            this.notifyConnection({ connected: true });
             return;
           }
           if ('type' in message && message.type === 'notification') {
@@ -106,6 +115,14 @@ export class ApiClient {
     };
   }
 
+  /** Observes connection changes so read views can reconnect and refresh independently of commands. */
+  onConnection(listener: (connection: ApiConnection) => void): () => void {
+    this.connections.add(listener);
+    return () => {
+      this.connections.delete(listener);
+    };
+  }
+
   /** Closes the connection and rejects pending requests without changing persisted work. */
   close(): void {
     this.socket?.close();
@@ -113,5 +130,15 @@ export class ApiClient {
     this.ready = undefined;
     for (const entry of this.pending.values()) entry.reject(new Error('API client closed.'));
     this.pending.clear();
+  }
+
+  private notifyConnection(connection: ApiConnection): void {
+    for (const listener of this.connections) {
+      try {
+        listener({ ...connection });
+      } catch {
+        /* An observer does not own the transport. */
+      }
+    }
   }
 }

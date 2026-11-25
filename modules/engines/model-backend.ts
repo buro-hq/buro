@@ -1,4 +1,9 @@
-import type { ModelCompletion, ModelMessage, ModelProvider } from '../../agent/contracts/model.ts';
+import type {
+  ModelCompletion,
+  ModelMessage,
+  ModelProvider,
+  AvailableModel,
+} from '../../agent/contracts/model.ts';
 import type { BackendRequest, SessionBackend } from './backend.ts';
 
 /** Reuses portable model transports without giving them filesystem or process responsibilities. */
@@ -17,6 +22,11 @@ export class ModelBackend implements SessionBackend {
   /** Delegates provider-specific request projection. */
   contextMessages(messages: readonly ModelMessage[]): ModelMessage[] {
     return this.provider.contextMessages?.(messages) ?? structuredClone([...messages]);
+  }
+
+  /** Delegates optional transport metadata discovery. */
+  async listModels(input: { signal: AbortSignal }): Promise<AvailableModel[]> {
+    return this.provider.listModels ? this.provider.listModels(input.signal) : [];
   }
 
   /** Sends only portable request fields to the model provider. */

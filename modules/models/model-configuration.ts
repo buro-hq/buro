@@ -1,5 +1,6 @@
 import type { ModelSamplingSettings } from '../../agent/providers/sampling.ts';
 import type { SessionBackend } from '../engines/backend.ts';
+import type { AvailableModel } from '../../agent/contracts/model.ts';
 import type { RecordStore } from '../storage/record-store.ts';
 
 /** Public settings for one application-wide model connection. */
@@ -30,6 +31,7 @@ export interface ModelConnection {
 /** Transports can be registered by an extension without adding provider branches to sessions. */
 export interface ModelTransport {
   id: string;
+  name?: string;
   /** Constructs a transport with its own credential resolver. */
   create(input: { configuration: ModelConfiguration; apiKey?: string }): SessionBackend;
 }
@@ -40,10 +42,22 @@ export interface ModelConfigurationView extends ModelConfiguration {
   available: boolean;
 }
 
+/** Omitted fields retain saved values; null clears an optional provider setting. */
+export type ModelConfigurationDraft = Partial<
+  Omit<
+    ModelConfiguration,
+    'revision' | 'capacity' | 'reasoningEffort' | 'reasoningBudgetTokens' | 'sampling'
+  >
+> & {
+  capacity?: number | null;
+  reasoningEffort?: string | null;
+  reasoningBudgetTokens?: number | null;
+  sampling?: ModelSamplingSettings | null;
+};
+
 /** Editable connection settings with working defaults. */
 export interface ModelConfigurationInput {
-  configuration: Partial<Omit<ModelConfiguration, 'revision'>> &
-    Pick<ModelConfiguration, 'name' | 'transport' | 'model'>;
+  configuration: ModelConfigurationDraft & Pick<ModelConfiguration, 'name' | 'transport' | 'model'>;
   apiKey?: string | null;
   default?: boolean;
 }
@@ -55,12 +69,29 @@ export interface ModelConfigurationResult {
   error?: string;
 }
 
+/** Discovery can use an unsaved connection, preserving credentials of an existing one when omitted. */
+export interface ModelDiscoveryInput {
+  configuration: ModelConfigurationDraft & Pick<ModelConfiguration, 'transport'>;
+  apiKey?: string | null;
+}
+
+/** An unavailable catalogue does not prevent entering a model ID manually. */
+export interface ModelDiscoveryResult {
+  ok: boolean;
+  models?: AvailableModel[];
+  error?: string;
+}
+
 /** Public configuration API, separate from inference routing. */
 export interface ModelConfigurations {
+  /** Lists registered implementations without constructing or contacting them. */
+  transports(): { id: string; name: string }[];
   /** Reads safe settings. */
   list(): Promise<ModelConfigurationView[]>;
   /** Saves settings and optionally replaces a private credential. */
   save(input: ModelConfigurationInput): Promise<ModelConfigurationResult>;
+  /** Queries available IDs without saving a connection or starting inference. */
+  discover(input: ModelDiscoveryInput): Promise<ModelDiscoveryResult>;
   /** Selects the application default for new conversations. */
   select(input: { id: string }): Promise<boolean>;
   /** Removes settings and credentials without deleting historical conversations. */

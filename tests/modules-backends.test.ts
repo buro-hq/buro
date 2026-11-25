@@ -9,6 +9,19 @@ import { CodexBackend } from '../modules/engines/codex-backend.ts';
 import { ToolRegistry } from '../modules/tools/tool-registry.ts';
 import type { Tool, ToolContext } from '../modules/tools/tool.ts';
 
+test('native discovery reads all catalogue pages without starting a model turn', async () => {
+  const backend = new CodexBackend({
+    id: 'fixture',
+    revision: 'one',
+    executable: process.execPath,
+    args: [fileURLToPath(new URL('./fixtures/native-backend.cjs', import.meta.url))],
+  });
+  assert.deepEqual(await backend.listModels({ signal: AbortSignal.timeout(5000) }), [
+    { id: 'first', name: 'First model' },
+    { id: 'second', name: 'Second model' },
+  ]);
+});
+
 test('a native JSONL backend uses the common tool broker and keeps its observations in portable history', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-native-backend-'));
   const app = await createApplication({ directory });

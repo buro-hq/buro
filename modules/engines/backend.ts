@@ -3,6 +3,7 @@ import type {
   ModelMessage,
   ModelProvider,
   ModelToolCall,
+  AvailableModel,
 } from '../../agent/contracts/model.ts';
 import type { ToolResult } from '../tools/tool.ts';
 
@@ -21,6 +22,8 @@ export interface BackendRequest extends ModelRequest {
 export interface SessionBackend {
   readonly id: string;
   readonly revision: string;
+  /** Reads model metadata without starting a generation. */
+  listModels?(input: { signal: AbortSignal }): Promise<AvailableModel[]>;
   /** Projects adapter-owned context without changing shared history. */
   contextMessages?(messages: readonly ModelMessage[]): ModelMessage[];
   /** Completes a host request, optionally calling registered tools through the callback. */

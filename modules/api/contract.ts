@@ -4,6 +4,8 @@ import type {
   ModelConfigurationInput,
   ModelConfigurationView,
   ModelConfigurationResult,
+  ModelDiscoveryInput,
+  ModelDiscoveryResult,
 } from '../models/model-configuration.ts';
 import type { Project, ProjectResult } from '../projects/project.ts';
 import type { Run, RunOptions, RunResult } from '../runs/run.ts';
@@ -14,49 +16,58 @@ import type { Session } from '../sessions/session.ts';
 import type { ApplicationSettings } from '../settings/settings.ts';
 import type { Task, TaskInput } from '../tasks/task.ts';
 
-/** Browser, CLI and external callers share the same feature commands and results. */
-export interface ApiMethods {
+/** Read operations are safe to refresh after notifications or reconnecting. */
+export interface ApiQueries {
   'projects.list': { params: {}; result: Project[] };
   'projects.get': { params: { id: string }; result: Project | undefined };
-  'projects.connect': { params: { root: string; name?: string }; result: ProjectResult };
-  'projects.disconnect': { params: { id: string }; result: void };
   'tasks.list': { params: { projectId?: string }; result: Task[] };
   'tasks.get': { params: { id: string }; result: Task | undefined };
-  'tasks.create': { params: TaskInput; result: Task };
-  'tasks.update': { params: TaskInput & { id: string }; result: Task | undefined };
-  'tasks.delete': { params: { id: string }; result: void };
   'runs.list': { params: { projectId?: string; taskId?: string }; result: Run[] };
   'runs.get': { params: { id: string }; result: Run | undefined };
-  'runs.start': { params: { taskId: string; options?: RunOptions }; result: RunResult };
-  'runs.retry': { params: { id: string; options?: RunOptions }; result: RunResult };
-  'runs.cancel': { params: { id: string }; result: void };
   'results.inspect': { params: { runId: string }; result: ResultOutcome };
-  'results.apply': { params: { runId: string; revision?: string }; result: ResultOutcome };
   'materials.list': { params: { projectId: string; taskId?: string }; result: Material[] };
-  'materials.upload': {
-    params: { projectId: string; taskId?: string; name: string; contentBase64: string };
-    result: MaterialOutcome;
-  };
   'materials.read': {
     params: { id: string; line?: number; count?: number };
     result: MaterialOutcome;
   };
   'materials.download': { params: { id: string }; result: MaterialOutcome };
-  'materials.delete': { params: { id: string }; result: void };
   'sessions.list': { params: { runId?: string }; result: Session[] };
   'sessions.get': { params: { id: string }; result: Session | undefined };
-  'sessions.model': { params: { sessionId: string; modelId: string }; result: boolean };
   'activity.list': { params: { sessionId?: string; runId?: string }; result: Activity[] };
   'agents.list': { params: {}; result: Agent[] };
+  'models.list': { params: {}; result: ModelConfigurationView[] };
+  'models.transports': { params: {}; result: { id: string; name: string }[] };
+  'models.discover': { params: ModelDiscoveryInput; result: ModelDiscoveryResult };
+  'settings.get': { params: {}; result: ApplicationSettings };
+}
+
+/** Commands execute once; losing a connection never causes automatic mutation replay. */
+export interface ApiCommands {
+  'projects.connect': { params: { root: string; name?: string }; result: ProjectResult };
+  'projects.disconnect': { params: { id: string }; result: void };
+  'tasks.create': { params: TaskInput; result: Task };
+  'tasks.update': { params: TaskInput & { id: string }; result: Task | undefined };
+  'tasks.delete': { params: { id: string }; result: void };
+  'runs.start': { params: { taskId: string; options?: RunOptions }; result: RunResult };
+  'runs.retry': { params: { id: string; options?: RunOptions }; result: RunResult };
+  'runs.cancel': { params: { id: string }; result: void };
+  'results.apply': { params: { runId: string; revision?: string }; result: ResultOutcome };
+  'materials.upload': {
+    params: { projectId: string; taskId?: string; name: string; contentBase64: string };
+    result: MaterialOutcome;
+  };
+  'materials.delete': { params: { id: string }; result: void };
+  'sessions.model': { params: { sessionId: string; modelId: string }; result: boolean };
   'agents.save': { params: Omit<Agent, 'id'> & { id?: string }; result: Agent };
   'agents.delete': { params: { id: string }; result: void };
-  'models.list': { params: {}; result: ModelConfigurationView[] };
   'models.save': { params: ModelConfigurationInput; result: ModelConfigurationResult };
   'models.default': { params: { id: string }; result: boolean };
   'models.delete': { params: { id: string }; result: void };
-  'settings.get': { params: {}; result: ApplicationSettings };
   'settings.update': { params: { instructions?: string }; result: ApplicationSettings };
 }
+
+/** Browser, CLI and external callers share one transport for feature APIs. */
+export interface ApiMethods extends ApiQueries, ApiCommands {}
 
 /** Public messages contain no private transport continuation or API credentials. */
 export interface ApiRequest {

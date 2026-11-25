@@ -14,6 +14,7 @@ export function modelTransports(
   return [
     {
       id: 'openai-compatible',
+      name: 'OpenAI compatible',
       create({ configuration: config, apiKey }) {
         return new ModelBackend({
           provider: new OpenAICompatibleProvider({
@@ -34,6 +35,7 @@ export function modelTransports(
     },
     {
       id: 'ollama',
+      name: 'Ollama',
       create({ configuration: config }) {
         return new ModelBackend({
           provider: new OllamaProvider({
@@ -51,6 +53,7 @@ export function modelTransports(
     },
     {
       id: 'codex',
+      name: 'Codex',
       create({ configuration: config, apiKey }) {
         return new CodexBackend({
           id: config.id,
@@ -64,6 +67,7 @@ export function modelTransports(
     },
     {
       id: 'deepseek',
+      name: 'DeepSeek',
       create({ configuration: config, apiKey }) {
         return new ModelBackend({
           provider: new DeepSeekProvider({
