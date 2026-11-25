@@ -158,7 +158,7 @@
       }
       .code-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
         min-width: 0;
       }
@@ -403,7 +403,7 @@
   <body>
     <header>
       <div class="micro">BURO / REAL TASKS / THINKING / AUTONOMOUS REVIEW</div>
-      <h1>Small and medium changes.<br />Qwen and Flash, three focused reviewers.</h1>
+      <h1>Small and medium changes.<br />Qwen, Flash and Gemma, three focused reviewers.</h1>
       <p>
         Code style, architecture and Buro runtime architecture review the same task independently.
         Findings return to the executor automatically.
@@ -519,6 +519,10 @@ Choose a code change, command or review to inspect its evidence.</pre
             <h3>DeepSeek Flash</h3>
             <pre id="flash-code"></pre>
           </article>
+          <article>
+            <h3>Gemma 4 12B</h3>
+            <pre id="gemma-code"></pre>
+          </article>
         </div>
         <details>
           <summary>Full patches for the selected run</summary>
@@ -553,13 +557,16 @@ Choose a code change, command or review to inspect its evidence.</pre
                 <td><a href="https://huggingface.co/Qwen/Qwen3.8-27B">Qwen3.8 27B</a></td>
                 <td>90.3</td>
                 <td>89.2</td>
-                <td>Dense, partial RAM; RTX speed not measured</td>
+                <td>Dense, partial RAM; measured Q4 ~4.5 and Q3 ~9 tokens/s</td>
               </tr>
               <tr>
                 <td><a href="https://huggingface.co/google/gemma-4-12B">Gemma 4 12B</a></td>
                 <td>72.0</td>
                 <td>78.8</td>
-                <td>7.7 GB Ollama package, candidate for GPU fit</td>
+                <td>
+                  Installed 8.02 GB package; measured 61–82 tokens/s at 8K with native MTP; Buro
+                  quality runs underway
+                </td>
               </tr>
               <tr>
                 <td><a href="https://huggingface.co/google/gemma-4-12B">Gemma 4 26B-A4B</a></td>
@@ -591,7 +598,10 @@ Choose a code change, command or review to inspect its evidence.</pre
           The original Flash small-task code passed independent host checks, but one review report
           failed validation because the JSON instruction transport omitted the actual schema. Commit
           f992728 sends that contract through the generic adapter. It does not reinterpret prose as
-          function calls. The original matrix remains on its frozen base. Separate contract probes
+          function calls. The original matrix remains on its frozen base and runtime. The Gemma
+          follow-up uses the same target code/tasks with repaired runtime c6156f2, temperature
+          1.0/top_p 0.95 and package-default native MTP. Runtime and sampling differ from the
+          original runs; results are not a strict same-runtime comparison. Separate contract probes
           use saved public history and are billed separately; they are not exact request replays or
           full correction cycles.
         </p>
@@ -600,21 +610,21 @@ Choose a code change, command or review to inspect its evidence.</pre
       <section id="method">
         <h2>Method and practical limits</h2>
         <p>
-          Four independent workspaces use one frozen base, the same task for each model, thinking
-          enabled, a nominal 32K context budget, 8K maximum output per request and capacity one.
-          Three review instruction documents are configuration data; there are no model-specific
-          runtime roles or score gates. Review rounds have no configured limit. A separate
-          diagnostic manager monitors the user's weekly quota and restores the RTX server when local
-          runs stop.
+          Six independent workspaces use one frozen target base, the same task for each model,
+          thinking enabled, a nominal 32K context budget, 8K maximum output per request and capacity
+          one. Three review instruction documents are configuration data; there are no
+          model-specific runtime roles or score gates. Review rounds have no configured limit. A
+          separate diagnostic manager monitors the user's weekly quota and restores the RTX server
+          when local runs stop.
         </p>
         <p>
-          Qwen runs on the RTX through Ollama; Flash calls the official DeepSeek API directly with
-          proxy variables removed. Separate machines may run concurrently. No engine tuning or new
-          model loading is mixed into this matrix. Preparation and code-snapshot instrumentation are
-          included in wall time and reported separately. Buro builds its request view using a
-          character-based token estimate; Ollama also receives num_ctx=32768, while the managed
-          Flash service has its own larger native limit. Actual usage is reported rather than
-          assumed from that estimate.
+          Qwen and Gemma run sequentially on the RTX through Ollama; Flash calls the official
+          DeepSeek API directly with proxy variables removed. Separate machines may run
+          concurrently. No engine tuning or new model loading is mixed into this matrix. Preparation
+          and code-snapshot instrumentation are included in wall time and reported separately. Buro
+          builds its request view using a character-based token estimate; Ollama also receives
+          num_ctx=32768, while the managed Flash service has its own larger native limit. Actual
+          usage is reported rather than assumed from that estimate.
         </p>
         <p>
           Bars show observed model-request intervals, not GPU utilization. Buro orchestration is
@@ -661,7 +671,7 @@ Choose a code change, command or review to inspect its evidence.</pre
     </main>
     <script id="data" type="application/json">
       {
-        "generatedAt": "2026-11-25T22:51:39.583050+00:00",
+        "generatedAt": "2026-11-25T22:59:06.670710+00:00",
         "cases": [
           {
             "id": "small-qwen",
@@ -4441,6 +4451,7 @@ Choose a code change, command or review to inspect its evidence.</pre
             "reports": 3,
             "snapshotSeconds": 10.165872502999802,
             "base": "65bc6f7dd3530f146c20fb2f70922ac53349f3aa",
+            "runtimeRevision": "65bc6f7dd3530f146c20fb2f70922ac53349f3aa",
             "reviews": [
               {
                 "sessionId": "c6e82b4d-eadf-45ea-9f23-d958b5da5b33",
@@ -13124,6 +13135,7 @@ Choose a code change, command or review to inspect its evidence.</pre
             "reports": 3,
             "snapshotSeconds": 15.831628122999607,
             "base": "65bc6f7dd3530f146c20fb2f70922ac53349f3aa",
+            "runtimeRevision": "65bc6f7dd3530f146c20fb2f70922ac53349f3aa",
             "reviews": [
               {
                 "sessionId": "6cd9ffb5-2a0d-4455-9935-cdddbb51d913",
@@ -15274,6 +15286,1154 @@ Choose a code change, command or review to inspect its evidence.</pre
                 "actor": "41d68c22-e498-4832-bf0a-a7521eb10173",
                 "start": 680.313468916,
                 "end": 683.237663041
+              }
+            ]
+          },
+          {
+            "id": "small-gemma",
+            "task": "small",
+            "engine": "gemma",
+            "name": "Small / Gemma 12B",
+            "complete": false,
+            "events": [
+              {
+                "seconds": 0.014140375000000005,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "state",
+                "title": "Executor idle",
+                "detail": "",
+                "allOnly": false
+              },
+              {
+                "seconds": 0.208684542,
+                "actor": "orchestration",
+                "kind": "state",
+                "title": "Run running",
+                "detail": "Review pending",
+                "allOnly": false
+              },
+              {
+                "seconds": 0.209711042,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "state",
+                "title": "Executor running",
+                "detail": "",
+                "allOnly": false
+              },
+              {
+                "seconds": 3.395784542,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 16.3s",
+                "usage": { "inputTokens": 2135, "outputTokens": 152 },
+                "allOnly": true
+              },
+              {
+                "seconds": 19.718038917,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": ".",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "." },
+                "actionId": "3be904d5-bc3f-488e-9b3e-742a84bc08eb"
+              },
+              {
+                "seconds": 19.797939917,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": ".",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "." },
+                "actionId": "3be904d5-bc3f-488e-9b3e-742a84bc08eb"
+              },
+              {
+                "seconds": 19.798478125000003,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.3s",
+                "usage": { "inputTokens": 2598, "outputTokens": 59 },
+                "allOnly": true
+              },
+              {
+                "seconds": 21.131672417,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src" },
+                "actionId": "4b96bb65-c2c5-483d-8bdc-34e7c33cc3b2"
+              },
+              {
+                "seconds": 21.204953292000003,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src" },
+                "actionId": "4b96bb65-c2c5-483d-8bdc-34e7c33cc3b2"
+              },
+              {
+                "seconds": 21.205536208,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.2s",
+                "usage": { "inputTokens": 2757, "outputTokens": 50 },
+                "allOnly": true
+              },
+              {
+                "seconds": 22.400340042,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "modules",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "modules" },
+                "actionId": "2b075cca-0a5e-43e8-b7cd-327d71a93ad7"
+              },
+              {
+                "seconds": 22.471274125,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "modules",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "modules" },
+                "actionId": "2b075cca-0a5e-43e8-b7cd-327d71a93ad7"
+              },
+              {
+                "seconds": 22.471910042000005,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.2s",
+                "usage": { "inputTokens": 2997, "outputTokens": 48 },
+                "allOnly": true
+              },
+              {
+                "seconds": 23.666853417000002,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src/shared",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared" },
+                "actionId": "ebb33064-a6f0-4a1c-a168-90fd1e261722"
+              },
+              {
+                "seconds": 23.732997625,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src/shared",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared" },
+                "actionId": "ebb33064-a6f0-4a1c-a168-90fd1e261722"
+              },
+              {
+                "seconds": 23.733685125,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 0.7s",
+                "usage": { "inputTokens": 3080, "outputTokens": 29 },
+                "allOnly": true
+              },
+              {
+                "seconds": 24.442946250000002,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src/shared/lib",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib" },
+                "actionId": "5930c3aa-eb3e-458f-b413-a84ab4c88f06"
+              },
+              {
+                "seconds": 24.513857583,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src/shared/lib",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib" },
+                "actionId": "5930c3aa-eb3e-458f-b413-a84ab4c88f06"
+              },
+              {
+                "seconds": 24.514512083000003,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.1s",
+                "usage": { "inputTokens": 3150, "outputTokens": 51 },
+                "allOnly": true
+              },
+              {
+                "seconds": 25.587976292000004,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "modules/materials",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "modules/materials" },
+                "actionId": "95a5b607-d263-4912-b5f8-41d3ea6cd282"
+              },
+              {
+                "seconds": 25.667856708000002,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "modules/materials",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "modules/materials" },
+                "actionId": "95a5b607-d263-4912-b5f8-41d3ea6cd282"
+              },
+              {
+                "seconds": 25.66847375,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 4.2s",
+                "usage": { "inputTokens": 3276, "outputTokens": 219 },
+                "allOnly": true
+              },
+              {
+                "seconds": 29.832646833000002,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "command started",
+                "detail": "grep -r \"KB\" .",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "command": "grep -r \"KB\" ." },
+                "actionId": "b1e9c741-1438-4986-8cf3-8602bd385606"
+              },
+              {
+                "seconds": 32.881613958,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "code",
+                "title": "Diagnostic workspace changes after command",
+                "detail": "",
+                "failed": false,
+                "allOnly": false,
+                "receipt": "{\"stdout\":\"Binary file ./branding/logo.png matches\\n./node_modules/@types/node/quic.d.ts:         * writing more. **Default:** `65536` (64 KB).\\n./node_modules/@types/node/http.d.ts:     * Defaults to 16KB. Configurable using the `--max-http-header-size` CLI option.\\n./node_modules/@types/node/fs/promises.d.ts:         * chunks (default 128 KB). If transforms are provided, they are applied\\n./node_modules/@types/node/fs/promises.d.ts:         * // Read 1 KB starting at byte 100\\n./node_modules/@types/babel__core/index.d.ts:     * Do not include superfluous whitespace characters and line terminators. When set to `\\\"auto\\\"` compact is set to `true` on input sizes of >500KB\\n./node_modules/playwright-core/lib/mcpBundleImpl/index.js:    deps: ${r}}`};var s4={keyword:\\\"dependencies\\\",type:\\\"object\\\",schemaType:\\\"object\\\",error:lr.error,code(t){let[e,r]=c4(t);xS(t,e),wS(t,r)}};function c4({schema:t}){let e={},r={};for(let o in t){if(o===\\\"__proto__\\\")continue;let n=Array.isArray(t[o])?e:r;n[o]=t[o]}return[e,r]}function xS(t,e=t.schema){let{gen:r,data:o,it:n}=t;if(Object.keys(e).length===0)return;let i=r.let(\\\"missing\\\");for(let a in e){let c=e[a];if(c.length===0)continue;let u=(0,Sc.propertyInData)(r,o,a,n.opts.ownProperties);t.setParams({property:a,depsCount:c.length,deps:c.join(\\\", \\\")}),n.allErrors?r.if(u,()=>{for(let l of c)(0,Sc.checkReportMissingProp)(t,l)}):(r.if((0,ay._)`${u} && (${(0,Sc.checkMissingProp)(t,c,i)})`),(0,Sc.reportMissingProp)(t,i),r.else())}}lr.validatePropertyDeps=xS;function wS(t,e=t.schema){let{gen:r,data:o,keyword:n,it:i}=t,a=r.name(\\\"valid\\\");for(let c in e)(0,a4.alwaysValidSchema)(i,e[c])||(r.if((0,Sc.propertyInData)(r,o,c,i.opts.ownProperties),()=>{let u=t.subschema({keyword:n,schemaProp:c},a);t.mergeValidEvaluated(u,a)},()=>r.var(a,!0)),t.ok(a))}lr.validateSchemaDeps=wS;lr.default=s4});var zS=z(sy=>{\\\"use strict\\\";Object.defineProperty(sy,\\\"__esModule\\\",{value:!0});var SS=ee(),u4=fe(),l4={message:\\\"property name must be valid\\\",params:({params:t})=>(0,SS._)`{propertyName: ${t.propertyName}}`},d4={keyword:\\\"propertyNames\\\",type:\\\"object\\\",schemaType:[\\\"object\\\",\\\"boolean\\\"],error:l4,code(t){let{gen:e,schema:r,data:o,it:n}=t;if((0,u4.alwaysValidSchema)(n,r))return;let i=e.name(\\\"valid\\\");e.forIn(\\\"key\\\",o,a=>{t.setParams({propertyName:a}),t.subschema({keyword:\\\"propertyNames\\\",data:a,dataTypes:[\\\"string\\\"],propertyName:a,compositeRule:!0},i),e.if((0,SS.not)(i),()=>{t.error(!0),n.allErrors||e.break()})}),t.ok(i)}};sy.default=d4});var uy=z(cy=>{\\\"use strict\\\";Object.defineProperty(cy,\\\"__esModule\\\",{value:!0});var Qf=Ct(),Gt=ee(),f4=zr(),ep=fe(),p4={message:\\\"must NOT have additional properties\\\",params:({params:t})=>(0,Gt._)`{additionalProperty: ${t.additionalProperty}}`},m4={keyword:\\\"additionalProperties\\\",type:[\\\"object\\\"],schemaType:[\\\"boolean\\\",\\\"object\\\"],allowUndefined:!0,trackErrors:!0,error:p4,code(t){let{gen:e,schema:r,parentSchema:o,data:n,errsCount:i,it:a}=t;if(!i)throw new Error(\\\"ajv implementation error\\\");let{allErrors:c,opts:u}=a;if(a.props=!0,u.removeAdditional!==\\\"all\\\"&&(0,ep.alwaysValidSchema)(a,r))return;let l=(0,Qf.allSchemaProperties)(o.properties),d=(0,Qf.allSchemaProperties)(o.patternProperties);s(),t.ok((0,Gt._)`${i} === ${f4.default.errors}`);function s(){e.forIn(\\\"key\\\",n,g=>{!l.length&&!d.length?m(g):e.if(f(g),()=>m(g))})}function f(g){let y;if(l.length>8){let w=(0,ep.schemaRefOrVal)(a,o.properties,\\\"properties\\\");y=(0,Qf.isOwnProperty)(e,w,g)}else l.length?y=(0,Gt.or)(...l.map(w=>(0,Gt._)`${g} === ${w}`)):y=Gt.nil;return d.length&&(y=(0,Gt.or)(y,...d.map(w=>(0,Gt._)`${(0,Qf.usePattern)(t,w)}.test(${g})`))),(0,Gt.not)(y)}function p(g){e.code((0,Gt._)`delete ${n}[${g}]`)}function m(g){if(u.removeAdditional===\\\"all\\\"||u.removeAdditional&&r===!1){p(g);return}if(r===!1){t.setParams({additionalProperty:g}),t.error(),c||e.break();return}if(typeof r==\\\"object\\\"&&!(0,ep.alwaysValidSchema)(a,r)){let y=e.name(\\\"valid\\\");u.removeAdditional===\\\"failing\\\"?(h(g,y,!1),e.if((0,Gt.not)(y),()=>{t.reset(),p(g)})):(h(g,y),c||e.if((0,Gt.not)(y),()=>e.break()))}}function h(g,y,w){let k={keyword:\\\"additionalProperties\\\",dataProp:g,dataPropType:ep.Type.Str};w===!1&&Object.assign(k,{compositeRule:!0,createErrors:!1,allErrors:!1}),t.subschema(k,y)}}};cy.default=m4});var TS=z(dy=>{\\\"use strict\\\";Object.defineProperty(dy,\\\"__esModule\\\",{value:!0});var h4=dc(),IS=Ct(),ly=fe(),PS=uy(),g4={keyword:\\\"properties\\\",type:\\\"object\\\",schemaType:\\\"object\\\",code(t){let{gen:e,schema:r,parentSchema:o,data:n,it:i}=t;i.opts.removeAdditional===\\\"all\\\"&&o.additionalProperties===void 0&&PS.default.code(new h4.KeywordCxt(i,PS.default,\\\"additionalProperties\\\"));let a=(0,IS.allSchemaProperties)(r);for(let s of a)i.definedProperties.add(s);i.opts.unevaluated&&a.length&&i.props!==!0&&(i.props=ly.mergeEvaluated.props(e,(0,ly.toHash)(a),i.props));let c=a.filter(s=>!(0,ly.alwaysValidSchema)(i,r[s]));if(c.length===0)return;let u=e.name(\\\"valid\\\");for(let s of c)l(s)?d(s):(e.if((0,IS.propertyInData)(e,n,s,i.opts.ownProperties)),d(s),i.allErrors||e.else().var(u,!0),e.endIf()),t.it.definedProperties.add(s),t.ok(u);function l(s){return i.opts.useDefaults&&!i.compositeRule&&r[s].default!==void 0}function d(s){t.subschema({keyword:\\\"properties\\\",schemaProp:s,dataProp:s},u)}}};dy.default=g4});var RS=z(fy=>{\\\"use strict\\\";Object.defineProperty(fy,\\\"__esModule\\\",{value:!0});var ES=Ct(),tp=ee(),OS=fe(),jS=fe(),v4={keyword:\\\"patternProperties\\\",type:\\\"object\\\",schemaType:\\\"object\\\",code(t){let{gen:e,schema:r,data:o,parentSchema:n,it:i}=t,{opts:a}=i,c=(0,ES.allSchemaProperties)(r),u=c.filter(h=>(0,OS.alwaysValidSchema)(i,r[h]));if(c.length===0||u.length===c.length&&(!i.opts.unevaluated||i.props===!0))return;let l=a.strictSchema&&!a.allowMatchingProperties&&n.properties,d=e.name(\\\"valid\\\");i.props!==!0&&!(i.props instanceof tp.Name)&&(i.props=(0,jS.evaluatedPropsToName)(e,i.props));let{props:s}=i;f();function f(){for(let h of c)l&&p(h),i.allErrors?m(h):(e.var(d,!0),m(h),e.if(d))}function p(h){for(let g in l)new RegExp(h).test(g)&&(0,OS.checkStrictMode)(i,`property ${g} matches pattern ${h} (use allowMatchingProperties)`)}function m(h){e.forIn(\\\"key\\\",o,g=>{e.if((0,tp._)`${(0,ES.usePattern)(t,h)}.test(${g})`,()=>{let y=u.includes(h);y||t.subschema({keyword:\\\"patternProperties\\\",schemaProp:h,dataProp:g,dataPropType:jS.Type.Str},d),i.opts.unevaluated&&s!==!0?e.assign((0,tp._)`${s}[${g}]`,!0):!y&&!i.allErrors&&e.if((0,tp.not)(d),()=>e.break())})})}}};fy.default=v4});var NS=z(py=>{\\\"use strict\\\";Object.defineProperty(py,\\\"__esModule\\\",{value:!0});var _4=fe(),y4={keyword:\\\"not\\\",schemaType:[\\\"object\\\",\\\"boolean\\\"],trackErrors:!0,code(t){let{gen:e,schema:r,it:o}=t;if((0,_4.alwaysValidSchema)(o,r)){t.fail();return}let n=e.name(\\\"valid\\\");t.subschema({keyword:\\\"not\\\",compositeRule:!0,createErrors:!1,allErrors:!1},n),t.failResult(n,()=>t.reset(),()=>t.error())},error:{message:\\\"must NOT be valid\\\"}};py.default=y4});var CS=z(my=>{\\\"use strict\\\";Object.defineProperty(my,\\\"__esModule\\\",{value:!0});var $4=Ct(),b4={keyword:\\\"anyOf\\\",schemaType:\\\"array\\\",trackErrors:!0,code:$4.validateUnion,error:{message:\\\"must match a schema in anyOf\\\"}};my.default=b4});var DS=z(hy=>{\\\"use strict\\\";Object.defineProperty(hy,\\\"__esModule\\\",{value:!0});var rp=ee(),x4=fe(),w4={message:\\\"must match exactly one schema in oneOf\\\",params:({params:t})=>(0,rp._)`{passingSchemas: ${t.passing}}`},k4={keyword:\\\"oneOf\\\",schemaType:\\\"array\\\",trackErrors:!0,error:w4,code(t){let{gen:e,schema:r,parentSchema:o,it:n}=t;if(!Array.isArray(r))throw new Error(\\\"ajv implementation error\\\");if(n.opts.discriminator&&o.discriminator)return;let i=r,a=e.let(\\\"valid\\\",!1),c=e.let(\\\"passing\\\",null),u=e.name(\\\"_valid\\\");t.setParams({passing:c}),e.block(l),t.result(a,()=>t.reset(),()=>t.error(!0));function l(){i.forEach((d,s)=>{let f;(0,x4.alwaysValidSchema)(n,d)?e.var(u,!0):f=t.subschema({keyword:\\\"oneOf\\\",schemaProp:s,compositeRule:!0},u),s>0&&e.if((0,rp._)`${u} && ${a}`).assign(a,!1).assign(c,(0,rp._)`[${c}, ${s}]`).else(),e.if(u,()=>{e.assign(a,!0),e.assign(c,s),f&&t.mergeEvaluated(f,rp.Name)})})}}};hy.default=k4});var US=z(gy=>{\\\"use strict\\\";Object.defineProperty(gy,\\\"__esModule\\\",{value:!0});var S4=fe(),z4={keyword:\\\"allOf\\\",schemaType:\\\"array\\\",code(t){let{gen:e,schema:r,it:o}=t;if(!Array.isArray(r))throw new Error(\\\"ajv implementation error\\\");let n=e.name(\\\"valid\\\");r.forEach((i,a)=>{if((0,S4.alwaysValidSchema)(o,i))return;let c=t.subschema({keyword:\\\"allOf\\\",schemaProp:a},n);t.ok(n),t.mergeEvaluated(c)})}};gy.default=z4});var MS=z(vy=>{\\\"use strict\\\";Object.defineProperty(vy,\\\"__esModule\\\",{value:!0});var np=ee(),ZS=fe(),I4={message:({params:t})=>(0,np.str)`must match \\\"${t.ifClause}\\\" schema`,params:({params:t})=>(0,np._)`{failingKeyword: ${t.ifClause}}`},P4={keyword:\\\"if\\\",schemaType:[\\\"object\\\",\\\"boolean\\\"],trackErrors:!0,error:I4,code(t){let{gen:e,parentSchema:r,it:o}=t;r.then===void 0&&r.else===void 0&&(0,ZS.checkStrictMode)(o,'\\\"if\\\" without \\\"then\\\" and \\\"else\\\" is ignored');let n=AS(o,\\\"then\\\"),i=AS(o,\\\"else\\\");if(!n&&!i)return;let a=e.let(\\\"valid\\\",!0),c=e.name(\\\"_valid\\\");if(u(),t.reset(),n&&i){let d=e.let(\\\"ifClause\\\");t.setParams({ifClause:d}),e.if(c,l(\\\"then\\\",d),l(\\\"else\\\",d))}else n?e.if(c,l(\\\"then\\\")):e.if((0,np.not)(c),l(\\\"else\\\"));t.pass(a,()=>t.error(!0));function u(){let d=t.subschema({keyword:\\\"if\\\",compositeRule:!0,createErrors:!1,allErrors:!1},c);t.mergeEvaluated(d)}function l(d,s){return()=>{let f=t.subschema({keyword:d},c);e.assign(a,c),t.mergeValidEvaluated(f,a),s?e.assign(s,(0,np._)`${d}`):t.setParams({ifClause:d})}}}};function AS(t,e){let r=t.schema[e];return r!==void 0&&!(0,ZS.alwaysValidSchema)(t,r)}vy.default=P4});var qS=z(_y=>{\\\"use strict\\\";Object.defineProperty(_y,\\\"__esModule\\\",{value:!0});var T4=fe(),E4={keyword:[\\\"then\\\",\\\"else\\\"],schemaType:[\\\"object\\\",\\\"boolean\\\"],code({keyword:t,parentSchema:e,it:r}){e.if===void 0&&(0,T4.checkStrictMode)(r,`\\\"${t}\\\" without \\\"if\\\" is ignored`)}};_y.default=E4});var LS=z(yy=>{\\\"use strict\\\";Object.defineProperty(yy,\\\"__esModule\\\",{value:!0});var O4=ty(),j4=_S(),R4=ry(),N4=$S(),C4=bS(),D4=kS(),U4=zS(),A4=uy(),Z4=TS(),M4=RS(),q4=NS(),L4=CS(),V4=DS(),F4=US(),J4=MS(),H4=qS();function W4(t=!1){let e=[q4.default,L4.default,V4.default,F4.default,J4.default,H4.default,U4.default,A4.default,D4.default,Z4.default,M4.default];return t?e.push(j4.default,N4.default):e.push(O4.default,R4.default),e.push(C4.default),e}yy.default=W4});var VS=z($y=>{\\\"use strict\\\";Object.defineProperty($y,\\\"__esModule\\\",{value:!0});var Ne=ee(),B4={message:({schemaCode:t})=>(0,Ne.str)`must match format \\\"${t}\\\"`,params:({schemaCode:t})=>(0,Ne._)`{format: ${t}}`},K4={keyword:\\\"format\\\",type:[\\\"number\\\",\\\"string\\\"],schemaType:\\\"string\\\",$data:!0,error:B4,code(t,e){let{gen:r,data:o,$data:n,schema:i,schemaCode:a,it:c}=t,{opts:u,errSchemaPath:l,schemaEnv:d,self:s}=c;if(!u.validateFormats)return;n?f():p();function f(){let m=r.scopeValue(\\\"formats\\\",{ref:s.formats,code:u.code.formats}),h=r.const(\\\"fDef\\\",(0,Ne._)`${m}[${a}]`),g=r.let(\\\"fType\\\"),y=r.let(\\\"format\\\");r.if((0,Ne._)`typeof ${h} == \\\"object\\\" && !(${h} instanceof RegExp)`,()=>r.assign(g,(0,Ne._)`${h}.type || \\\"string\\\"`).assign(y,(0,Ne._)`${h}.validate`),()=>r.assign(g,(0,Ne._)`\\\"string\\\"`).assign(y,h)),t.fail$data((0,Ne.or)(w(),k()));function w(){return u.strictSchema===!1?Ne.nil:(0,Ne._)`${a} && !${y}`}function k(){let b=d.$async?(0,Ne._)`(${h}.async ? await ${y}(${o}) : ${y}(${o}))`:(0,Ne._)`${y}(${o})`,x=(0,Ne._)`(typeof ${y} == \\\"function\\\" ? ${b} : ${y}.test(${o}))`;return(0,Ne._)`${y} && ${y} !== true && ${g} === ${e} && !${x}`}}function p(){let m=s.formats[i];if(!m){w();return}if(m===!0)return;let[h,g,y]=k(m);h===e&&t.pass(b());function w(){if(u.strictSchema===!1){s.logger.warn(x());return}throw new Error(x());function x(){return`unknown format \\\"${i}\\\" ignored in schema at path \\\"${l}\\\"`}}function k(x){let D=x instanceof RegExp?(0,Ne.regexpCode)(x):u.code.formats?(0,Ne._)`${u.code.formats}${(0,Ne.getProperty)(i)}`:void 0,V=r.scopeValue(\\\"",
+                "arguments": { "command": "grep -r \"KB\" ." },
+                "actionId": "b1e9c741-1438-4986-8cf3-8602bd385606",
+                "patch": "",
+                "tree": "dc081863913ec164ee29b3ede519ec01248fadd6",
+                "diagnosticPatchBlocksOmitted": 0
+              },
+              {
+                "seconds": 33.026960124999995,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.7s",
+                "usage": { "inputTokens": 3532, "outputTokens": 68 },
+                "allOnly": true
+              },
+              {
+                "seconds": 34.696972375,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "command started",
+                "detail": "grep -r \"KB\" modules/materials",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "command": "grep -r \"KB\" modules/materials" },
+                "actionId": "bcf3e107-ea71-4474-9626-05b045dcf038"
+              },
+              {
+                "seconds": 34.725784125,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "command completed",
+                "detail": "grep -r \"KB\" modules/materials",
+                "failed": true,
+                "allOnly": true,
+                "receipt": "{\"stdout\":\"\",\"stderr\":\"\",\"exitCode\":1,\"interrupted\":false,\"truncated\":false}",
+                "arguments": { "command": "grep -r \"KB\" modules/materials" },
+                "actionId": "bcf3e107-ea71-4474-9626-05b045dcf038"
+              },
+              {
+                "seconds": 34.832564833000006,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.9s",
+                "usage": { "inputTokens": 3632, "outputTokens": 93 },
+                "allOnly": true
+              },
+              {
+                "seconds": 36.76823725,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src" },
+                "actionId": "3fc5c1b3-f600-41f4-970a-f5af43e44fb3"
+              },
+              {
+                "seconds": 36.833058917,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src" },
+                "actionId": "3fc5c1b3-f600-41f4-970a-f5af43e44fb3"
+              },
+              {
+                "seconds": 36.834879125,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 2.1s",
+                "usage": { "inputTokens": 3825, "outputTokens": 109 },
+                "allOnly": true
+              },
+              {
+                "seconds": 38.994058667000004,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "command started",
+                "detail": "grep -r \"KB\" src",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "command": "grep -r \"KB\" src" },
+                "actionId": "21160590-18e7-490d-ab01-6c33fcd05d1e"
+              },
+              {
+                "seconds": 39.033573875,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "command completed",
+                "detail": "grep -r \"KB\" src",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "{\"stdout\":\"src/features/materials/MaterialsPage.tsx:                  \u003cText size=\\\"xs\\\" c=\\\"dimmed\\\">{(material.bytes / 1024).toFixed(1)} KB\u003c/Text>\\n\",\"stderr\":\"\",\"exitCode\":0,\"interrupted\":false,\"truncated\":false}",
+                "arguments": { "command": "grep -r \"KB\" src" },
+                "actionId": "21160590-18e7-490d-ab01-6c33fcd05d1e"
+              },
+              {
+                "seconds": 39.126939083,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 20.2s",
+                "usage": { "inputTokens": 4010, "outputTokens": 1439 },
+                "allOnly": true
+              },
+              {
+                "seconds": 59.308343958,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "src/shared/lib/index.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/index.ts" },
+                "actionId": "3ebe65f8-15f7-4460-80cf-da4ea570d006"
+              },
+              {
+                "seconds": 59.357378125000004,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "src/shared/lib/index.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/index.ts" },
+                "actionId": "3ebe65f8-15f7-4460-80cf-da4ea570d006"
+              },
+              {
+                "seconds": 59.359160042000006,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.9s",
+                "usage": { "inputTokens": 5516, "outputTokens": 92 },
+                "allOnly": true
+              },
+              {
+                "seconds": 61.226968917,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "edit_file started",
+                "detail": "src/shared/lib/index.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/index.ts" },
+                "actionId": "a89ecd7f-5e03-4aae-85e1-a1530dabcdf1"
+              },
+              {
+                "seconds": 61.272075375,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "code",
+                "title": "Code changed after edit_file",
+                "detail": "M\tsrc/shared/lib/index.ts\n",
+                "failed": false,
+                "allOnly": false,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/index.ts" },
+                "actionId": "a89ecd7f-5e03-4aae-85e1-a1530dabcdf1",
+                "patch": "diff --git a/src/shared/lib/index.ts b/src/shared/lib/index.ts\nindex 75557ec..eb7dabc 100644\n--- a/src/shared/lib/index.ts\n+++ b/src/shared/lib/index.ts\n@@ -1 +1,2 @@\n export { useOperation, type Operation, type OperationOutcome } from './use-operation.ts';\n+export * from './format-bytes.ts';\n",
+                "tree": "a043f5d8b2eda56d802ca68ac9819138da4af985",
+                "diagnosticPatchBlocksOmitted": 0
+              },
+              {
+                "seconds": 61.483224833,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 4.6s",
+                "usage": { "inputTokens": 5643, "outputTokens": 284 },
+                "allOnly": true
+              },
+              {
+                "seconds": 66.08611350000001,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "write_file started",
+                "detail": "src/shared/lib/format-bytes.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/format-bytes.ts" },
+                "actionId": "f6e4966c-49b8-4778-8855-0cbe8bc918bb"
+              },
+              {
+                "seconds": 66.130524625,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "code",
+                "title": "Code changed after write_file",
+                "detail": "A\tsrc/shared/lib/format-bytes.ts\n",
+                "failed": false,
+                "allOnly": false,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/format-bytes.ts" },
+                "actionId": "f6e4966c-49b8-4778-8855-0cbe8bc918bb",
+                "patch": "diff --git a/src/shared/lib/format-bytes.ts b/src/shared/lib/format-bytes.ts\nnew file mode 100644\nindex 0000000..860df72\n--- /dev/null\n+++ b/src/shared/lib/format-bytes.ts\n@@ -0,0 +1,10 @@\n+export function formatBytes({ bytes }: { bytes: number }): string {\n+  if (bytes === 0) return '0 B';\n+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];\n+  const i = Math.floor(Math.log(bytes) / Math.log(1024));\n+  const unitIndex = Math.min(i, units.length - 1);\n+  const value = bytes / Math.pow(1024, unitIndex);\n+\n+  const formattedValue = Number(value.toFixed(1)).toString();\n+  return `${formattedValue} ${units[unitIndex]}`;\n+}\n",
+                "tree": "f082c4cfd93f216a9b9b8184a2782d4473c85015",
+                "diagnosticPatchBlocksOmitted": 0
+              },
+              {
+                "seconds": 66.24194966700001,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.3s",
+                "usage": { "inputTokens": 5964, "outputTokens": 50 },
+                "allOnly": true
+              },
+              {
+                "seconds": 67.5085625,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "bd2a4dc1-4adb-442c-85c0-65689b542a48"
+              },
+              {
+                "seconds": 67.571622542,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "bd2a4dc1-4adb-442c-85c0-65689b542a48"
+              },
+              {
+                "seconds": 67.57366520800001,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 3.8s",
+                "usage": { "inputTokens": 8220, "outputTokens": 100 },
+                "allOnly": true
+              },
+              {
+                "seconds": 71.38839808300001,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "edit_file started",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "6e456a0e-6caf-47ae-a233-19fdd9739518"
+              },
+              {
+                "seconds": 71.4536255,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "code",
+                "title": "Code changed after edit_file",
+                "detail": "M\tsrc/features/materials/MaterialsPage.tsx\n",
+                "failed": false,
+                "allOnly": false,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "6e456a0e-6caf-47ae-a233-19fdd9739518",
+                "patch": "diff --git a/src/features/materials/MaterialsPage.tsx b/src/features/materials/MaterialsPage.tsx\nindex 0736616..143aab1 100644\n--- a/src/features/materials/MaterialsPage.tsx\n+++ b/src/features/materials/MaterialsPage.tsx\n@@ -3,7 +3,7 @@ import { useState, type ReactElement } from 'react';\n import { useApplication, useApiQuery } from '../../data/application.tsx';\n import { Panel, ErrorNotice, QueryFeedback } from '@/shared/ui';\n import { t } from '../../i18n/index.ts';\n-import { useOperation } from '@/shared/lib';\n+import { useOperation, formatBytes } from '@/shared/lib';\n import { uploadedFile } from './upload.ts';\n \n const MaterialReader = (input: { id: string; onClose(): void }): ReactElement => {\n",
+                "tree": "c583bc66536524a7412c1ffecfb44277547d40e0",
+                "diagnosticPatchBlocksOmitted": 0
+              },
+              {
+                "seconds": 71.564519417,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 2.6s",
+                "usage": { "inputTokens": 8357, "outputTokens": 176 },
+                "allOnly": true
+              },
+              {
+                "seconds": 74.16501333299999,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "edit_file started",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "d78ffbf1-3c3b-4a87-b4c9-918f1fc0cfaa"
+              },
+              {
+                "seconds": 74.224898792,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "edit_file completed",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": true,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "d78ffbf1-3c3b-4a87-b4c9-918f1fc0cfaa"
+              },
+              {
+                "seconds": 74.316858083,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.4s",
+                "usage": { "inputTokens": 8561, "outputTokens": 56 },
+                "allOnly": true
+              },
+              {
+                "seconds": 75.69431054200001,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "1bc81174-cdf3-45f4-ad32-98d454ba7ad2"
+              },
+              {
+                "seconds": 75.755132375,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "1bc81174-cdf3-45f4-ad32-98d454ba7ad2"
+              },
+              {
+                "seconds": 75.757138125,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 5.2s",
+                "usage": { "inputTokens": 10826, "outputTokens": 181 },
+                "allOnly": true
+              },
+              {
+                "seconds": 80.990211667,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "edit_file started",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "1222f953-64f7-4a1b-bfc4-4d8e4d20338b"
+              },
+              {
+                "seconds": 81.051452958,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "edit_file completed",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": true,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "1222f953-64f7-4a1b-bfc4-4d8e4d20338b"
+              },
+              {
+                "seconds": 81.14180008299999,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 2.0s",
+                "usage": { "inputTokens": 11035, "outputTokens": 111 },
+                "allOnly": true
+              },
+              {
+                "seconds": 83.12208025,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "edit_file started",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "06888b16-734c-462c-b8bc-7f77cb336614"
+              },
+              {
+                "seconds": 83.180250375,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "code",
+                "title": "Code changed after edit_file",
+                "detail": "M\tsrc/features/materials/MaterialsPage.tsx\n",
+                "failed": false,
+                "allOnly": false,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "06888b16-734c-462c-b8bc-7f77cb336614",
+                "patch": "diff --git a/src/features/materials/MaterialsPage.tsx b/src/features/materials/MaterialsPage.tsx\nindex 143aab1..b86cf8d 100644\n--- a/src/features/materials/MaterialsPage.tsx\n+++ b/src/features/materials/MaterialsPage.tsx\n@@ -129,7 +129,7 @@ export const MaterialsPage = (input: { projectId: string }): ReactElement => {\n                 \u003cText fw={500}>{material.name}\u003c/Text>\n                 \u003cGroup gap=\"sm\">\n                   \u003cText size=\"xs\" c=\"dimmed\">{material.mimeType}\u003c/Text>\n-                  \u003cText size=\"xs\" c=\"dimmed\">{(material.bytes / 1024).toFixed(1)} KB\u003c/Text>\n+                  \u003cText size=\"xs\" c=\"dimmed\">{formatBytes({ bytes: material.bytes })}\u003c/Text>\n                   {material.taskId && \u003cBadge variant=\"light\">{t('Task attachment')}\u003c/Badge>}\n                 \u003c/Group>\n               \u003c/div>\n",
+                "tree": "010be95713def308af5a2bfa6b596fd304b1a0be",
+                "diagnosticPatchBlocksOmitted": 0
+              },
+              {
+                "seconds": 83.287870625,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.6s",
+                "usage": { "inputTokens": 11183, "outputTokens": 75 },
+                "allOnly": true
+              },
+              {
+                "seconds": 84.909853542,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "tests/unit",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests/unit" },
+                "actionId": "0a644713-299a-433d-b8d0-31c44ff69b8d"
+              },
+              {
+                "seconds": 84.969721542,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "tests/unit",
+                "failed": true,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests/unit" },
+                "actionId": "0a644713-299a-433d-b8d0-31c44ff69b8d"
+              },
+              {
+                "seconds": 84.97179695800001,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.3s",
+                "usage": { "inputTokens": 11355, "outputTokens": 49 },
+                "allOnly": true
+              },
+              {
+                "seconds": 86.299769208,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "tests",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests" },
+                "actionId": "05e5352d-3586-4da4-bbdc-cb707ca2cf37"
+              },
+              {
+                "seconds": 86.36944825,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "tests",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests" },
+                "actionId": "05e5352d-3586-4da4-bbdc-cb707ca2cf37"
+              },
+              {
+                "seconds": 86.371363167,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 2.2s",
+                "usage": { "inputTokens": 11770, "outputTokens": 95 },
+                "allOnly": true
+              },
+              {
+                "seconds": 88.63317937500001,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "command started",
+                "detail": "mkdir -p tests/unit",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "command": "mkdir -p tests/unit" },
+                "actionId": "ce5b22c4-41d7-4da5-afd5-7a5b4a3f7eaa"
+              },
+              {
+                "seconds": 88.6672375,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "command completed",
+                "detail": "mkdir -p tests/unit",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "{\"stdout\":\"\",\"stderr\":\"\",\"exitCode\":0,\"interrupted\":false,\"truncated\":false}",
+                "arguments": { "command": "mkdir -p tests/unit" },
+                "actionId": "ce5b22c4-41d7-4da5-afd5-7a5b4a3f7eaa"
+              },
+              {
+                "seconds": 88.76183287500001,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 1.2s",
+                "usage": { "inputTokens": 11897, "outputTokens": 54 },
+                "allOnly": true
+              },
+              {
+                "seconds": 89.9968025,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "package.json",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "package.json" },
+                "actionId": "fe45b2a7-fe7d-41aa-8705-cd378843c63d"
+              },
+              {
+                "seconds": 90.056407083,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "package.json",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "package.json" },
+                "actionId": "fe45b2a7-fe7d-41aa-8705-cd378843c63d"
+              },
+              {
+                "seconds": 90.058726083,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 13.9s",
+                "usage": { "inputTokens": 13045, "outputTokens": 847 },
+                "allOnly": true
+              },
+              {
+                "seconds": 103.999699667,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "write_file started",
+                "detail": "tests/unit/format-bytes.test.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests/unit/format-bytes.test.ts" },
+                "actionId": "3ae7561e-2ff1-499a-9dea-db422bb47a7d"
+              },
+              {
+                "seconds": 104.063769792,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "code",
+                "title": "Code changed after write_file",
+                "detail": "A\ttests/unit/format-bytes.test.ts\n",
+                "failed": false,
+                "allOnly": false,
+                "receipt": "",
+                "arguments": { "path": "tests/unit/format-bytes.test.ts" },
+                "actionId": "3ae7561e-2ff1-499a-9dea-db422bb47a7d",
+                "patch": "diff --git a/tests/unit/format-bytes.test.ts b/tests/unit/format-bytes.test.ts\nnew file mode 100644\nindex 0000000..fe638b1\n--- /dev/null\n+++ b/tests/unit/format-bytes.test.ts\n@@ -0,0 +1,36 @@\n+import { assert } from 'node:assert';\n+import { formatBytes } from '@/shared/lib/format-bytes.ts';\n+\n+describe('formatBytes', () => {\n+  it('should format 0 bytes correctly', () => {\n+    assert.strictEqual(formatBytes({ bytes: 0 }), '0 B');\n+  });\n+\n+  it('should format 1 byte correctly', () => {\n+    assert.strictEqual(formatBytes({ bytes: 1 }), '1 B');\n+  });\n+\n+  it('should format 1023 bytes correctly', () => {\n+    assert.strictEqual(formatBytes({ bytes: 1023 }), '1023 B');\n+  });\n+\n+  it('should format 1024 bytes correctly', () => {\n+    assert.strictEqual(formatBytes({ bytes: 1024 }), '1 KB');\n+  });\n+\n+  it('should format 1536 bytes correctly', () => {\n+    assert.strictEqual(formatBytes({ bytes: 1536 }), '1.5 KB');\n+  });\n+\n+  it('should format 1048576 bytes correctly', () => {\n+    assert.strictEqual(formatBytes({ bytes: 1048576 }), '1 MB');\n+  });\n+\n+  it('should format 1610612736 bytes correctly', () => {\n+    assert.strictEqual(formatBytes({ bytes: 1610612736 }), '1.5 GB');\n+  });\n+\n+  it('should format 1099511627776 bytes correctly', () => {\n+    assert.strictEqual(formatBytes({ bytes: 1099511627776 }), '1 TB');\n+  });\n+});\n",
+                "tree": "0d71e94a02534c49671d32fccc45ab126e68b507",
+                "diagnosticPatchBlocksOmitted": 0
+              },
+              {
+                "seconds": 104.239674,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 4.2s",
+                "usage": { "inputTokens": 13930, "outputTokens": 204 },
+                "allOnly": true
+              },
+              {
+                "seconds": 108.430894917,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "command started",
+                "detail": "npm test",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "command": "npm test" },
+                "actionId": "18e9ed5c-f4fb-4468-81d6-203401555028"
+              },
+              {
+                "seconds": 114.192648542,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "command completed",
+                "detail": "npm test",
+                "failed": true,
+                "allOnly": true,
+                "receipt": "{\"stdout\":\"\\n> buro@0.1.0 test\\n> node --test tests/*.test.ts\\n\\n(node:57224) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✖ the production launcher connects the real UI and CLI to a fresh service and releases ownership on shutdown (1246.006375ms)\\n✔ formatting honors the selected guards, argument objects and short values (586.681208ms)\\n✔ object expansion preserves comments, nested values, spread and constructor arguments (28.547959ms)\\n✔ formatting preserves logical groups and puts continued operators at the end of the line (19.014166ms)\\n✔ separate variable declarations and inline type modifiers are automatically fixed (8.641667ms)\\n✔ formatting TSX preserves rendered text and is stable on the second pass (44.387458ms)\\n✔ inline JSX separators retain spaces on both sides of expressions (10.40875ms)\\n✔ documented union members keep their comments and leading type separators (3.845ms)\\n✔ formatting and correctness have distinct configurations (993.369791ms)\\n✔ format owners agree on source and exclude generated and private state (31.170584ms)\\n(node:57226) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✖ live evaluation reports an unfinished claim as a failing test without changing agent completion, and verifies a real tool fix (1326.986709ms)\\n(node:57227) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ the feature API validates external inputs, persists edits, sends safe notifications and reconnects without replay (91.997459ms)\\n✖ concurrent local clients receive the same complete private API credential (24.404417ms)\\n(node:57228) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ application restarts with persisted feature records, default model and private adapter state without publishing credentials (730.1585ms)\\n✔ sqlite: concurrent record patches preserve unrelated fields (1.158583ms)\\n✔ json: concurrent record patches preserve unrelated fields (8.93425ms)\\n(node:57229) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ a broken HTTP generation is retried before its proposed tool can execute, and the completed edit runs once (73.878541ms)\\n✔ cancellation stops HTTP retry backoff and authentication failures are not retried (3.556709ms)\\n✔ native discovery reads all catalogue pages without starting a model turn (94.925833ms)\\n✔ a native JSONL backend uses the common tool broker and keeps its observations in portable history (67.017667ms)\\n✔ stateful tool instances retain their methods without mutating another invocation’s context (0.255292ms)\\n✔ a model selected from a native callback continues the same conversation with observed tool results (21.48425ms)\\n✔ a native adapter cannot hide an unexpected tool failure by returning a successful terminal (20.566916ms)\\n✔ the configured DeepSeek transport enables thinking without imposing a final-answer schema (41.114667ms)\\n(node:57230) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ failed composition releases storage and application ownership before the next startup (32.996375ms)\\n✔ a second application cannot interrupt work owned by the first, and ownership is released on close (14.224833ms)\\n✔ model discovery uses a draft or a saved private credential without saving a connection or starting inference (68.93375ms)\\n✔ application shutdown cancels and joins catalogue requests before releasing storage (30.395084ms)\\n(node:57231) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ sqlite: migration preserves long histories, private identities and paged reads through restart (94.762667ms)\\n✔ json: migration preserves long histories, private identities and paged reads through restart (277.880041ms)\\n✔ normal execution appends messages without updating any saved transcript row (46.484917ms)\\n✔ a failed atomic message batch leaves the header and old transcript intact (0.664875ms)\\n✔ a transcript retains opened pages and catches up with a burst larger than one response (0.615959ms)\\n(node:57232) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ explicit publication pushes only the run delta to a fresh base, keeps a blank PR body, and records a pushed branch if PR creation fails (3603.762917ms)\\n(node:57405) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ sqlite: feature state persists independently of notifications and returned objects (21.156333ms)\\n✔ json: feature state persists independently of notifications and returned objects (10.447042ms)\\n✔ any session can use tools and return a result without a role, workflow grammar, reviewer or mandatory checks (4.071ms)\\n✔ output truncation continues inside the model/tool loop and never executes an incomplete proposal (2.033875ms)\\n✔ model changes keep the same history while private adapter state stays with its model and outside notifications (1.914792ms)\\n✔ a second writer cannot enter a session while independent sessions remain runnable (1.287708ms)\\n✔ parallel runs of one task have independent files and linked sessions; completion needs no review gate (979.556333ms)\\n✔ retry carries saved files and history into a new attempt and preserves explicit access options (1120.400167ms)\\n✔ recovery marks an abandoned run interrupted and a new attempt does not replay an unknown tool outcome (500.110667ms)\\n✔ oversized tool output cannot evict the current request and context projection does not change saved history (0.450917ms)\\n✔ ambiguous tool IDs are a response failure, never authority to perform actions (0.744917ms)\\n✔ cancelling a newly announced run takes effect before its first model request (331.618083ms)\\n✔ closing the run owner joins startup before storage can close and does not start inference afterward (87.557292ms)\\n✔ a saved attempt can continue after its editable task is removed (429.925958ms)\\n✔ retry keeps the last selected model and original baseline unless the caller explicitly replaces them (328.858125ms)\\n✔ a collaborator can use another model, return feedback and retain explicit read-only access on follow-up (299.255291ms)\\n✔ run completion stops background collaborators before declaring the attempt complete (299.62225ms)\\n✖ real sandboxed file tools edit a workspace without exposing source writes or private files (324.113458ms)\\n(node:57406) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ uploaded context is read in ranges through ordinary tools without broadcasting document contents (51.875458ms)\\n✔ image references remain available without claiming their pixels were analyzed; loaders need no frozen startup catalog (13.395083ms)\\n(node:57578) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ sqlite: concurrent model edits keep the latest credential and a coherent default through restart (41.55325ms)\\n✔ json: concurrent model edits keep the latest credential and a coherent default through restart (50.025834ms)\\n✔ concurrent first connections choose the same persisted and running default (9.103834ms)\\n(node:57788) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✖ multiple optional previews outlive their completed run, expose logs, use independent ports and stop with their owner (598.454458ms)\\n✖ workspace commands preserve Git metadata and cannot signal or inspect an unrelated host process (36.882417ms)\\n✔ continuous notifications refresh the view before the stream stops (221.969ms)\\n✔ slow reads are applied even when dirty and only one follow-up runs at a time (235.746167ms)\\n✔ a failed refresh retains the visible data and the next change can recover (152.320208ms)\\n✔ notifications affect their own feature and owner, with conservative deletion handling (0.413833ms)\\n(node:58314) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n✔ initial dirty source becomes the baseline; results preserve binary/mode changes and apply without touching unrelated work (1768.762333ms)\\n✔ an invalid base is an ordinary start result and does not leave an idle session behind (43.157ms)\\n(node:58565) ExperimentalWarning: SQLite is an experimental feature and might change at any time\\n(Use `node --trace-warnings ...` to show where the warning was created)\\n\\u001b[31m(!) Failed to run dependency scan. Skipping dependency pre-bundling. Error: \\u001b[31m  Failed to scan for dependencies from entries:\\n  /Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/index.html\\n/Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/branding/index.html\\n/Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/docs/reports/autonomous-review-real-task-2026-11-25.html\\n/Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/docs/reports/cloud-local-review-comparison-2026-11-25.html\\n/Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/docs/reports/shared-ui-model-comparison-2026-11-25.html\\n\\n  \\u001b[31m\\u001b[31m✘ \\u001b[41;31m[\\u001b[41;97mERROR\\u001b[41;31m]\\u001b[0m \\u001b[1mThe server is being restarted or closed. Request is outdated\\u001b[0m \\u001b[1m\\u001b[35m[plugin vite:dep-scan]\\u001b[0m\\n\\n    node_modules/esbuild/lib/main.js:1498:27:\\n\\u001b[37m      1498 │         let result = await \\u001b[32m\\u001b[37mcallback({\\n           ╵                            \\u001b[32m^\\u001b[0m\\n\\n    at throwClosedServerError (file:///Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/node_modules/vite/dist/node/chunks/config.js:28563:32)\\n    at EnvironmentPluginContainer.resolveId (file:///Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/node_modules/vite/dist/node/chunks/config.js:28695:65)\\n    at resolveId (file:///Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/node_modules/vite/dist/node/chunks/config.js:31504:38)\\n    at resolve$4 (file:///Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/node_modules/vite/dist/node/chunks/config.js:31509:22)\\n    at file:///Users/redzumi/Desktop/projects/buro/artifacts/preference-review-comparison/small-gemma/data/workspaces/f01a681e-d111-4e2b-9092-6a07420eddf6/node_modules/vite/dist/nod",
+                "arguments": { "command": "npm test" },
+                "actionId": "18e9ed5c-f4fb-4468-81d6-203401555028"
+              },
+              {
+                "seconds": 114.317266292,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 35.2s",
+                "usage": { "inputTokens": 32654, "outputTokens": 111 },
+                "allOnly": true
+              },
+              {
+                "seconds": 149.55649525,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 40.2s",
+                "usage": { "inputTokens": 32270, "outputTokens": 496 },
+                "allOnly": true
+              },
+              {
+                "seconds": 189.76951291700001,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 39.3s",
+                "usage": { "inputTokens": 31944, "outputTokens": 496 },
+                "allOnly": true
+              },
+              {
+                "seconds": 229.10706075000002,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src/shared/lib",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib" },
+                "actionId": "f6b7d333-2e80-426a-b329-03d278539b97"
+              },
+              {
+                "seconds": 229.17017158299998,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src/shared/lib",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib" },
+                "actionId": "f6b7d333-2e80-426a-b329-03d278539b97"
+              },
+              {
+                "seconds": 229.17278791700002,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 32.8s",
+                "usage": { "inputTokens": 32288, "outputTokens": 54 },
+                "allOnly": true
+              },
+              {
+                "seconds": 261.957546917,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "src/shared/lib/format-bytes.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/format-bytes.ts" },
+                "actionId": "0de6ae8c-7aed-4ae7-86d8-944940c746e4"
+              },
+              {
+                "seconds": 262.01443512500003,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "src/shared/lib/format-bytes.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/format-bytes.ts" },
+                "actionId": "0de6ae8c-7aed-4ae7-86d8-944940c746e4"
+              },
+              {
+                "seconds": 262.017415792,
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "running; 0.0s",
+                "usage": null,
+                "allOnly": true
+              }
+            ],
+            "lanes": [
+              { "id": "1d38b801-513e-47a6-8907-aa4a608b212c", "name": "Executor" },
+              { "id": "orchestration", "name": "Buro orchestration" }
+            ],
+            "code": {
+              "initial": {},
+              "final": {
+                "src/features/materials/MaterialsPage.tsx": "import { Badge, Button, FileInput, Group, Modal, Paper, Stack, Text } from '@mantine/core';\nimport { useState, type ReactElement } from 'react';\nimport { useApplication, useApiQuery } from '../../data/application.tsx';\nimport { Panel, ErrorNotice, QueryFeedback } from '@/shared/ui';\nimport { t } from '../../i18n/index.ts';\nimport { useOperation, formatBytes } from '@/shared/lib';\nimport { uploadedFile } from './upload.ts';\n\nconst MaterialReader = (input: { id: string; onClose(): void }): ReactElement => {\n  const [line, setLine] = useState(1);\n  const material = useApiQuery('materials.read', {\n    id: input.id,\n    line,\n    count: 200,\n  });\n  return (\n    \u003cModal\n      opened\n      onClose={input.onClose}\n      title={material.data?.material?.name ?? t('Material')}\n      size=\"xl\"\n    >\n      \u003cStack>\n        \u003cQueryFeedback loading={material.loading} error={material.error ?? material.data?.error} />\n        {material.data?.material?.note && (\n          \u003cText c=\"dimmed\" size=\"sm\">\n            {material.data.material.note}\n          \u003c/Text>\n        )}\n        \u003cpre className=\"feature-pre\">{material.data?.text}\u003c/pre>\n        \u003cGroup justify=\"space-between\">\n          \u003cButton\n            variant=\"default\"\n            disabled={line === 1}\n            onClick={() => setLine(Math.max(1, line - 200))}\n          >\n            {t('Previous')}\n          \u003c/Button>\n          \u003cText size=\"sm\">\n            {line} / {material.data?.totalLines ?? '—'}\n          \u003c/Text>\n          \u003cButton\n            variant=\"default\"\n            disabled={line + 200 > (material.data?.totalLines ?? 0)}\n            onClick={() => setLine(line + 200)}\n          >\n            {t('Next')}\n          \u003c/Button>\n        \u003c/Group>\n      \u003c/Stack>\n    \u003c/Modal>\n  );\n};\n\n/** Project context can be uploaded, read and downloaded independently of a run. */\nexport const MaterialsPage = (input: { projectId: string }): ReactElement => {\n  const { client } = useApplication();\n  const materials = useApiQuery('materials.list', {\n    projectId: input.projectId,\n  });\n  const action = useOperation();\n  const [files, setFiles] = useState\u003cFile[]>([]);\n  const [selected, setSelected] = useState\u003cstring>();\n  const upload = async (): Promise\u003cvoid> => {\n    for (const file of files) {\n      const result = await action.perform(async () => {\n        const uploaded = await client.call('materials.upload', {\n          projectId: input.projectId,\n          name: file.name,\n          contentBase64: await uploadedFile({\n            file,\n          }),\n        });\n        return { ok: uploaded.ok, error: uploaded.error };\n      });\n      if (!result.ok)\n        return;\n\n      setFiles((previous) => previous.filter((candidate) => candidate !== file));\n    }\n  };\n  const download = async (id: string): Promise\u003cvoid> => {\n    await action.perform(async () => {\n      const result = await client.call('materials.download', {\n        id,\n      });\n      if (!result.ok || result.contentBase64 === undefined)\n        return { ok: false, error: result.error };\n\n      const bytes = Uint8Array.from(atob(result.contentBase64), (character) =>\n        character.charCodeAt(0));\n      const url = URL.createObjectURL(new Blob([bytes], {\n        type: result.material?.mimeType,\n      }));\n      const anchor = document.createElement('a');\n      anchor.href = url;\n      anchor.download = result.material?.name ?? 'material';\n      anchor.click();\n      setTimeout(() => URL.revokeObjectURL(url), 1000);\n      return { ok: true };\n    });\n  };\n  return (\n    \u003cPanel\n      title={t('Materials')}\n      description={t('Files and documents available to agents when they need them.')}\n    >\n      \u003cStack>\n        \u003cGroup align=\"end\">\n          \u003cFileInput\n            multiple\n            label={t('Upload files')}\n            value={files}\n            onChange={setFiles}\n            style={{ flex: 1 }}\n            clearable\n          />\n          \u003cButton loading={action.busy} onClick={() => void upload()} disabled={!files.length}>\n            {t('Upload')}\n          \u003c/Button>\n        \u003c/Group>\n        \u003cErrorNotice error={action.error} />\n        \u003cQueryFeedback loading={materials.loading} error={materials.error} />\n        {materials.data?.length === 0 && \u003cText c=\"dimmed\">{t('No materials yet')}\u003c/Text>}\n        {materials.data?.map((material) => (\n          \u003cPaper key={material.id} withBorder p=\"md\">\n            \u003cGroup justify=\"space-between\">\n              \u003cdiv>\n                \u003cText fw={500}>{material.name}\u003c/Text>\n                \u003cGroup gap=\"sm\">\n                  \u003cText size=\"xs\" c=\"dimmed\">{material.mimeType}\u003c/Text>\n                  \u003cText size=\"xs\" c=\"dimmed\">{formatBytes({ bytes: material.bytes })}\u003c/Text>\n                  {material.taskId && \u003cBadge variant=\"light\">{t('Task attachment')}\u003c/Badge>}\n                \u003c/Group>\n              \u003c/div>\n              \u003cGroup>\n                \u003cButton variant=\"default\" onClick={() => setSelected(material.id)}>\n                  {t('Read')}\n                \u003c/Button>\n                \u003cButton variant=\"subtle\" onClick={() => void download(material.id)}>\n                  {t('Download')}\n                \u003c/Button>\n                \u003cButton\n                  variant=\"subtle\"\n                  color=\"red\"\n                  onClick={() =>\n                    void action.perform(async () => {\n                      await client.call('materials.delete', {\n                        id: material.id,\n                      });\n                      return { ok: true };\n                    })}\n                >\n                  {t('Delete')}\n                \u003c/Button>\n              \u003c/Group>\n            \u003c/Group>\n          \u003c/Paper>\n        ))}\n      \u003c/Stack>\n      {selected && (\n        \u003cMaterialReader key={selected} id={selected} onClose={() => setSelected(undefined)} />\n      )}\n    \u003c/Panel>\n  );\n};\n",
+                "src/shared/lib/format-bytes.ts": "export function formatBytes({ bytes }: { bytes: number }): string {\n  if (bytes === 0) return '0 B';\n  const units = ['B', 'KB', 'MB', 'GB', 'TB'];\n  const i = Math.floor(Math.log(bytes) / Math.log(1024));\n  const unitIndex = Math.min(i, units.length - 1);\n  const value = bytes / Math.pow(1024, unitIndex);\n\n  const formattedValue = Number(value.toFixed(1)).toString();\n  return `${formattedValue} ${units[unitIndex]}`;\n}\n",
+                "src/shared/lib/index.ts": "export { useOperation, type Operation, type OperationOutcome } from './use-operation.ts';\nexport * from './format-bytes.ts';\n",
+                "tests/unit/format-bytes.test.ts": "import { assert } from 'node:assert';\nimport { formatBytes } from '@/shared/lib/format-bytes.ts';\n\ndescribe('formatBytes', () => {\n  it('should format 0 bytes correctly', () => {\n    assert.strictEqual(formatBytes({ bytes: 0 }), '0 B');\n  });\n\n  it('should format 1 byte correctly', () => {\n    assert.strictEqual(formatBytes({ bytes: 1 }), '1 B');\n  });\n\n  it('should format 1023 bytes correctly', () => {\n    assert.strictEqual(formatBytes({ bytes: 1023 }), '1023 B');\n  });\n\n  it('should format 1024 bytes correctly', () => {\n    assert.strictEqual(formatBytes({ bytes: 1024 }), '1 KB');\n  });\n\n  it('should format 1536 bytes correctly', () => {\n    assert.strictEqual(formatBytes({ bytes: 1536 }), '1.5 KB');\n  });\n\n  it('should format 1048576 bytes correctly', () => {\n    assert.strictEqual(formatBytes({ bytes: 1048576 }), '1 MB');\n  });\n\n  it('should format 1610612736 bytes correctly', () => {\n    assert.strictEqual(formatBytes({ bytes: 1610612736 }), '1.5 GB');\n  });\n\n  it('should format 1099511627776 bytes correctly', () => {\n    assert.strictEqual(formatBytes({ bytes: 1099511627776 }), '1 TB');\n  });\n});\n"
+              }
+            },
+            "patch": "",
+            "correctionPatch": "",
+            "verification": {},
+            "findings": [],
+            "status": "running",
+            "reviewStatus": "pending",
+            "wallSeconds": 285.276370417,
+            "requests": 30,
+            "reports": 0,
+            "snapshotSeconds": 1.435567208000015,
+            "base": "65bc6f7dd3530f146c20fb2f70922ac53349f3aa",
+            "runtimeRevision": "c6156f21231eb9b19ae044939e738a9178ae8aad",
+            "runtimeCaveat": "Gemma follow-up: same target base and task, repaired Buro runtime c6156f2, temperature 1.0/top_p 0.95 and package-default native MTP. Original Qwen/Flash runtime remains frozen; this is not a strict same-runtime rerun.",
+            "reviews": [],
+            "intervals": [
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 3.395784542,
+                "end": 19.709824375000004
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 19.798478125000003,
+                "end": 21.124946583000003
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 21.205536208,
+                "end": 22.394824333000003
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 22.471910042000005,
+                "end": 23.660083750000002
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 23.733685125,
+                "end": 24.436985709
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 24.514512083000003,
+                "end": 25.582274916000003
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 25.66847375,
+                "end": 29.826102792
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 33.026960124999995,
+                "end": 34.691590166
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 34.832564833000006,
+                "end": 36.76376216600001
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 36.834879125,
+                "end": 38.984424166
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 39.126939083,
+                "end": 59.305065125
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 59.359160042000006,
+                "end": 61.223935292000014
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 61.483224833,
+                "end": 66.079315708
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 66.24194966700001,
+                "end": 67.49908095900003
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 67.57366520800001,
+                "end": 71.3782185
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 71.564519417,
+                "end": 74.153444459
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 74.316858083,
+                "end": 75.68398679100001
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 75.757138125,
+                "end": 80.97910783399999
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 81.14180008299999,
+                "end": 83.10459866699999
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 83.287870625,
+                "end": 84.897717334
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 84.97179695800001,
+                "end": 86.28768825000002
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 86.371363167,
+                "end": 88.620782917
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 88.76183287500001,
+                "end": 89.984630292
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 90.058726083,
+                "end": 103.989981083
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 104.239674,
+                "end": 108.42006175
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 114.317266292,
+                "end": 149.53831308399998
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 149.55649525,
+                "end": 189.751897833
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 189.76951291700001,
+                "end": 229.09591416700002
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 229.17278791700002,
+                "end": 261.9491545
+              },
+              {
+                "actor": "1d38b801-513e-47a6-8907-aa4a608b212c",
+                "start": 262.017415792,
+                "end": 285.276370417
               }
             ]
           },
@@ -18822,6 +19982,7 @@ Choose a code change, command or review to inspect its evidence.</pre
             "reports": 0,
             "snapshotSeconds": 7.602298331000321,
             "base": "65bc6f7dd3530f146c20fb2f70922ac53349f3aa",
+            "runtimeRevision": "65bc6f7dd3530f146c20fb2f70922ac53349f3aa",
             "reviews": [],
             "metrics": {
               "case": "qwen",
@@ -36590,6 +37751,7 @@ Choose a code change, command or review to inspect its evidence.</pre
             "reports": 3,
             "snapshotSeconds": 28.02909379600005,
             "base": "65bc6f7dd3530f146c20fb2f70922ac53349f3aa",
+            "runtimeRevision": "65bc6f7dd3530f146c20fb2f70922ac53349f3aa",
             "reviews": [
               {
                 "sessionId": "18028cfc-1cca-4bdd-a21c-a6d123cd8af3",
@@ -40716,6 +41878,21 @@ Choose a code change, command or review to inspect its evidence.</pre
                 "end": 1654.674519125
               }
             ]
+          },
+          {
+            "id": "medium-gemma",
+            "task": "medium",
+            "engine": "gemma",
+            "name": "Medium / Gemma 12B",
+            "complete": false,
+            "events": [],
+            "lanes": [],
+            "code": { "initial": {}, "final": {} },
+            "patch": "",
+            "correctionPatch": "",
+            "verification": {},
+            "findings": [],
+            "status": "Waiting"
           }
         ],
         "tasks": {
@@ -41689,7 +42866,9 @@ Choose a code change, command or review to inspect its evidence.</pre
         data.generatedAt +
         ' | ' +
         data.cases.filter((x) => x.complete).length +
-        '/4 cases ended';
+        '/' +
+        data.cases.length +
+        ' cases ended';
       for (const c of data.cases) {
         const card = n('article');
         card.append(
@@ -41817,7 +42996,7 @@ Choose a code change, command or review to inspect its evidence.</pre
         const c = caseNow();
         selectedEvent = undefined;
         selected = c.id;
-        $('run-caveat').textContent = c.timingCaveat || '';
+        $('run-caveat').textContent = [c.timingCaveat, c.runtimeCaveat].filter(Boolean).join(' ');
         fill('actor', [{ id: '', name: 'All actors' }, ...c.lanes]);
         $('run-status').textContent = c.complete
           ? c.status + ' / recorded result'
@@ -41892,7 +43071,7 @@ Choose a code change, command or review to inspect its evidence.</pre
         renderCode = () => {
           const phase = $('phase').value,
             path = $('file').value;
-          for (const engine of ['qwen', 'flash']) {
+          for (const engine of ['qwen', 'flash', 'gemma']) {
             const c = codeCases().find((c) => c.engine === engine);
             $(engine + '-code').textContent =
               c?.code[phase][path] || '(No changed file at this path in this snapshot.)';
