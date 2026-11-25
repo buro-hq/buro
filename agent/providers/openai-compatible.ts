@@ -145,6 +145,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
           ? { reasoning_content: object(message.continuation).reasoningContent }
           : {}),
       }));
+      const needsSchemaInstructions = input.schema != null &&
+        this.structuredOutputMode === 'instruction';
+      if (needsSchemaInstructions)
+        messages.push({
+          role: 'user',
+          content: 'Return JSON matching this schema:\n' + encodeJSON(input.schema),
+        });
+
       const response = await request(this.options, 'chat/completions', {
         method: 'POST',
         signal: input.signal,
