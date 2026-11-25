@@ -66,9 +66,11 @@ A model can be selected for a run or session and changed for the next request th
 
 A collaborator is another session using the same loop. A saved agent description is optional: callers can supply the assignment, instructions and model directly. A collaborator inherits shared task background, explicitly labeled as reference information; its current assignment arrives in a separate conversation message. The parent's full history is not copied automatically.
 
-Read-only access is inherited, and the available tool set can narrow. Waiting tracks circular dependencies between sessions. When a run's root work finishes, its background sessions are stopped and joined before the attempt finishes. See [session tools](modules/agents/session-tools.ts) and [Sessions.wait](modules/sessions/session-service.ts).
+Read-only access is inherited, and the available tool set can narrow. Waiting tracks circular dependencies between sessions. When a run's root turn finishes, its background sessions are stopped and joined. Optional team review can then continue the attempt through new sessions. See [session tools](modules/agents/session-tools.ts) and [Sessions.wait](modules/sessions/session-service.ts).
 
 Review is an ordinary exchange: request an independent opinion, read findings, fix the code and send the revision back. It does not require a separate workflow engine.
+
+[Autonomous team review](docs/AUTONOMOUS-REVIEW.md) is an explicit application setting with run overrides. Its participant descriptions, models and tool selections are data. [reviewRun](modules/runs/review.ts) creates fresh ordinary sessions, returns actionable findings to the original executor, and repeats until the team has no findings or an explicit limit/cancellation ends the cycle. The common session loop has no reviewer-role branch. Review reports and observed commands are saved on the run; applying a result remains independent of an approval score.
 
 Delegation freedom alone does not prevent coordination failures. In the current Qwen 9B diagnostic, agents repeatedly delegated the same assignment and reread files. The scenario was stopped after 31.6 minutes: 9 collaborators and 261 requests. Model behavior, shared context and tool descriptions have not yet been isolated experimentally as causes.
 

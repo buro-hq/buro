@@ -8,6 +8,7 @@ import { useOperation } from '../common/operation.ts';
 import { SessionView } from './SessionView.tsx';
 import { PreviewsPanel } from './PreviewsPanel.tsx';
 import { DeliveriesPanel } from './DeliveriesPanel.tsx';
+import { ReviewResults } from '../run-review/index.ts';
 
 const fileStatusLabels: Record<string, string> = {
   A: 'Added',
@@ -131,6 +132,7 @@ export const RunDetail = (input: {
         <Tabs.List>
           <Tabs.Tab value="conversation">{t('Conversations')}</Tabs.Tab>
           <Tabs.Tab value="changes">{t('Changes')}</Tabs.Tab>
+          {run.data?.review && <Tabs.Tab value="review">{t('Automatic review')}</Tabs.Tab>}
           <Tabs.Tab value="preview">{t('Preview')}</Tabs.Tab>
           <Tabs.Tab value="publish">{t('Publish')}</Tabs.Tab>
         </Tabs.List>
@@ -162,6 +164,17 @@ export const RunDetail = (input: {
         </Tabs.Panel>
         <Tabs.Panel value="changes" pt="md">
           {tab === 'changes' && <Changes runId={input.id} />}
+        </Tabs.Panel>
+        <Tabs.Panel value="review" pt="md">
+          {run.data?.review && (
+            <ReviewResults
+              review={run.data.review}
+              onSession={(id) => {
+                setSessionId(id);
+                setTab('conversation');
+              }}
+            />
+          )}
         </Tabs.Panel>
         <Tabs.Panel value="preview" pt="md">
           {tab === 'preview' && <PreviewsPanel runId={input.id} />}

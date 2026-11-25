@@ -60,6 +60,21 @@ test(
               id: configuration.id,
               revision: configuration.revision,
               async complete(request) {
+                if (request.messages[0]?.content.includes('Independently review the actual task result'))
+                  return {
+                    model: 'fixture',
+                    finish: 'stop',
+                    message: {
+                      role: 'assistant',
+                      content: request.schema
+                        ? JSON.stringify({
+                            summary: 'Independent review completed.',
+                            findings: [],
+                          })
+                        : 'Inspected the implementation.',
+                    },
+                  };
+
                 if (!request.messages.some((message) => message.role === 'tool'))
                   return {
                     model: 'fixture',
@@ -292,6 +307,66 @@ test(
     await page.screenshot({
       path: 'artifacts/architecture-refactor/models-desktop.png',
     });
+    await page.locator('.sidebar').getByRole('button', {
+      name: 'Settings',
+      exact: true,
+    }).click();
+    await page.getByLabel('Automatically review and correct runs', {
+      exact: true,
+    }).check();
+    await expect(page.getByLabel('Reviewer name', {
+      exact: true,
+    })).toHaveCount(2);
+    await page.getByLabel('Reviewer name', {
+      exact: true,
+    }).first().fill('Independent quality');
+    await page.getByLabel('Maximum review rounds', {
+      exact: true,
+    }).fill('2');
+    await page.getByRole('button', {
+      name: 'Save review settings',
+      exact: true,
+    }).click();
+    await expect.poll(async () => (await app.settings.get()).review?.enabled).toBe(true);
+    assert.equal((await app.settings.get()).review?.participants?.[0].name, 'Independent quality');
+    await page.screenshot({
+      path: 'artifacts/architecture-refactor/review-settings-desktop.png',
+      fullPage: true,
+    });
+    await page.locator('.sidebar').getByRole('button', {
+      name: 'Goals',
+      exact: true,
+    }).click();
+    await page.getByRole('button', {
+      name: 'Run options',
+      exact: true,
+    }).click();
+    await page.getByRole('textbox', {
+      name: 'Automatic team review',
+      exact: true,
+    }).click();
+    await page.getByRole('option', {
+      name: 'Enabled',
+      exact: true,
+    }).click();
+    await page.getByRole('button', {
+      name: 'Start run',
+      exact: true,
+    }).click();
+    await page.getByRole('tab', {
+      name: 'Automatic review',
+      exact: true,
+    }).click();
+    await expect(page.getByText('Review completed', {
+      exact: true,
+    })).toBeVisible();
+    await expect(page.getByText('Independent quality', {
+      exact: true,
+    })).toBeVisible();
+    await expect(page.getByRole('button', {
+      name: 'Open review conversation',
+      exact: true,
+    })).toHaveCount(2);
     await page.setViewportSize({
       width: 390,
       height: 844,

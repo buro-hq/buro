@@ -18,6 +18,8 @@ import { Panel } from '../../components/molecules/Panel.tsx';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 import { TaskEditor } from './TaskEditor.tsx';
+import { ReviewEditor } from '../run-review/index.ts';
+import type { ReviewSettings } from '#shared/contracts';
 
 /** Owns task editing and explicit run options; it never reconstructs server state from events. */
 export const TasksPage = (input: { projectId: string; onRun(id: string): void }): ReactElement => {
@@ -26,17 +28,21 @@ export const TasksPage = (input: { projectId: string; onRun(id: string): void })
     projectId: input.projectId,
   });
   const models = useApiQuery('models.list', {});
+  const settings = useApiQuery('settings.get', {});
   const action = useOperation();
   const [editor, setEditor] = useState<{ task?: Task }>();
   const [advanced, setAdvanced] = useState(false);
   const [modelId, setModelId] = useState<string | null>(null);
   const [instructions, setInstructions] = useState('');
   const [readOnly, setReadOnly] = useState(false);
+  const [reviewMode, setReviewMode] = useState<string | null>(null);
+  const [review, setReview] = useState<ReviewSettings>({});
   const start = async (taskId: string): Promise<void> => {
     const options: RunOptions = {
       ...(modelId ? { modelId } : {}),
       ...(instructions ? { instructions } : {}),
       ...(readOnly ? { readOnly: true } : {}),
+      ...(reviewMode ? { review: { ...review, enabled: reviewMode === 'enabled' } } : {}),
     };
     const result = await action.perform(async () => {
       const started = await client.call('runs.start', {
@@ -84,6 +90,24 @@ export const TasksPage = (input: { projectId: string; onRun(id: string): void })
               checked={readOnly}
               onChange={(event) => setReadOnly(event.currentTarget.checked)}
             />
+            <Select
+              label={t('Automatic team review')}
+              placeholder={t('Application default')}
+              clearable
+              value={reviewMode}
+              onChange={setReviewMode}
+              data={[
+                { value: 'enabled', label: t('Enabled') },
+                { value: 'disabled', label: t('Disabled') },
+              ]}
+            />
+            {reviewMode === 'enabled' && (
+              <ReviewEditor
+                value={{ ...settings.data?.review, ...review, enabled: true }}
+                models={models.data ?? []}
+                onChange={setReview}
+              />
+            )}
           </Stack>
         </Collapse>
         <ErrorNotice error={action.error} />

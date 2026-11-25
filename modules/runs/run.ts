@@ -1,4 +1,5 @@
 import type { RecordStore } from '../storage/record-store.ts';
+import type { ReviewSettings, RunReviewState } from '#shared/contracts';
 
 /** One isolated attempt at a task. A restart creates a new run linked to this one. */
 export interface Run {
@@ -17,6 +18,7 @@ export interface Run {
   result?: string;
   error?: string;
   options?: RunOptions;
+  review?: RunReviewState;
 }
 
 /** Owns attempts independently of task definitions and conversation history. */
@@ -29,6 +31,7 @@ export interface RunOptions {
   tools?: string[];
   readOnly?: boolean;
   base?: string;
+  review?: ReviewSettings;
 }
 
 /** Expected inability to start work is returned to the caller. */

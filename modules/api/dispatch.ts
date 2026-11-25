@@ -11,12 +11,23 @@ const task = z.object({
   title: z.string(),
   description: z.string(),
 });
+const review = z.object({
+  enabled: z.boolean().optional(),
+  maxRounds: z.number().int().positive().nullable().optional(),
+  participants: z.array(z.object({
+    name: z.string(),
+    instructions: z.string(),
+    modelId: z.string().nullable().optional(),
+    tools: z.array(z.string()).optional(),
+  })).optional(),
+});
 const runOptions = z.object({
   modelId: z.string().optional(),
   instructions: z.string().optional(),
   tools: z.array(z.string()).optional(),
   readOnly: z.boolean().optional(),
   base: z.string().optional(),
+  review: review.optional(),
 });
 const configuration = z.object({
   id: z.string().optional(),
@@ -225,6 +236,7 @@ export const apiMethods = (app: Application): ApiHandlers => ({
   'settings.get': method(empty, () => app.settings.get()),
   'settings.update': method(z.object({
     instructions: z.string().optional(),
+    review: review.optional(),
   }), (input) =>
     app.settings.update(input)),
 });

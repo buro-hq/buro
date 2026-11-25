@@ -76,7 +76,7 @@ export interface ApiCommands {
   'models.save': { params: ModelConfigurationInput; result: ModelConfigurationResult };
   'models.default': { params: { id: string }; result: boolean };
   'models.delete': { params: { id: string }; result: void };
-  'settings.update': { params: { instructions?: string }; result: ApplicationSettings };
+  'settings.update': { params: Partial<Omit<ApplicationSettings, 'id' | 'defaultModelId'>>; result: ApplicationSettings };
 }
 
 /** Browser, CLI and external callers share one transport for feature APIs. */

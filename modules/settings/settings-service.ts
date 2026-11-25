@@ -1,7 +1,7 @@
 import type { RecordStore } from '../storage/record-store.ts';
 import type { Notifications } from '../events/notifications.ts';
 import type { ApplicationSettings, Settings } from './settings.ts';
-import { defaultInstructions } from './defaults.ts';
+import { defaultInstructions, defaultReviewSettings } from './defaults.ts';
 
 /** Owns application-wide defaults. */
 export class SettingsService implements Settings {
@@ -16,12 +16,16 @@ export class SettingsService implements Settings {
 
   /** Reads initial values without creating a fake project or connection. */
   async get(): Promise<ApplicationSettings> {
-    return (
-      (await this.store.get('application')) ?? {
-        id: 'application',
-        instructions: defaultInstructions,
-      }
-    );
+    const saved = await this.store.get('application');
+    return {
+      id: 'application',
+      instructions: defaultInstructions,
+      ...saved,
+      review: structuredClone({
+        ...defaultReviewSettings,
+        ...saved?.review,
+      }),
+    };
   }
 
   /** Stores changes without changing unrelated defaults. */

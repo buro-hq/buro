@@ -7,6 +7,8 @@ import type { Workspaces } from '../workspaces/workspace.ts';
 import type { Settings } from '../settings/settings.ts';
 import type { Materials } from '../materials/material.ts';
 import type { Run, RunStore, RunOptions, RunResult, Runs } from './run.ts';
+import { reviewRun } from './review.ts';
+import type { ActivityHistory } from '../sessions/activity.ts';
 
 /** A run is one isolated attempt. Sessions own their tool loop and report their own result. */
 export class RunService implements Runs {
@@ -18,6 +20,7 @@ export class RunService implements Runs {
   private events: Notifications;
   private settings: Settings;
   private materials: Materials;
+  private activity: ActivityHistory;
   private jobs = new Map<string, { controller: AbortController; promise: Promise<void> }>();
   private starting = new Set<{ controller: AbortController; settled: Promise<void> }>();
   private closing = false;
@@ -32,6 +35,7 @@ export class RunService implements Runs {
     events: Notifications;
     settings: Settings;
     materials: Materials;
+    activity: ActivityHistory;
   }) {
     this.store = input.store;
     this.tasks = input.tasks;
@@ -41,6 +45,7 @@ export class RunService implements Runs {
     this.events = input.events;
     this.settings = input.settings;
     this.materials = input.materials;
+    this.activity = input.activity;
   }
 
   /** Lists attempts, optionally restricted to one task or project. */
@@ -126,6 +131,7 @@ export class RunService implements Runs {
         })
       : undefined;
     const settings = await this.settings.get();
+    const review = { ...settings.review, ...input.options?.review };
     const materials = await this.materials.list({
       projectId: project.id,
       taskId: task.id,
@@ -193,6 +199,9 @@ export class RunService implements Runs {
       createdAt: new Date().toISOString(),
       previousRunId: previous?.id,
       options: structuredClone(input.options ?? {}),
+      ...(review.enabled
+        ? { review: { configuration: structuredClone(review), status: 'pending', reports: [] } }
+        : {}),
     };
     let release!: (start: boolean) => void;
     const ready = new Promise<boolean>((resolve) => {
@@ -245,7 +254,13 @@ export class RunService implements Runs {
     return this.start({
       taskId: run.taskId,
       previousRunId: run.id,
-      options: { ...retained, ...input.options },
+      options: {
+        ...retained,
+        ...input.options,
+        ...(retained.review || input.options?.review
+          ? { review: { ...retained.review, ...input.options?.review } }
+          : {}),
+      },
     });
   }
 
@@ -267,6 +282,17 @@ export class RunService implements Runs {
         await this.save({
           ...run,
           status: 'interrupted',
+          ...(run.review && ['pending', 'running'].includes(run.review.status)
+            ? {
+                review: {
+                  ...run.review,
+                  status: 'interrupted',
+                  reports: run.review.reports.map((report) => report.status === 'running'
+                    ? { ...report, status: 'interrupted' }
+                    : report),
+                },
+              }
+            : {}),
           finishedAt: new Date().toISOString(),
           error:
             'The previous process stopped. Continue as a new attempt using the saved workspace and history.',
@@ -292,8 +318,9 @@ export class RunService implements Runs {
     options: RunOptions;
     signal: AbortSignal;
   }): Promise<void> {
+    let run = input.run;
     try {
-      const result = await this.sessions.run({
+      let result = await this.sessions.run({
         sessionId: input.run.sessionId,
         input: input.prompt,
         workspace: input.run.workspace,
@@ -305,8 +332,36 @@ export class RunService implements Runs {
       await this.sessions.close({
         runId: input.run.id,
       });
+      if (result.ok && run.review) {
+        const reviewed = await reviewRun({
+          sessions: this.sessions,
+          activity: this.activity,
+          run,
+          prompt: input.prompt,
+          result,
+          configuration: run.review.configuration,
+          signal: input.signal,
+          update: async (progress) => {
+            run = {
+              ...run,
+              review: {
+                configuration: run.review!.configuration,
+                status: progress.status,
+                reports: progress.reviews,
+                error: progress.error,
+              },
+            };
+            await this.save(run);
+          },
+        });
+        result = reviewed.result;
+      }
+
+      await this.sessions.close({
+        runId: run.id,
+      });
       await this.save({
-        ...input.run,
+        ...run,
         status: result.ok ? 'completed' : result.interrupted ? 'interrupted' : 'failed',
         result: result.text,
         error: result.error,
@@ -317,7 +372,7 @@ export class RunService implements Runs {
         runId: input.run.id,
       });
       await this.save({
-        ...input.run,
+        ...run,
         status: input.signal.aborted ? 'interrupted' : 'failed',
         error: error instanceof Error ? error.message : String(error),
         finishedAt: new Date().toISOString(),

@@ -1,5 +1,7 @@
 import {
   Button,
+  Checkbox,
+  Collapse,
   Select,
   Stack,
   Textarea,
@@ -16,6 +18,42 @@ import { useAppearance } from '../../theme/AppearanceProvider.tsx';
 import { themePresets } from '../../theme/presets.ts';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
+import { ReviewEditor } from '../run-review/index.ts';
+import type { ReviewSettings } from '#shared/contracts';
+
+const ReviewSettingsEditor = (input: { review: ReviewSettings }): ReactElement => {
+  const { client } = useApplication();
+  const models = useApiQuery('models.list', {});
+  const action = useOperation();
+  const [review, setReview] = useState(input.review);
+  return (
+    <Stack>
+      <Checkbox
+        label={t('Automatically review and correct runs')}
+        checked={review.enabled ?? false}
+        onChange={(event) => setReview({
+          ...review,
+          enabled: event.currentTarget.checked,
+        })}
+      />
+      <Collapse in={review.enabled === true}>
+        <ReviewEditor value={review} models={models.data ?? []} onChange={setReview} />
+      </Collapse>
+      <ErrorNotice error={action.error} />
+      <Button
+        loading={action.busy}
+        onClick={() => void action.perform(async () => {
+          await client.call('settings.update', {
+            review,
+          });
+          return { ok: true };
+        })}
+      >
+        {t('Save review settings')}
+      </Button>
+    </Stack>
+  );
+};
 
 const InstructionsEditor = (input: { instructions: string }): ReactElement => {
   const { client } = useApplication();
@@ -65,6 +103,15 @@ export const PreferencesPage = (): ReactElement => {
         <section>
           <QueryFeedback loading={settings.loading} error={settings.error} />
           {settings.data && <InstructionsEditor instructions={settings.data.instructions} />}
+        </section>
+        <section>
+          <h3>{t('Automatic team review')}</h3>
+          {settings.data?.review && (
+            <ReviewSettingsEditor
+              key={JSON.stringify(settings.data.review)}
+              review={settings.data.review}
+            />
+          )}
         </section>
         <section className="appearance-section">
           <h3>{t('Language')}</h3>

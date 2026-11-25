@@ -152,6 +152,7 @@ const composeApplication = async (scope: {
     workspaces,
     settings,
     materials,
+    activity,
     events,
   });
   const results = new ResultService({

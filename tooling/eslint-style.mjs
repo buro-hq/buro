@@ -4,7 +4,7 @@ import { multilineCallObject } from './eslint-rules/multiline-call-object.mjs';
 
 /** Source code has one formatting owner; generated state and historical sources stay excluded. */
 export const codeFiles = [
-  '{src,modules,agent,daemon,cli,scripts,tests,tooling}/**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}',
+  '{src,shared,modules,agent,daemon,cli,scripts,tests,tooling}/**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}',
   '*.{js,mjs,cjs,ts}',
 ];
 

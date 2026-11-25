@@ -376,6 +376,7 @@ async function projectFixture(t: { after(callback: () => Promise<void>): void })
     }),
     settings,
     materials,
+    activity: f.activity,
     events: f.events,
   });
   t.after(async () => {

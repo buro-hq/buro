@@ -1,8 +1,11 @@
+import type { ReviewSettings } from '#shared/contracts';
+
 /** Application defaults are overridden explicitly by a run, without a configuration hierarchy. */
 export interface ApplicationSettings {
   id: string;
   defaultModelId?: string;
   instructions: string;
+  review?: ReviewSettings;
 }
 
 /** Defaults are independent of project and agent identities. */
