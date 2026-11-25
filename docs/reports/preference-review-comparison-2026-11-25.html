@@ -661,7 +661,7 @@ Choose a code change, command or review to inspect its evidence.</pre
     </main>
     <script id="data" type="application/json">
       {
-        "generatedAt": "2026-11-25T22:34:17.883634+00:00",
+        "generatedAt": "2026-11-25T22:43:24.407000+00:00",
         "cases": [
           {
             "id": "small-qwen",
@@ -40758,7 +40758,7 @@ Choose a code change, command or review to inspect its evidence.</pre
         "nativePreflights": [
           {
             "label": "Qwen3.8",
-            "status": "Downloading Qwen3.8-27B-UD-Q3_K_XL.gguf",
+            "status": "Waiting for Gemma before Qwen3.8 Q3+MTP follow-up",
             "error": null,
             "experiments": [
               {
@@ -41082,6 +41082,159 @@ Choose a code change, command or review to inspect its evidence.</pre
                 "status": "completed",
                 "after": { "freeRamKB": 9989164, "gpu": ["10340, 1774, 61"] },
                 "finishedAt": 1795646025.425834
+              },
+              {
+                "name": "qwen38-q3",
+                "startedAt": 1795646307.2569752,
+                "configuration": [
+                  "--model",
+                  "C:\\Users\\User\\AppData\\Local\\Buro\\models\\qwen38-2026-11-26\\Qwen3.8-27B-UD-Q3_K_XL.gguf",
+                  "--alias",
+                  "local-qwen38",
+                  "--host",
+                  "127.0.0.1",
+                  "--port",
+                  "18086",
+                  "--ctx-size",
+                  "8192",
+                  "--parallel",
+                  "1",
+                  "--fit",
+                  "on",
+                  "--fit-target",
+                  "1024",
+                  "--flash-attn",
+                  "on",
+                  "--cache-type-k",
+                  "q8_0",
+                  "--cache-type-v",
+                  "q8_0",
+                  "--jinja",
+                  "--metrics",
+                  "--perf",
+                  "--log-file",
+                  "C:\\Users\\User\\AppData\\Local\\Buro\\benchmarks\\qwen38-2026-11-26\\qwen38-q3.native.log"
+                ],
+                "requests": [
+                  {
+                    "label": "cold",
+                    "wallSeconds": 28.57053279876709,
+                    "usage": {
+                      "completion_tokens": 256,
+                      "prompt_tokens": 56,
+                      "total_tokens": 312,
+                      "prompt_tokens_details": { "cached_tokens": 0 }
+                    },
+                    "timings": {
+                      "cache_n": 0,
+                      "prompt_n": 56,
+                      "prompt_ms": 803.282,
+                      "prompt_per_token_ms": 14.34432142857143,
+                      "prompt_per_second": 69.71399832188446,
+                      "predicted_n": 256,
+                      "predicted_ms": 27760.353,
+                      "predicted_per_token_ms": 108.86412941176471,
+                      "predicted_per_second": 9.185762155113807
+                    },
+                    "thinkingObserved": true,
+                    "finish": "length"
+                  },
+                  {
+                    "label": "warm",
+                    "wallSeconds": 28.77978014945984,
+                    "usage": {
+                      "completion_tokens": 256,
+                      "prompt_tokens": 56,
+                      "total_tokens": 312,
+                      "prompt_tokens_details": { "cached_tokens": 52 }
+                    },
+                    "timings": {
+                      "cache_n": 52,
+                      "prompt_n": 4,
+                      "prompt_ms": 380.738,
+                      "prompt_per_token_ms": 95.1845,
+                      "prompt_per_second": 10.505912202091727,
+                      "predicted_n": 256,
+                      "predicted_ms": 28293.251,
+                      "predicted_per_token_ms": 110.95392549019608,
+                      "predicted_per_second": 9.012750072446606
+                    },
+                    "thinkingObserved": true,
+                    "finish": "length"
+                  },
+                  {
+                    "label": "context",
+                    "wallSeconds": 33.2025032043457,
+                    "usage": {
+                      "completion_tokens": 256,
+                      "prompt_tokens": 1832,
+                      "total_tokens": 2088,
+                      "prompt_tokens_details": { "cached_tokens": 0 }
+                    },
+                    "timings": {
+                      "cache_n": 0,
+                      "prompt_n": 1832,
+                      "prompt_ms": 4417.511,
+                      "prompt_per_token_ms": 2.411305131004367,
+                      "prompt_per_second": 414.7131721913086,
+                      "predicted_n": 256,
+                      "predicted_ms": 28695.212,
+                      "predicted_per_token_ms": 112.5302431372549,
+                      "predicted_per_second": 8.88649994988711
+                    },
+                    "thinkingObserved": true,
+                    "finish": "length"
+                  },
+                  {
+                    "label": "native tool call",
+                    "wallSeconds": 7.272423982620239,
+                    "usage": {
+                      "completion_tokens": 51,
+                      "prompt_tokens": 325,
+                      "total_tokens": 376,
+                      "prompt_tokens_details": { "cached_tokens": 0 }
+                    },
+                    "timings": {
+                      "cache_n": 0,
+                      "prompt_n": 325,
+                      "prompt_ms": 1649.547,
+                      "prompt_per_token_ms": 5.075529230769231,
+                      "prompt_per_second": 197.023788955392,
+                      "predicted_n": 51,
+                      "predicted_ms": 5504.117,
+                      "predicted_per_token_ms": 110.08234,
+                      "predicted_per_second": 9.084109222242187
+                    }
+                  },
+                  {
+                    "label": "tool result followup",
+                    "wallSeconds": 59.55549597740173,
+                    "usage": {
+                      "completion_tokens": 526,
+                      "prompt_tokens": 425,
+                      "total_tokens": 951,
+                      "prompt_tokens_details": { "cached_tokens": 375 }
+                    },
+                    "timings": {
+                      "cache_n": 375,
+                      "prompt_n": 50,
+                      "prompt_ms": 779.692,
+                      "prompt_per_token_ms": 15.59384,
+                      "prompt_per_second": 64.12788639616669,
+                      "predicted_n": 526,
+                      "predicted_ms": 58763.862,
+                      "predicted_per_token_ms": 111.93116571428571,
+                      "predicted_per_second": 8.934062230287044
+                    }
+                  }
+                ],
+                "before": { "freeRamKB": 28782128, "gpu": ["93, 12021, 0"] },
+                "servedModels": ["local-qwen38"],
+                "nativeToolCallObserved": true,
+                "toolFollowup": "**The bug in `sample.ts`:**\n\n```ts\nexport const ratio = (done: number, total: number): number => done / total;\n```\n\nThe function performs a plain division with no guard against a zero denominator, but the intent (per the comment) is that `ratio(0, 0)` should return `0`. In JavaScript/TypeScript, `0 / 0` evaluates to `NaN`, not `0`, so the function breaks its contract in the very case the comment calls out.\n\nMore broadly, any call where `total === 0` misbehaves:\n- `ratio(0, 0)` → `NaN` (expected `0`)\n- `ratio(5, 0)` → `Infinity` (also not a sensible ratio)\n\n**Fix — guard the zero case:**\n\n```ts\nexport const ratio = (done: number, total: number): number =>\n  total === 0 ? 0 : done / total;\n```\n\nOr, if a non-zero `done` over zero `total` should mean \"fully complete,\" you could return `done > 0 ? 1 : 0`. Either way, the key point is that division by zero must be handled explicitly, since `x / 0` and `0 / 0` do **not** throw in JS/TS — they silently produce `Infinity`/`NaN`, which can then propagate through arithmetic and comparisons (`NaN !== NaN`).",
+                "status": "completed",
+                "after": { "freeRamKB": 14843912, "gpu": ["10432, 1682, 0"] },
+                "finishedAt": 1795646479.181115
               }
             ],
             "requests": [],
@@ -41091,7 +41244,7 @@ Choose a code change, command or review to inspect its evidence.</pre
           },
           {
             "label": "Gemma 4 12B",
-            "status": "Waiting for Qwen3.8 preflight",
+            "status": "Downloading Gemma 4 12B",
             "error": null,
             "experiments": [],
             "requests": [],

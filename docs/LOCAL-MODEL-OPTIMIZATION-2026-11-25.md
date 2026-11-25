@@ -35,7 +35,7 @@ Qwen3.6 SWE results use an internal bash/file-edit scaffold and a 200K context; 
 | Qwen3.6 35B-A3B Q4_K_M    | GPU plus RAM, already observed                                                               | Previous Buro task: 43.4 generated tokens/s during decoding; 10.7 output tokens/s over model-call wall time | Baseline; optimize context processing first |
 | Gemma 4 12B               | About 7.7 GB Ollama package; plausible GPU fit with bounded context, must inspect allocation | Not measured on this RTX                                                                                    | Best next practical experiment              |
 | Gemma 4 26B-A4B           | 18 GB Ollama package; hybrid GPU/RAM                                                         | Not measured                                                                                                | Compare after 12B, not a guaranteed upgrade |
-| Qwen3.8 27B               | Dense, partial RAM at useful quantization                                                    | Not measured; no claim of >=15 tokens/s                                                                     | Quality-focused candidate                   |
+| Qwen3.8 27B               | Dense, partial RAM at useful quantization                                                    | Measured Q4 ~4.5; Q4+MTP ~7.2–8.1; Q3 ~8.9–9.2 tokens/s                                                     | Quality-focused candidate                   |
 | Qwen3.6 27B / Gemma 4 31B | Dense, partial RAM                                                                           | Not measured in the current workflow                                                                        | Lower priority for latency                  |
 | Qwen3.5 9B                | Much easier weight fit than the larger dense models                                          | New matched-run speed not measured                                                                          | Useful small-model control                  |
 
@@ -59,6 +59,8 @@ The NVFP4 speedups in Unsloth's guide require Blackwell GPUs; they are not an RT
 
 The RTX disk had 43,068,764,160 free bytes (about 40.1 GiB) when checked on November 25. One Q4 artifact fits on disk; that is separate from inference memory. Model loading and engine changes remain scheduled after the original local runs. Qwen3.8 artifact downloading was later moved alongside the long-running Qwen medium case; its overlapping timing is explicitly labeled in the report.
 
+During the November 26 storage cleanup, the unused local DeepSeek R1 14B and 32B packages were removed through Ollama, including their duplicate tag names. Unique stored bytes decreased by approximately 28.84 GB; duplicate names had shared weights and were not counted twice. Qwen 9B, Qwen 35B and Flint were retained. This reclaimed disk space, not inference RAM or VRAM.
+
 ## Optimization order
 
 ### Measured Qwen3.8 preflight on this RTX
@@ -69,8 +71,9 @@ The November 26 native llama.cpp test used build b12359 CUDA 12.4, automatic mem
 | ---------------------------------------------- | ---------------------- | -------------------- | ---------------------- |
 | Qwen3.8-27B UD-Q4_K_M                          | 4.54 tokens/s          | 4.51 tokens/s        | Passed                 |
 | Same Q4 plus Q4_0 MTP head, three draft tokens | 7.90 tokens/s          | 7.24 tokens/s        | Passed                 |
+| Qwen3.8-27B UD-Q3_K_XL                         | 9.01 tokens/s          | 8.89 tokens/s        | Passed                 |
 
-MTP improved repeated-prompt decoding by about 1.7 times, but neither configuration reached the user's 15 tokens/s threshold. Both identified the fixture's zero-division bug after reading it through a native tool. This does not establish broader coding quality or architecture compliance. Conditional Q3 measurement and Gemma 4 12B remain pending; see the [live comparison snapshot](reports/preference-review-comparison-2026-11-25.html).
+MTP improved repeated-prompt decoding by about 1.7 times, but neither configuration reached the user's 15 tokens/s threshold. Both identified the fixture's zero-division bug after reading it through a native tool. This does not establish broader coding quality or architecture compliance. Q3 measured 8.9–9.2 tokens/s and also completed the tool fixture, without reaching 15 tokens/s. A Q3+MTP follow-up is queued after Gemma 4 12B; see the [live comparison snapshot](reports/preference-review-comparison-2026-11-25.html).
 
 | Priority | Change to investigate                                                                                                           | What it can improve                                        | Expected gain and quality caveat                                                                                                       |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
