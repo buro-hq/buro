@@ -57,9 +57,20 @@ Start with a pinned llama.cpp CUDA build and UD-Q4_K_M as the quality baseline. 
 
 The NVFP4 speedups in Unsloth's guide require Blackwell GPUs; they are not an RTX 3060 optimization. ExLlamaV3 is another possible engine, but its [current README](https://github.com/turboderp-org/exllamav3) requires CUDA build prerequisites and Triton on Windows and describes CPU offload for large MoE models. A compatible architecture and a fast all-GPU benchmark do not establish an efficient dense 27B hybrid deployment. Keep it secondary until this exact configuration is demonstrated.
 
-The RTX disk had 43,068,764,160 free bytes (about 40.1 GiB) when checked on November 25. One Q4 artifact fits on disk; that is separate from inference memory. Any new download/load or runtime change is scheduled after the original matched local runs.
+The RTX disk had 43,068,764,160 free bytes (about 40.1 GiB) when checked on November 25. One Q4 artifact fits on disk; that is separate from inference memory. Model loading and engine changes remain scheduled after the original local runs. Qwen3.8 artifact downloading was later moved alongside the long-running Qwen medium case; its overlapping timing is explicitly labeled in the report.
 
 ## Optimization order
+
+### Measured Qwen3.8 preflight on this RTX
+
+The November 26 native llama.cpp test used build b12359 CUDA 12.4, automatic memory fitting, 8K context, Flash Attention, q8 KV and one slot. These are short diagnostic requests with thinking enabled, not full Buro coding tasks. Both pinned Q4 weights and the MTP head passed SHA-256 verification on the RTX host.
+
+| Configuration                                  | Repeated-prompt decode | Context-probe decode | Native tool round trip |
+| ---------------------------------------------- | ---------------------- | -------------------- | ---------------------- |
+| Qwen3.8-27B UD-Q4_K_M                          | 4.54 tokens/s          | 4.51 tokens/s        | Passed                 |
+| Same Q4 plus Q4_0 MTP head, three draft tokens | 7.90 tokens/s          | 7.24 tokens/s        | Passed                 |
+
+MTP improved repeated-prompt decoding by about 1.7 times, but neither configuration reached the user's 15 tokens/s threshold. Both identified the fixture's zero-division bug after reading it through a native tool. This does not establish broader coding quality or architecture compliance. Conditional Q3 measurement and Gemma 4 12B remain pending; see the [live comparison snapshot](reports/preference-review-comparison-2026-11-25.html).
 
 | Priority | Change to investigate                                                                                                           | What it can improve                                        | Expected gain and quality caveat                                                                                                       |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -75,6 +86,6 @@ Ollama documents Flash Attention, q8_0/q4_0 KV types, loading lifetime and paral
 
 Preserved reasoning can help Qwen's agent consistency and cache use, according to its card. Buro's Ollama provider already forwards private continuation `thinking`; adding duplicate reasoning into public history is not a justified fix. Gemma has its own history rules, including retaining thinking across tool turns but excluding it from ordinary earlier turns. Follow the native engine/template behavior rather than imposing one model's rule on all adapters. [Qwen guidance](https://huggingface.co/Qwen/Qwen3.6-35B-A3B#preserved-thinking), [Gemma history guidance](https://huggingface.co/google/gemma-4-12B).
 
-No runtime settings, models or engines were changed for this research while the matched Qwen/Flash comparison was running. The next experiment should pin model digest and engine build, compare cold/warm multi-turn native tool requests, record prompt/decode time, RAM/VRAM, and then run the same small/medium quality tasks. Accept a faster configuration only when behavior and architecture remain sound.
+No engine settings or model loading were changed during the original matrix. A later Qwen3.8 artifact download overlapped the Qwen medium case, so its affected wall time is not an isolated speed measurement. The next experiment should pin model digest and engine build, compare cold/warm multi-turn native tool requests, record prompt/decode time, RAM/VRAM, and then run the same small/medium quality tasks. Accept a faster configuration only when behavior and architecture remain sound.
 
 One Buro-specific hypothesis also deserves measurement: `modules/sessions/context.ts` preserves the task and recent complete exchanges when a conversation outgrows its request allowance, replacing omitted content with a notice. As the retained suffix changes, the input prefix after that notice changes too. This can reduce prefix-cache reuse and remove earlier verification evidence from the model's current view. It does not prove the cause of the measured input time, but context stability and repeated work should be measured alongside engine kernels. A retained history is not automatically an efficient request context.
