@@ -9,11 +9,13 @@ import { useSessionHistory } from './use-session-history.ts';
 
 /** Displays portable conversation history and provisional text separately. */
 export function SessionView(input: { session: Session }): ReactElement {
-  const { client } = useApplication(),
-    models = useApiQuery('models.list', {}),
-    action = useOperation();
+  const { client } = useApplication();
+  const models = useApiQuery('models.list', {});
+  const action = useOperation();
   const [stream, setStream] = useState('');
-  const history = useSessionHistory({ sessionId: input.session.id });
+  const history = useSessionHistory({
+    sessionId: input.session.id,
+  });
   useEffect(
     () =>
       client.subscribe((notice) => {
@@ -24,8 +26,12 @@ export function SessionView(input: { session: Session }): ReactElement {
           typeof data.text === 'string'
         )
           setStream((previous) => previous + data.text);
-        if (notice.type === 'session.messages' && data.id === input.session.id) setStream('');
-        if (notice.type === 'session.retry' && data.sessionId === input.session.id) setStream('');
+
+        if (notice.type === 'session.messages' && data.id === input.session.id)
+          setStream('');
+
+        if (notice.type === 'session.retry' && data.sessionId === input.session.id)
+          setStream('');
       }),
     [client, input.session.id],
   );
@@ -49,7 +55,10 @@ export function SessionView(input: { session: Session }): ReactElement {
         onChange={(modelId) => {
           if (modelId)
             void action.perform(async () => ({
-              ok: await client.call('sessions.model', { sessionId: input.session.id, modelId }),
+              ok: await client.call('sessions.model', {
+                sessionId: input.session.id,
+                modelId,
+              }),
               error: t('Model unavailable'),
             }));
         }}

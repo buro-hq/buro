@@ -29,11 +29,14 @@ function browserCredential(): string {
       null,
       '',
       window.location.pathname +
-        window.location.search +
-        (fragment.size ? '#' + fragment.toString() : ''),
+      window.location.search +
+      (fragment.size ? '#' + fragment.toString() : ''),
     );
   }
-  if (token) return token;
+
+  if (token)
+    return token;
+
   try {
     return localStorage.getItem(credentialKey) ?? '';
   } catch {
@@ -52,24 +55,34 @@ const context = createContext<ApplicationContext | undefined>(undefined);
 export function ApplicationProvider(input: { children: ReactNode; url?: string }): ReactElement {
   const [token, setToken] = useState(browserCredential);
   const client = useMemo(
-    () => new ApiClient({ url: input.url ?? import.meta.env.VITE_BURO_API_URL, token }),
+    () => new ApiClient({
+      url: input.url ?? import.meta.env.VITE_BURO_API_URL,
+      token,
+    }),
     [input.url, token],
   );
-  const [connection, setConnection] = useState<ApiConnection>({ connected: false });
+  const [connection, setConnection] = useState<ApiConnection>({
+    connected: false,
+  });
   useEffect(() => {
     let active = true;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const connect = () => {
-      if (active) void client.connect().catch(() => {});
+      if (active)
+        void client.connect().catch(() => {});
     };
     const offConnection = client.onConnection((state) => {
-      if (!active) return;
+      if (!active)
+        return;
+
       setConnection(state);
       clearTimeout(retry);
-      if (!state.connected && !state.authorizationRequired) retry = setTimeout(connect, 1000);
+      if (!state.connected && !state.authorizationRequired)
+        retry = setTimeout(connect, 1000);
     });
     const credentialChanged = (event: StorageEvent) => {
-      if (event.key === credentialKey) setToken(event.newValue ?? '');
+      if (event.key === credentialKey)
+        setToken(event.newValue ?? '');
     };
     window.addEventListener('storage', credentialChanged);
     connect();
@@ -87,7 +100,9 @@ export function ApplicationProvider(input: { children: ReactNode; url?: string }
 /** Returns the shared local connection, never a mutable server-state projection. */
 export function useApplication(): ApplicationContext {
   const value = useContext(context);
-  if (!value) throw new Error('ApplicationProvider is missing.');
+  if (!value)
+    throw new Error('ApplicationProvider is missing.');
+
   return value;
 }
 
@@ -97,14 +112,16 @@ export function useApiQuery<K extends keyof ApiQueries>(
   params: ApiQueries[K]['params'] | undefined,
 ): QueryResult<ApiQueries[K]['result']> {
   const { client } = useApplication();
-  const serialized = JSON.stringify(params),
-    key = method + ':' + serialized;
+  const serialized = JSON.stringify(params);
+  const key = method + ':' + serialized;
   const [state, setState] = useState<QueryResult<ApiQueries[K]['result']> & { key: string }>({
     key,
     loading: params !== undefined,
   });
   useEffect(() => {
-    if (serialized === undefined) return;
+    if (serialized === undefined)
+      return;
+
     setState((previous) => ({
       key,
       data: previous.key === key ? previous.data : undefined,
@@ -113,19 +130,28 @@ export function useApiQuery<K extends keyof ApiQueries>(
     const queryParams = JSON.parse(serialized);
     const query = new QuerySubscription<ApiQueries[K]['result']>({
       read: () => client.call(method, queryParams),
-      update: (result) => setState({ key, ...result }),
+      update: (result) => setState({
+        key,
+        ...result,
+      }),
     });
     const off = client.subscribe((notification) => {
-      if (queryAffected({ method, params: queryParams, notification })) query.invalidate();
+      if (queryAffected({
+        method,
+        params: queryParams,
+        notification,
+      }))
+        query.invalidate();
     });
     const offConnection = client.onConnection((state) => {
-      if (state.connected) query.invalidate();
+      if (state.connected)
+        query.invalidate();
     });
     return () => {
       query.close();
       off();
       offConnection();
     };
-  }, [client, method, serialized]);
+  }, [client, method, serialized, key]);
   return state.key === key ? state : { loading: params !== undefined };
 }

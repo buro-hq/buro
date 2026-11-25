@@ -21,8 +21,13 @@ export class ModelRegistry implements Models {
     providerRevision: string;
     continuation: unknown;
   }): Promise<void> {
-    if (input.continuation === undefined || !this.adapterState) return;
-    await this.adapterState.save({ ...input, id: `${input.sessionId}:${input.messageId}` });
+    if (input.continuation === undefined || !this.adapterState)
+      return;
+
+    await this.adapterState.save({
+      ...input,
+      id: `${input.sessionId}:${input.messageId}`,
+    });
   }
 
   /** Attaches only private continuation owned by the currently selected adapter. */
@@ -32,7 +37,9 @@ export class ModelRegistry implements Models {
     providerRevision: string;
     messages: (ModelMessage & { id?: string })[];
   }): Promise<ModelMessage[]> {
-    if (!this.adapterState) return structuredClone(input.messages);
+    if (!this.adapterState)
+      return structuredClone(input.messages);
+
     return Promise.all(
       input.messages.map(async (message) => {
         const state = message.id
@@ -58,7 +65,8 @@ export class ModelRegistry implements Models {
     } = input;
     const model: Model = { id, name, backend, model: modelId, contextTokens, outputTokens };
     this.models.set(model.id, model);
-    if (!this.defaultId || selected) this.defaultId = model.id;
+    if (!this.defaultId || selected)
+      this.defaultId = model.id;
   }
 
   /** Returns a selected model, using the application default only when no ID was supplied. */
@@ -83,7 +91,9 @@ export class ModelRegistry implements Models {
 
   /** Selects the application default without changing existing sessions. */
   select(input: { id: string }): boolean {
-    if (!this.models.has(input.id)) return false;
+    if (!this.models.has(input.id))
+      return false;
+
     this.defaultId = input.id;
     return true;
   }
@@ -91,6 +101,7 @@ export class ModelRegistry implements Models {
   /** Removes a transport and selects another default when needed. */
   remove(input: { id: string }): void {
     this.models.delete(input.id);
-    if (this.defaultId === input.id) this.defaultId = this.models.keys().next().value;
+    if (this.defaultId === input.id)
+      this.defaultId = this.models.keys().next().value;
   }
 }

@@ -1,6 +1,5 @@
 import type { Runs } from '../runs/run.ts';
-import type { Tool, ToolContext } from '../tools/tool.ts';
-import { ToolFailure } from '../tools/tool.ts';
+import { ToolFailure, type Tool, type ToolContext } from '../tools/tool.ts';
 import { objectArguments, textArgument } from '../tools/arguments.ts';
 import type { Materials } from './material.ts';
 
@@ -9,7 +8,11 @@ export function materialTools(input: { materials: Materials; runs: Runs }): Tool
   async function scope(
     context: ToolContext,
   ): Promise<{ projectId: string; taskId?: string } | undefined> {
-    const run = context.runId ? await input.runs.get({ id: context.runId }) : undefined;
+    const run = context.runId
+      ? await input.runs.get({
+          id: context.runId,
+        })
+      : undefined;
     const projectId = run?.projectId ?? context.projectId;
     return projectId ? { projectId, taskId: run?.taskId } : undefined;
   }
@@ -44,12 +47,18 @@ export function materialTools(input: { materials: Materials; runs: Runs }): Tool
         },
       },
       async execute({ arguments: value, context }) {
-        const args = objectArguments(value),
-          id = textArgument({ arguments: args, name: 'id' })!;
-        const selected = await scope(context),
-          material = await input.materials.get({ id });
+        const args = objectArguments(value);
+        const id = textArgument({
+          arguments: args,
+          name: 'id',
+        })!;
+        const selected = await scope(context);
+        const material = await input.materials.get({
+          id,
+        });
         if (!selected || material?.projectId !== selected.projectId)
           throw new ToolFailure('Material not found in this project.');
+
         for (const name of ['line', 'count'])
           if (
             args[name] !== undefined &&

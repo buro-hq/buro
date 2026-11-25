@@ -6,7 +6,9 @@ import { openUi } from '../cli/open-ui.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const directory = path.resolve(process.env.PROJECT_DATA_DIR ?? path.join(root, '.buro'));
-let frontend, daemon, stopping;
+let frontend;
+let daemon;
+let stopping;
 function stop(code = 0) {
   return (stopping ??= (async () => {
     process.exitCode = code;
@@ -34,11 +36,13 @@ try {
   const ready = new Promise((resolve, reject) => {
     daemon.once('error', reject);
     daemon.on('message', (message) => {
-      if (message?.type === 'buro.ready') resolve(message);
+      if (message?.type === 'buro.ready')
+        resolve(message);
     });
     daemon.once('close', (code) => {
       reject(new Error('Buro service exited during startup.'));
-      if (!stopping) void stop(code ?? 1);
+      if (!stopping)
+        void stop(code ?? 1);
     });
   });
   const address = await ready;
@@ -58,9 +62,11 @@ try {
     const url = frontend.resolvedUrls.local[0];
     console.log(`Buro: ${url}`);
     if (process.env.BURO_OPEN_BROWSER !== '0')
-      await openUi({ directory, url }).catch(() =>
-        console.error('Could not open the browser. Run npm run cli -- open.'),
-      );
+      await openUi({
+        directory,
+        url,
+      }).catch(() =>
+        console.error('Could not open the browser. Run npm run cli -- open.'));
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

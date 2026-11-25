@@ -9,7 +9,9 @@ import { SandboxedCommands } from '../modules/commands/sandboxed-commands.ts';
 
 test(
   'workspace commands preserve Git metadata and cannot signal or inspect an unrelated host process',
-  { skip: process.platform !== 'darwin' },
+  {
+    skip: process.platform !== 'darwin',
+  },
   async (t) => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-command-boundary-'));
     const commands = new SandboxedCommands();
@@ -25,7 +27,11 @@ test(
         canary.kill('SIGKILL');
         await once(canary, 'close');
       }
-      await fs.rm(directory, { recursive: true, force: true });
+
+      await fs.rm(directory, {
+        recursive: true,
+        force: true,
+      });
     });
     const signal = new AbortController().signal;
     const healthy = await commands.run({

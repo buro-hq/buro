@@ -24,6 +24,7 @@ export class FeatureCli {
       ]);
       return { projects, models, settings };
     }
+
     return this.client.call(
       input.method as keyof ApiMethods,
       input.params as ApiMethods[keyof ApiMethods]['params'],
@@ -34,29 +35,40 @@ export class FeatureCli {
   async watch(input: { id: string; signal?: AbortSignal }): Promise<Run> {
     input.signal?.throwIfAborted();
     return new Promise<Run>((resolve, reject) => {
-      let settled = false,
-        reading = false,
-        dirty = false;
+      let settled = false;
+      let reading = false;
+      let dirty = false;
       const finish = (run?: Run, error?: unknown) => {
-        if (settled) return;
+        if (settled)
+          return;
+
         settled = true;
         off();
         offConnection();
         input.signal?.removeEventListener('abort', abort);
-        if (error) reject(error);
-        else resolve(run!);
+        if (error)
+          reject(error);
+        else
+          resolve(run!);
       };
       const read = async () => {
-        if (settled) return;
+        if (settled)
+          return;
+
         if (reading) {
           dirty = true;
           return;
         }
+
         reading = true;
         try {
-          const run = await this.client.call('runs.get', { id: input.id });
-          if (!run) finish(undefined, new Error('Run not found.'));
-          else if (run.status !== 'running') finish(run);
+          const run = await this.client.call('runs.get', {
+            id: input.id,
+          });
+          if (!run)
+            finish(undefined, new Error('Run not found.'));
+          else if (run.status !== 'running')
+            finish(run);
         } catch (error) {
           finish(undefined, error);
         } finally {
@@ -71,7 +83,9 @@ export class FeatureCli {
         const data = notice.data as { id?: string; runId?: string };
         if ((notice.type === 'run.updated' && data.id === input.id) || data.runId === input.id)
           this.observe(notice);
-        if (notice.type === 'run.updated' && data.id === input.id) void read();
+
+        if (notice.type === 'run.updated' && data.id === input.id)
+          void read();
       });
       const offConnection = this.client.onConnection((connection) => {
         if (!connection.connected)
@@ -81,9 +95,13 @@ export class FeatureCli {
           );
       });
       const abort = () => finish(undefined, input.signal?.reason ?? new Error('Watching stopped.'));
-      input.signal?.addEventListener('abort', abort, { once: true });
-      if (input.signal?.aborted) abort();
-      else void read();
+      input.signal?.addEventListener('abort', abort, {
+        once: true,
+      });
+      if (input.signal?.aborted)
+        abort();
+      else
+        void read();
     });
   }
 }

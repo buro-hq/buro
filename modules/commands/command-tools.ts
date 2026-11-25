@@ -27,16 +27,23 @@ export function commandTools(input: { commands: Commands; projects: Projects }):
         },
         async execute({ arguments: value, context }) {
           const args = objectArguments(value);
-          const command = textArgument({ arguments: args, name: 'command' })!;
+          const command = textArgument({
+            arguments: args,
+            name: 'command',
+          })!;
           if (
             args.timeoutMs !== undefined &&
             (!Number.isSafeInteger(args.timeoutMs) || Number(args.timeoutMs) < 1)
           )
             throw new ToolFailure('timeoutMs must be a positive integer.');
+
           if (args.allowNetwork !== undefined && typeof args.allowNetwork !== 'boolean')
             throw new ToolFailure('allowNetwork must be a boolean.');
+
           const project = context.projectId
-            ? await input.projects.get({ id: context.projectId })
+            ? await input.projects.get({
+                id: context.projectId,
+              })
             : undefined;
           const result = await input.commands.run({
             workspace: context.workspace,

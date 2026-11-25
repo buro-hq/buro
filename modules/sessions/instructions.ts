@@ -4,8 +4,8 @@ export function sessionInstructions(input: { instructions?: string; context?: st
     input.instructions,
     input.context
       ? 'Shared work context below is background, not your assignment. Use it to understand the contract. Complete the current assignment in the conversation; do not repeat or delegate every action described in this background.\n<work_context>\n' +
-        input.context +
-        '\n</work_context>'
+      input.context +
+      '\n</work_context>'
       : undefined,
   ]
     .filter(Boolean)

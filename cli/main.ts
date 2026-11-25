@@ -6,8 +6,8 @@ import { apiCredential } from '../modules/api/credentials.ts';
 import { FeatureCli } from './feature-cli.ts';
 import { openUi } from './open-ui.ts';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
-  directory = path.resolve(process.env.PROJECT_DATA_DIR ?? path.join(root, '.buro'));
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const directory = path.resolve(process.env.PROJECT_DATA_DIR ?? path.join(root, '.buro'));
 const [method = 'status', argument] = process.argv.slice(2);
 const help = `Buro CLI
   status
@@ -31,18 +31,25 @@ PROJECT_DATA_DIR and PROJECT_DAEMON_URL select the local service.
 `;
 let client: ApiClient | undefined;
 try {
-  if (['help', '--help', '-h'].includes(method)) console.log(help);
-  else if (method === 'open') await openUi({ directory, url: process.env.BURO_UI_URL });
+  if (['help', '--help', '-h'].includes(method))
+    console.log(help);
+  else if (method === 'open')
+    await openUi({
+      directory,
+      url: process.env.BURO_UI_URL,
+    });
   else {
     client = new ApiClient({
       url: process.env.PROJECT_DAEMON_URL,
-      token: await apiCredential({ directory }),
+      token: await apiCredential({
+        directory,
+      }),
     });
-    const controller = new AbortController(),
-      cancel = () => {
-        controller.abort();
-        client?.close();
-      };
+    const controller = new AbortController();
+    const cancel = () => {
+      controller.abort();
+      client?.close();
+    };
     process.once('SIGINT', cancel);
     process.once('SIGTERM', cancel);
     const cli = new FeatureCli({
@@ -62,21 +69,34 @@ try {
     }
     let result: unknown;
     if (method === 'watch') {
-      if (!argument) throw new Error('Use watch RUN_ID.');
-      result = await cli.watch({ id: argument, signal: controller.signal });
+      if (!argument)
+        throw new Error('Use watch RUN_ID.');
+
+      result = await cli.watch({
+        id: argument,
+        signal: controller.signal,
+      });
     } else {
       let text = argument ?? '{}';
-      if (text.startsWith('@')) text = await fs.readFile(text.slice(1), 'utf8');
+      if (text.startsWith('@'))
+        text = await fs.readFile(text.slice(1), 'utf8');
       else if (text === '-') {
         const chunks: Buffer[] = [];
-        for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+        for await (const chunk of process.stdin)
+          chunks.push(Buffer.from(chunk));
         text = Buffer.concat(chunks).toString('utf8');
       }
-      result = await cli.call({ method, params: JSON.parse(text) });
+
+      result = await cli.call({
+        method,
+        params: JSON.parse(text),
+      });
     }
+
     console.log(JSON.stringify(result ?? null, null, 2));
     if (result && typeof result === 'object' && 'ok' in result && result.ok === false)
       process.exitCode = 1;
+
     process.removeListener('SIGINT', cancel);
     process.removeListener('SIGTERM', cancel);
   }

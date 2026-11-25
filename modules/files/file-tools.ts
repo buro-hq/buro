@@ -70,13 +70,19 @@ export function fileTools(input: { commands: Commands; projects: Projects }): To
     async execute({ arguments: value, context }) {
       const args = objectArguments(value);
       const project = context.projectId
-        ? await input.projects.get({ id: context.projectId })
+        ? await input.projects.get({
+            id: context.projectId,
+          })
         : undefined;
       const result = await input.commands.run({
         workspace: context.workspace,
         source: project?.root,
         argv: [process.execPath, '-e', worker],
-        stdin: JSON.stringify({ ...args, path: args.path ?? '.', operation: definition.operation }),
+        stdin: JSON.stringify({
+          ...args,
+          path: args.path ?? '.',
+          operation: definition.operation,
+        }),
         readOnly: context.readOnly || definition.effect === 'read',
         allowNetwork: false,
         signal: context.signal,

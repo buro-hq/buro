@@ -1,5 +1,6 @@
 import { Badge, Button, Group, Paper, Select, Stack, Tabs, Text } from '@mantine/core';
 import { useState, type ReactElement } from 'react';
+import type { ChangedFile } from '../../../modules/results/result.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { t } from '../../i18n/index.ts';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
@@ -8,18 +9,31 @@ import { SessionView } from './SessionView.tsx';
 import { PreviewsPanel } from './PreviewsPanel.tsx';
 import { DeliveriesPanel } from './DeliveriesPanel.tsx';
 
+const fileStatusLabels: Record<string, string> = {
+  A: 'Added',
+  M: 'Modified',
+  D: 'Deleted',
+  T: 'Type changed',
+};
+
+const changedFileStatus = (file: ChangedFile): string =>
+  t(fileStatusLabels[file.status] ?? 'Changed');
+
 function Changes(input: { runId: string }): ReactElement {
-  const { client } = useApplication(),
-    changes = useApiQuery('results.inspect', { runId: input.runId }),
-    action = useOperation();
+  const { client } = useApplication();
+  const changes = useApiQuery('results.inspect', {
+    runId: input.runId,
+  });
+  const action = useOperation();
   return (
     <Stack>
       <QueryFeedback loading={changes.loading} error={changes.error ?? changes.data?.error} />
       <ErrorNotice error={action.error} />
       {changes.data?.files?.map((file) => (
-        <Text key={file.path} size="sm">
-          {file.status} · {file.path}
-        </Text>
+        <Group key={file.path} gap="sm" role="group" aria-label={file.path}>
+          <Text size="sm" style={{ overflowWrap: 'anywhere' }}>{file.path}</Text>
+          <Badge variant="light">{changedFileStatus(file)}</Badge>
+        </Group>
       ))}
       <pre className="feature-pre feature-patch">{changes.data?.patch}</pre>
       {changes.data?.ok && (
@@ -33,8 +47,7 @@ function Changes(input: { runId: string }): ReactElement {
                 revision: changes.data?.revision,
               });
               return { ok: applied.ok, error: applied.error };
-            })
-          }
+            })}
         >
           {t('Apply changes to project')}
         </Button>
@@ -49,12 +62,16 @@ export function RunDetail(input: {
   onRun(id: string): void;
   onBack(): void;
 }): ReactElement {
-  const { client } = useApplication(),
-    run = useApiQuery('runs.get', { id: input.id }),
-    sessions = useApiQuery('sessions.list', { runId: input.id }),
-    action = useOperation();
-  const [sessionId, setSessionId] = useState<string | null>(null),
-    [tab, setTab] = useState<string | null>('conversation');
+  const { client } = useApplication();
+  const run = useApiQuery('runs.get', {
+    id: input.id,
+  });
+  const sessions = useApiQuery('sessions.list', {
+    runId: input.id,
+  });
+  const action = useOperation();
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [tab, setTab] = useState<string | null>('conversation');
   const selected =
     sessions.data?.find((session) => session.id === sessionId) ??
     sessions.data?.find((session) => session.id === run.data?.sessionId) ??
@@ -72,10 +89,11 @@ export function RunDetail(input: {
             variant="default"
             onClick={() =>
               void action.perform(async () => {
-                await client.call('runs.cancel', { id: input.id });
+                await client.call('runs.cancel', {
+                  id: input.id,
+                });
                 return { ok: true };
-              })
-            }
+              })}
           >
             {t('Stop')}
           </Button>
@@ -83,11 +101,14 @@ export function RunDetail(input: {
             loading={action.busy}
             onClick={() =>
               void action.perform(async () => {
-                const result = await client.call('runs.retry', { id: input.id });
-                if (result.run) input.onRun(result.run.id);
+                const result = await client.call('runs.retry', {
+                  id: input.id,
+                });
+                if (result.run)
+                  input.onRun(result.run.id);
+
                 return { ok: result.ok, error: result.error };
-              })
-            }
+              })}
           >
             {t('New attempt with saved work')}
           </Button>

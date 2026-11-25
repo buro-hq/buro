@@ -26,28 +26,28 @@ export function ModelEditor(input: {
   model?: ModelConfigurationView;
   onClose(): void;
 }): ReactElement {
-  const { client } = useApplication(),
-    transports = useApiQuery('models.transports', {}),
-    action = useOperation(),
-    discovery = useOperation();
-  const [name, setName] = useState(input.model?.name ?? ''),
-    [transport, setTransport] = useState(input.model?.transport ?? 'openai-compatible'),
-    [endpoint, setEndpoint] = useState(input.model?.endpoint ?? ''),
-    [model, setModel] = useState(input.model?.model ?? ''),
-    [key, setKey] = useState(''),
-    [removeKey, setRemoveKey] = useState(false),
-    [local, setLocal] = useState(input.model?.local ?? true),
-    [thinking, setThinking] = useState(input.model?.thinking ?? true),
-    [contextTokens, setContextTokens] = useState<string | number>(
-      input.model?.contextTokens ?? 32768,
-    ),
-    [outputTokens, setOutputTokens] = useState<string | number>(input.model?.outputTokens ?? 8192),
-    [effort, setEffort] = useState(input.model?.reasoningEffort ?? ''),
-    [capacity, setCapacity] = useState<string | number>(input.model?.capacity ?? ''),
-    [retries, setRetries] = useState<string | number>(input.model?.retries ?? ''),
-    [advanced, setAdvanced] = useState(false),
-    [asDefault, setAsDefault] = useState(false),
-    [catalogue, setCatalogue] = useState<AvailableModel[]>([]);
+  const { client } = useApplication();
+  const transports = useApiQuery('models.transports', {});
+  const action = useOperation();
+  const discovery = useOperation();
+  const [name, setName] = useState(input.model?.name ?? '');
+  const [transport, setTransport] = useState(input.model?.transport ?? 'openai-compatible');
+  const [endpoint, setEndpoint] = useState(input.model?.endpoint ?? '');
+  const [model, setModel] = useState(input.model?.model ?? '');
+  const [key, setKey] = useState('');
+  const [removeKey, setRemoveKey] = useState(false);
+  const [local, setLocal] = useState(input.model?.local ?? true);
+  const [thinking, setThinking] = useState(input.model?.thinking ?? true);
+  const [contextTokens, setContextTokens] = useState<string | number>(
+    input.model?.contextTokens ?? 32768,
+  );
+  const [outputTokens, setOutputTokens] = useState<string | number>(input.model?.outputTokens ?? 8192);
+  const [effort, setEffort] = useState(input.model?.reasoningEffort ?? '');
+  const [capacity, setCapacity] = useState<string | number>(input.model?.capacity ?? '');
+  const [retries, setRetries] = useState<string | number>(input.model?.retries ?? '');
+  const [advanced, setAdvanced] = useState(false);
+  const [asDefault, setAsDefault] = useState(false);
+  const [catalogue, setCatalogue] = useState<AvailableModel[]>([]);
   function configuration(): ModelConfigurationInput['configuration'] {
     return {
       id: input.model?.id,
@@ -73,7 +73,8 @@ export function ModelEditor(input: {
       });
       return { ok: result.ok, error: result.error, value: result.models };
     });
-    if (found.value) setCatalogue(found.value);
+    if (found.value)
+      setCatalogue(found.value);
   }
   async function save(): Promise<void> {
     const saved = await action.perform(async () => {
@@ -84,7 +85,8 @@ export function ModelEditor(input: {
       });
       return { ok: result.ok, error: result.error };
     });
-    if (saved.ok) input.onClose();
+    if (saved.ok)
+      input.onClose();
   }
   return (
     <Modal
@@ -156,7 +158,8 @@ export function ModelEditor(input: {
             searchable
             value={catalogue.some((item) => item.id === model) ? model : null}
             onChange={(value) => {
-              if (value) setModel(value);
+              if (value)
+                setModel(value);
             }}
             data={catalogue.map((item) => ({
               value: item.id,

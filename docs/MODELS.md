@@ -21,12 +21,12 @@ Add connections in **Models**, or call `models.save` through the CLI/API. Connec
 
 Keep a real key in a private file and pass its path with `npm run cli -- models.save @connection.json`. It is not returned by `models.list`. Omit `apiKey` when updating a saved connection to retain its key; send `null` to remove it.
 
-| Transport | Endpoint and behavior |
-| --- | --- |
-| `openai-compatible` | OpenAI style `/models` and `/chat/completions`; local endpoints receive chat template thinking settings |
-| `ollama` | Native Ollama API and its `think` setting |
-| `deepseek` | Chat completions with the explicit `thinking` field, enabled by default |
-| `codex` | Installed native app-server, existing login or a configured key, portable Buro history and common host tools |
+| Transport           | Endpoint and behavior                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `openai-compatible` | OpenAI style `/models` and `/chat/completions`; local endpoints receive chat template thinking settings      |
+| `ollama`            | Native Ollama API and its `think` setting                                                                    |
+| `deepseek`          | Chat completions with the explicit `thinking` field, enabled by default                                      |
+| `codex`             | Installed native app-server, existing login or a configured key, portable Buro history and common host tools |
 
 `models.discover` queries available IDs from a draft or saved connection without saving a placeholder or starting inference. A missing catalogue does not prevent entering an ID directly. Selecting a model does not trigger a readiness or coding test.
 

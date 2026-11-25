@@ -31,7 +31,10 @@ const ollama = (chat: () => Response) =>
     endpoint: 'http://127.0.0.1:11434',
     fetch: async (url) =>
       String(url).endsWith('/api/show')
-        ? Response.json({ capabilities: ['tools'], model_info: { 'fixture.context_length': 4000 } })
+        ? Response.json({
+            capabilities: ['tools'],
+            model_info: { 'fixture.context_length': 4000 },
+          })
         : chat(),
   });
 
@@ -42,9 +45,10 @@ test('terminal empty responses and unexpected choice indexes never look like com
         done: true,
         done_reason: 'stop',
         message: { role: 'assistant', content: '' },
-      }),
-    ).complete(input()),
-    { code: 'MODEL_INVALID_RESPONSE' },
+      })).complete(input()),
+    {
+      code: 'MODEL_INVALID_RESPONSE',
+    },
   );
   await assert.rejects(
     deepseek(
@@ -53,7 +57,9 @@ test('terminal empty responses and unexpected choice indexes never look like com
           'data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
         ),
     ).complete(input()),
-    { code: 'MODEL_INVALID_RESPONSE' },
+    {
+      code: 'MODEL_INVALID_RESPONSE',
+    },
   );
   await assert.rejects(
     deepseek(
@@ -62,7 +68,9 @@ test('terminal empty responses and unexpected choice indexes never look like com
           'data: {"choices":[{"index":1,"delta":{"content":"{}"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
         ),
     ).complete(input()),
-    { code: 'MODEL_STREAM_INTERRUPTED' },
+    {
+      code: 'MODEL_STREAM_INTERRUPTED',
+    },
   );
 });
 
@@ -79,9 +87,12 @@ test('invalid UTF-8 is rejected instead of changing streamed tool arguments', as
   await assert.rejects(
     async () => {
       for await (const _line of lines(response, () => {})) {
+        // Consume until the malformed response is rejected.
       }
     },
-    { code: 'MODEL_INVALID_RESPONSE' },
+    {
+      code: 'MODEL_INVALID_RESPONSE',
+    },
   );
 });
 
@@ -120,9 +131,12 @@ test('terminal completion cancels a still-open response and response bounds rele
   await assert.rejects(
     async () => {
       for await (const _line of lines(response, () => {})) {
+        // Consume until the malformed response is rejected.
       }
     },
-    { code: 'MODEL_RESPONSE_LIMIT' },
+    {
+      code: 'MODEL_RESPONSE_LIMIT',
+    },
   );
   assert.equal(oversizedCancelled, true);
 });

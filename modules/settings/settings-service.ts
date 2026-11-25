@@ -31,7 +31,10 @@ export class SettingsService implements Settings {
       initial: await this.get(),
       changes: input,
     }))!;
-    this.events.publish({ type: 'settings.updated', data: settings });
+    this.events.publish({
+      type: 'settings.updated',
+      data: settings,
+    });
     return settings;
   }
 }

@@ -22,8 +22,13 @@ export function sessionTools(input: {
 }): Tool[] {
   async function related(argumentsValue: unknown, context: ToolContext): Promise<Session> {
     const args = objectArguments(argumentsValue);
-    const id = textArgument({ arguments: args, name: 'sessionId' })!;
-    const session = await input.sessions.get({ id });
+    const id = textArgument({
+      arguments: args,
+      name: 'sessionId',
+    })!;
+    const session = await input.sessions.get({
+      id,
+    });
     if (
       !session ||
       (context.runId
@@ -31,6 +36,7 @@ export function sessionTools(input: {
         : session.id !== context.sessionId && session.parentId !== context.sessionId)
     )
       throw new ToolFailure('No such conversation in this work.');
+
     return session;
   }
 
@@ -79,12 +85,20 @@ export function sessionTools(input: {
       definition: {
         name: 'model_select',
         description: 'Choose the next model for this conversation while retaining its history.',
-        parameters: parameters({ modelId: string }, ['modelId']),
+        parameters: parameters({
+          modelId: string,
+        }, ['modelId']),
       },
       async execute({ arguments: value, context }) {
         const args = objectArguments(value);
-        const modelId = textArgument({ arguments: args, name: 'modelId' })!;
-        const ok = await input.sessions.switchModel({ sessionId: context.sessionId, modelId });
+        const modelId = textArgument({
+          arguments: args,
+          name: 'modelId',
+        })!;
+        const ok = await input.sessions.switchModel({
+          sessionId: context.sessionId,
+          modelId,
+        });
         return { content: ok ? 'Selected model ' + modelId : 'Model unavailable.', isError: !ok };
       },
     },
@@ -108,11 +122,28 @@ export function sessionTools(input: {
       },
       async execute({ arguments: value, context }) {
         const args = objectArguments(value);
-        const prompt = textArgument({ arguments: args, name: 'input' })!;
-        const agentId = textArgument({ arguments: args, name: 'agentId', optional: true });
-        const agent = agentId ? await input.agents.get({ id: agentId }) : undefined;
-        if (agentId && !agent) throw new ToolFailure('Agent description not found.');
-        const modelId = textArgument({ arguments: args, name: 'modelId', optional: true });
+        const prompt = textArgument({
+          arguments: args,
+          name: 'input',
+        })!;
+        const agentId = textArgument({
+          arguments: args,
+          name: 'agentId',
+          optional: true,
+        });
+        const agent = agentId
+          ? await input.agents.get({
+              id: agentId,
+            })
+          : undefined;
+        if (agentId && !agent)
+          throw new ToolFailure('Agent description not found.');
+
+        const modelId = textArgument({
+          arguments: args,
+          name: 'modelId',
+          optional: true,
+        });
         const instructions = textArgument({
           arguments: args,
           name: 'instructions',
@@ -120,16 +151,20 @@ export function sessionTools(input: {
         });
         if (args.readOnly !== undefined && typeof args.readOnly !== 'boolean')
           throw new ToolFailure('readOnly must be a boolean.');
+
         if (
           args.tools !== undefined &&
           (!Array.isArray(args.tools) || args.tools.some((name) => typeof name !== 'string'))
         )
           throw new ToolFailure('tools must be an array of tool names.');
+
         const requested = (args.tools as string[] | undefined) ?? agent?.tools;
         const tools = context.tools
           ? context.tools.filter((name) => !requested || requested.includes(name))
           : requested;
-        const parent = await input.sessions.get({ id: context.sessionId });
+        const parent = await input.sessions.get({
+          id: context.sessionId,
+        });
         context.signal.throwIfAborted();
         const created = await input.sessions.create({
           runId: context.runId,
@@ -142,6 +177,7 @@ export function sessionTools(input: {
         });
         if (!created.ok)
           return { content: created.error ?? 'Unable to start session.', isError: true };
+
         const job = input.sessions.run({
           sessionId: created.sessionId,
           input: prompt,
@@ -158,9 +194,11 @@ export function sessionTools(input: {
               sessionId: created.sessionId,
               error: error instanceof Error ? error.message : String(error),
             },
-          }),
-        );
-        return { content: JSON.stringify({ sessionId: created.sessionId, status: 'running' }) };
+          }));
+        return { content: JSON.stringify({
+          sessionId: created.sessionId,
+          status: 'running',
+        }) };
       },
     },
     {
@@ -168,7 +206,9 @@ export function sessionTools(input: {
       definition: {
         name: 'session_status',
         description: 'Read a collaborator’s state and final result.',
-        parameters: parameters({ sessionId: string }, ['sessionId']),
+        parameters: parameters({
+          sessionId: string,
+        }, ['sessionId']),
       },
       async execute({ arguments: value, context }) {
         return { content: summary(await related(value, context)) };
@@ -179,7 +219,9 @@ export function sessionTools(input: {
       definition: {
         name: 'session_wait',
         description: 'Wait for a collaborator’s current turn and read its result.',
-        parameters: parameters({ sessionId: string }, ['sessionId']),
+        parameters: parameters({
+          sessionId: string,
+        }, ['sessionId']),
       },
       async execute({ arguments: value, context }) {
         const session = await related(value, context);
@@ -199,7 +241,11 @@ export function sessionTools(input: {
       definition: {
         name: 'session_send',
         description: 'Send follow-up work to an idle collaborator and receive its next result.',
-        parameters: parameters({ sessionId: string, input: string, modelId: string }, [
+        parameters: parameters({
+          sessionId: string,
+          input: string,
+          modelId: string,
+        }, [
           'sessionId',
           'input',
         ]),
@@ -209,8 +255,15 @@ export function sessionTools(input: {
         const args = objectArguments(value);
         const result = await input.sessions.run({
           sessionId: session.id,
-          input: textArgument({ arguments: args, name: 'input' })!,
-          modelId: textArgument({ arguments: args, name: 'modelId', optional: true }),
+          input: textArgument({
+            arguments: args,
+            name: 'input',
+          })!,
+          modelId: textArgument({
+            arguments: args,
+            name: 'modelId',
+            optional: true,
+          }),
           workspace: context.workspace,
           projectId: context.projectId,
           readOnly: context.readOnly,
@@ -225,11 +278,15 @@ export function sessionTools(input: {
       definition: {
         name: 'session_interrupt',
         description: 'Stop a collaborator while preserving its work and history.',
-        parameters: parameters({ sessionId: string }, ['sessionId']),
+        parameters: parameters({
+          sessionId: string,
+        }, ['sessionId']),
       },
       async execute({ arguments: value, context }) {
         const session = await related(value, context);
-        input.sessions.interrupt({ sessionId: session.id });
+        input.sessions.interrupt({
+          sessionId: session.id,
+        });
         return { content: 'Interruption requested.' };
       },
     },

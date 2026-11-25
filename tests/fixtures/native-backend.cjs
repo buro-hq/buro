@@ -3,11 +3,19 @@ if (process.argv.includes('mcp')) {
   console.log('[]');
   process.exit(0);
 }
-const lines = readline.createInterface({ input: process.stdin });
+
+const lines = readline.createInterface({
+  input: process.stdin,
+});
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\n');
 lines.on('line', (line) => {
   const message = JSON.parse(line);
-  if (message.method === 'initialize') send({ id: message.id, result: {} });
+  if (message.method === 'initialize')
+    send({
+      id: message.id,
+      result: {},
+    });
+
   if (message.method === 'model/list') {
     send({
       id: message.id,
@@ -16,9 +24,11 @@ lines.on('line', (line) => {
         : { data: [{ model: 'first', displayName: 'First model' }], nextCursor: 'next-page' },
     });
   }
+
   if (message.method === 'thread/start') {
     if (!message.params.dynamicTools.some((tool) => tool.name === 'save'))
       throw new Error('Missing host tool');
+
     send({
       id: message.id,
       result: {
@@ -28,8 +38,12 @@ lines.on('line', (line) => {
       },
     });
   }
+
   if (message.method === 'turn/start') {
-    send({ id: message.id, result: { turn: { id: 'native-turn' } } });
+    send({
+      id: message.id,
+      result: { turn: { id: 'native-turn' } },
+    });
     send({
       id: 'tool-request',
       method: 'item/tool/call',
@@ -42,9 +56,11 @@ lines.on('line', (line) => {
       },
     });
   }
+
   if (message.id === 'tool-request') {
     if (!message.result?.success || message.result?.contentItems[0]?.text !== 'Saved by host')
       throw new Error('Host tool did not complete');
+
     send({
       method: 'item/agentMessage/delta',
       params: { threadId: 'native-thread', delta: 'Done by native' },

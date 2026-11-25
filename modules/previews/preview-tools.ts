@@ -23,9 +23,14 @@ export function previewTools(input: { previews: Previews }): Tool[] {
       },
       async execute({ arguments: value, context }) {
         context.signal.throwIfAborted();
-        if (!context.runId) throw new ToolFailure('A preview needs a run workspace.');
-        const args = objectArguments(value),
-          command = textArgument({ arguments: args, name: 'command' })!;
+        if (!context.runId)
+          throw new ToolFailure('A preview needs a run workspace.');
+
+        const args = objectArguments(value);
+        const command = textArgument({
+          arguments: args,
+          name: 'command',
+        })!;
         const result = await input.previews.start({
           runId: context.runId,
           command,
@@ -50,13 +55,27 @@ export function previewTools(input: { previews: Previews }): Tool[] {
           },
         },
         async execute({ arguments: value, context }) {
-          const args = objectArguments(value),
-            id = textArgument({ arguments: args, name: 'id' })!,
-            preview = await input.previews.get({ id });
+          const args = objectArguments(value);
+          const id = textArgument({
+            arguments: args,
+            name: 'id',
+          })!;
+          const preview = await input.previews.get({
+            id,
+          });
           if (!context.runId || preview?.runId !== context.runId)
             throw new ToolFailure('Preview not found in this run.');
-          if (stop) await input.previews.stop({ id });
-          return { content: JSON.stringify(stop ? await input.previews.get({ id }) : preview) };
+
+          if (stop)
+            await input.previews.stop({
+              id,
+            });
+
+          return { content: JSON.stringify(stop
+            ? await input.previews.get({
+                id,
+              })
+            : preview) };
         },
       }),
     ),

@@ -10,5 +10,6 @@ export async function closeResources(input: {
       errors.push(error);
     }
   }
-  if (errors.length) throw new AggregateError(errors, 'Application cleanup failed.');
+  if (errors.length)
+    throw new AggregateError(errors, 'Application cleanup failed.');
 }

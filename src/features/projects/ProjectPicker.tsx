@@ -12,14 +12,17 @@ export function ProjectPicker(input: {
   onClose(): void;
   onSelect(project: Project): void;
 }): ReactElement {
-  const { client } = useApplication(),
-    projects = useApiQuery('projects.list', {}),
-    action = useOperation();
-  const [root, setRoot] = useState(''),
-    [name, setName] = useState('');
+  const { client } = useApplication();
+  const projects = useApiQuery('projects.list', {});
+  const action = useOperation();
+  const [root, setRoot] = useState('');
+  const [name, setName] = useState('');
   async function connect(): Promise<void> {
     const result = await action.perform(async () => {
-      const connected = await client.call('projects.connect', { root, name: name || undefined });
+      const connected = await client.call('projects.connect', {
+        root,
+        name: name || undefined,
+      });
       return { ok: connected.ok, value: connected.project, error: connected.error };
     });
     if (result.value) {
@@ -56,10 +59,11 @@ export function ProjectPicker(input: {
                 color="red"
                 onClick={() =>
                   void action.perform(async () => {
-                    await client.call('projects.disconnect', { id: project.id });
+                    await client.call('projects.disconnect', {
+                      id: project.id,
+                    });
                     return { ok: true };
-                  })
-                }
+                  })}
               >
                 {t('Disconnect')}
               </Button>

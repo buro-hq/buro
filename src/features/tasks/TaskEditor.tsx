@@ -15,33 +15,43 @@ export function TaskEditor(input: {
   onClose(): void;
   onSaved(task: Task, start: boolean): void;
 }): ReactElement {
-  const { client } = useApplication(),
-    action = useOperation();
-  const [id, setId] = useState(input.task?.id),
-    [title, setTitle] = useState(input.task?.title ?? ''),
-    [description, setDescription] = useState(input.task?.description ?? ''),
-    [files, setFiles] = useState<File[]>([]);
+  const { client } = useApplication();
+  const action = useOperation();
+  const [id, setId] = useState(input.task?.id);
+  const [title, setTitle] = useState(input.task?.title ?? '');
+  const [description, setDescription] = useState(input.task?.description ?? '');
+  const [files, setFiles] = useState<File[]>([]);
   async function save(start: boolean): Promise<void> {
     const result = await action.perform(async () => {
       const fields = { projectId: input.projectId, title, description };
       const task = id
-        ? await client.call('tasks.update', { ...fields, id })
+        ? await client.call('tasks.update', {
+            ...fields,
+            id,
+          })
         : await client.call('tasks.create', fields);
-      if (!task) return { ok: false, error: 'Task not found.' };
+      if (!task)
+        return { ok: false, error: 'Task not found.' };
+
       setId(task.id);
       for (const file of files) {
         const material = await client.call('materials.upload', {
           projectId: input.projectId,
           taskId: task.id,
           name: file.name,
-          contentBase64: await uploadedFile({ file }),
+          contentBase64: await uploadedFile({
+            file,
+          }),
         });
-        if (!material.ok) return { ok: false, error: material.error };
+        if (!material.ok)
+          return { ok: false, error: material.error };
+
         setFiles((previous) => previous.filter((item) => item !== file));
       }
       return { ok: true, value: task };
     });
-    if (result.value) input.onSaved(result.value, start);
+    if (result.value)
+      input.onSaved(result.value, start);
   }
   return (
     <Modal
@@ -86,7 +96,8 @@ export function TaskEditor(input: {
             <Button
               loading={action.busy}
               onClick={() => {
-                if (title.trim()) void save(true);
+                if (title.trim())
+                  void save(true);
               }}
             >
               {t('Save and start')}

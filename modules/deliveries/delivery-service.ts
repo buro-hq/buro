@@ -47,6 +47,7 @@ export class DeliveryService implements Deliveries {
   publishers(): { id: string; name: string }[] {
     return [...this.implementations.values()].map(({ id, name }) => ({ id, name }));
   }
+
   /** Reads current publication observations. */
   async list(input: { runId?: string } = {}): Promise<Delivery[]> {
     return (await this.store.list()).filter(
@@ -56,7 +57,9 @@ export class DeliveryService implements Deliveries {
 
   /** Reserves ownership before asynchronous reads, so shutdown cannot close storage underneath a publication. */
   async publish(input: Parameters<Deliveries['publish']>[0]): Promise<DeliveryOutcome> {
-    if (this.closing) return { ok: false, error: 'Publication service is closed.' };
+    if (this.closing)
+      return { ok: false, error: 'Publication service is closed.' };
+
     let release!: () => void;
     const entry = {
       controller: new AbortController(),
@@ -77,25 +80,44 @@ export class DeliveryService implements Deliveries {
     input: Parameters<Deliveries['publish']>[0],
     signal: AbortSignal,
   ): Promise<DeliveryOutcome> {
-    const run = await this.runs.get({ id: input.runId });
-    if (!run) return { ok: false, error: 'Run not found.' };
-    const project = await this.projects.get({ id: run.projectId });
-    if (!project) return { ok: false, error: 'Project is disconnected.' };
+    const run = await this.runs.get({
+      id: input.runId,
+    });
+    if (!run)
+      return { ok: false, error: 'Run not found.' };
+
+    const project = await this.projects.get({
+      id: run.projectId,
+    });
+    if (!project)
+      return { ok: false, error: 'Project is disconnected.' };
+
     const publisher = input.publisherId
       ? this.implementations.get(input.publisherId)
       : this.implementations.values().next().value;
-    if (!publisher) return { ok: false, error: 'Publication implementation is unavailable.' };
-    const snapshot = await this.results.inspect({ runId: run.id });
-    if (!snapshot.ok || snapshot.patch === undefined) return { ok: false, error: snapshot.error };
+    if (!publisher)
+      return { ok: false, error: 'Publication implementation is unavailable.' };
+
+    const snapshot = await this.results.inspect({
+      runId: run.id,
+    });
+    if (!snapshot.ok || snapshot.patch === undefined)
+      return { ok: false, error: snapshot.error };
+
     if (input.revision !== undefined && input.revision !== snapshot.revision)
       return {
         ok: false,
         error:
           'The result changed after it was read. Refresh its changes before publishing this revision.',
       };
-    if (!snapshot.patch) return { ok: false, error: 'There are no changes to publish.' };
-    const task = await this.tasks.get({ id: run.taskId }),
-      id = randomUUID();
+
+    if (!snapshot.patch)
+      return { ok: false, error: 'There are no changes to publish.' };
+
+    const task = await this.tasks.get({
+      id: run.taskId,
+    });
+    const id = randomUUID();
     let delivery: Delivery = {
       id,
       runId: run.id,
@@ -134,7 +156,9 @@ export class DeliveryService implements Deliveries {
             : String(error),
       };
       await this.save(delivery);
-      if (!signal.aborted) throw error;
+      if (!signal.aborted)
+        throw error;
+
       return { ok: false, delivery, error: delivery.error };
     }
   }
@@ -150,14 +174,20 @@ export class DeliveryService implements Deliveries {
             'The previous process exited during publication. Check the remote before retrying.',
         });
   }
+
   /** Stops owned publications before application resources close. */
   async close(): Promise<void> {
     this.closing = true;
-    for (const entry of this.active) entry.controller.abort();
+    for (const entry of this.active)
+      entry.controller.abort();
     await Promise.all([...this.active].map((entry) => entry.settled));
   }
+
   private async save(delivery: Delivery): Promise<void> {
     await this.store.save(delivery);
-    this.events.publish({ type: 'delivery.updated', data: delivery });
+    this.events.publish({
+      type: 'delivery.updated',
+      data: delivery,
+    });
   }
 }

@@ -47,16 +47,24 @@ function tool(name: string, argumentsValue: unknown = {}): ModelCompletion {
 }
 
 function fixture(t: { after(callback: () => Promise<void>): void }) {
-  const storage = new SqliteStorage({ filename: ':memory:' });
+  const storage = new SqliteStorage({
+    filename: ':memory:',
+  });
   const observations: Notification[] = [];
   const events = new EventBus();
   events.subscribe((event) => {
     observations.push(event);
   });
-  const models = new ModelRegistry({ adapterState: storage.records('adapter-state') });
+  const models = new ModelRegistry({
+    adapterState: storage.records('adapter-state'),
+  });
   const tools = new ToolRegistry();
-  const activity = new ActivityLog({ store: storage.records('activity') });
-  const conversations = new ConversationStore({ storage });
+  const activity = new ActivityLog({
+    store: storage.records('activity'),
+  });
+  const conversations = new ConversationStore({
+    storage,
+  });
   const sessions = new SessionService({
     store: conversations,
     models,
@@ -72,7 +80,9 @@ function fixture(t: { after(callback: () => Promise<void>): void }) {
       model: id,
       contextTokens: 32768,
       outputTokens: 8192,
-      backend: new ModelBackend({ provider: { id, revision: id + '-v1', local: true, complete } }),
+      backend: new ModelBackend({
+        provider: { id, revision: id + '-v1', local: true, complete },
+      }),
     });
   }
   return { storage, conversations, models, tools, activity, sessions, observations, model, events };
@@ -83,29 +93,46 @@ for (const backend of ['sqlite', 'json']) {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-modules-'));
     const open = () =>
       backend === 'sqlite'
-        ? new SqliteStorage({ filename: path.join(directory, 'state.sqlite') })
-        : new JsonStorage({ directory });
+        ? new SqliteStorage({
+            filename: path.join(directory, 'state.sqlite'),
+          })
+        : new JsonStorage({
+            directory,
+          });
     let storage = open();
     t.after(async () => {
       await storage.close();
-      await fs.rm(directory, { recursive: true, force: true });
+      await fs.rm(directory, {
+        recursive: true,
+        force: true,
+      });
     });
     const events = new EventBus();
     events.subscribe(() => {
       throw new Error('An observer cannot undo persisted work');
     });
-    const tasks = new TaskService({ store: storage.records('tasks'), events });
+    const tasks = new TaskService({
+      store: storage.records('tasks'),
+      events,
+    });
     const created = await tasks.create({
       projectId: 'project',
       title: 'Original',
       description: 'Intent',
     });
     created.title = 'Changed by caller';
-    assert.equal((await tasks.get({ id: created.id }))!.title, 'Original');
+    assert.equal((await tasks.get({
+      id: created.id,
+    }))!.title, 'Original');
     await storage.close();
     storage = open();
-    const reopened = new TaskService({ store: storage.records('tasks'), events: new EventBus() });
-    assert.equal((await reopened.get({ id: created.id }))!.title, 'Original');
+    const reopened = new TaskService({
+      store: storage.records('tasks'),
+      events: new EventBus(),
+    });
+    assert.equal((await reopened.get({
+      id: created.id,
+    }))!.title, 'Original');
     assert.equal((await storage.records('sessions').list()).length, 0);
     assert.equal(
       await reopened.update({
@@ -121,8 +148,8 @@ for (const backend of ['sqlite', 'json']) {
 
 test('any session can use tools and return a result without a role, workflow grammar, reviewer or mandatory checks', async (t) => {
   const f = fixture(t);
-  let writes = 0,
-    requests = 0;
+  let writes = 0;
+  let requests = 0;
   f.tools.register({
     effect: 'write',
     definition: {
@@ -138,7 +165,9 @@ test('any session can use tools and return a result without a role, workflow gra
   f.model('local', async (input) => {
     requests++;
     assert.equal(input.schema, undefined);
-    if (requests === 1) return tool('save');
+    if (requests === 1)
+      return tool('save');
+
     assert.equal(input.messages.at(-1)!.content, 'Saved');
     return reply('Done');
   });
@@ -150,13 +179,15 @@ test('any session can use tools and return a result without a role, workflow gra
   });
   assert.equal(result.text, 'Done');
   assert.equal(writes, 1);
-  assert.equal((await f.sessions.get({ id: created.sessionId }))!.status, 'completed');
+  assert.equal((await f.sessions.get({
+    id: created.sessionId,
+  }))!.status, 'completed');
 });
 
 test('output truncation continues inside the model/tool loop and never executes an incomplete proposal', async (t) => {
   const f = fixture(t);
-  let requests = 0,
-    writes = 0;
+  let requests = 0;
+  let writes = 0;
   f.tools.register({
     effect: 'write',
     definition: { name: 'save', description: 'Save', parameters: { type: 'object' } },
@@ -167,7 +198,9 @@ test('output truncation continues inside the model/tool loop and never executes 
   });
   f.model('local', async (input) => {
     requests++;
-    if (requests === 1) return { ...tool('save'), finish: 'length' };
+    if (requests === 1)
+      return { ...tool('save'), finish: 'length' };
+
     if (requests === 2) {
       assert.ok(
         input.messages.some(
@@ -176,6 +209,7 @@ test('output truncation continues inside the model/tool loop and never executes 
       );
       return tool('save');
     }
+
     return reply('Done');
   });
   const created = await f.sessions.create();
@@ -204,7 +238,10 @@ test('model changes keep the same history while private adapter state stays with
     async execute(input) {
       const modelId = (input.arguments as { modelId: string }).modelId;
       assert.equal(
-        await f.sessions.switchModel({ sessionId: input.context.sessionId, modelId }),
+        await f.sessions.switchModel({
+          sessionId: input.context.sessionId,
+          modelId,
+        }),
         true,
       );
       return { content: 'Selected ' + modelId };
@@ -213,10 +250,13 @@ test('model changes keep the same history while private adapter state stays with
   f.model('first', async (input) => {
     firstRequests++;
     if (firstRequests === 1) {
-      const response = tool('switch', { modelId: 'second' });
+      const response = tool('switch', {
+        modelId: 'second',
+      });
       response.message.continuation = { value: privateA };
       return response;
     }
+
     assert.ok(JSON.stringify(input.messages).includes(privateA));
     assert.ok(!JSON.stringify(input.messages).includes(privateB));
     return reply('Finished with shared history');
@@ -224,11 +264,15 @@ test('model changes keep the same history while private adapter state stays with
   f.model('second', async (input) => {
     assert.ok(input.messages.some((message) => message.content === 'Selected second'));
     assert.ok(!JSON.stringify(input.messages).includes(privateA));
-    const response = tool('switch', { modelId: 'first' });
+    const response = tool('switch', {
+      modelId: 'first',
+    });
     response.message.continuation = { value: privateB };
     return response;
   });
-  const created = await f.sessions.create({ modelId: 'first' });
+  const created = await f.sessions.create({
+    modelId: 'first',
+  });
   const result = await f.sessions.run({
     sessionId: created.sessionId,
     input: 'Use both models',
@@ -239,7 +283,9 @@ test('model changes keep the same history while private adapter state stays with
   assert.equal((await f.sessions.list()).length, 1);
   assert.ok(!JSON.stringify(f.observations).includes('private-test-continuation'));
   assert.ok(
-    !JSON.stringify(await f.sessions.get({ id: created.sessionId })).includes(
+    !JSON.stringify(await f.sessions.get({
+      id: created.sessionId,
+    })).includes(
       'private-test-continuation',
     ),
   );
@@ -247,7 +293,8 @@ test('model changes keep the same history while private adapter state stays with
 
 test('a second writer cannot enter a session while independent sessions remain runnable', async (t) => {
   const f = fixture(t);
-  let started!: () => void, release!: () => void;
+  let started!: () => void;
+  let release!: () => void;
   const entered = new Promise<void>((resolve) => (started = resolve));
   const waiting = new Promise<void>((resolve) => (release = resolve));
   let requests = 0;
@@ -257,9 +304,13 @@ test('a second writer cannot enter a session while independent sessions remain r
     await waiting;
     return reply('Done');
   });
-  const first = await f.sessions.create(),
-    second = await f.sessions.create();
-  const active = f.sessions.run({ sessionId: first.sessionId, input: 'First', workspace: '/tmp' });
+  const first = await f.sessions.create();
+  const second = await f.sessions.create();
+  const active = f.sessions.run({
+    sessionId: first.sessionId,
+    input: 'First',
+    workspace: '/tmp',
+  });
   const duplicate = await f.sessions.run({
     sessionId: first.sessionId,
     input: 'Duplicate',
@@ -283,15 +334,34 @@ async function projectFixture(t: { after(callback: () => Promise<void>): void })
   const root = path.join(directory, 'source');
   await fs.mkdir(root);
   await exec('git', ['init', '-q', root]);
-  await exec('git', ['config', 'user.name', 'Buro test'], { cwd: root });
-  await exec('git', ['config', 'user.email', 'test@example.invalid'], { cwd: root });
+  await exec('git', ['config', 'user.name', 'Buro test'], {
+    cwd: root,
+  });
+  await exec('git', ['config', 'user.email', 'test@example.invalid'], {
+    cwd: root,
+  });
   await fs.writeFile(path.join(root, 'result.txt'), 'original');
-  await exec('git', ['add', '.'], { cwd: root });
-  await exec('git', ['commit', '-qm', 'Initial'], { cwd: root });
-  const f = fixture({ after() {} });
-  const projects = new ProjectService({ store: f.storage.records('projects'), events: f.events });
-  const tasks = new TaskService({ store: f.storage.records('tasks'), events: f.events });
-  const settings = new SettingsService({ store: f.storage.records('settings'), events: f.events });
+  await exec('git', ['add', '.'], {
+    cwd: root,
+  });
+  await exec('git', ['commit', '-qm', 'Initial'], {
+    cwd: root,
+  });
+  const f = fixture({
+    after() {},
+  });
+  const projects = new ProjectService({
+    store: f.storage.records('projects'),
+    events: f.events,
+  });
+  const tasks = new TaskService({
+    store: f.storage.records('tasks'),
+    events: f.events,
+  });
+  const settings = new SettingsService({
+    store: f.storage.records('settings'),
+    events: f.events,
+  });
   const materials = new MaterialService({
     store: f.storage.records('materials'),
     events: f.events,
@@ -301,7 +371,9 @@ async function projectFixture(t: { after(callback: () => Promise<void>): void })
     projects,
     tasks,
     sessions: f.sessions,
-    workspaces: new GitWorkspaces({ directory: path.join(directory, 'workspaces') }),
+    workspaces: new GitWorkspaces({
+      directory: path.join(directory, 'workspaces'),
+    }),
     settings,
     materials,
     events: f.events,
@@ -309,9 +381,14 @@ async function projectFixture(t: { after(callback: () => Promise<void>): void })
   t.after(async () => {
     await runs.close();
     await f.storage.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
-  const project = (await projects.connect({ root })).project!;
+  const project = (await projects.connect({
+    root,
+  })).project!;
   const task = await tasks.create({
     projectId: project.id,
     title: 'Write the result',
@@ -322,35 +399,44 @@ async function projectFixture(t: { after(callback: () => Promise<void>): void })
 
 test('parallel runs of one task have independent files and linked sessions; completion needs no review gate', async (t) => {
   const f = await projectFixture(t);
-  let waiting = 0,
-    release!: () => void;
+  let waiting = 0;
+  let release!: () => void;
   const bothEntered = new Promise<void>((resolve) => (release = resolve));
   f.tools.register({
     effect: 'write',
     definition: { name: 'save', description: 'Save', parameters: {} },
     async execute({ context }) {
       await fs.writeFile(path.join(context.workspace, 'result.txt'), context.runId!);
-      if (++waiting === 2) release();
+      if (++waiting === 2)
+        release();
+
       await bothEntered;
       return { content: context.runId! };
     },
   });
   f.model('local', async ({ messages }) =>
-    messages.at(-1)?.role === 'tool' ? reply('Done') : tool('save'),
-  );
+    messages.at(-1)?.role === 'tool' ? reply('Done') : tool('save'));
   const starts = await Promise.all([
-    f.runs.start({ taskId: f.task.id }),
-    f.runs.start({ taskId: f.task.id }),
+    f.runs.start({
+      taskId: f.task.id,
+    }),
+    f.runs.start({
+      taskId: f.task.id,
+    }),
   ]);
   assert.ok(starts.every((start) => start.ok));
   const [first, second] = starts.map((start) => start.run!);
-  const finished = await Promise.all(starts.map((start) => f.runs.wait({ id: start.run!.id })));
+  const finished = await Promise.all(starts.map((start) => f.runs.wait({
+    id: start.run!.id,
+  })));
   assert.ok(finished.every((run) => run?.status === 'completed'));
   assert.notEqual(first.workspace, second.workspace);
   assert.equal(await fs.readFile(path.join(first.workspace, 'result.txt'), 'utf8'), first.id);
   assert.equal(await fs.readFile(path.join(second.workspace, 'result.txt'), 'utf8'), second.id);
   assert.equal(await fs.readFile(path.join(f.root, 'result.txt'), 'utf8'), 'original');
-  assert.equal((await f.sessions.get({ id: first.sessionId }))!.runId, first.id);
+  assert.equal((await f.sessions.get({
+    id: first.sessionId,
+  }))!.runId, first.id);
   assert.notEqual(first.sessionId, second.sessionId);
 });
 
@@ -359,22 +445,34 @@ test('retry carries saved files and history into a new attempt and preserves exp
   let requests = 0;
   f.model('local', async (input) => {
     requests++;
-    if (requests === 1) return reply('First attempt result');
+    if (requests === 1)
+      return reply('First attempt result');
+
     assert.ok(input.messages.some((message) => message.content === 'First attempt result'));
     assert.ok(input.messages.at(-1)!.content.includes('new attempt'));
     return reply('Continued result');
   });
-  const first = (await f.runs.start({ taskId: f.task.id, options: { readOnly: true, tools: [] } }))
+  const first = (await f.runs.start({
+    taskId: f.task.id,
+    options: { readOnly: true, tools: [] },
+  }))
     .run!;
-  await f.runs.wait({ id: first.id });
+  await f.runs.wait({
+    id: first.id,
+  });
   await fs.writeFile(path.join(first.workspace, 'result.txt'), 'preserved edit');
   await fs.writeFile(path.join(first.workspace, 'new.txt'), 'preserved untracked file');
-  const retry = (await f.runs.retry({ id: first.id })).run!;
+  const retry = (await f.runs.retry({
+    id: first.id,
+  })).run!;
   assert.notEqual(retry.id, first.id);
   assert.notEqual(retry.sessionId, first.sessionId);
   assert.notEqual(retry.workspace, first.workspace);
   assert.equal(retry.previousRunId, first.id);
-  assert.deepEqual(retry.options, { readOnly: true, tools: [] });
+  assert.deepEqual(retry.options, {
+    readOnly: true,
+    tools: [],
+  });
   assert.equal(
     await fs.readFile(path.join(retry.workspace, 'result.txt'), 'utf8'),
     'preserved edit',
@@ -383,22 +481,33 @@ test('retry carries saved files and history into a new attempt and preserves exp
     await fs.readFile(path.join(retry.workspace, 'new.txt'), 'utf8'),
     'preserved untracked file',
   );
-  assert.equal((await f.runs.wait({ id: retry.id }))!.status, 'completed');
-  assert.equal((await f.sessions.get({ id: retry.sessionId }))!.parentId, undefined);
+  assert.equal((await f.runs.wait({
+    id: retry.id,
+  }))!.status, 'completed');
+  assert.equal((await f.sessions.get({
+    id: retry.sessionId,
+  }))!.parentId, undefined);
 });
 
 test('recovery marks an abandoned run interrupted and a new attempt does not replay an unknown tool outcome', async (t) => {
   const f = await projectFixture(t);
   f.model('local', async () => reply('Initial'));
-  const previous = (await f.runs.start({ taskId: f.task.id })).run!;
-  await f.runs.wait({ id: previous.id });
+  const previous = (await f.runs.start({
+    taskId: f.task.id,
+  })).run!;
+  await f.runs.wait({
+    id: previous.id,
+  });
   const session = (await f.conversations.load(previous.sessionId))!;
   await f.conversations.replace({
     ...session,
     status: 'running',
     messages: [...session.messages, tool('external-action').message],
   });
-  await f.storage.records('runs').save({ ...previous, status: 'running' });
+  await f.storage.records('runs').save({
+    ...previous,
+    status: 'running',
+  });
   let actions = 0;
   f.tools.register({
     effect: 'command',
@@ -417,9 +526,15 @@ test('recovery marks an abandoned run interrupted and a new attempt does not rep
     return reply('Inspected saved state');
   });
   await f.runs.recover();
-  assert.equal((await f.runs.get({ id: previous.id }))!.status, 'interrupted');
-  const next = (await f.runs.retry({ id: previous.id })).run!;
-  assert.equal((await f.runs.wait({ id: next.id }))!.status, 'completed');
+  assert.equal((await f.runs.get({
+    id: previous.id,
+  }))!.status, 'interrupted');
+  const next = (await f.runs.retry({
+    id: previous.id,
+  })).run!;
+  assert.equal((await f.runs.wait({
+    id: next.id,
+  }))!.status, 'completed');
   assert.equal(actions, 0);
 });
 
@@ -435,7 +550,11 @@ test('oversized tool output cannot evict the current request and context project
     { role: 'tool' as const, toolCallId: 'read', content: 'x'.repeat(100000) },
     { role: 'user' as const, content: 'Current task: fix the saved file' },
   ];
-  const context = conversationContext({ messages, contextTokens: 1024, outputTokens: 256 });
+  const context = conversationContext({
+    messages,
+    contextTokens: 1024,
+    outputTokens: 256,
+  });
   assert.ok(context.some((message) => message.content.includes('Current task')));
   assert.ok(context.some((message) => message.role === 'tool' && message.toolCallId === 'read'));
   assert.ok(JSON.stringify(context).length < (1024 - 256) * 4);
@@ -480,10 +599,16 @@ test('cancelling a newly announced run takes effect before its first model reque
       notification.type === 'run.updated' &&
       (notification.data as { status: string }).status === 'running'
     )
-      f.runs.cancel({ id: (notification.data as { id: string }).id });
+      f.runs.cancel({
+        id: (notification.data as { id: string }).id,
+      });
   });
-  const started = (await f.runs.start({ taskId: f.task.id })).run!;
-  assert.equal((await f.runs.wait({ id: started.id }))!.status, 'interrupted');
+  const started = (await f.runs.start({
+    taskId: f.task.id,
+  })).run!;
+  assert.equal((await f.runs.wait({
+    id: started.id,
+  }))!.status, 'interrupted');
   assert.equal(requests, 0);
 });
 
@@ -494,24 +619,38 @@ test('closing the run owner joins startup before storage can close and does not 
     requests++;
     return reply('Must not start');
   });
-  const starting = f.runs.start({ taskId: f.task.id });
+  const starting = f.runs.start({
+    taskId: f.task.id,
+  });
   await f.runs.close();
   assert.equal((await starting).ok, false);
   assert.equal(requests, 0);
-  assert.equal((await f.runs.start({ taskId: f.task.id })).ok, false);
+  assert.equal((await f.runs.start({
+    taskId: f.task.id,
+  })).ok, false);
 });
 
 test('a saved attempt can continue after its editable task is removed', async (t) => {
   const f = await projectFixture(t);
   f.model('local', async () => reply('Done'));
-  const first = (await f.runs.start({ taskId: f.task.id })).run!;
-  await f.runs.wait({ id: first.id });
-  await f.tasks.delete({ id: f.task.id });
-  const retried = await f.runs.retry({ id: first.id });
+  const first = (await f.runs.start({
+    taskId: f.task.id,
+  })).run!;
+  await f.runs.wait({
+    id: first.id,
+  });
+  await f.tasks.delete({
+    id: f.task.id,
+  });
+  const retried = await f.runs.retry({
+    id: first.id,
+  });
   assert.equal(retried.ok, true, retried.error);
   assert.equal(retried.run?.title, f.task.title);
   assert.equal(retried.run?.description, f.task.description);
-  assert.equal((await f.runs.wait({ id: retried.run!.id }))?.status, 'completed');
+  assert.equal((await f.runs.wait({
+    id: retried.run!.id,
+  }))?.status, 'completed');
 });
 
 test('retry keeps the last selected model and original baseline unless the caller explicitly replaces them', async (t) => {
@@ -519,12 +658,22 @@ test('retry keeps the last selected model and original baseline unless the calle
   f.model('initial', async () => reply('Initial result'));
   f.model('selected', async () => reply('Selected model result'));
   const first = (
-    await f.runs.start({ taskId: f.task.id, options: { modelId: 'initial', base: 'HEAD' } })
+    await f.runs.start({
+      taskId: f.task.id,
+      options: { modelId: 'initial', base: 'HEAD' },
+    })
   ).run!;
-  await f.runs.wait({ id: first.id });
-  await f.sessions.switchModel({ sessionId: first.sessionId, modelId: 'selected' });
+  await f.runs.wait({
+    id: first.id,
+  });
+  await f.sessions.switchModel({
+    sessionId: first.sessionId,
+    modelId: 'selected',
+  });
   await fs.writeFile(path.join(f.root, 'later.txt'), 'Later source work');
-  await exec('git', ['add', 'later.txt'], { cwd: f.root });
+  await exec('git', ['add', 'later.txt'], {
+    cwd: f.root,
+  });
   await exec(
     'git',
     [
@@ -536,17 +685,28 @@ test('retry keeps the last selected model and original baseline unless the calle
       '-qm',
       'Later source work',
     ],
-    { cwd: f.root },
+    {
+      cwd: f.root,
+    },
   );
-  const next = (await f.runs.retry({ id: first.id })).run!;
+  const next = (await f.runs.retry({
+    id: first.id,
+  })).run!;
   assert.equal(next.base, first.base);
-  assert.equal((await f.runs.wait({ id: next.id }))!.result, 'Selected model result');
-  await assert.rejects(fs.stat(path.join(next.workspace, 'later.txt')), { code: 'ENOENT' });
+  assert.equal((await f.runs.wait({
+    id: next.id,
+  }))!.result, 'Selected model result');
+  await assert.rejects(fs.stat(path.join(next.workspace, 'later.txt')), {
+    code: 'ENOENT',
+  });
 });
 
 test('a collaborator can use another model, return feedback and retain explicit read-only access on follow-up', async (t) => {
   const f = await projectFixture(t);
-  const agents = new AgentService({ store: f.storage.records('agents'), events: f.events });
+  const agents = new AgentService({
+    store: f.storage.records('agents'),
+    events: f.events,
+  });
   for (const entry of sessionTools({
     sessions: f.sessions,
     models: f.models,
@@ -554,9 +714,9 @@ test('a collaborator can use another model, return feedback and retain explicit 
     events: f.events,
   }))
     f.tools.register(entry);
-  let writes = 0,
-    childRequests = 0,
-    rootRequests = 0;
+  let writes = 0;
+  let childRequests = 0;
+  let rootRequests = 0;
   f.tools.register({
     effect: 'write',
     definition: { name: 'save', description: 'Save', parameters: {} },
@@ -568,13 +728,26 @@ test('a collaborator can use another model, return feedback and retain explicit 
   f.model('root', async (input) => {
     rootRequests++;
     if (rootRequests === 1)
-      return tool('session_start', { input: 'Inspect it', modelId: 'helper', readOnly: true });
+      return tool('session_start', {
+        input: 'Inspect it',
+        modelId: 'helper',
+        readOnly: true,
+      });
+
     const last = JSON.parse(input.messages.at(-1)!.content);
-    if (rootRequests === 2) return tool('session_wait', { sessionId: last.sessionId });
+    if (rootRequests === 2)
+      return tool('session_wait', {
+        sessionId: last.sessionId,
+      });
+
     if (rootRequests === 3) {
       assert.equal(last.result, 'Read-only feedback');
-      return tool('session_send', { sessionId: last.sessionId, input: 'Check once more' });
+      return tool('session_send', {
+        sessionId: last.sessionId,
+        input: 'Check once more',
+      });
     }
+
     assert.equal(last.text, 'Read-only feedback');
     return reply('Done with feedback');
   });
@@ -583,22 +756,33 @@ test('a collaborator can use another model, return feedback and retain explicit 
     assert.ok(input.messages[0].content.includes(f.task.title));
     assert.ok(input.messages[0].content.includes(f.task.description));
     assert.ok(!input.tools.some((definition) => definition.name === 'save'));
-    if (childRequests === 1 || childRequests === 3) return tool('save');
+    if (childRequests === 1 || childRequests === 3)
+      return tool('save');
+
     assert.ok(input.messages.at(-1)!.content.includes('read-only'));
     return reply('Read-only feedback');
   });
-  const started = (await f.runs.start({ taskId: f.task.id })).run!;
-  const finished = (await f.runs.wait({ id: started.id }))!;
+  const started = (await f.runs.start({
+    taskId: f.task.id,
+  })).run!;
+  const finished = (await f.runs.wait({
+    id: started.id,
+  }))!;
   assert.equal(finished.result, 'Done with feedback');
   assert.equal(writes, 0);
-  const conversations = await f.sessions.list({ runId: started.id });
+  const conversations = await f.sessions.list({
+    runId: started.id,
+  });
   assert.equal(conversations.length, 2);
   assert.equal(conversations.find((session) => session.parentId)?.modelId, 'helper');
 });
 
 test('run completion stops background collaborators before declaring the attempt complete', async (t) => {
   const f = await projectFixture(t);
-  const agents = new AgentService({ store: f.storage.records('agents'), events: f.events });
+  const agents = new AgentService({
+    store: f.storage.records('agents'),
+    events: f.events,
+  });
   for (const entry of sessionTools({
     sessions: f.sessions,
     models: f.models,
@@ -610,11 +794,15 @@ test('run completion stops background collaborators before declaring the attempt
   const entered = new Promise<void>((resolve) => {
     childStarted = resolve;
   });
-  let rootRequests = 0,
-    aborted = false;
+  let rootRequests = 0;
+  let aborted = false;
   f.model('root', async () => {
     if (++rootRequests === 1)
-      return tool('session_start', { input: 'Long work', modelId: 'helper' });
+      return tool('session_start', {
+        input: 'Long work',
+        modelId: 'helper',
+      });
+
     await entered;
     return reply('Enough work is done');
   });
@@ -627,38 +815,59 @@ test('run completion stops background collaborators before declaring the attempt
           aborted = true;
           reject(signal.reason);
         },
-        { once: true },
+        {
+          once: true,
+        },
       );
     });
     return reply('Unreachable');
   });
-  const started = (await f.runs.start({ taskId: f.task.id })).run!;
-  assert.equal((await f.runs.wait({ id: started.id }))!.status, 'completed');
+  const started = (await f.runs.start({
+    taskId: f.task.id,
+  })).run!;
+  assert.equal((await f.runs.wait({
+    id: started.id,
+  }))!.status, 'completed');
   assert.equal(aborted, true);
   assert.equal(
-    (await f.sessions.list({ runId: started.id })).find((session) => session.parentId)!.status,
+    (await f.sessions.list({
+      runId: started.id,
+    })).find((session) => session.parentId)!.status,
     'interrupted',
   );
 });
 
 test(
   'real sandboxed file tools edit a workspace without exposing source writes or private files',
-  { skip: process.platform !== 'darwin' },
+  {
+    skip: process.platform !== 'darwin',
+  },
   async (t) => {
     const f = await projectFixture(t);
     const privateFile = path.join(f.root, '.env');
     await fs.writeFile(privateFile, 'private-test-value');
-    const commands = new SandboxedCommands({ privatePaths: [path.join(f.directory, 'private')] });
+    const commands = new SandboxedCommands({
+      privatePaths: [path.join(f.directory, 'private')],
+    });
     t.after(() => commands.close());
-    for (const entry of fileTools({ commands, projects: f.projects })) f.tools.register(entry);
+    for (const entry of fileTools({
+      commands,
+      projects: f.projects,
+    }))
+      f.tools.register(entry);
     let requests = 0;
     f.model('local', async (input) => {
       switch (++requests) {
         case 1:
-          return tool('write_file', { path: 'result.txt', content: 'Changed by tool' });
+          return tool('write_file', {
+            path: 'result.txt',
+            content: 'Changed by tool',
+          });
         case 2:
           assert.equal(input.messages.at(-1)!.role, 'tool');
-          return tool('read_file', { path: 'result.txt' });
+          return tool('read_file', {
+            path: 'result.txt',
+          });
         case 3:
           assert.ok(input.messages.at(-1)!.content.includes('Changed by tool'));
           return tool('write_file', {
@@ -671,8 +880,12 @@ test(
           throw new Error('Unexpected request');
       }
     });
-    const started = (await f.runs.start({ taskId: f.task.id })).run!;
-    assert.equal((await f.runs.wait({ id: started.id }))!.status, 'completed');
+    const started = (await f.runs.start({
+      taskId: f.task.id,
+    })).run!;
+    assert.equal((await f.runs.wait({
+      id: started.id,
+    }))!.status, 'completed');
     assert.equal(
       await fs.readFile(path.join(started.workspace, 'result.txt'), 'utf8'),
       'Changed by tool',

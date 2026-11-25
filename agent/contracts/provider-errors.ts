@@ -15,8 +15,10 @@ export class ProviderFailure extends Error {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     if (!/^[A-Z][A-Z0-9_]*$/.test(code))
       throw new TypeError('A provider failure needs a stable uppercase code.');
+
     if (!['not-dispatched', 'rejected', 'unknown'].includes(options.outcome))
       throw new TypeError('A provider failure needs an explicit request outcome.');
+
     this.name = 'ProviderFailure';
     Object.defineProperties(this, {
       code: { value: code, enumerable: true, writable: false, configurable: false },

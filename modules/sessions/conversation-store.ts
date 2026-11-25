@@ -43,14 +43,17 @@ export class ConversationStore implements SessionStore {
   async get(id: string): Promise<Session | undefined> {
     const record = await this.records.get(id);
 
-    if (!record) return undefined;
+    if (!record)
+      return undefined;
 
     return metadata(record);
   }
 
   /** Restricts selection in the adapter, before records are deserialized. */
   async list(input: { runId?: string; status?: string } = {}): Promise<Session[]> {
-    const records = await this.records.list({ where: { sequence: -1, ...input } });
+    const records = await this.records.list({
+      where: { sequence: -1, ...input },
+    });
 
     return records.map(metadata);
   }
@@ -69,7 +72,8 @@ export class ConversationStore implements SessionStore {
       limit,
     });
 
-    if (descending) records.reverse();
+    if (descending)
+      records.reverse();
 
     return {
       messages: records.map((record) => record.message!),
@@ -82,7 +86,8 @@ export class ConversationStore implements SessionStore {
   async load(id: string): Promise<SessionConversation | undefined> {
     const session = await this.get(id);
 
-    if (!session) return undefined;
+    if (!session)
+      return undefined;
 
     const messages: SessionMessage[] = [];
     while (messages.length < session.messageCount) {
@@ -92,7 +97,8 @@ export class ConversationStore implements SessionStore {
         limit: Math.min(250, session.messageCount - messages.length),
       });
 
-      if (!page.messages.length) break;
+      if (!page.messages.length)
+        break;
 
       messages.push(...page.messages);
     }
@@ -103,7 +109,12 @@ export class ConversationStore implements SessionStore {
   /** Commits the current header and appended messages in one adapter transaction. */
   async append(input: { session: Session; messages: SessionMessage[] }): Promise<void> {
     const { session, messages } = input;
-    await this.records.write({ save: this.entries({ session, messages }) });
+    await this.records.write({
+      save: this.entries({
+        session,
+        messages,
+      }),
+    });
   }
 
   /** Replaces history only for migration or repair of an interrupted exchange. */
@@ -111,7 +122,10 @@ export class ConversationStore implements SessionStore {
     const { messages, ...session } = conversation;
     await this.records.write({
       delete: { sessionId: session.id },
-      save: this.entries({ session: { ...session, messageCount: messages.length }, messages }),
+      save: this.entries({
+        session: { ...session, messageCount: messages.length },
+        messages,
+      }),
     });
   }
 
@@ -122,14 +136,17 @@ export class ConversationStore implements SessionStore {
   }): Promise<Session | undefined> {
     const record = await this.records.patch(input);
 
-    if (!record) return undefined;
+    if (!record)
+      return undefined;
 
     return metadata(record);
   }
 
   /** Removes a header and all messages atomically. */
   async delete(id: string): Promise<void> {
-    await this.records.write({ delete: { sessionId: id } });
+    await this.records.write({
+      delete: { sessionId: id },
+    });
   }
 
   /** Copies existing histories once, preserving message identities and private continuations. */

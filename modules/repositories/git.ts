@@ -97,7 +97,8 @@ export async function safeGit(args: string[], options: Options) {
     ).stdout;
   } catch (error) {
     // git config returns 1 when no matching keys exist; every other failure is unsafe.
-    if ((error as { code?: unknown }).code !== 1) throw error;
+    if ((error as { code?: unknown }).code !== 1)
+      throw error;
   }
   for (const key of keys.split('\0').filter(Boolean)) {
     if (
@@ -107,9 +108,12 @@ export async function safeGit(args: string[], options: Options) {
       )
     )
       throw Error('Unsafe executable Git configuration.');
+
     global.push('-c', key + (/\.(required|cachetextconv)$/.test(key) ? '=false' : '='));
   }
-  if (!options.stdoutFile) return exec('git', [...global, ...args], config);
+  if (!options.stdoutFile)
+    return exec('git', [...global, ...args], config);
+
   const destination = await fs.open(
     options.stdoutFile,
     constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
@@ -133,11 +137,19 @@ export async function safeGit(args: string[], options: Options) {
         failure = error;
       });
       child.once('close', (code, signal) => {
-        if (failure) reject(failure);
-        else if (code === 0) resolve({ stdout: '', stderr });
+        if (failure)
+          reject(failure);
+        else if (code === 0)
+          resolve({
+            stdout: '',
+            stderr,
+          });
         else
           reject(
-            Object.assign(new Error('Git object operation failed: ' + stderr), { code, signal }),
+            Object.assign(new Error('Git object operation failed: ' + stderr), {
+              code,
+              signal,
+            }),
           );
       });
     });

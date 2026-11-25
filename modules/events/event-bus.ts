@@ -21,7 +21,8 @@ export class EventBus implements Notifications {
     for (const listener of this.listeners) {
       try {
         const pending = listener(structuredClone(notification));
-        if (pending) void pending.catch(this.report);
+        if (pending)
+          void pending.catch(this.report);
       } catch (error) {
         this.report(error);
       }

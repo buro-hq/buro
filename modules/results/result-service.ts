@@ -25,31 +25,53 @@ export class ResultService implements Results {
 
   /** Inspects an attempt even when its task definition was removed or changed. */
   async inspect(input: { runId: string }): Promise<ResultOutcome> {
-    const run = await this.runs.get({ id: input.runId });
-    if (!run) return { ok: false, error: 'Run not found.' };
-    return this.changes.inspect({ workspace: run.workspace, base: run.base });
+    const run = await this.runs.get({
+      id: input.runId,
+    });
+    if (!run)
+      return { ok: false, error: 'Run not found.' };
+
+    return this.changes.inspect({
+      workspace: run.workspace,
+      base: run.base,
+    });
   }
 
   /** Applies a concrete patch without requiring a special reviewer or a generated commit. */
   async apply(input: { runId: string; revision?: string }): Promise<ResultOutcome> {
-    const run = await this.runs.get({ id: input.runId });
-    if (!run) return { ok: false, error: 'Run not found.' };
-    const project = await this.projects.get({ id: run.projectId });
-    if (!project) return { ok: false, error: 'Project not found.' };
+    const run = await this.runs.get({
+      id: input.runId,
+    });
+    if (!run)
+      return { ok: false, error: 'Run not found.' };
+
+    const project = await this.projects.get({
+      id: run.projectId,
+    });
+    if (!project)
+      return { ok: false, error: 'Project not found.' };
+
     const snapshot = await this.inspect(input);
-    if (!snapshot.ok || snapshot.patch === undefined) return snapshot;
+    if (!snapshot.ok || snapshot.patch === undefined)
+      return snapshot;
+
     if (input.revision !== undefined && snapshot.revision !== input.revision)
       return {
         ok: false,
         error:
           'The workspace changed after this view was read. Refresh its changes before applying this revision.',
       };
-    const result = await this.changes.apply({ root: project.root, patch: snapshot.patch });
+
+    const result = await this.changes.apply({
+      root: project.root,
+      patch: snapshot.patch,
+    });
     if (result.ok)
       this.events.publish({
         type: 'result.applied',
         data: { runId: run.id, revision: snapshot.revision },
       });
+
     return result;
   }
 }

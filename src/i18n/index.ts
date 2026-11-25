@@ -16,25 +16,34 @@ let locale = savedLocale();
 export const getLocale = () => locale;
 export const getFormattingLocale = () => (locale === 'ru' ? 'ru-RU' : 'en-US');
 export function setLocale(value: Locale) {
-  if (value !== 'en' && value !== 'ru') return;
+  if (value !== 'en' && value !== 'ru')
+    return;
+
   locale = value;
   try {
     localStorage.setItem(storageKey, value);
   } catch {
     /* Preferences still work for this session. */
   }
-  if (typeof document !== 'undefined') document.documentElement.lang = value;
-  for (const listener of listeners) listener();
+  if (typeof document !== 'undefined')
+    document.documentElement.lang = value;
+
+  for (const listener of listeners)
+    listener();
 }
-if (typeof document !== 'undefined') document.documentElement.lang = locale;
+if (typeof document !== 'undefined')
+  document.documentElement.lang = locale;
+
 if (typeof window !== 'undefined')
   window.addEventListener('storage', (event) => {
     if (event.key === storageKey) {
       locale = savedLocale();
       document.documentElement.lang = locale;
-      for (const listener of listeners) listener();
+      for (const listener of listeners)
+        listener();
     }
   });
+
 export function useLocale() {
   return useSyncExternalStore(
     (listener) => {
@@ -49,6 +58,5 @@ export function useLocale() {
 export function t(message: string, values: Record<string, unknown> = {}) {
   const template = catalogs[locale][message] ?? en[message as keyof typeof en] ?? message;
   return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) =>
-    Object.hasOwn(values, key) ? String(values[key]) : match,
-  );
+    Object.hasOwn(values, key) ? String(values[key]) : match);
 }

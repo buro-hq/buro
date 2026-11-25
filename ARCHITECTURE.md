@@ -26,17 +26,17 @@ flowchart LR
 
 ## Entities and ownership
 
-| Entity | Owns |
-| --- | --- |
-| Project | A connected source directory |
-| Task | User intent, editable independently of attempts |
-| Run | One isolated attempt, workspace and root session ID |
-| Session | Portable messages, shared background, selected model, explicit access and result |
-| Agent | An optional reusable description and instructions |
-| Model connection | Transport configuration and its private credential |
-| Material | A retained file and optional extracted text |
-| Preview | A foreground process with its own port and lifetime |
-| Delivery | An explicit publication and its observed outcome |
+| Entity           | Owns                                                                             |
+| ---------------- | -------------------------------------------------------------------------------- |
+| Project          | A connected source directory                                                     |
+| Task             | User intent, editable independently of attempts                                  |
+| Run              | One isolated attempt, workspace and root session ID                              |
+| Session          | Portable messages, shared background, selected model, explicit access and result |
+| Agent            | An optional reusable description and instructions                                |
+| Model connection | Transport configuration and its private credential                               |
+| Material         | A retained file and optional extracted text                                      |
+| Preview          | A foreground process with its own port and lifetime                              |
+| Delivery         | An explicit publication and its observed outcome                                 |
 
 SQLite stores current feature records in separate namespaces. A replaceable JSON implementation exposes the same record API. Records returned to callers are detached values. Diagnostic activity is separate from state and is never replayed to reconstruct it. Application-directory ownership is acquired before recovery.
 

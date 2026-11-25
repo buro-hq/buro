@@ -36,8 +36,10 @@ export class ToolRegistry implements Tools {
         content: `Tool ${input.name} is unavailable. Choose an advertised tool.`,
         isError: true,
       };
+
     if (input.context.readOnly && tool.effect !== 'read')
       return { content: 'This invocation is read-only. No action was performed.', isError: true };
+
     try {
       return await tool.execute({
         arguments: structuredClone(input.arguments),
@@ -47,7 +49,9 @@ export class ToolRegistry implements Tools {
         },
       });
     } catch (error) {
-      if (error instanceof ToolFailure) return { content: error.message, isError: true };
+      if (error instanceof ToolFailure)
+        return { content: error.message, isError: true };
+
       throw error;
     }
   }

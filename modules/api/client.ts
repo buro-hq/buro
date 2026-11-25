@@ -17,6 +17,7 @@ export class ApiClient {
     string,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
+
   private listeners = new Set<(notification: Notification) => void>();
   private connections = new Set<(connection: ApiConnection) => void>();
   private sequence = 0;
@@ -29,7 +30,9 @@ export class ApiClient {
 
   /** Opens one shared connection or joins the connection already being established. */
   connect(): Promise<void> {
-    if (this.ready) return this.ready;
+    if (this.ready)
+      return this.ready;
+
     const socket = new WebSocket(this.url);
     this.socket = socket;
     this.ready = new Promise<void>((resolve, reject) => {
@@ -38,21 +41,32 @@ export class ApiClient {
           reject(new Error('Connection was replaced.'));
           return;
         }
-        socket.send(JSON.stringify({ type: 'authenticate', token: this.token }));
+
+        socket.send(JSON.stringify({
+          type: 'authenticate',
+          token: this.token,
+        }));
       };
       socket.onerror = () => reject(new Error('The Buro API is unavailable.'));
       socket.onclose = (event) => {
         reject(new Error('The Buro API connection closed.'));
-        if (this.socket !== socket) return;
+        if (this.socket !== socket)
+          return;
+
         this.ready = undefined;
         this.socket = undefined;
         for (const entry of this.pending.values())
           entry.reject(new Error('Connection lost. Read current state before retrying a command.'));
         this.pending.clear();
-        this.notifyConnection({ connected: false, authorizationRequired: event.code === 1008 });
+        this.notifyConnection({
+          connected: false,
+          authorizationRequired: event.code === 1008,
+        });
       };
       socket.onmessage = (event) => {
-        if (this.socket !== socket) return;
+        if (this.socket !== socket)
+          return;
+
         try {
           const message = JSON.parse(String(event.data)) as
             | ApiResponse
@@ -60,9 +74,12 @@ export class ApiClient {
             | ApiAuthenticated;
           if ('type' in message && message.type === 'authenticated') {
             resolve();
-            this.notifyConnection({ connected: true });
+            this.notifyConnection({
+              connected: true,
+            });
             return;
           }
+
           if ('type' in message && message.type === 'notification') {
             for (const listener of this.listeners) {
               try {
@@ -73,10 +90,14 @@ export class ApiClient {
             }
           } else if ('id' in message) {
             const entry = this.pending.get(message.id);
-            if (!entry) return;
+            if (!entry)
+              return;
+
             this.pending.delete(message.id);
-            if (message.ok) entry.resolve(message.result);
-            else entry.reject(new Error(message.error ?? 'API request failed.'));
+            if (message.ok)
+              entry.resolve(message.result);
+            else
+              entry.reject(new Error(message.error ?? 'API request failed.'));
           }
         } catch {
           socket.close();
@@ -99,7 +120,11 @@ export class ApiClient {
         reject,
       });
       try {
-        this.socket!.send(JSON.stringify({ id, method, params }));
+        this.socket!.send(JSON.stringify({
+          id,
+          method,
+          params,
+        }));
       } catch (error) {
         this.pending.delete(id);
         reject(error);
@@ -128,14 +153,17 @@ export class ApiClient {
     this.socket?.close();
     this.socket = undefined;
     this.ready = undefined;
-    for (const entry of this.pending.values()) entry.reject(new Error('API client closed.'));
+    for (const entry of this.pending.values())
+      entry.reject(new Error('API client closed.'));
     this.pending.clear();
   }
 
   private notifyConnection(connection: ApiConnection): void {
     for (const listener of this.connections) {
       try {
-        listener({ ...connection });
+        listener({
+          ...connection,
+        });
       } catch {
         /* An observer does not own the transport. */
       }

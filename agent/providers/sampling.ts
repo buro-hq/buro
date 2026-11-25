@@ -13,7 +13,8 @@ export function samplingParameters(settings?: ModelSamplingSettings): Record<str
     ['presencePenalty', 'presence_penalty'],
   ] as const) {
     const value = settings?.[key];
-    if (value !== undefined) params[wire] = value;
+    if (value !== undefined)
+      params[wire] = value;
   }
   return params;
 }

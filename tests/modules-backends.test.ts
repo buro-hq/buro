@@ -12,18 +12,26 @@ import { ModelBackend } from '../modules/engines/model-backend.ts';
 import { OpenAICompatibleProvider } from '../agent/providers/openai-compatible.ts';
 
 test('a broken HTTP generation is retried before its proposed tool can execute, and the completed edit runs once', async (t) => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-http-retry-')),
-    app = await createApplication({ directory });
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-http-retry-'));
+  const app = await createApplication({
+    directory,
+  });
   t.after(async () => {
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
-  const writes: unknown[] = [],
-    notices: string[] = [];
+  const writes: unknown[] = [];
+  const notices: string[] = [];
   let requests = 0;
   const frame = (delta: unknown, finish: string | null = null) =>
     'data: ' +
-    JSON.stringify({ model: 'fixture', choices: [{ index: 0, delta, finish_reason: finish }] }) +
+    JSON.stringify({
+      model: 'fixture',
+      choices: [{ index: 0, delta, finish_reason: finish }],
+    }) +
     '\n\n';
   const call = (argumentsValue: string) => ({
     tool_calls: [
@@ -51,18 +59,25 @@ test('a broken HTTP generation is retried before its proposed tool can execute, 
                 sent = true;
                 controller.enqueue(
                   new TextEncoder().encode(
-                    frame({ content: 'Unfinished text', ...call('{"partial":true}') }),
+                    frame({
+                      content: 'Unfinished text',
+                      ...call('{"partial":true}'),
+                    }),
                   ),
                 );
-              } else controller.error(new TypeError('Fixture connection lost'));
+              } else
+                controller.error(new TypeError('Fixture connection lost'));
             },
           }),
         );
       }
+
       return new Response(
         requests === 2
           ? frame(call('{"ready":true}'), 'tool_calls') + 'data: [DONE]\n\n'
-          : frame({ content: 'Done' }, 'stop') + 'data: [DONE]\n\n',
+          : frame({
+            content: 'Done',
+          }, 'stop') + 'data: [DONE]\n\n',
       );
     },
   });
@@ -72,7 +87,11 @@ test('a broken HTTP generation is retried before its proposed tool can execute, 
     model: 'fixture',
     contextTokens: 32768,
     outputTokens: 8192,
-    backend: new ModelBackend({ provider, retries: 1, retryDelayMs: 0 }),
+    backend: new ModelBackend({
+      provider,
+      retries: 1,
+      retryDelayMs: 0,
+    }),
   });
   app.tools.register({
     effect: 'write',
@@ -89,18 +108,20 @@ test('a broken HTTP generation is retried before its proposed tool can execute, 
   app.events.subscribe((notice) => {
     notices.push(notice.type);
   });
-  const session = await app.sessions.create(),
-    result = await app.sessions.run({
-      sessionId: session.sessionId,
-      input: 'Save once',
-      workspace: directory,
-    });
+  const session = await app.sessions.create();
+  const result = await app.sessions.run({
+    sessionId: session.sessionId,
+    input: 'Save once',
+    workspace: directory,
+  });
   assert.equal(result.ok, true, result.error);
   assert.equal(result.text, 'Done');
   assert.equal(requests, 3);
   assert.deepEqual(writes, [{ ready: true }]);
   assert.equal(notices.filter((type) => type === 'session.retry').length, 1);
-  const saved = await app.sessions.history({ sessionId: session.sessionId });
+  const saved = await app.sessions.history({
+    sessionId: session.sessionId,
+  });
   assert.ok(!saved.messages.some((message) => message.content === 'Unfinished text'));
   assert.equal(saved.messages.filter((message) => message.role === 'tool').length, 1);
 });
@@ -108,19 +129,27 @@ test('a broken HTTP generation is retried before its proposed tool can execute, 
 test('cancellation stops HTTP retry backoff and authentication failures are not retried', async () => {
   for (const mode of ['cancel', 'auth']) {
     let requests = 0;
-    const controller = new AbortController(),
-      provider = new OpenAICompatibleProvider({
-        id: 'fixture',
-        revision: 'one',
-        local: true,
-        endpoint: 'http://127.0.0.1:1/v1',
-        fetch: async () => {
-          requests++;
-          if (mode === 'auth') return new Response('', { status: 401 });
-          throw new TypeError('Fixture connection lost');
-        },
-      });
-    const backend = new ModelBackend({ provider, retries: 2, retryDelayMs: 10000 });
+    const controller = new AbortController();
+    const provider = new OpenAICompatibleProvider({
+      id: 'fixture',
+      revision: 'one',
+      local: true,
+      endpoint: 'http://127.0.0.1:1/v1',
+      fetch: async () => {
+        requests++;
+        if (mode === 'auth')
+          return new Response('', {
+            status: 401,
+          });
+
+        throw new TypeError('Fixture connection lost');
+      },
+    });
+    const backend = new ModelBackend({
+      provider,
+      retries: 2,
+      retryDelayMs: 10000,
+    });
     await assert.rejects(
       backend.complete({
         sessionId: 'fixture',
@@ -154,7 +183,9 @@ test('native discovery reads all catalogue pages without starting a model turn',
     executable: process.execPath,
     args: [fileURLToPath(new URL('./fixtures/native-backend.cjs', import.meta.url))],
   });
-  assert.deepEqual(await backend.listModels({ signal: AbortSignal.timeout(5000) }), [
+  assert.deepEqual(await backend.listModels({
+    signal: AbortSignal.timeout(5000),
+  }), [
     { id: 'first', name: 'First model' },
     { id: 'second', name: 'Second model' },
   ]);
@@ -162,10 +193,15 @@ test('native discovery reads all catalogue pages without starting a model turn',
 
 test('a native JSONL backend uses the common tool broker and keeps its observations in portable history', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-native-backend-'));
-  const app = await createApplication({ directory });
+  const app = await createApplication({
+    directory,
+  });
   t.after(async () => {
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
   let writes = 0;
   app.tools.register({
@@ -202,7 +238,9 @@ test('a native JSONL backend uses the common tool broker and keeps its observati
   assert.equal(result.ok, true, result.error);
   assert.equal(result.text, 'Done by native');
   assert.equal(writes, 1);
-  const { messages: history } = await app.sessions.history({ sessionId: created.sessionId });
+  const { messages: history } = await app.sessions.history({
+    sessionId: created.sessionId,
+  });
   assert.ok(
     history.some(
       (message) =>
@@ -213,7 +251,9 @@ test('a native JSONL backend uses the common tool broker and keeps its observati
     history.some((message) => message.role === 'tool' && message.content === 'Saved by host'),
   );
   assert.equal(
-    (await app.activity.list({ sessionId: created.sessionId })).filter(
+    (await app.activity.list({
+      sessionId: created.sessionId,
+    })).filter(
       (event) => event.type === 'tool.completed',
     ).length,
     1,
@@ -231,8 +271,8 @@ test('stateful tool instances retain their methods without mutating another invo
       return { content: String(++this.calls) };
     }
   }
-  const registry = new ToolRegistry(),
-    tool = new StatefulTool();
+  const registry = new ToolRegistry();
+  const tool = new StatefulTool();
   registry.register(tool);
   const context = {
     sessionId: 'one',
@@ -240,18 +280,31 @@ test('stateful tool instances retain their methods without mutating another invo
     tools: ['stateful'],
     signal: new AbortController().signal,
   };
-  assert.equal((await registry.execute({ name: 'stateful', arguments: {}, context })).content, '1');
-  assert.equal((await registry.execute({ name: 'stateful', arguments: {}, context })).content, '2');
+  assert.equal((await registry.execute({
+    name: 'stateful',
+    arguments: {},
+    context,
+  })).content, '1');
+  assert.equal((await registry.execute({
+    name: 'stateful',
+    arguments: {},
+    context,
+  })).content, '2');
   assert.equal(context.workspace, '/original');
   assert.deepEqual(context.tools, ['stateful']);
 });
 
 test('a model selected from a native callback continues the same conversation with observed tool results', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-backend-switch-'));
-  const app = await createApplication({ directory });
+  const app = await createApplication({
+    directory,
+  });
   t.after(async () => {
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
   let writes = 0;
   app.tools.register({
@@ -272,7 +325,11 @@ test('a model selected from a native callback continues the same conversation wi
       id: 'first',
       revision: 'one',
       async complete(input) {
-        await input.executeTool({ id: 'save', name: 'save', arguments: {} });
+        await input.executeTool({
+          id: 'save',
+          name: 'save',
+          arguments: {},
+        });
         await input.executeTool({
           id: 'select',
           name: 'model_select',
@@ -309,7 +366,9 @@ test('a model selected from a native callback continues the same conversation wi
       },
     },
   });
-  const created = await app.sessions.create({ modelId: 'first' });
+  const created = await app.sessions.create({
+    modelId: 'first',
+  });
   const result = await app.sessions.run({
     sessionId: created.sessionId,
     input: 'Work together',
@@ -318,15 +377,22 @@ test('a model selected from a native callback continues the same conversation wi
   assert.equal(result.text, 'Second model result');
   assert.equal(writes, 1);
   assert.equal((await app.sessions.list()).length, 1);
-  assert.equal((await app.sessions.get({ id: created.sessionId }))!.modelId, 'second');
+  assert.equal((await app.sessions.get({
+    id: created.sessionId,
+  }))!.modelId, 'second');
 });
 
 test('a native adapter cannot hide an unexpected tool failure by returning a successful terminal', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-native-tool-failure-'));
-  const app = await createApplication({ directory });
+  const app = await createApplication({
+    directory,
+  });
   t.after(async () => {
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
   app.tools.register({
     effect: 'write',
@@ -346,8 +412,14 @@ test('a native adapter cannot hide an unexpected tool failure by returning a suc
       revision: 'one',
       async complete(input) {
         try {
-          await input.executeTool({ id: 'broken', name: 'broken', arguments: {} });
-        } catch {}
+          await input.executeTool({
+            id: 'broken',
+            name: 'broken',
+            arguments: {},
+          });
+        } catch {
+          // Simulate a native adapter concealing the tool failure.
+        }
         return {
           model: 'native',
           finish: 'stop',
@@ -364,7 +436,9 @@ test('a native adapter cannot hide an unexpected tool failure by returning a suc
   });
   assert.equal(result.ok, false);
   assert.equal(result.error, 'Unexpected tool fault');
-  assert.equal((await app.sessions.get({ id: created.sessionId }))!.status, 'failed');
+  assert.equal((await app.sessions.get({
+    id: created.sessionId,
+  }))!.status, 'failed');
 });
 
 test('the configured DeepSeek transport enables thinking without imposing a final-answer schema', async (t) => {
@@ -375,7 +449,9 @@ test('the configured DeepSeek transport enables thinking without imposing a fina
     fetch: async (_url, options) => {
       requests++;
       const body = JSON.parse(String(options?.body));
-      assert.deepEqual(body.thinking, { type: 'enabled' });
+      assert.deepEqual(body.thinking, {
+        type: 'enabled',
+      });
       assert.equal(body.temperature, 0.5);
       assert.equal(body.max_tokens, 8192);
       assert.equal(body.response_format, undefined);
@@ -398,7 +474,10 @@ test('the configured DeepSeek transport enables thinking without imposing a fina
   });
   t.after(async () => {
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
   const saved = await app.modelConfigurations.save({
     configuration: {
@@ -420,7 +499,12 @@ test('the configured DeepSeek transport enables thinking without imposing a fina
   });
   assert.equal(result.ok, true, result.error);
   assert.equal(requests, 1);
-  const session = (await app.sessions.get({ id: created.sessionId }))!;
-  assert.deepEqual(session.usage, { inputTokens: 12, outputTokens: 5 });
+  const session = (await app.sessions.get({
+    id: created.sessionId,
+  }))!;
+  assert.deepEqual(session.usage, {
+    inputTokens: 12,
+    outputTokens: 5,
+  });
   assert.ok(!JSON.stringify(session).includes('private-fixture-reasoning'));
 });

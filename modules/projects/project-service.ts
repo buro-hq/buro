@@ -39,23 +39,32 @@ export class ProjectService implements Projects {
         )
       )
         return { ok: false, error: 'The project directory is missing or inaccessible.' };
+
       throw error;
     }
     const existing = (await this.store.list()).find((project) => project.root === root);
-    if (existing) return { ok: true, project: existing };
+    if (existing)
+      return { ok: true, project: existing };
+
     const project: Project = {
       id: createHash('sha256').update(root).digest('hex'),
       root,
       name: input.name ?? path.basename(root),
     };
     await this.store.save(project);
-    this.events.publish({ type: 'project.connected', data: project });
+    this.events.publish({
+      type: 'project.connected',
+      data: project,
+    });
     return { ok: true, project };
   }
 
   /** Disconnects the project record while preserving its files and historical workspaces. */
   async disconnect(input: { id: string }): Promise<void> {
     await this.store.delete(input.id);
-    this.events.publish({ type: 'project.disconnected', data: input });
+    this.events.publish({
+      type: 'project.disconnected',
+      data: input,
+    });
   }
 }

@@ -161,5 +161,10 @@
   "user": "user",
   "assistant": "assistant",
   "tool": "tool",
-  "HTTP retries · two when empty": "HTTP retries · two when empty"
+  "HTTP retries · two when empty": "HTTP retries · two when empty",
+  "Added": "Added",
+  "Modified": "Modified",
+  "Deleted": "Deleted",
+  "Type changed": "Type changed",
+  "Changed": "Changed"
 }

@@ -27,13 +27,19 @@ export class AgentService implements Agents {
   async save(input: Omit<Agent, 'id'> & { id?: string }): Promise<Agent> {
     const agent: Agent = { ...structuredClone(input), id: input.id ?? randomUUID() };
     await this.store.save(agent);
-    this.events.publish({ type: 'agent.saved', data: agent });
+    this.events.publish({
+      type: 'agent.saved',
+      data: agent,
+    });
     return agent;
   }
 
   /** Removes a description without deleting sessions that referenced it. */
   async delete(input: { id: string }): Promise<void> {
     await this.store.delete(input.id);
-    this.events.publish({ type: 'agent.deleted', data: input });
+    this.events.publish({
+      type: 'agent.deleted',
+      data: input,
+    });
   }
 }

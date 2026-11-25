@@ -2,9 +2,15 @@ import { z } from 'zod';
 import type { Application } from '../application/application.ts';
 import type { ApiMethods } from './contract.ts';
 
-const id = z.object({ id: z.string() });
+const id = z.object({
+  id: z.string(),
+});
 const empty = z.object({});
-const task = z.object({ projectId: z.string(), title: z.string(), description: z.string() });
+const task = z.object({
+  projectId: z.string(),
+  title: z.string(),
+  description: z.string(),
+});
 const runOptions = z.object({
   modelId: z.string().optional(),
   instructions: z.string().optional(),
@@ -51,13 +57,17 @@ export function apiMethods(app: Application): {
     'projects.list': method(empty, () => app.projects.list()),
     'projects.get': method(id, (input) => app.projects.get(input)),
     'projects.connect': method(
-      z.object({ root: z.string(), name: z.string().optional() }),
+      z.object({
+        root: z.string(),
+        name: z.string().optional(),
+      }),
       (input) => app.projects.connect(input),
     ),
     'projects.disconnect': method(id, (input) => app.projects.disconnect(input)),
-    'previews.list': method(z.object({ runId: z.string().optional() }), (input) =>
-      app.previews.list(input),
-    ),
+    'previews.list': method(z.object({
+      runId: z.string().optional(),
+    }), (input) =>
+      app.previews.list(input)),
     'previews.get': method(id, (input) => app.previews.get(input)),
     'previews.start': method(
       z.object({
@@ -69,9 +79,10 @@ export function apiMethods(app: Application): {
       (input) => app.previews.start(input),
     ),
     'previews.stop': method(id, (input) => app.previews.stop(input)),
-    'deliveries.list': method(z.object({ runId: z.string().optional() }), (input) =>
-      app.deliveries.list(input),
-    ),
+    'deliveries.list': method(z.object({
+      runId: z.string().optional(),
+    }), (input) =>
+      app.deliveries.list(input)),
     'deliveries.publishers': method(empty, () => app.deliveries.publishers()),
     'deliveries.publish': method(
       z.object({
@@ -86,35 +97,53 @@ export function apiMethods(app: Application): {
       }),
       (input) => app.deliveries.publish(input),
     ),
-    'tasks.list': method(z.object({ projectId: z.string().optional() }), (input) =>
-      app.tasks.list(input),
-    ),
+    'tasks.list': method(z.object({
+      projectId: z.string().optional(),
+    }), (input) =>
+      app.tasks.list(input)),
     'tasks.get': method(id, (input) => app.tasks.get(input)),
     'tasks.create': method(task, (input) => app.tasks.create(input)),
-    'tasks.update': method(task.extend({ id: z.string() }), (input) => app.tasks.update(input)),
+    'tasks.update': method(task.extend({
+      id: z.string(),
+    }), (input) => app.tasks.update(input)),
     'tasks.delete': method(id, (input) => app.tasks.delete(input)),
     'runs.list': method(
-      z.object({ projectId: z.string().optional(), taskId: z.string().optional() }),
+      z.object({
+        projectId: z.string().optional(),
+        taskId: z.string().optional(),
+      }),
       (input) => app.runs.list(input),
     ),
     'runs.get': method(id, (input) => app.runs.get(input)),
     'runs.start': method(
-      z.object({ taskId: z.string(), options: runOptions.optional() }),
+      z.object({
+        taskId: z.string(),
+        options: runOptions.optional(),
+      }),
       (input) => app.runs.start(input),
     ),
-    'runs.retry': method(z.object({ id: z.string(), options: runOptions.optional() }), (input) =>
-      app.runs.retry(input),
-    ),
+    'runs.retry': method(z.object({
+      id: z.string(),
+      options: runOptions.optional(),
+    }), (input) =>
+      app.runs.retry(input)),
     'runs.cancel': method(id, (input) => app.runs.cancel(input)),
-    'results.inspect': method(z.object({ runId: z.string() }), (input) =>
-      app.results.inspect(input),
-    ),
+    'results.inspect': method(z.object({
+      runId: z.string(),
+    }), (input) =>
+      app.results.inspect(input)),
     'results.apply': method(
-      z.object({ runId: z.string(), revision: z.string().optional() }),
+      z.object({
+        runId: z.string(),
+        revision: z.string().optional(),
+      }),
       (input) => app.results.apply(input),
     ),
     'materials.list': method(
-      z.object({ projectId: z.string(), taskId: z.string().optional() }),
+      z.object({
+        projectId: z.string(),
+        taskId: z.string().optional(),
+      }),
       (input) => app.materials.list(input),
     ),
     'materials.upload': method(
@@ -135,9 +164,10 @@ export function apiMethods(app: Application): {
     ),
     'materials.download': method(id, (input) => app.materials.download(input)),
     'materials.delete': method(id, (input) => app.materials.delete(input)),
-    'sessions.list': method(z.object({ runId: z.string().optional() }), (input) =>
-      app.sessions.list(input),
-    ),
+    'sessions.list': method(z.object({
+      runId: z.string().optional(),
+    }), (input) =>
+      app.sessions.list(input)),
     'sessions.get': method(id, (input) => app.sessions.get(input)),
     'sessions.messages': method(
       z
@@ -152,11 +182,16 @@ export function apiMethods(app: Application): {
         }),
       (input) => app.sessions.history(input),
     ),
-    'sessions.model': method(z.object({ sessionId: z.string(), modelId: z.string() }), (input) =>
-      app.sessions.switchModel(input),
-    ),
+    'sessions.model': method(z.object({
+      sessionId: z.string(),
+      modelId: z.string(),
+    }), (input) =>
+      app.sessions.switchModel(input)),
     'activity.list': method(
-      z.object({ sessionId: z.string().optional(), runId: z.string().optional() }),
+      z.object({
+        sessionId: z.string().optional(),
+        runId: z.string().optional(),
+      }),
       (input) => app.activity.list(input),
     ),
     'agents.list': method(empty, () => app.agents.list()),
@@ -175,7 +210,9 @@ export function apiMethods(app: Application): {
     'models.transports': method(empty, () => app.modelConfigurations.transports()),
     'models.discover': method(
       z.object({
-        configuration: configuration.partial().extend({ transport: z.string() }),
+        configuration: configuration.partial().extend({
+          transport: z.string(),
+        }),
         apiKey: z.string().nullable().optional(),
       }),
       (input) => app.modelConfigurations.discover(input),
@@ -191,8 +228,9 @@ export function apiMethods(app: Application): {
     'models.default': method(id, (input) => app.modelConfigurations.select(input)),
     'models.delete': method(id, (input) => app.modelConfigurations.delete(input)),
     'settings.get': method(empty, () => app.settings.get()),
-    'settings.update': method(z.object({ instructions: z.string().optional() }), (input) =>
-      app.settings.update(input),
-    ),
+    'settings.update': method(z.object({
+      instructions: z.string().optional(),
+    }), (input) =>
+      app.settings.update(input)),
   };
 }

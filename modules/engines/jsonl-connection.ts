@@ -19,6 +19,7 @@ export class JsonlConnection {
     number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
+
   private observers = new Set<(message: RpcMessage) => void>();
   private request?: (message: RpcMessage) => Promise<unknown>;
   private closing?: Promise<void>;
@@ -40,7 +41,9 @@ export class JsonlConnection {
       detached: process.platform !== 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    this.lines = readline.createInterface({ input: this.process.stdout });
+    this.lines = readline.createInterface({
+      input: this.process.stdout,
+    });
     this.process.stderr.on('data', (chunk: Buffer) => {
       this.diagnostics = (this.diagnostics + chunk.toString('utf8')).slice(-65536);
     });
@@ -53,7 +56,9 @@ export class JsonlConnection {
           diagnostics: this.diagnostics,
         }),
       );
-      this.notify({ method: 'process/closed' });
+      this.notify({
+        method: 'process/closed',
+      });
     });
     this.lines.on('line', (line) => {
       let message: RpcMessage;
@@ -61,6 +66,7 @@ export class JsonlConnection {
         const value: unknown = JSON.parse(line);
         if (!value || typeof value !== 'object' || Array.isArray(value))
           throw new Error('Invalid frame');
+
         message = value as RpcMessage;
       } catch {
         this.fail(new Error('Invalid native RPC frame.'));
@@ -69,25 +75,36 @@ export class JsonlConnection {
       }
       if (message.id !== undefined && !message.method) {
         const pending = typeof message.id === 'number' ? this.pending.get(message.id) : undefined;
-        if (!pending) return;
+        if (!pending)
+          return;
+
         this.pending.delete(message.id as number);
         if (message.error)
           pending.reject(new Error(message.error.message ?? 'Native RPC request failed.'));
-        else pending.resolve(message.result);
+        else
+          pending.resolve(message.result);
       } else if (message.id !== undefined && message.method) {
         if (!this.request) {
-          this.send({ id: message.id, error: { message: 'This server request is unsupported.' } });
+          this.send({
+            id: message.id,
+            error: { message: 'This server request is unsupported.' },
+          });
           return;
         }
+
         void this.request(message).then(
-          (result) => this.send({ id: message.id, result }),
+          (result) => this.send({
+            id: message.id,
+            result,
+          }),
           () =>
             this.send({
               id: message.id,
               error: { message: 'The host could not execute this tool.' },
             }),
         );
-      } else this.notify(message);
+      } else
+        this.notify(message);
     });
   }
 
@@ -101,18 +118,27 @@ export class JsonlConnection {
 
   /** Sends a notification or tool result to the owned process. */
   send(message: RpcMessage): void {
-    if (!this.closed) this.process.stdin.write(JSON.stringify(message) + '\n');
+    if (!this.closed)
+      this.process.stdin.write(JSON.stringify(message) + '\n');
   }
 
   /** Calls a native method; cancellation is owned by the surrounding backend request. */
   call(method: string, params: unknown): Promise<unknown> {
     if (this.closed || this.closing)
       return Promise.reject(new Error('The native controller is closed.'));
+
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, {
+        resolve,
+        reject,
+      });
       try {
-        this.send({ id, method, params });
+        this.send({
+          id,
+          method,
+          params,
+        });
       } catch (error) {
         this.pending.delete(id);
         reject(error);
@@ -128,7 +154,8 @@ export class JsonlConnection {
           try {
             if (this.process.pid && process.platform !== 'win32')
               process.kill(-this.process.pid, signal);
-            else this.process.kill(signal);
+            else
+              this.process.kill(signal);
           } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ESRCH')
               this.fail(new Error('Native process termination failed.'));
@@ -146,13 +173,15 @@ export class JsonlConnection {
           this.process.stdin.end();
         });
       }
+
       this.lines.close();
       this.fail(new Error('The native controller is closed.'));
     })());
   }
 
   private fail(error: Error): void {
-    for (const pending of this.pending.values()) pending.reject(error);
+    for (const pending of this.pending.values())
+      pending.reject(error);
     this.pending.clear();
   }
 

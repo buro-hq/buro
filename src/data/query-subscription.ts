@@ -24,9 +24,13 @@ export class QuerySubscription<T> {
 
   /** Marks this view stale; continuous notifications never reset an existing timer. */
   invalidate(): void {
-    if (this.closed) return;
+    if (this.closed)
+      return;
+
     this.dirty = true;
-    if (this.running || this.timer) return;
+    if (this.running || this.timer)
+      return;
+
     this.timer = setTimeout(() => {
       this.timer = undefined;
       void this.load();
@@ -46,7 +50,10 @@ export class QuerySubscription<T> {
       const data = await this.read();
       if (!this.closed) {
         this.data = data;
-        this.update({ data, loading: false });
+        this.update({
+          data,
+          loading: false,
+        });
       }
     } catch (error) {
       if (!this.closed)
@@ -57,7 +64,8 @@ export class QuerySubscription<T> {
         });
     } finally {
       this.running = false;
-      if (this.dirty) this.invalidate();
+      if (this.dirty)
+        this.invalidate();
     }
   }
 }

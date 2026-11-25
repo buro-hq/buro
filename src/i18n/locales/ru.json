@@ -161,5 +161,10 @@
   "user": "Пользователь",
   "assistant": "Ассистент",
   "tool": "Инструмент",
-  "HTTP retries · two when empty": "Повторы HTTP · два, если пусто"
+  "HTTP retries · two when empty": "Повторы HTTP · два, если пусто",
+  "Added": "Добавлен",
+  "Modified": "Изменен",
+  "Deleted": "Удален",
+  "Type changed": "Изменен тип",
+  "Changed": "Изменен"
 }

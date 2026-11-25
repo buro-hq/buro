@@ -6,9 +6,13 @@ export function settledHistory(messages: SessionMessage[]): SessionMessage[] {
   const result: SessionMessage[] = [];
   for (let index = 0; index < history.length; index++) {
     const message = history[index];
-    if (message.role === 'tool') continue;
+    if (message.role === 'tool')
+      continue;
+
     result.push(message);
-    if (!message.toolCalls?.length) continue;
+    if (!message.toolCalls?.length)
+      continue;
+
     const observed = new Map<string | undefined, SessionMessage>();
     while (history[index + 1]?.role === 'tool') {
       const tool = history[++index];

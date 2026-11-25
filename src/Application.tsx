@@ -39,12 +39,12 @@ type Page = (typeof navigation)[number]['id'];
 /** The frame owns navigation only. Feature pages read and mutate their own data. */
 export default function Application(): ReactElement {
   useLocale();
-  const { connection } = useApplication(),
-    projects = useApiQuery('projects.list', {});
-  const [page, setPage] = useState<Page>('office'),
-    [picker, setPicker] = useState(false),
-    [mobile, setMobile] = useState(false),
-    [selectedRun, setSelectedRun] = useState<{ projectId: string; id: string }>();
+  const { connection } = useApplication();
+  const projects = useApiQuery('projects.list', {});
+  const [page, setPage] = useState<Page>('office');
+  const [picker, setPicker] = useState(false);
+  const [mobile, setMobile] = useState(false);
+  const [selectedRun, setSelectedRun] = useState<{ projectId: string; id: string }>();
   const [projectId, setProjectId] = useLocalStorage<string>({
     key: 'buro.selected-project',
     defaultValue: '',
@@ -145,7 +145,10 @@ export default function Application(): ReactElement {
                   key={project.id}
                   projectId={project.id}
                   onRun={(id) => {
-                    setSelectedRun({ projectId: project.id, id });
+                    setSelectedRun({
+                      projectId: project.id,
+                      id,
+                    });
                     navigate('runs');
                   }}
                 />
@@ -155,7 +158,10 @@ export default function Application(): ReactElement {
                   key={project.id}
                   projectId={project.id}
                   onRun={(id) => {
-                    setSelectedRun({ projectId: project.id, id });
+                    setSelectedRun({
+                      projectId: project.id,
+                      id,
+                    });
                     navigate('runs');
                   }}
                 />

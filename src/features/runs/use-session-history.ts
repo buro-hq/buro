@@ -15,7 +15,9 @@ interface HistoryView extends QueryResult<SessionHistory> {
 export const useSessionHistory = (input: { sessionId: string }): HistoryView => {
   const { client } = useApplication();
   const { sessionId } = input;
-  const [state, setState] = useState<QueryResult<SessionHistory>>({ loading: true });
+  const [state, setState] = useState<QueryResult<SessionHistory>>({
+    loading: true,
+  });
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const earlier = useRef<() => Promise<void>>(async () => {});
 
@@ -30,22 +32,32 @@ export const useSessionHistory = (input: { sessionId: string }): HistoryView => 
       update: setState,
     });
     const off = client.subscribe((notification) => {
-      if (queryAffected({ method: 'sessions.messages', params: { sessionId }, notification }))
+      if (queryAffected({
+        method: 'sessions.messages',
+        params: { sessionId },
+        notification,
+      }))
         query.invalidate();
     });
     const offConnection = client.onConnection(({ connected }) => {
-      if (connected) query.invalidate();
+      if (connected)
+        query.invalidate();
     });
     let readingEarlier = false;
     earlier.current = async () => {
-      if (readingEarlier) return;
+      if (readingEarlier)
+        return;
 
       readingEarlier = true;
       setLoadingEarlier(true);
       try {
         const data = await transcript.earlier();
 
-        if (active) setState({ data, loading: false });
+        if (active)
+          setState({
+            data,
+            loading: false,
+          });
       } catch (error) {
         if (active)
           setState((previous) => ({
@@ -55,7 +67,8 @@ export const useSessionHistory = (input: { sessionId: string }): HistoryView => 
       } finally {
         readingEarlier = false;
 
-        if (active) setLoadingEarlier(false);
+        if (active)
+          setLoadingEarlier(false);
       }
     };
 

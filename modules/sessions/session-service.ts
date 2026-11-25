@@ -31,7 +31,8 @@ interface ActiveSession {
 
 const latestAssistant = (messages: SessionMessage[]): SessionMessage | undefined => {
   for (let index = messages.length - 1; index >= 0; index--)
-    if (messages[index].role === 'assistant') return messages[index];
+    if (messages[index].role === 'assistant')
+      return messages[index];
 
   return undefined;
 };
@@ -68,8 +69,12 @@ export class SessionService implements Sessions {
 
   /** Creates a portable session without dispatching inference. */
   async create(input: SessionInput = {}): Promise<SessionResult> {
-    const model = this.models.get({ id: input.modelId });
-    if (!model) return { ok: false, sessionId: '', error: 'Select an available model.' };
+    const model = this.models.get({
+      id: input.modelId,
+    });
+    if (!model)
+      return { ok: false, sessionId: '', error: 'Select an available model.' };
+
     const now = new Date().toISOString();
     const source = input.sourceSessionId ? await this.store.load(input.sourceSessionId) : undefined;
     const session: SessionConversation = {
@@ -127,22 +132,30 @@ export class SessionService implements Sessions {
             'These conversations would wait for each other. Read their status or continue other work instead.',
         };
     const caller = input.callerId ? this.active.get(input.callerId) : undefined;
-    if (caller) caller.waitingFor = input.id;
+    if (caller)
+      caller.waitingFor = input.id;
+
     let onAbort!: () => void;
     try {
       const interrupted = new Promise<void>((resolve) => {
         onAbort = resolve;
       });
-      input.signal?.addEventListener('abort', onAbort, { once: true });
-      if (input.signal?.aborted) onAbort();
+      input.signal?.addEventListener('abort', onAbort, {
+        once: true,
+      });
+      if (input.signal?.aborted)
+        onAbort();
+
       await Promise.race([this.active.get(input.id)?.settled, interrupted]);
       if (input.signal?.aborted)
         return { ok: false, interrupted: true, error: 'Waiting was interrupted.' };
+
       const session = await this.store.get(input.id);
       return session ? { ok: true, session } : { ok: false, error: 'Session not found.' };
     } finally {
       input.signal?.removeEventListener('abort', onAbort);
-      if (caller) caller.waitingFor = undefined;
+      if (caller)
+        caller.waitingFor = undefined;
     }
   }
 
@@ -153,7 +166,9 @@ export class SessionService implements Sessions {
 
   /** Marks abandoned turns interrupted; their files and recorded messages remain authoritative observations. */
   async recover(): Promise<void> {
-    for (const session of await this.store.list({ status: 'running' }))
+    for (const session of await this.store.list({
+      status: 'running',
+    }))
       if (session.status === 'running' && !this.active.has(session.id))
         await this.store.patch({
           id: session.id,
@@ -166,23 +181,39 @@ export class SessionService implements Sessions {
 
   /** Removes an inactive conversation; an active conversation must be stopped first. */
   async delete(input: { id: string }): Promise<boolean> {
-    if (this.active.has(input.id)) return false;
+    if (this.active.has(input.id))
+      return false;
+
     await this.store.delete(input.id);
-    this.events.publish({ type: 'session.deleted', data: input });
+    this.events.publish({
+      type: 'session.deleted',
+      data: input,
+    });
     return true;
   }
 
   /** Selects the next model without changing identity or dropping shared history. */
   async switchModel(input: { sessionId: string; modelId: string }): Promise<boolean> {
     const session = await this.store.get(input.sessionId);
-    if (!session || !this.models.get({ id: input.modelId })) return false;
+    if (!session || !this.models.get({
+      id: input.modelId,
+    }))
+      return false;
+
     const active = this.active.get(input.sessionId);
-    if (active) active.modelId = input.modelId;
+    if (active)
+      active.modelId = input.modelId;
+
     const next = await this.store.patch({
       id: input.sessionId,
       changes: { modelId: input.modelId, updatedAt: new Date().toISOString() },
     });
-    if (next) this.events.publish({ type: 'session.updated', data: next });
+    if (next)
+      this.events.publish({
+        type: 'session.updated',
+        data: next,
+      });
+
     return true;
   }
 
@@ -193,10 +224,15 @@ export class SessionService implements Sessions {
 
   /** Stops and joins conversations, optionally only those belonging to a particular run. */
   async close(input: { runId?: string } = {}): Promise<void> {
-    const sessions = input.runId ? await this.list({ runId: input.runId }) : undefined;
+    const sessions = input.runId
+      ? await this.list({
+          runId: input.runId,
+        })
+      : undefined;
     const ids = sessions ? new Set(sessions.map((session) => session.id)) : undefined;
     const active = [...this.active].filter(([id]) => !ids || ids.has(id)).map(([, entry]) => entry);
-    for (const entry of active) entry.controller.abort();
+    for (const entry of active)
+      entry.controller.abort();
     await Promise.all(active.map((entry) => entry.settled));
   }
 
@@ -209,6 +245,7 @@ export class SessionService implements Sessions {
     };
     if (this.active.has(input.sessionId))
       return { ok: false, sessionId: input.sessionId, error: 'This session is already running.' };
+
     const controller = new AbortController();
     let resolveSettled!: () => void;
     const settled = new Promise<void>((resolve) => {
@@ -221,20 +258,29 @@ export class SessionService implements Sessions {
       savedMessages: 0,
     });
     const abort = () => controller.abort();
-    input.signal?.addEventListener('abort', abort, { once: true });
-    if (input.signal?.aborted) controller.abort();
+    input.signal?.addEventListener('abort', abort, {
+      once: true,
+    });
+    if (input.signal?.aborted)
+      controller.abort();
+
     let session: SessionConversation | undefined;
     try {
       session = await this.store.load(input.sessionId);
-      if (!session) return { ok: false, sessionId: input.sessionId, error: 'Session not found.' };
+      if (!session)
+        return { ok: false, sessionId: input.sessionId, error: 'Session not found.' };
+
       const repaired = settledHistory(session.messages).map((message) =>
-        message.id ? message : { ...message, id: randomUUID() },
-      );
+        message.id ? message : { ...message, id: randomUUID() });
       const changed =
         repaired.length !== session.messages.length ||
         repaired.some((message, index) => message.id !== session!.messages[index]?.id);
 
-      if (changed) await this.store.replace({ ...session, messages: repaired });
+      if (changed)
+        await this.store.replace({
+          ...session,
+          messages: repaired,
+        });
 
       this.active.get(session.id)!.savedMessages = repaired.length;
       input = {
@@ -257,20 +303,26 @@ export class SessionService implements Sessions {
         controller.signal.throwIfAborted();
         // A tool can explicitly select the next model; historical adapter state stays with its message.
         const selected = await this.store.get(session.id);
-        if (selected) session = { ...session, modelId: selected.modelId };
-        const model = this.models.get({ id: session.modelId });
+        if (selected)
+          session = { ...session, modelId: selected.modelId };
+
+        const model = this.models.get({
+          id: session.modelId,
+        });
         if (!model)
           return await this.finish(session, {
             ok: false,
             sessionId: session.id,
             error: 'The selected model is unavailable.',
           });
+
         if (input.maxRequests !== undefined && requests >= input.maxRequests)
           return await this.finish(session, {
             ok: false,
             sessionId: session.id,
             error: 'The request allowance supplied for this turn was reached.',
           });
+
         requests++;
         const requestId = randomUUID();
         const definitions = this.tools.definitions({
@@ -322,7 +374,11 @@ export class SessionService implements Sessions {
                   ],
                 };
                 await this.save(session);
-                const executed = await this.performTool({ session, call, context: toolContext });
+                const executed = await this.performTool({
+                  session,
+                  call,
+                  context: toolContext,
+                });
                 session = executed.session;
                 return executed.result;
               });
@@ -373,6 +429,7 @@ export class SessionService implements Sessions {
             error:
               'The model returned tool calls without unique, nonempty IDs and names. No action was executed.',
           });
+
         await this.activity.append({
           sessionId: session.id,
           runId: session.runId,
@@ -393,7 +450,12 @@ export class SessionService implements Sessions {
           providerRevision: model.backend.revision,
           continuation: response.message.continuation,
         });
-        session = this.withResponse({ session, response, messageId, modelId: model.id });
+        session = this.withResponse({
+          session,
+          response,
+          messageId,
+          modelId: model.id,
+        });
         await this.save(session);
         const switched = this.active.get(session.id)?.modelId;
         if (switched && switched !== model.id) {
@@ -421,6 +483,7 @@ export class SessionService implements Sessions {
           await this.save(session);
           continue;
         }
+
         if (response.finish === 'length' || (calls.length > 0 && response.finish === 'stop')) {
           session = {
             ...session,
@@ -443,24 +506,33 @@ export class SessionService implements Sessions {
           await this.save(session);
           continue;
         }
+
         if (response.finish === 'failed')
           return await this.finish(session, {
             ok: false,
             sessionId: session.id,
             error: 'The model could not complete its response.',
           });
+
         if (!calls.length)
           return await this.finish(session, {
             ok: true,
             sessionId: session.id,
             text: response.message.content,
           });
+
         for (const call of calls) {
-          session = (await this.performTool({ session, call, context: toolContext })).session;
+          session = (await this.performTool({
+            session,
+            call,
+            context: toolContext,
+          })).session;
         }
       }
     } catch (error) {
-      if (!session) throw error;
+      if (!session)
+        throw error;
+
       if (controller.signal.aborted)
         return await this.finish(session, {
           ok: false,
@@ -468,6 +540,7 @@ export class SessionService implements Sessions {
           interrupted: true,
           error: 'Work was interrupted. Saved files and history are available for a new run.',
         });
+
       return await this.finish(session, {
         ok: false,
         sessionId: session.id,
@@ -559,8 +632,7 @@ export class SessionService implements Sessions {
       ...session,
       modelId: this.active.get(session.id)?.modelId ?? session.modelId,
       messages: session.messages.map((message) =>
-        message.id ? message : { ...message, id: randomUUID() },
-      ),
+        message.id ? message : { ...message, id: randomUUID() }),
       updatedAt: new Date().toISOString(),
     };
     const { messages, ...metadata } = next;
@@ -572,11 +644,18 @@ export class SessionService implements Sessions {
       preview:
         latest?.content.slice(0, 500) || latest?.toolCalls?.map(({ name }) => name).join(', '),
     };
-    await this.store.append({ session: header, messages: added });
+    await this.store.append({
+      session: header,
+      messages: added,
+    });
 
-    if (active) active.savedMessages = messages.length;
+    if (active)
+      active.savedMessages = messages.length;
 
-    this.events.publish({ type: 'session.updated', data: header });
+    this.events.publish({
+      type: 'session.updated',
+      data: header,
+    });
 
     if (added.length)
       this.events.publish({

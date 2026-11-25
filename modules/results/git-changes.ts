@@ -24,7 +24,10 @@ export class GitChanges implements RepositoryChanges {
       ).stdout.split('\0');
       const files = [];
       for (let index = 0; index + 1 < names.length; index += 2)
-        files.push({ status: names[index], path: names[index + 1] });
+        files.push({
+          status: names[index],
+          path: names[index + 1],
+        });
       return { ok: true, patch, files, revision: createHash('sha256').update(patch).digest('hex') };
     } catch (error) {
       return this.expected(error);
@@ -33,18 +36,29 @@ export class GitChanges implements RepositoryChanges {
 
   /** Applies a whole patch after Git's conflict check; no pristine-tree or review-status gate is required. */
   async apply(input: { root: string; patch: string }): Promise<ResultOutcome> {
-    if (!input.patch) return { ok: true };
+    if (!input.patch)
+      return { ok: true };
+
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-apply-'));
     const filename = path.join(directory, 'changes.patch');
     try {
-      await fs.writeFile(filename, input.patch, { mode: 0o600 });
-      await safeGit(['apply', '--check', '--binary', filename], { cwd: input.root });
-      await safeGit(['apply', '--binary', filename], { cwd: input.root });
+      await fs.writeFile(filename, input.patch, {
+        mode: 0o600,
+      });
+      await safeGit(['apply', '--check', '--binary', filename], {
+        cwd: input.root,
+      });
+      await safeGit(['apply', '--binary', filename], {
+        cwd: input.root,
+      });
       return { ok: true };
     } catch (error) {
       return this.expected(error);
     } finally {
-      await fs.rm(directory, { recursive: true, force: true });
+      await fs.rm(directory, {
+        recursive: true,
+        force: true,
+      });
     }
   }
 
@@ -59,6 +73,7 @@ export class GitChanges implements RepositoryChanges {
         error:
           'Git could not inspect or apply this result. The repository may be unavailable or the changes may conflict with current source files.',
       };
+
     throw error;
   }
 }

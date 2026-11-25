@@ -22,12 +22,17 @@ export class JsonStorage implements StorageEngine {
 
   /** Opens a module namespace. Paths are validated at this storage boundary. */
   records<T extends StoredRecord>(namespace: string): RecordStore<T> {
-    if (!/^[a-z][a-z0-9_-]*$/.test(namespace)) throw new Error('Invalid storage namespace.');
+    if (!/^[a-z][a-z0-9_-]*$/.test(namespace))
+      throw new Error('Invalid storage namespace.');
+
     let store = this.stores.get(namespace);
     if (!store) {
-      store = new JsonRecordStore({ filename: path.join(this.directory, namespace + '.json') });
+      store = new JsonRecordStore({
+        filename: path.join(this.directory, namespace + '.json'),
+      });
       this.stores.set(namespace, store);
     }
+
     return store as JsonRecordStore<T>;
   }
 
@@ -49,7 +54,9 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
     try {
       return JSON.parse(await fs.readFile(this.filename, 'utf8')) as T[];
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+        return [];
+
       throw error;
     }
   }
@@ -57,13 +64,21 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
   private update(update: (records: T[]) => T[]): Promise<void> {
     const work = this.queue.then(async () => {
       const records = update(await this.read());
-      await fs.mkdir(path.dirname(this.filename), { recursive: true, mode: 0o700 });
+      await fs.mkdir(path.dirname(this.filename), {
+        recursive: true,
+        mode: 0o700,
+      });
       const temporary = this.filename + '.' + randomUUID() + '.tmp';
       try {
-        await fs.writeFile(temporary, JSON.stringify(records), { mode: 0o600, flag: 'wx' });
+        await fs.writeFile(temporary, JSON.stringify(records), {
+          mode: 0o600,
+          flag: 'wx',
+        });
         await fs.rename(temporary, this.filename);
       } finally {
-        await fs.rm(temporary, { force: true });
+        await fs.rm(temporary, {
+          force: true,
+        });
       }
     });
     this.queue = work.catch(() => {});
@@ -76,7 +91,10 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
 
   async list(query?: RecordQuery<T>): Promise<T[]> {
     await this.queue;
-    return selectRecords({ records: await this.read(), query });
+    return selectRecords({
+      records: await this.read(),
+      query,
+    });
   }
 
   async write(input: RecordWrite<T>): Promise<void> {
@@ -84,14 +102,18 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
     await this.update((records) => {
       const removed = new Set(
         copy.delete
-          ? selectRecords({ records, query: { where: copy.delete } }).map(({ id }) => id)
+          ? selectRecords({
+              records,
+              query: { where: copy.delete },
+            }).map(({ id }) => id)
           : [],
       );
       const next = new Map(
         records.filter(({ id }) => !removed.has(id)).map((record) => [record.id, record]),
       );
 
-      for (const record of copy.save ?? []) next.set(record.id, record);
+      for (const record of copy.save ?? [])
+        next.set(record.id, record);
 
       return [...next.values()];
     });
@@ -101,7 +123,9 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
     const copy = structuredClone(record);
     await this.update((records) => {
       const index = records.findIndex((item) => item.id === copy.id);
-      if (index < 0) return [...records, copy];
+      if (index < 0)
+        return [...records, copy];
+
       return records.map((item, position) => (position === index ? copy : item));
     });
   }
@@ -123,8 +147,11 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
         updated = { ...initial, ...changes, id: input.id };
         return [...records, updated];
       }
+
       return records.map((record) => {
-        if (record.id !== input.id) return record;
+        if (record.id !== input.id)
+          return record;
+
         updated = { ...record, ...changes, id: record.id };
         return updated;
       });

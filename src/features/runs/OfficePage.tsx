@@ -7,9 +7,11 @@ import { QueryFeedback } from '../common/feedback.tsx';
 
 /** The office follows actual sessions, with no reserved desks, names or team size. */
 export function OfficePage(input: { projectId: string; onRun(id: string): void }): ReactElement {
-  const runs = useApiQuery('runs.list', { projectId: input.projectId }),
-    agents = useApiQuery('agents.list', {}),
-    models = useApiQuery('models.list', {});
+  const runs = useApiQuery('runs.list', {
+    projectId: input.projectId,
+  });
+  const agents = useApiQuery('agents.list', {});
+  const models = useApiQuery('models.list', {});
   const [runId, setRunId] = useState<string | null>(null);
   const run =
     runs.data?.find((candidate) => candidate.id === runId) ??
@@ -17,7 +19,7 @@ export function OfficePage(input: { projectId: string; onRun(id: string): void }
       ?.slice()
       .reverse()
       .find((candidate) => candidate.status === 'running') ??
-    runs.data?.at(-1);
+      runs.data?.at(-1);
   const sessions = useApiQuery('sessions.list', run ? { runId: run.id } : undefined);
   return (
     <Panel
@@ -50,9 +52,9 @@ export function OfficePage(input: { projectId: string; onRun(id: string): void }
         {!run && <Text c="dimmed">{t('Start a goal to see its agents here.')}</Text>}
         <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }}>
           {sessions.data?.map((session) => {
-            const agent = agents.data?.find((candidate) => candidate.id === session.agentId),
-              model = models.data?.find((candidate) => candidate.id === session.modelId),
-              latest = session.preview;
+            const agent = agents.data?.find((candidate) => candidate.id === session.agentId);
+            const model = models.data?.find((candidate) => candidate.id === session.modelId);
+            const latest = session.preview;
             return (
               <Paper withBorder p="md" key={session.id}>
                 <Stack gap="sm">

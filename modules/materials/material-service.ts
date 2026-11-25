@@ -56,13 +56,20 @@ export class MaterialService implements Materials {
     const bytes = Buffer.from(input.contentBase64, 'base64');
     if (bytes.toString('base64') !== input.contentBase64)
       return { ok: false, error: 'The uploaded file is not valid base64.' };
+
     const loader = this.loaders.find((loader) =>
-      loader.matches({ name: input.name, bytes: new Uint8Array(bytes) }),
-    );
+      loader.matches({
+        name: input.name,
+        bytes: new Uint8Array(bytes),
+      }));
     const signal = input.signal ?? new AbortController().signal;
     signal.throwIfAborted();
     const loaded = loader
-      ? await loader.load({ name: input.name, bytes: new Uint8Array(bytes), signal })
+      ? await loader.load({
+          name: input.name,
+          bytes: new Uint8Array(bytes),
+          signal,
+        })
       : {
           mimeType: 'application/octet-stream',
           note: 'Original retained; no text reader is configured for this format.',
@@ -83,24 +90,31 @@ export class MaterialService implements Materials {
     };
     await this.store.save(record);
     const material = metadata(record);
-    this.events.publish({ type: 'material.uploaded', data: material });
+    this.events.publish({
+      type: 'material.uploaded',
+      data: material,
+    });
     return { ok: true, material };
   }
 
   /** Reads explicit line ranges so large documents do not displace the current task. */
   async read(input: { id: string; line?: number; count?: number }): Promise<MaterialOutcome> {
     const record = await this.store.get(input.id);
-    if (!record) return { ok: false, error: 'Material not found.' };
+    if (!record)
+      return { ok: false, error: 'Material not found.' };
+
     if (record.text === undefined)
       return {
         ok: false,
         material: metadata(record),
         error: record.note ?? 'Extracted text is unavailable.',
       };
-    const line = input.line ?? 1,
-      count = input.count ?? 200;
+
+    const line = input.line ?? 1;
+    const count = input.count ?? 200;
     if (!Number.isSafeInteger(line) || !Number.isSafeInteger(count) || line < 1 || count < 1)
       return { ok: false, error: 'line and count must be positive integers.' };
+
     const lines = record.text.split('\n');
     return {
       ok: true,
@@ -121,6 +135,9 @@ export class MaterialService implements Materials {
   /** Removes application-owned context without deleting or changing caller files. */
   async delete(input: { id: string }): Promise<void> {
     await this.store.delete(input.id);
-    this.events.publish({ type: 'material.deleted', data: input });
+    this.events.publish({
+      type: 'material.deleted',
+      data: input,
+    });
   }
 }

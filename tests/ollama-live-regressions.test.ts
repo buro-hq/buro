@@ -60,6 +60,7 @@ function fixture(responses: unknown[][]) {
           capabilities: ['completion', 'tools', 'thinking'],
           model_info: { 'qwen3.context_length': 32768 },
         });
+
       assert.equal(route, '/api/chat');
       bodies.push(JSON.parse(String(init?.body)));
       const frames = responses.shift();
@@ -192,8 +193,10 @@ function evidenceHistory(): ModelMessage[] {
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
     Object.freeze(value);
-    for (const child of Object.values(value)) deepFreeze(child);
+    for (const child of Object.values(value))
+      deepFreeze(child);
   }
+
   return value;
 }
 
@@ -244,7 +247,11 @@ test('ambiguous duplicate or missing call/result identities preserve the entire 
   const duplicateResults = evidenceHistory();
   duplicateResults.splice(5, 0, structuredClone(duplicateResults[3]));
   const unknownResult = evidenceHistory();
-  unknownResult.splice(5, 0, { role: 'tool', toolCallId: 'foreign', content: 'Unknown result.' });
+  unknownResult.splice(5, 0, {
+    role: 'tool',
+    toolCallId: 'foreign',
+    content: 'Unknown result.',
+  });
   const duplicateAcrossBatches = evidenceHistory();
   duplicateAcrossBatches.push(
     {
@@ -288,7 +295,10 @@ test('final projection omits only the explicit current intermediate content and 
   const { provider } = fixture([]);
   const original = evidenceHistory();
   original.push(
-    { role: 'user', content: 'The current task.' },
+    {
+      role: 'user',
+      content: 'The current task.',
+    },
     {
       role: 'assistant',
       content: 'PRIVATE_CURRENT_INTERMEDIATE '.repeat(1000),
@@ -351,7 +361,10 @@ test('unmarked or invalid intermediate provenance cannot omit an ordinary assist
       think,
     });
     assert.deepEqual(
-      thinking.contextMessages(messages, { phase: 'final', intermediateMessageIndexes: [2] }),
+      thinking.contextMessages(messages, {
+        phase: 'final',
+        intermediateMessageIndexes: [2],
+      }),
       messages,
     );
   }
@@ -367,13 +380,19 @@ test('unmarked or invalid intermediate provenance cannot omit an ordinary assist
     { id: 'pending', name: 'read_file', arguments: { path: 'src/value.mjs' } },
   ];
   assert.deepEqual(
-    provider.contextMessages(toolCandidate, { phase: 'final', intermediateMessageIndexes: [2] }),
+    provider.contextMessages(toolCandidate, {
+      phase: 'final',
+      intermediateMessageIndexes: [2],
+    }),
     toolCandidate,
   );
   const noFinalUser = structuredClone(messages);
   noFinalUser[3] = { role: 'assistant', content: 'A real final answer.' };
   assert.deepEqual(
-    provider.contextMessages(noFinalUser, { phase: 'final', intermediateMessageIndexes: [2] }),
+    provider.contextMessages(noFinalUser, {
+      phase: 'final',
+      intermediateMessageIndexes: [2],
+    }),
     noFinalUser,
   );
 });

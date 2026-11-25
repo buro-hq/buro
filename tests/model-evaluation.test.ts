@@ -11,14 +11,17 @@ import fixture from '../scripts/fixtures/ready-queue.json' with { type: 'json' }
 
 test(
   'live evaluation reports an unfinished claim as a failing test without changing agent completion, and verifies a real tool fix',
-  { timeout: 30000 },
+  {
+    timeout: 30000,
+  },
   async (t) => {
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-evaluation-cli-')),
-      outputs: string[] = [];
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-evaluation-cli-'));
+    const outputs: string[] = [];
     let mode = 'claim';
     const server = http.createServer(async (request, response) => {
       const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      for await (const chunk of request)
+        chunks.push(Buffer.from(chunk));
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
         messages: { role: string }[];
       };
@@ -56,14 +59,16 @@ test(
             ],
           }
         : { content: 'Done' };
-      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+      });
       response.end(
         'data: ' +
-          JSON.stringify({
-            model: 'fixture',
-            choices: [{ index: 0, delta, finish_reason: fixing ? 'tool_calls' : 'stop' }],
-          }) +
-          '\n\ndata: [DONE]\n\n',
+        JSON.stringify({
+          model: 'fixture',
+          choices: [{ index: 0, delta, finish_reason: fixing ? 'tool_calls' : 'stop' }],
+        }) +
+        '\n\ndata: [DONE]\n\n',
       );
     });
     await new Promise<void>((resolve, reject) => {
@@ -72,12 +77,21 @@ test(
     });
     t.after(async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      for (const output of outputs) await fs.rm(output, { recursive: true, force: true });
-      await fs.rm(directory, { recursive: true, force: true });
+      for (const output of outputs)
+        await fs.rm(output, {
+          recursive: true,
+          force: true,
+        });
+      await fs.rm(directory, {
+        recursive: true,
+        force: true,
+      });
     });
     const address = server.address();
     assert.ok(address && typeof address !== 'string');
-    const app = await createApplication({ directory });
+    const app = await createApplication({
+      directory,
+    });
     await app.modelConfigurations.save({
       configuration: {
         id: 'fixture',
@@ -91,14 +105,17 @@ test(
     });
     await app.close();
     for (mode of ['claim', 'fix']) {
-      let stdout = '',
-        code = 0;
+      let stdout: string;
+      let code = 0;
       try {
         stdout = (
           await promisify(execFile)(
             process.execPath,
             ['scripts/evaluate-model.ts', 'queue', 'fixture'],
-            { env: { ...process.env, PROJECT_DATA_DIR: directory }, maxBuffer: 1024 * 1024 },
+            {
+              env: { ...process.env, PROJECT_DATA_DIR: directory },
+              maxBuffer: 1024 * 1024,
+            },
           )
         ).stdout;
       } catch (error) {

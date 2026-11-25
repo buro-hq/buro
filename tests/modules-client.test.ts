@@ -11,7 +11,10 @@ import { FeatureCli } from '../cli/feature-cli.ts';
 
 test('failed composition releases storage and application ownership before the next startup', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-failed-composition-'));
-  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  t.after(() => fs.rm(directory, {
+    recursive: true,
+    force: true,
+  }));
   let closed = false;
   await assert.rejects(
     createApplication({
@@ -28,24 +31,38 @@ test('failed composition releases storage and application ownership before the n
     /Fixture storage failure/,
   );
   assert.equal(closed, true);
-  const app = await createApplication({ directory });
+  const app = await createApplication({
+    directory,
+  });
   await app.close();
 });
 
 test('a second application cannot interrupt work owned by the first, and ownership is released on close', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-application-owner-'));
-  let first: Application | undefined, second: Application | undefined;
+  let first: Application | undefined;
+  let second: Application | undefined;
   t.after(async () => {
     await first?.close();
     await second?.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
-  first = await createApplication({ directory });
-  await first.settings.update({ instructions: 'Keep the first application intact' });
-  await assert.rejects(createApplication({ directory }), /Another Buro server/);
+  first = await createApplication({
+    directory,
+  });
+  await first.settings.update({
+    instructions: 'Keep the first application intact',
+  });
+  await assert.rejects(createApplication({
+    directory,
+  }), /Another Buro server/);
   assert.equal((await first.settings.get()).instructions, 'Keep the first application intact');
   await first.close();
-  second = await createApplication({ directory });
+  second = await createApplication({
+    directory,
+  });
   assert.equal((await second.settings.get()).instructions, 'Keep the first application intact');
 });
 
@@ -64,7 +81,10 @@ test('model discovery uses a draft or a saved private credential without saving 
             id: configuration.id,
             revision: configuration.revision,
             async listModels() {
-              calls.push({ key: apiKey, model: configuration.model });
+              calls.push({
+                key: apiKey,
+                model: configuration.model,
+              });
               return [{ id: 'fixture', name: 'Fixture model' }];
             },
             async complete() {
@@ -75,13 +95,23 @@ test('model discovery uses a draft or a saved private credential without saving 
       },
     ],
   });
-  const server = await startApiServer({ application: app, token: 'fixture-token', port: 0 }),
-    client = new ApiClient({ url: `ws://127.0.0.1:${server.port}`, token: 'fixture-token' });
+  const server = await startApiServer({
+    application: app,
+    token: 'fixture-token',
+    port: 0,
+  });
+  const client = new ApiClient({
+    url: `ws://127.0.0.1:${server.port}`,
+    token: 'fixture-token',
+  });
   t.after(async () => {
     client.close();
     await server.close();
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
   assert.deepEqual(await client.call('models.transports', {}), [
     { id: 'extension', name: 'Extension' },
@@ -90,7 +120,10 @@ test('model discovery uses a draft or a saved private credential without saving 
     configuration: { transport: 'extension' },
     apiKey: credential,
   });
-  assert.deepEqual(draft, { ok: true, models: [{ id: 'fixture', name: 'Fixture model' }] });
+  assert.deepEqual(draft, {
+    ok: true,
+    models: [{ id: 'fixture', name: 'Fixture model' }],
+  });
   assert.deepEqual(await client.call('models.list', {}), []);
   const saved = await client.call('models.save', {
     configuration: {
@@ -109,7 +142,9 @@ test('model discovery uses a draft or a saved private credential without saving 
   assert.ok(calls.every((call) => call.key === credential));
   assert.ok(!JSON.stringify(discovered).includes(credential));
   assert.equal((await client.call('models.list', {})).length, 1);
-  const cli = new FeatureCli({ client });
+  const cli = new FeatureCli({
+    client,
+  });
   const cleared = (await cli.call({
     method: 'models.save',
     params: {
@@ -126,8 +161,13 @@ test('model discovery uses a draft or a saved private credential without saving 
   assert.equal(cleared.configuration.capacity, undefined);
   assert.equal(cleared.configuration.reasoningEffort, undefined);
   assert.equal(cleared.configuration.hasApiKey, true);
-  await assert.rejects(cli.call({ method: 'tasks.create', params: { title: 42 } }), /Invalid API/);
-  await assert.rejects(cli.watch({ id: 'missing' }), /Run not found/);
+  await assert.rejects(cli.call({
+    method: 'tasks.create',
+    params: { title: 42 },
+  }), /Invalid API/);
+  await assert.rejects(cli.watch({
+    id: 'missing',
+  }), /Run not found/);
 });
 
 test('application shutdown cancels and joins catalogue requests before releasing storage', async (t) => {
@@ -148,8 +188,11 @@ test('application shutdown cancels and joins catalogue requests before releasing
             async listModels({ signal }) {
               entered();
               await new Promise<void>((_, reject) => {
-                signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-                if (signal.aborted) reject(signal.reason);
+                signal.addEventListener('abort', () => reject(signal.reason), {
+                  once: true,
+                });
+                if (signal.aborted)
+                  reject(signal.reason);
               });
               return [];
             },
@@ -163,12 +206,19 @@ test('application shutdown cancels and joins catalogue requests before releasing
   });
   t.after(async () => {
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
-  const pending = app.modelConfigurations.discover({ configuration: { transport: 'fixture' } });
+  const pending = app.modelConfigurations.discover({
+    configuration: { transport: 'fixture' },
+  });
   await started;
   await app.close();
   assert.equal((await pending).ok, false);
-  const reopened = await createApplication({ directory });
+  const reopened = await createApplication({
+    directory,
+  });
   await reopened.close();
 });

@@ -4,9 +4,13 @@ const failure = (
   code: string,
   message: string,
   outcome: 'not-dispatched' | 'rejected' | 'unknown' = 'unknown',
-) => new ProviderFailure(code, message, { outcome });
+) => new ProviderFailure(code, message, {
+  outcome,
+});
 export function observer(callback: (() => void) | undefined) {
-  if (!callback) return;
+  if (!callback)
+    return;
+
   try {
     void Promise.resolve(callback()).catch(() => {});
   } catch {
@@ -26,8 +30,10 @@ export class RequestGate {
         'Invalid endpoint capacity.',
         'not-dispatched',
       );
+
     this.capacity = privateCapacity;
   }
+
   private capacity: number;
   /** Apply a capacity change without dropping active work or queued cancellation handlers. */
   setCapacity(capacity: number) {
@@ -37,15 +43,19 @@ export class RequestGate {
         'Invalid endpoint capacity.',
         'not-dispatched',
       );
+
     this.capacity = capacity;
     while (this.active < this.capacity && this.waiting.length) {
       const next = this.waiting.shift()!;
-      if (!next.signal.aborted) next.grant();
+      if (!next.signal.aborted)
+        next.grant();
     }
   }
 
   async run<T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> {
-    if (signal.aborted) throw aborted('not-dispatched');
+    if (signal.aborted)
+      throw aborted('not-dispatched');
+
     await new Promise<void>((resolve, reject) => {
       const entry = {
         signal,
@@ -57,23 +67,31 @@ export class RequestGate {
       };
       const abort = () => {
         const index = this.waiting.indexOf(entry);
-        if (index >= 0) this.waiting.splice(index, 1);
+        if (index >= 0)
+          this.waiting.splice(index, 1);
+
         reject(aborted('not-dispatched'));
       };
-      if (this.active < this.capacity) entry.grant();
+      if (this.active < this.capacity)
+        entry.grant();
       else {
         this.waiting.push(entry);
-        signal.addEventListener('abort', abort, { once: true });
+        signal.addEventListener('abort', abort, {
+          once: true,
+        });
       }
     });
     try {
-      if (signal.aborted) throw aborted('not-dispatched');
+      if (signal.aborted)
+        throw aborted('not-dispatched');
+
       return await action();
     } finally {
       this.active--;
       while (this.active < this.capacity && this.waiting.length) {
         const next = this.waiting.shift()!;
-        if (!next.signal.aborted) next.grant();
+        if (!next.signal.aborted)
+          next.grant();
       }
     }
   }
@@ -109,6 +127,7 @@ export function endpointURL(endpoint: string) {
       'Use an HTTP(S) endpoint without embedded credentials, query or fragment.',
       'not-dispatched',
     );
+
   return url;
 }
 export const object = (value: unknown): Record<string, unknown> =>
@@ -122,25 +141,33 @@ export function tokenCount(value: unknown) {
 export function encodeJSON(value: unknown): string {
   try {
     const result = JSON.stringify(value);
-    if (result === undefined) throw Error();
+    if (result === undefined)
+      throw Error();
+
     return result;
   } catch (cause) {
     throw new ProviderFailure(
       'MODEL_INVALID_REQUEST',
       'The model request is not JSON serializable.',
-      { outcome: 'not-dispatched', cause },
+      {
+        outcome: 'not-dispatched',
+        cause,
+      },
     );
   }
 }
 
 export async function request(options: HttpOptions, route: string, init: RequestInit) {
-  if (init.signal?.aborted) throw aborted('not-dispatched');
+  if (init.signal?.aborted)
+    throw aborted('not-dispatched');
+
   if (typeof options.fetch !== 'function')
     throw failure(
       'INVALID_PROVIDER_CONFIGURATION',
       'An explicit fetch implementation is required.',
       'not-dispatched',
     );
+
   const url = new URL(route, endpointURL(options.endpoint));
   let response: Response;
   try {
@@ -149,11 +176,16 @@ export async function request(options: HttpOptions, route: string, init: Request
       redirect: 'error',
     });
   } catch (error) {
-    if (init.signal?.aborted) throw aborted('unknown');
+    if (init.signal?.aborted)
+      throw aborted('unknown');
+
     throw new ProviderFailure(
       'MODEL_UNAVAILABLE',
       'The configured model endpoint could not be reached.',
-      { outcome: 'unknown', cause: error },
+      {
+        outcome: 'unknown',
+        cause: error,
+      },
     );
   }
   if (!response.ok) {
@@ -172,28 +204,35 @@ export async function request(options: HttpOptions, route: string, init: Request
       codes[response.status] ? 'rejected' : 'unknown',
     );
   }
+
   return response;
 }
 
 export async function* lines(response: Response, onProgress: () => void) {
-  if (!response.body) throw failure('MODEL_INVALID_RESPONSE', 'The model response has no body.');
+  if (!response.body)
+    throw failure('MODEL_INVALID_RESPONSE', 'The model response has no body.');
+
   let reader: ReadableStreamDefaultReader<Uint8Array>;
   try {
     reader = response.body.getReader();
   } catch {
     throw failure('MODEL_INVALID_RESPONSE', 'The model response body cannot be read.');
   }
-  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const decoder = new TextDecoder('utf-8', {
+    fatal: true,
+  });
   const decode = (value?: Uint8Array, streaming = false) => {
     try {
-      return decoder.decode(value, { stream: streaming });
+      return decoder.decode(value, {
+        stream: streaming,
+      });
     } catch {
       throw failure('MODEL_INVALID_RESPONSE', 'The endpoint returned invalid UTF-8.');
     }
   };
-  let buffer = '',
-    size = 0,
-    finished = false;
+  let buffer = '';
+  let size = 0;
+  let finished = false;
   try {
     while (true) {
       const chunk = await reader.read();
@@ -202,9 +241,11 @@ export async function* lines(response: Response, onProgress: () => void) {
         buffer += decode();
         break;
       }
+
       size += chunk.value.byteLength;
       if (size > 4 * 1024 * 1024)
         throw failure('MODEL_RESPONSE_LIMIT', 'The model response exceeds 4 MB.');
+
       observer(onProgress);
       buffer += decode(chunk.value, true);
       let newline: number;
@@ -213,26 +254,41 @@ export async function* lines(response: Response, onProgress: () => void) {
         buffer = buffer.slice(newline + 1);
       }
     }
-    if (buffer) yield buffer.replace(/\r$/, '');
+    if (buffer)
+      yield buffer.replace(/\r$/, '');
   } catch (error) {
     if (isProviderFailure(error)) {
-      if (error.outcome === 'unknown') throw error;
-      throw new ProviderFailure(error.code, error.message, { outcome: 'unknown', cause: error });
+      if (error.outcome === 'unknown')
+        throw error;
+
+      throw new ProviderFailure(error.code, error.message, {
+        outcome: 'unknown',
+        cause: error,
+      });
     }
-    if (error instanceof DOMException && error.name === 'AbortError') throw aborted('unknown');
+
+    if (error instanceof DOMException && error.name === 'AbortError')
+      throw aborted('unknown');
+
     throw new ProviderFailure(
       'MODEL_STREAM_INTERRUPTED',
       'The model response stream was interrupted.',
-      { outcome: 'unknown', cause: error },
+      {
+        outcome: 'unknown',
+        cause: error,
+      },
     );
   } finally {
-    if (!finished) await reader.cancel().catch(() => {});
+    if (!finished)
+      await reader.cancel().catch(() => {});
+
     reader.releaseLock();
   }
 }
 export async function json(response: Response) {
   let body = '';
-  for await (const line of lines(response, () => {})) body += line + '\n';
+  for await (const line of lines(response, () => {}))
+    body += line + '\n';
   try {
     return JSON.parse(body) as unknown;
   } catch {
@@ -250,9 +306,13 @@ export async function* sse(response: Response, onProgress: () => void) {
   let data: string[] = [];
   for await (const line of lines(response, onProgress)) {
     if (!line) {
-      if (data.length) yield data.join('\n');
+      if (data.length)
+        yield data.join('\n');
+
       data = [];
-    } else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+    } else if (line.startsWith('data:'))
+      data.push(line.slice(5).trimStart());
   }
-  if (data.length) yield data.join('\n');
+  if (data.length)
+    yield data.join('\n');
 }

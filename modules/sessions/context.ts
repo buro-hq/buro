@@ -16,12 +16,16 @@ export function conversationContext(input: ContextInput): ModelMessage[] {
   });
   const groups: ModelMessage[][] = [];
   for (const message of messages) {
-    if (message.role === 'tool' && groups.length) groups.at(-1)!.push(message);
-    else groups.push([message]);
+    if (message.role === 'tool' && groups.length)
+      groups.at(-1)!.push(message);
+    else
+      groups.push([message]);
   }
   const available =
     Math.max(0, input.contextTokens - input.outputTokens - (input.toolTokens ?? 0)) * 4;
-  if (JSON.stringify(messages).length <= available) return messages;
+  if (JSON.stringify(messages).length <= available)
+    return messages;
+
   const note: ModelMessage = {
     role: 'user',
     content:
@@ -34,8 +38,7 @@ export function conversationContext(input: ContextInput): ModelMessage[] {
   );
   const selected = new Set(
     groups.flatMap((group, index) =>
-      group[0].role === 'system' || index === firstUser || index === lastUser ? [index] : [],
-    ),
+      group[0].role === 'system' || index === firstUser || index === lastUser ? [index] : []),
   );
   let used =
     JSON.stringify(note).length +
@@ -44,8 +47,11 @@ export function conversationContext(input: ContextInput): ModelMessage[] {
     throw new Error(
       'The instructions and current task exceed this model’s input context. Increase its context size or shorten the input.',
     );
+
   for (let index = groups.length - 1; index >= 0; index--) {
-    if (selected.has(index)) continue;
+    if (selected.has(index))
+      continue;
+
     let size = JSON.stringify(groups[index]).length;
     if (used + size > available) {
       // A large result must not evict the current task. Shorten only observed tool output,
@@ -57,19 +63,22 @@ export function conversationContext(input: ContextInput): ModelMessage[] {
               content:
                 '[Large tool output omitted from this request. The complete result remains in session history; read a narrower range if needed.]',
             }
-          : message,
-      );
+          : message);
       size = JSON.stringify(compact).length;
-      if (used + size > available) break;
+      if (used + size > available)
+        break;
+
       groups[index] = compact;
     }
+
     selected.add(index);
     used += size;
   }
   const result: ModelMessage[] = [];
   let noticed = false;
   for (let index = 0; index < groups.length; index++) {
-    if (selected.has(index)) result.push(...groups[index]);
+    if (selected.has(index))
+      result.push(...groups[index]);
     else if (!noticed) {
       result.push(note);
       noticed = true;

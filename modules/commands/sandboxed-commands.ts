@@ -11,16 +11,24 @@ export class SandboxedCommands implements Commands {
 
   /** Protects application-private files in addition to the sandbox's credential exclusions. */
   constructor(input: { privatePaths?: string[]; sandbox?: CommandSandbox } = {}) {
-    this.sandbox = input.sandbox ?? new NativeSandbox({ privatePaths: input.privatePaths });
+    this.sandbox = input.sandbox ?? new NativeSandbox({
+      privatePaths: input.privatePaths,
+    });
   }
 
   /** Executes an argv vector; process trees are stopped on cancellation or timeout. */
   async run(input: CommandInput): Promise<CommandResult> {
-    if (this.closing) return { stdout: '', stderr: '', error: 'Command execution is closed.' };
+    if (this.closing)
+      return { stdout: '', stderr: '', error: 'Command execution is closed.' };
+
     const controller = new AbortController();
     const abort = () => controller.abort();
-    input.signal.addEventListener('abort', abort, { once: true });
-    if (input.signal.aborted) abort();
+    input.signal.addEventListener('abort', abort, {
+      once: true,
+    });
+    if (input.signal.aborted)
+      abort();
+
     let resolveSettled!: () => void;
     const entry = {
       controller,
@@ -54,16 +62,18 @@ export class SandboxedCommands implements Commands {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       const maximum = input.maxOutputBytes ?? 256 * 1024;
-      let stdout: Buffer = Buffer.alloc(0),
-        stderr: Buffer = Buffer.alloc(0),
-        truncated = false;
-      let error: string | undefined,
-        interrupted = false;
+      let stdout: Buffer = Buffer.alloc(0);
+      let stderr: Buffer = Buffer.alloc(0);
+      let truncated = false;
+      let error: string | undefined;
+      let interrupted = false;
       let escalation: ReturnType<typeof setTimeout> | undefined;
       const kill = (signal: NodeJS.Signals) => {
         try {
-          if (child.pid && process.platform !== 'win32') process.kill(-child.pid, signal);
-          else child.kill(signal);
+          if (child.pid && process.platform !== 'win32')
+            process.kill(-child.pid, signal);
+          else
+            child.kill(signal);
         } catch (failure) {
           if ((failure as NodeJS.ErrnoException).code !== 'ESRCH')
             error ??= 'Could not terminate the command process group.';
@@ -77,8 +87,12 @@ export class SandboxedCommands implements Commands {
         interrupted = true;
         stop();
       };
-      input.signal.addEventListener('abort', abort, { once: true });
-      if (input.signal.aborted) abort();
+      input.signal.addEventListener('abort', abort, {
+        once: true,
+      });
+      if (input.signal.aborted)
+        abort();
+
       const timeout =
         input.timeoutMs === undefined
           ? undefined
@@ -88,7 +102,9 @@ export class SandboxedCommands implements Commands {
             }, input.timeoutMs);
       const capture = (previous: Buffer, chunk: Buffer): Buffer => {
         const remaining = Math.max(0, maximum - stdout.length - stderr.length);
-        if (chunk.length > remaining) truncated = true;
+        if (chunk.length > remaining)
+          truncated = true;
+
         return Buffer.concat([previous, chunk.subarray(0, remaining)]);
       };
       const observe = () => {
@@ -114,7 +130,8 @@ export class SandboxedCommands implements Commands {
         error = failure.message;
       });
       child.stdin.on('error', (failure) => {
-        if ((failure as NodeJS.ErrnoException).code !== 'EPIPE') error = failure.message;
+        if ((failure as NodeJS.ErrnoException).code !== 'EPIPE')
+          error = failure.message;
       });
       child.stdin.end(input.stdin);
       // A shell may exit while a background child still owns its output handles.
@@ -138,7 +155,8 @@ export class SandboxedCommands implements Commands {
   /** Releases prepared environments after the owning application has joined its sessions. */
   async close(): Promise<void> {
     this.closing = true;
-    for (const entry of this.active) entry.controller.abort();
+    for (const entry of this.active)
+      entry.controller.abort();
     await Promise.all([...this.active].map((entry) => entry.settled));
     await this.sandbox.close?.();
   }

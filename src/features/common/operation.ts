@@ -19,8 +19,8 @@ export interface Operation {
 
 /** Captures action feedback without replaying failed mutations after reconnecting. */
 export function useOperation(): Operation {
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
   return {
     busy,
     error,
@@ -30,7 +30,9 @@ export function useOperation(): Operation {
       setError(undefined);
       try {
         const result = await work();
-        if (!result.ok) setError(result.error ?? 'The operation failed.');
+        if (!result.ok)
+          setError(result.error ?? 'The operation failed.');
+
         return result;
       } catch (failure) {
         const message = failure instanceof Error ? failure.message : String(failure);

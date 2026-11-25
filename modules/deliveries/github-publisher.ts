@@ -13,7 +13,9 @@ export class GitHubPublisher implements ResultPublisher {
   private pullRequests: PullRequests;
   private protocols: string[];
   constructor(input: { directory: string; pullRequests?: PullRequests; protocols?: string[] }) {
-    this.workspaces = new GitWorkspaces({ directory: input.directory });
+    this.workspaces = new GitWorkspaces({
+      directory: input.directory,
+    });
     this.pullRequests = input.pullRequests ?? new GitHubPullRequests();
     this.protocols = [...(input.protocols ?? ['https', 'ssh'])];
   }
@@ -21,12 +23,12 @@ export class GitHubPublisher implements ResultPublisher {
   async publish(
     input: Parameters<ResultPublisher['publish']>[0],
   ): ReturnType<ResultPublisher['publish']> {
-    let workspace: string | undefined,
-      commit: string | undefined,
-      pushed = false;
+    let workspace: string | undefined;
+    let commit: string | undefined;
+    let pushed = false;
     try {
-      const source = { cwd: input.root, signal: input.signal },
-        network = this.protocols.flatMap((protocol) => ['-c', `protocol.${protocol}.allow=always`]);
+      const source = { cwd: input.root, signal: input.signal };
+      const network = this.protocols.flatMap((protocol) => ['-c', `protocol.${protocol}.allow=always`]);
       await safeGit(['check-ref-format', '--branch', input.branch], source);
       await safeGit(['remote', 'get-url', '--', input.remote], source);
       const prefix = `refs/remotes/${input.remote}/`;
@@ -47,10 +49,15 @@ export class GitHubPublisher implements ResultPublisher {
         base: reference,
         signal: input.signal,
       });
-      if (!prepared.workspace) return { ok: false, error: prepared.error };
+      if (!prepared.workspace)
+        return { ok: false, error: prepared.error };
+
       workspace = prepared.workspace.path;
-      const changes = new GitChanges(),
-        applied = await changes.apply({ root: workspace, patch: input.patch });
+      const changes = new GitChanges();
+      const applied = await changes.apply({
+        root: workspace,
+        patch: input.patch,
+      });
       if (!applied.ok)
         return {
           ok: false,
@@ -58,8 +65,12 @@ export class GitHubPublisher implements ResultPublisher {
           error:
             'The result conflicts with the publication base. The isolated publication workspace is preserved.',
         };
-      const tree = await captureGitTree({ workspace, base: prepared.workspace.base }),
-        options = { cwd: workspace, signal: input.signal };
+
+      const tree = await captureGitTree({
+        workspace,
+        base: prepared.workspace.base,
+      });
+      const options = { cwd: workspace, signal: input.signal };
       commit = (
         await safeGit(
           [
@@ -94,7 +105,9 @@ export class GitHubPublisher implements ResultPublisher {
       });
       return { ...result, workspace, commit };
     } catch (error) {
-      if (input.signal.aborted) throw error;
+      if (input.signal.aborted)
+        throw error;
+
       const code = (error as { code?: unknown }).code;
       if (
         typeof code === 'number' ||
@@ -108,6 +121,7 @@ export class GitHubPublisher implements ResultPublisher {
             ? 'The branch was pushed, but PR creation failed. Check the remote before retrying.'
             : 'Publication failed. Check the remote, its default or explicit base branch, Git authentication and the requested branch name.',
         };
+
       throw error;
     }
   }

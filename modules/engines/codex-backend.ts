@@ -50,7 +50,10 @@ export class CodexBackend implements SessionBackend {
   /** Reads the native catalogue without creating a model turn. */
   async listModels(input: { signal: AbortSignal }): Promise<AvailableModel[]> {
     input.signal.throwIfAborted();
-    const specification = codexArguments({ prefix: this.prefix, deniedPaths: this.privatePaths });
+    const specification = codexArguments({
+      prefix: this.prefix,
+      deniedPaths: this.privatePaths,
+    });
     const connection = new JsonlConnection({
       executable: this.executable,
       args: specification.args,
@@ -60,21 +63,30 @@ export class CodexBackend implements SessionBackend {
     const abort = () => {
       void connection.close();
     };
-    input.signal.addEventListener('abort', abort, { once: true });
-    if (input.signal.aborted) abort();
+    input.signal.addEventListener('abort', abort, {
+      once: true,
+    });
+    if (input.signal.aborted)
+      abort();
+
     try {
       await connection.call('initialize', {
         clientInfo: { name: 'buro', version: '0.1.0' },
         capabilities: { experimentalApi: true },
       });
-      connection.send({ method: 'initialized', params: {} });
+      connection.send({
+        method: 'initialized',
+        params: {},
+      });
       const models: AvailableModel[] = [];
       let cursor: string | undefined;
       do {
-        const page = object(await connection.call('model/list', { cursor }));
+        const page = object(await connection.call('model/list', {
+          cursor,
+        }));
         for (const raw of Array.isArray(page.data) ? page.data : []) {
-          const model = object(raw),
-            id = typeof model.model === 'string' ? model.model : model.id;
+          const model = object(raw);
+          const id = typeof model.model === 'string' ? model.model : model.id;
           if (typeof id === 'string')
             models.push({
               id,
@@ -106,9 +118,11 @@ export class CodexBackend implements SessionBackend {
       request: async (message) => {
         if (message.method !== 'item/tool/call')
           throw new Error('This native server request is unsupported.');
+
         const params = object(message.params);
         if (typeof params.callId !== 'string' || typeof params.tool !== 'string')
           throw new Error('Invalid native tool request.');
+
         try {
           const result = await input.executeTool({
             id: params.callId,
@@ -129,13 +143,18 @@ export class CodexBackend implements SessionBackend {
     const abort = () => {
       void connection.close();
     };
-    input.signal.addEventListener('abort', abort, { once: true });
-    if (input.signal.aborted) abort();
-    let threadId = '',
-      answer = '',
-      reportedModel = input.model,
-      usage: ModelUsage | undefined;
-    let resolveTurn!: () => void, rejectTurn!: (error: Error) => void;
+    input.signal.addEventListener('abort', abort, {
+      once: true,
+    });
+    if (input.signal.aborted)
+      abort();
+
+    let threadId = '';
+    let answer = '';
+    let reportedModel = input.model;
+    let usage: ModelUsage | undefined;
+    let resolveTurn!: () => void;
+    let rejectTurn!: (error: Error) => void;
     const ended = new Promise<void>((resolve, reject) => {
       resolveTurn = resolve;
       rejectTurn = reject;
@@ -146,15 +165,24 @@ export class CodexBackend implements SessionBackend {
         rejectTurn(new Error('The native controller stopped before completing the turn.'));
         return;
       }
+
       const params = object(message.params);
-      if (params.threadId !== threadId || !threadId) return;
+      if (params.threadId !== threadId || !threadId)
+        return;
+
       observer(input.onProgress);
       if (message.method === 'item/agentMessage/delta' && typeof params.delta === 'string')
-        observer(() => input.onEvent?.({ type: 'text.delta', text: String(params.delta) }));
+        observer(() => input.onEvent?.({
+          type: 'text.delta',
+          text: String(params.delta),
+        }));
+
       if (message.method === 'item/completed') {
         const item = object(params.item);
-        if (item.type === 'agentMessage' && typeof item.text === 'string') answer = item.text;
+        if (item.type === 'agentMessage' && typeof item.text === 'string')
+          answer = item.text;
       }
+
       if (message.method === 'thread/tokenUsage/updated') {
         const total = object(object(params.tokenUsage).total);
         usage = {
@@ -162,9 +190,11 @@ export class CodexBackend implements SessionBackend {
           outputTokens: typeof total.outputTokens === 'number' ? total.outputTokens : undefined,
         };
       }
+
       if (message.method === 'turn/completed') {
         const turn = object(params.turn);
-        if (turn.status === 'completed') resolveTurn();
+        if (turn.status === 'completed')
+          resolveTurn();
         else
           rejectTurn(
             new Error(String(object(turn.error).message ?? 'The native turn did not complete.')),
@@ -176,7 +206,10 @@ export class CodexBackend implements SessionBackend {
         clientInfo: { name: 'buro', version: '0.1.0' },
         capabilities: { experimentalApi: true },
       });
-      connection.send({ method: 'initialized', params: {} });
+      connection.send({
+        method: 'initialized',
+        params: {},
+      });
       const system = input.messages
         .filter((message) => message.role === 'system')
         .map((message) => message.content)
@@ -201,11 +234,15 @@ export class CodexBackend implements SessionBackend {
       );
       if (object(started.activePermissionProfile).id !== specification.permissions)
         throw new Error('The native client did not confirm its host-tool access boundary.');
+
       const thread = object(started.thread);
       if (typeof thread.id !== 'string')
         throw new Error('The native client did not return a thread ID.');
+
       threadId = thread.id;
-      if (typeof started.model === 'string') reportedModel = started.model;
+      if (typeof started.model === 'string')
+        reportedModel = started.model;
+
       await connection.call('turn/start', {
         threadId,
         model: input.model,
@@ -222,7 +259,9 @@ export class CodexBackend implements SessionBackend {
         ],
       });
       await ended;
-      if (toolFailure) throw toolFailure;
+      if (toolFailure)
+        throw toolFailure;
+
       input.signal.throwIfAborted();
       return {
         model: reportedModel,

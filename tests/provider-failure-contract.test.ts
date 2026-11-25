@@ -8,7 +8,9 @@ import {
 
 test('request outcomes are explicit and cannot be rewritten after a failure crosses the host boundary', () => {
   for (const outcome of ['not-dispatched', 'rejected', 'unknown'] as const) {
-    const failure = new ProviderFailure('MODEL_AUTH_FAILED', 'Synthetic failure', { outcome });
+    const failure = new ProviderFailure('MODEL_AUTH_FAILED', 'Synthetic failure', {
+      outcome,
+    });
     assert.equal(providerFailureOutcome(failure), outcome);
     assert.equal(isProviderFailure(failure), true);
     assert.throws(() => {
@@ -46,7 +48,9 @@ test('response data, lookalike errors and nested causes cannot declare a trusted
       code: 'MODEL_AUTH_FAILED',
       outcome: 'rejected',
     }),
-    new Error('Outer adapter must translate explicitly', { cause: direct }),
+    new Error('Outer adapter must translate explicitly', {
+      cause: direct,
+    }),
     { cause: { cause: direct } },
     getter,
     null,
@@ -78,12 +82,16 @@ test('private causes are retained for explicit host handling but are not seriali
 
 test('invalid failure metadata is rejected instead of receiving a safe-looking default', () => {
   assert.throws(
-    () => new ProviderFailure('bad code', 'Invalid', { outcome: 'rejected' }),
+    () => new ProviderFailure('bad code', 'Invalid', {
+      outcome: 'rejected',
+    }),
     TypeError,
   );
   for (const outcome of [undefined, 'observed', 'success'])
     assert.throws(
-      () => new ProviderFailure('MODEL_UNAVAILABLE', 'Invalid', { outcome } as never),
+      () => new ProviderFailure('MODEL_UNAVAILABLE', 'Invalid', {
+        outcome,
+      } as never),
       TypeError,
     );
 });

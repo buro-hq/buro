@@ -14,14 +14,16 @@ import { startApiServer } from '../modules/api/server.ts';
 const exec = promisify(execFile);
 
 test('explicit publication pushes only the run delta to a fresh base, keeps a blank PR body, and records a pushed branch if PR creation fails', async (t) => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-deliveries-')),
-    root = path.join(directory, 'source'),
-    remote = path.join(directory, 'remote.git');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-deliveries-'));
+  const root = path.join(directory, 'source');
+  const remote = path.join(directory, 'remote.git');
   await fs.mkdir(root);
   await exec('git', ['init', '--bare', '--initial-branch=main', '-q', remote]);
   await exec('git', ['init', '--initial-branch=main', '-q', root]);
   await fs.writeFile(path.join(root, 'README.md'), 'Committed source\n');
-  await exec('git', ['add', '.'], { cwd: root });
+  await exec('git', ['add', '.'], {
+    cwd: root,
+  });
   await exec(
     'git',
     [
@@ -37,16 +39,24 @@ test('explicit publication pushes only the run delta to a fresh base, keeps a bl
       '-qm',
       'Initial',
     ],
-    { cwd: root },
+    {
+      cwd: root,
+    },
   );
-  await exec('git', ['remote', 'add', 'origin', remote], { cwd: root });
-  await exec('git', ['push', '-q', 'origin', 'HEAD'], { cwd: root });
+  await exec('git', ['remote', 'add', 'origin', remote], {
+    cwd: root,
+  });
+  await exec('git', ['push', '-q', 'origin', 'HEAD'], {
+    cwd: root,
+  });
   await exec('git', ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'], {
     cwd: root,
   });
   await fs.writeFile(path.join(root, 'README.md'), 'Pre-existing user edit\n');
   await fs.writeFile(path.join(root, 'user-work.txt'), 'Pre-existing untracked work\n');
-  const before = (await exec('git', ['status', '--porcelain'], { cwd: root })).stdout;
+  const before = (await exec('git', ['status', '--porcelain'], {
+    cwd: root,
+  })).stdout;
   const requests: Parameters<PullRequests['create']>[0][] = [];
   let failPr = false;
   const publisher = new GitHubPublisher({
@@ -78,7 +88,8 @@ test('explicit publication pushes only the run delta to a fresh base, keeps a bl
             input.signal.addEventListener('abort', () => reject(input.signal.reason), {
               once: true,
             });
-            if (input.signal.aborted) reject(input.signal.reason);
+            if (input.signal.aborted)
+              reject(input.signal.reason);
           });
           return { ok: true };
         },
@@ -86,17 +97,23 @@ test('explicit publication pushes only the run delta to a fresh base, keeps a bl
     ],
   });
   const api = await startApiServer({
-      application: app,
-      token: 'test-delivery-token',
-      port: 0,
-      onClosing: () => app.stopWork(),
-    }),
-    client = new ApiClient({ url: `ws://127.0.0.1:${api.port}`, token: 'test-delivery-token' });
+    application: app,
+    token: 'test-delivery-token',
+    port: 0,
+    onClosing: () => app.stopWork(),
+  });
+  const client = new ApiClient({
+    url: `ws://127.0.0.1:${api.port}`,
+    token: 'test-delivery-token',
+  });
   t.after(async () => {
     client.close();
     await api.close();
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
   app.models.register({
     id: 'fixture',
@@ -116,19 +133,27 @@ test('explicit publication pushes only the run delta to a fresh base, keeps a bl
       },
     },
   });
-  const project = (await app.projects.connect({ root })).project!,
-    task = await app.tasks.create({
-      projectId: project.id,
-      title: 'Add result file',
-      description: 'Intent',
-    }),
-    run = (await app.runs.start({ taskId: task.id })).run!;
-  await app.runs.wait({ id: run.id });
+  const project = (await app.projects.connect({
+    root,
+  })).project!;
+  const task = await app.tasks.create({
+    projectId: project.id,
+    title: 'Add result file',
+    description: 'Intent',
+  });
+  const run = (await app.runs.start({
+    taskId: task.id,
+  })).run!;
+  await app.runs.wait({
+    id: run.id,
+  });
   await fs.writeFile(
     path.join(run.workspace, 'result.txt'),
     'Only this change should be published\n',
   );
-  const snapshot = await app.results.inspect({ runId: run.id });
+  const snapshot = await app.results.inspect({
+    runId: run.id,
+  });
   const result = await client.call('deliveries.publish', {
     runId: run.id,
     branch: 'test/publication',
@@ -153,7 +178,9 @@ test('explicit publication pushes only the run delta to a fresh base, keeps a bl
   await assert.rejects(
     exec('git', ['--git-dir=' + remote, 'show', 'refs/heads/test/publication:user-work.txt']),
   );
-  assert.equal((await exec('git', ['status', '--porcelain'], { cwd: root })).stdout, before);
+  assert.equal((await exec('git', ['status', '--porcelain'], {
+    cwd: root,
+  })).stdout, before);
   assert.equal(await fs.readFile(path.join(root, 'README.md'), 'utf8'), 'Pre-existing user edit\n');
   failPr = true;
   const partial = await client.call('deliveries.publish', {
@@ -169,13 +196,20 @@ test('explicit publication pushes only the run delta to a fresh base, keeps a bl
     (await exec('git', ['--git-dir=' + remote, 'rev-parse', 'refs/heads/test/partial'])).stdout,
     /^[a-f0-9]{40}/,
   );
-  assert.equal((await client.call('deliveries.list', { runId: run.id })).length, 2);
+  assert.equal((await client.call('deliveries.list', {
+    runId: run.id,
+  })).length, 2);
   const interrupted = assert.rejects(
-    client.call('deliveries.publish', { runId: run.id, publisherId: 'blocked' }),
+    client.call('deliveries.publish', {
+      runId: run.id,
+      publisherId: 'blocked',
+    }),
     /Connection lost/,
   );
   await blocked;
   await api.close();
   await interrupted;
-  assert.equal((await app.deliveries.list({ runId: run.id })).at(-1)?.status, 'interrupted');
+  assert.equal((await app.deliveries.list({
+    runId: run.id,
+  })).at(-1)?.status, 'interrupted');
 });

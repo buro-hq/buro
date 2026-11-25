@@ -7,3 +7,17 @@ public
 package-lock.json
 
 archive
+docs/archive
+output
+branding
+docs/**/*.json
+
+# ESLint Stylistic owns source formatting.
+**/*.js
+**/*.jsx
+**/*.mjs
+**/*.cjs
+**/*.ts
+**/*.tsx
+**/*.mts
+**/*.cts

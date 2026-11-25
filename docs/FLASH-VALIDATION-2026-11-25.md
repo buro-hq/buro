@@ -4,10 +4,10 @@ The completed feature-module runtime was exercised through its ordinary task, ru
 
 Both final scenarios used core revision `5b2ea36328da48227f6dec9306f15d4bbd80ee84` and harness hash `65aba8a172045aaeb6c34fd47912c11d2ea150c29d464b66a04ce13080543cd9`, on Node 24.9.0. They ran sequentially.
 
-| Scenario | Before: public / independent | Final: public / independent | Run wall time | Model requests | Helpers | Reported output tokens | Output tokens / whole-run second |
-| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Original ready-queue task | 0/3 · 3/5 | 3/3 · 5/5 | 16.48 s | 7 | 0 | 1,987 | 120.6 |
-| Independent review, repair and follow-up | 3/3 · 4/5 | 3/3 · 5/5 | 211.56 s | 55 | 4 | 40,342 | 190.7 |
+| Scenario                                 | Before: public / independent | Final: public / independent | Run wall time | Model requests | Helpers | Reported output tokens | Output tokens / whole-run second |
+| ---------------------------------------- | ---------------------------- | --------------------------- | ------------: | -------------: | ------: | ---------------------: | -------------------------------: |
+| Original ready-queue task                | 0/3 · 3/5                    | 3/3 · 5/5                   |       16.48 s |              7 |       0 |                  1,987 |                            120.6 |
+| Independent review, repair and follow-up | 3/3 · 4/5                    | 3/3 · 5/5                   |      211.56 s |             55 |       4 |                 40,342 |                            190.7 |
 
 Wall time covers starting the run through completion, including thinking, model requests, tools and collaborator work. Fixture preparation and the final independent verifier are outside that timer. Token throughput uses the provider's reported output tokens across all sessions, including thinking; concurrent sessions can overlap. It is not decoder throughput. The API supplied no decoder timing, and no decode speed is inferred. Neither final scenario needed an HTTP retry or hit the output allowance.
 
@@ -38,10 +38,10 @@ Final repository checks: 105 tests passed, type checking and production build pa
 
 Both scenarios were repeated on revision `84f4301a27bfe33054b3fdd9314ee25bfc4bca16`, with harness hash `467fb053cb04ec99d93ff00e431dcebe3f0ff94efef7413d132d03819da07fb3`. The saved connection ID is `deepseek-flash-thinking`; the requested/reported model remains `deepseek-flash`. Thinking, context and output allowances are unchanged.
 
-| Scenario | Final public / independent | Run wall time | Requests | Helpers | Reported output tokens | Output tokens / whole-run second |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Original ready-queue task | 3/3 · 5/5 | 18.20 s | 7 | 0 | 2,486 | 136.6 |
-| Independent review, repair and follow-up | 3/3 · 5/5 | 76.66 s | 23 | 1 | 12,466 | 162.6 |
+| Scenario                                 | Final public / independent | Run wall time | Requests | Helpers | Reported output tokens | Output tokens / whole-run second |
+| ---------------------------------------- | -------------------------- | ------------: | -------: | ------: | ---------------------: | -------------------------------: |
+| Original ready-queue task                | 3/3 · 5/5                  |       18.20 s |        7 |       0 |                  2,486 |                            136.6 |
+| Independent review, repair and follow-up | 3/3 · 5/5                  |       76.66 s |       23 |       1 |                 12,466 |                            162.6 |
 
 The queue solution uses the dependency filter and stable sort directly, without index decoration. The review solution removes the incorrect ID tiebreaker and explains stable sorting. Only the requested source files changed. The review helper completed an initial review and a second user turn in the same session; both it and the main conversation finished. Private continuation was observed, with no HTTP retry or output-length terminal in either run.
 

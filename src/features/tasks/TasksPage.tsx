@@ -21,15 +21,17 @@ import { TaskEditor } from './TaskEditor.tsx';
 
 /** Owns task editing and explicit run options; it never reconstructs server state from events. */
 export function TasksPage(input: { projectId: string; onRun(id: string): void }): ReactElement {
-  const { client } = useApplication(),
-    tasks = useApiQuery('tasks.list', { projectId: input.projectId }),
-    models = useApiQuery('models.list', {}),
-    action = useOperation();
-  const [editor, setEditor] = useState<{ task?: Task }>(),
-    [advanced, setAdvanced] = useState(false),
-    [modelId, setModelId] = useState<string | null>(null),
-    [instructions, setInstructions] = useState(''),
-    [readOnly, setReadOnly] = useState(false);
+  const { client } = useApplication();
+  const tasks = useApiQuery('tasks.list', {
+    projectId: input.projectId,
+  });
+  const models = useApiQuery('models.list', {});
+  const action = useOperation();
+  const [editor, setEditor] = useState<{ task?: Task }>();
+  const [advanced, setAdvanced] = useState(false);
+  const [modelId, setModelId] = useState<string | null>(null);
+  const [instructions, setInstructions] = useState('');
+  const [readOnly, setReadOnly] = useState(false);
   async function start(taskId: string): Promise<void> {
     const options: RunOptions = {
       ...(modelId ? { modelId } : {}),
@@ -37,10 +39,14 @@ export function TasksPage(input: { projectId: string; onRun(id: string): void })
       ...(readOnly ? { readOnly: true } : {}),
     };
     const result = await action.perform(async () => {
-      const started = await client.call('runs.start', { taskId, options });
+      const started = await client.call('runs.start', {
+        taskId,
+        options,
+      });
       return { ok: started.ok, value: started.run, error: started.error };
     });
-    if (result.value) input.onRun(result.value.id);
+    if (result.value)
+      input.onRun(result.value.id);
   }
   return (
     <Panel
@@ -96,7 +102,12 @@ export function TasksPage(input: { projectId: string; onRun(id: string): void })
                   <Button loading={action.busy} onClick={() => void start(task.id)}>
                     {t('Start run')}
                   </Button>
-                  <Button variant="default" onClick={() => setEditor({ task })}>
+                  <Button
+                    variant="default"
+                    onClick={() => setEditor({
+                      task,
+                    })}
+                  >
                     {t('Edit')}
                   </Button>
                   <Button
@@ -104,10 +115,11 @@ export function TasksPage(input: { projectId: string; onRun(id: string): void })
                     color="red"
                     onClick={() =>
                       void action.perform(async () => {
-                        await client.call('tasks.delete', { id: task.id });
+                        await client.call('tasks.delete', {
+                          id: task.id,
+                        });
                         return { ok: true };
-                      })
-                    }
+                      })}
                   >
                     {t('Delete')}
                   </Button>
@@ -125,7 +137,8 @@ export function TasksPage(input: { projectId: string; onRun(id: string): void })
           onClose={() => setEditor(undefined)}
           onSaved={(task, shouldStart) => {
             setEditor(undefined);
-            if (shouldStart) void start(task.id);
+            if (shouldStart)
+              void start(task.id);
           }}
         />
       )}

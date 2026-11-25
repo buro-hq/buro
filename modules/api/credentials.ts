@@ -7,7 +7,10 @@ import { randomBytes, randomUUID } from 'node:crypto';
 export async function apiCredential(input: { directory: string }): Promise<string> {
   const directory = path.resolve(input.directory, 'private');
   const filename = path.join(directory, 'api-token');
-  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  await fs.mkdir(directory, {
+    recursive: true,
+    mode: 0o700,
+  });
   await fs.chmod(directory, 0o700);
   const temporary = path.join(directory, '.api-token-' + randomUUID());
   try {
@@ -26,17 +29,23 @@ export async function apiCredential(input: { directory: string }): Promise<strin
     await fs.link(temporary, filename);
     return token;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST')
+      throw error;
   } finally {
-    await fs.rm(temporary, { force: true });
+    await fs.rm(temporary, {
+      force: true,
+    });
   }
   const file = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     if (!(await file.stat()).isFile())
       throw new Error('The local API credential is not a regular file.');
+
     await file.chmod(0o600);
     const token = (await file.readFile('utf8')).trim();
-    if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('The local API credential is invalid.');
+    if (!/^[a-f0-9]{64}$/.test(token))
+      throw new Error('The local API credential is invalid.');
+
     return token;
   } finally {
     await file.close();

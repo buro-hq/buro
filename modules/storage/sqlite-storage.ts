@@ -5,7 +5,8 @@ import type { RecordStore, StorageEngine, StoredRecord } from './record-store.ts
 
 const field = (name: string): string => {
   // Field names are adapter configuration, never interpolated query values.
-  if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) throw new Error('Invalid record field.');
+  if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name))
+    throw new Error('Invalid record field.');
 
   return `json_extract(data, '$.${name}')`;
 };
@@ -26,7 +27,11 @@ export class SqliteStorage implements StorageEngine {
   /** Opens an existing database or creates a private database at the supplied path. */
   constructor(input: { filename: string }) {
     if (input.filename !== ':memory:')
-      mkdirSync(path.dirname(input.filename), { recursive: true, mode: 0o700 });
+      mkdirSync(path.dirname(input.filename), {
+        recursive: true,
+        mode: 0o700,
+      });
+
     this.database = new DatabaseSync(input.filename);
     this.database.exec(`
       PRAGMA journal_mode=WAL;
@@ -38,7 +43,8 @@ export class SqliteStorage implements StorageEngine {
         PRIMARY KEY(namespace, id)
       );
     `);
-    if (input.filename !== ':memory:') chmodSync(input.filename, 0o600);
+    if (input.filename !== ':memory:')
+      chmodSync(input.filename, 0o600);
   }
 
   /** Creates a typed view of a module-owned namespace. */
@@ -100,7 +106,8 @@ export class SqliteStorage implements StorageEngine {
               .prepare(`DELETE FROM records WHERE namespace=?${deletion.sql}`)
               .run(namespace, ...deletion.values);
 
-          for (const record of records) upsert.run(namespace, record.id, record.data);
+          for (const record of records)
+            upsert.run(namespace, record.id, record.data);
 
           database.exec('COMMIT');
         } catch (error) {
@@ -119,7 +126,9 @@ export class SqliteStorage implements StorageEngine {
         const row = database
           .prepare('SELECT data FROM records WHERE namespace=? AND id=?')
           .get(namespace, input.id);
-        if (!row && !input.initial) return undefined;
+        if (!row && !input.initial)
+          return undefined;
+
         const next = {
           ...(row ? JSON.parse(String(row.data)) : structuredClone(input.initial)),
           ...structuredClone(input.changes),
@@ -140,6 +149,7 @@ export class SqliteStorage implements StorageEngine {
 
   /** Closes the database after its module owners have stopped using it. */
   async close(): Promise<void> {
-    if (this.database.isOpen) this.database.close();
+    if (this.database.isOpen)
+      this.database.close();
   }
 }

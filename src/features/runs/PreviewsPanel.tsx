@@ -7,9 +7,11 @@ import { useOperation } from '../common/operation.ts';
 
 /** Preview processes remain optional and independent of the attempt's completion. */
 export function PreviewsPanel(input: { runId: string }): ReactElement {
-  const { client } = useApplication(),
-    previews = useApiQuery('previews.list', { runId: input.runId }),
-    action = useOperation();
+  const { client } = useApplication();
+  const previews = useApiQuery('previews.list', {
+    runId: input.runId,
+  });
+  const action = useOperation();
   const [command, setCommand] = useState('');
   return (
     <Stack>
@@ -20,7 +22,10 @@ export function PreviewsPanel(input: { runId: string }): ReactElement {
         onSubmit={(event) => {
           event.preventDefault();
           void action.perform(async () => {
-            const result = await client.call('previews.start', { runId: input.runId, command });
+            const result = await client.call('previews.start', {
+              runId: input.runId,
+              command,
+            });
             return { ok: result.ok, error: result.error };
           });
         }}
@@ -47,7 +52,8 @@ export function PreviewsPanel(input: { runId: string }): ReactElement {
               <Group>
                 <Badge>{t(preview.status)}</Badge>
                 <Text size="xs" c="dimmed">
-                  :{preview.port}
+                  :
+                  {preview.port}
                 </Text>
               </Group>
               {['starting', 'running'].includes(preview.status) && (
@@ -55,10 +61,11 @@ export function PreviewsPanel(input: { runId: string }): ReactElement {
                   variant="default"
                   onClick={() =>
                     void action.perform(async () => {
-                      await client.call('previews.stop', { id: preview.id });
+                      await client.call('previews.stop', {
+                        id: preview.id,
+                      });
                       return { ok: true };
-                    })
-                  }
+                    })}
                 >
                   {t('Stop preview')}
                 </Button>

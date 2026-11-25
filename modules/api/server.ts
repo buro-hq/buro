@@ -18,7 +18,9 @@ const request = z.object({
   params: z.unknown().optional(),
 });
 const allowedOrigin = (origin?: string) => {
-  if (!origin) return true;
+  if (!origin)
+    return true;
+
   try {
     const url = new URL(origin);
     return (
@@ -58,11 +60,16 @@ export async function startApiServer(input: {
   const pending = new Set<Promise<void>>();
   const authenticated = new WeakSet<WebSocket>();
   const send = (socket: WebSocket, message: ApiResponse | ApiNotification | ApiAuthenticated) => {
-    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+    if (socket.readyState === WebSocket.OPEN)
+      socket.send(JSON.stringify(message));
   };
   const unsubscribe = app.events.subscribe((notification) => {
     for (const socket of server.clients)
-      if (authenticated.has(socket)) send(socket, { type: 'notification', notification });
+      if (authenticated.has(socket))
+        send(socket, {
+          type: 'notification',
+          notification,
+        });
   });
   server.on('connection', (socket) => {
     socket.on('error', (error) => input.report?.(error));
@@ -73,7 +80,10 @@ export async function startApiServer(input: {
           const body: unknown = JSON.parse(bytes.toString());
           if (!authenticated.has(socket)) {
             const auth = z
-              .object({ type: z.literal('authenticate'), token: z.string() })
+              .object({
+                type: z.literal('authenticate'),
+                token: z.string(),
+              })
               .safeParse(body);
             const actual = Buffer.from(auth.success ? auth.data.token : '');
             const expected = Buffer.from(input.token);
@@ -85,24 +95,38 @@ export async function startApiServer(input: {
               socket.close(1008, 'Authentication required');
               return;
             }
+
             authenticated.add(socket);
-            send(socket, { type: 'authenticated' });
+            send(socket, {
+              type: 'authenticated',
+            });
             return;
           }
+
           const parsed = request.parse(body);
           id = parsed.id;
           const invoke = Object.hasOwn(methods, parsed.method)
             ? methods[parsed.method as keyof typeof methods]
             : undefined;
           if (!invoke) {
-            send(socket, { id, ok: false, error: 'Unknown API method.' });
+            send(socket, {
+              id,
+              ok: false,
+              error: 'Unknown API method.',
+            });
             return;
           }
+
           const result = await invoke(parsed.params ?? {});
-          send(socket, { id, ok: true, result });
+          send(socket, {
+            id,
+            ok: true,
+            result,
+          });
         } catch (error) {
           if (!(error instanceof z.ZodError) && !(error instanceof SyntaxError))
             input.report?.(error);
+
           send(socket, {
             id,
             ok: false,
@@ -120,21 +144,23 @@ export async function startApiServer(input: {
   const address = server.address();
   if (!address || typeof address === 'string')
     throw new Error('The API did not receive a TCP port.');
+
   let closing: Promise<void> | undefined;
   return {
     port: address.port,
     close() {
       return (closing ??= (async () => {
         unsubscribe();
-        for (const socket of server.clients) socket.terminate();
+        for (const socket of server.clients)
+          socket.terminate();
         const disconnected = new Promise<void>((resolve, reject) =>
-          server.close((error) => (error ? reject(error) : resolve())),
-        );
+          server.close((error) => (error ? reject(error) : resolve())));
         const results = await Promise.allSettled([disconnected, input.onClosing?.(), ...pending]);
         const errors = results
           .filter((result) => result.status === 'rejected')
           .map((result) => result.reason);
-        if (errors.length) throw new AggregateError(errors, 'API shutdown failed.');
+        if (errors.length)
+          throw new AggregateError(errors, 'API shutdown failed.');
       })());
     },
   };

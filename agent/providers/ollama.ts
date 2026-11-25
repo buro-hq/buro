@@ -29,7 +29,9 @@ export type OllamaOptions = HttpOptions & {
 };
 type Options = OllamaOptions;
 const failure = (code: string, message: string) =>
-  new ProviderFailure(code, message, { outcome: 'unknown' });
+  new ProviderFailure(code, message, {
+    outcome: 'unknown',
+  });
 export class OllamaProvider implements ModelProvider {
   readonly structuredToolMode = 'separate-turn' as const;
   readonly structuredOutputMode = 'schema' as const;
@@ -49,6 +51,7 @@ export class OllamaProvider implements ModelProvider {
     this.local = options.local;
     this.gate = options.gate || new RequestGate(1);
   }
+
   /**
    * An intentionally lossy request view for explicit non-thinking mode: once every tool
    * result is present, retain the calls and their evidence without assistant commentary.
@@ -57,62 +60,80 @@ export class OllamaProvider implements ModelProvider {
    */
   contextMessages(messages: readonly ModelMessage[], context?: ModelContext): ModelMessage[] {
     const projected = structuredClone([...messages]);
-    if (this.options.think !== false) return projected;
+    if (this.options.think !== false)
+      return projected;
+
     const callCounts = new Map<string, number>();
     const resultCounts = new Map<string, number>();
     for (const message of messages) {
       if (message.role === 'assistant')
         for (const call of message.toolCalls || [])
           callCounts.set(call.id, (callCounts.get(call.id) || 0) + 1);
+
       if (message.role === 'tool' && message.toolCallId)
         resultCounts.set(message.toolCallId, (resultCounts.get(message.toolCallId) || 0) + 1);
     }
     for (let index = 0; index < messages.length; index++) {
       const message = messages[index];
-      if (message.role !== 'assistant' || !message.toolCalls?.length) continue;
+      if (message.role !== 'assistant' || !message.toolCalls?.length)
+        continue;
+
       const ids = new Set(message.toolCalls.map((call) => call.id));
       if (
         ids.size !== message.toolCalls.length ||
         [...ids].some((id) => !id || callCounts.get(id) !== 1 || resultCounts.get(id) !== 1)
       )
         continue;
+
       const completed = new Set<string>();
       let valid = true;
       for (let next = index + 1; next < messages.length; next++) {
         const following = messages[next];
-        if (following.role === 'user' || following.role === 'assistant') break;
-        if (following.role !== 'tool') continue;
+        if (following.role === 'user' || following.role === 'assistant')
+          break;
+
+        if (following.role !== 'tool')
+          continue;
+
         if (!following.toolCallId || !ids.has(following.toolCallId)) {
           valid = false;
           break;
         }
+
         completed.add(following.toolCallId);
       }
-      if (valid && completed.size === ids.size) projected[index].content = '';
+      if (valid && completed.size === ids.size)
+        projected[index].content = '';
     }
     const notes = context?.intermediateMessageIndexes;
     if (
       notes?.length &&
       (context?.phase === 'work' ||
         (context?.phase === 'final' && notes.at(-1) === messages.length - 2)) &&
-      notes.every(
-        (index, position) =>
-          Number.isInteger(index) &&
-          index >= 0 &&
-          (position === 0 || index > notes[position - 1]) &&
-          messages[index]?.role === 'assistant' &&
-          !messages[index].toolCalls?.length &&
-          messages[index + 1]?.role === 'user',
-      )
+        notes.every(
+          (index, position) =>
+            Number.isInteger(index) &&
+            index >= 0 &&
+            (position === 0 || index > notes[position - 1]) &&
+            messages[index]?.role === 'assistant' &&
+            !messages[index].toolCalls?.length &&
+            messages[index + 1]?.role === 'user',
+        )
     )
-      for (const index of notes) projected[index].content = '';
+      for (const index of notes)
+        projected[index].content = '';
+
     return projected;
   }
+
   async listModels(signal: AbortSignal) {
     return this.gate.run(signal, async () => {
-      const result = object(await json(await request(this.options, 'api/tags', { signal })));
+      const result = object(await json(await request(this.options, 'api/tags', {
+        signal,
+      })));
       if (!Array.isArray(result.models))
         throw failure('MODEL_INVALID_RESPONSE', 'Ollama did not return a model list.');
+
       return result.models
         .map((raw) => object(raw))
         .filter((model) => typeof model.name === 'string')
@@ -122,6 +143,7 @@ export class OllamaProvider implements ModelProvider {
         }));
     });
   }
+
   async inspect(model: string, signal: AbortSignal) {
     return this.gate.run(signal, async () => {
       const result = object(
@@ -130,7 +152,9 @@ export class OllamaProvider implements ModelProvider {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             signal,
-            body: encodeJSON({ model }),
+            body: encodeJSON({
+              model,
+            }),
           }),
         ),
       );
@@ -153,10 +177,12 @@ export class OllamaProvider implements ModelProvider {
       };
     });
   }
+
   async complete(input: Parameters<ModelProvider['complete']>[0]) {
     return this.gate.run(input.signal, async () => {
       const emit = (event: import('../contracts/model.ts').ModelStreamEvent) => {
-        if (input.onEvent) observer(() => input.onEvent?.(structuredClone(event)));
+        if (input.onEvent)
+          observer(() => input.onEvent?.(structuredClone(event)));
       };
       const messages = input.messages.map((message) => ({
         role: message.role,
@@ -191,39 +217,55 @@ export class OllamaProvider implements ModelProvider {
           },
         }),
       });
-      let content = '',
-        thinking = '',
-        done = false,
-        reason = '',
-        reportedModel = input.model;
-      let inputTokens: number | undefined, outputTokens: number | undefined;
+      let content = '';
+      let thinking = '';
+      let done = false;
+      let reason = '';
+      let reportedModel = input.model;
+      let inputTokens: number | undefined;
+      let outputTokens: number | undefined;
       const calls = new Map<number, { name: string; fragments: string; args?: unknown }>();
       for await (const line of lines(response, input.onProgress)) {
-        if (!line.trim()) continue;
+        if (!line.trim())
+          continue;
+
         const chunk = object(parseJSON(line));
         if (chunk.error)
           throw failure('MODEL_REQUEST_REJECTED', 'Ollama returned a generation error.');
+
         const message = object(chunk.message);
         if (typeof message.content === 'string') {
           content += message.content;
-          emit({ type: 'text.delta', text: message.content });
+          emit({
+            type: 'text.delta',
+            text: message.content,
+          });
         }
-        if (typeof message.thinking === 'string') thinking += message.thinking;
-        if (typeof chunk.model === 'string') reportedModel = chunk.model;
+
+        if (typeof message.thinking === 'string')
+          thinking += message.thinking;
+
+        if (typeof chunk.model === 'string')
+          reportedModel = chunk.model;
+
         if (Array.isArray(message.tool_calls))
           for (const raw of message.tool_calls) {
-            const call = object(raw),
-              fn = object(call.function);
+            const call = object(raw);
+            const fn = object(call.function);
             const index = tokenCount(call.index) ?? tokenCount(fn.index) ?? calls.size;
             const current = calls.get(index) || { name: '', fragments: '' };
-            if (typeof fn.name === 'string' && fn.name !== current.name) current.name += fn.name;
+            if (typeof fn.name === 'string' && fn.name !== current.name)
+              current.name += fn.name;
+
             if (typeof fn.arguments === 'string') {
               if (current.args !== undefined)
                 throw failure('MODEL_INVALID_RESPONSE', 'Ollama mixed tool argument formats.');
+
               current.fragments += fn.arguments;
             } else if (fn.arguments !== undefined) {
               if (current.fragments)
                 throw failure('MODEL_INVALID_RESPONSE', 'Ollama mixed tool argument formats.');
+
               if (
                 current.args !== undefined &&
                 JSON.stringify(current.args) !== JSON.stringify(fn.arguments)
@@ -232,10 +274,13 @@ export class OllamaProvider implements ModelProvider {
                   'MODEL_INVALID_RESPONSE',
                   'Ollama returned conflicting tool arguments.',
                 );
+
               current.args = fn.arguments;
             }
+
             calls.set(index, current);
           }
+
         if (chunk.done === true) {
           done = true;
           reason = typeof chunk.done_reason === 'string' ? chunk.done_reason : 'stop';
@@ -249,10 +294,13 @@ export class OllamaProvider implements ModelProvider {
           'MODEL_STREAM_INTERRUPTED',
           'Ollama generation ended without a terminal response.',
         );
+
       const toolCalls: ModelToolCall[] = [...calls.entries()]
         .sort(([a], [b]) => a - b)
         .map(([index, call]) => {
-          if (!call.name) throw failure('MODEL_INVALID_RESPONSE', 'A tool call has no name.');
+          if (!call.name)
+            throw failure('MODEL_INVALID_RESPONSE', 'A tool call has no name.');
+
           return {
             id: `${input.requestId}:call:${index}`,
             name: call.name,
@@ -261,6 +309,7 @@ export class OllamaProvider implements ModelProvider {
         });
       if (!toolCalls.length && reason === 'stop' && !content.trim())
         throw failure('MODEL_INVALID_RESPONSE', 'Ollama completed without an assistant answer.');
+
       const completion = {
         model: reportedModel,
         finish:
@@ -281,8 +330,17 @@ export class OllamaProvider implements ModelProvider {
           ? { usage: { inputTokens, outputTokens } }
           : {}),
       };
-      if (completion.usage) emit({ type: 'usage', usage: completion.usage });
-      emit({ type: 'response.completed', model: completion.model, finish: completion.finish });
+      if (completion.usage)
+        emit({
+          type: 'usage',
+          usage: completion.usage,
+        });
+
+      emit({
+        type: 'response.completed',
+        model: completion.model,
+        finish: completion.finish,
+      });
       return completion;
     });
   }

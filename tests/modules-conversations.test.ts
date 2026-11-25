@@ -20,7 +20,9 @@ const conversation = (id: string): SessionConversation => ({
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
   messageCount: 1201,
-  messages: Array.from({ length: 1201 }, (_, index) => ({
+  messages: Array.from({
+    length: 1201,
+  }, (_, index) => ({
     id: id + '-message-' + index,
     role: index === 0 ? 'system' : index % 2 ? 'user' : 'assistant',
     content: 'Observed message ' + index,
@@ -32,13 +34,22 @@ for (const adapter of ['sqlite', 'json']) {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-conversations-'));
     const open = () =>
       adapter === 'sqlite'
-        ? new SqliteStorage({ filename: path.join(directory, 'state.sqlite') })
-        : new JsonStorage({ directory });
+        ? new SqliteStorage({
+            filename: path.join(directory, 'state.sqlite'),
+          })
+        : new JsonStorage({
+            directory,
+          });
     let storage = open();
-    let store = new ConversationStore({ storage });
+    let store = new ConversationStore({
+      storage,
+    });
     t.after(async () => {
       await storage.close();
-      await fs.rm(directory, { recursive: true, force: true });
+      await fs.rm(directory, {
+        recursive: true,
+        force: true,
+      });
     });
     const original = conversation('first');
     await storage.records('sessions').save(original);
@@ -48,18 +59,30 @@ for (const adapter of ['sqlite', 'json']) {
     });
     await store.migrate();
     await store.replace(conversation('unrelated'));
-    const selected = await store.list({ runId: 'run-first' });
+    const selected = await store.list({
+      runId: 'run-first',
+    });
     assert.equal(selected.length, 1);
     assert.equal('messages' in selected[0], false);
     assert.equal(selected[0].messageCount, 1201);
-    const tail = await store.history({ sessionId: original.id });
+    const tail = await store.history({
+      sessionId: original.id,
+    });
     assert.equal(tail.start, 1151);
     assert.deepEqual(tail.messages, original.messages.slice(1151));
-    const earlier = await store.history({ sessionId: original.id, before: tail.start, limit: 100 });
+    const earlier = await store.history({
+      sessionId: original.id,
+      before: tail.start,
+      limit: 100,
+    });
     assert.equal(earlier.start, 1051);
     assert.deepEqual(earlier.messages, original.messages.slice(1051, 1151));
     assert.deepEqual(
-      (await store.history({ sessionId: original.id, after: 1198, limit: 10 })).messages,
+      (await store.history({
+        sessionId: original.id,
+        after: 1198,
+        limit: 10,
+      })).messages,
       original.messages.slice(1199),
     );
     assert.deepEqual((await store.load(original.id))!.messages, original.messages);
@@ -67,11 +90,16 @@ for (const adapter of ['sqlite', 'json']) {
 
     // An interrupted migration must not replace already migrated and subsequently edited data.
     await storage.records('sessions').save(original);
-    await store.patch({ id: original.id, changes: { modelId: 'selected-after-migration' } });
+    await store.patch({
+      id: original.id,
+      changes: { modelId: 'selected-after-migration' },
+    });
     await store.migrate();
     await storage.close();
     storage = open();
-    store = new ConversationStore({ storage });
+    store = new ConversationStore({
+      storage,
+    });
     assert.equal((await store.get(original.id))!.modelId, 'selected-after-migration');
     assert.deepEqual((await store.load(original.id))!.messages, original.messages);
     assert.equal(
@@ -81,7 +109,9 @@ for (const adapter of ['sqlite', 'json']) {
       'private-fixture',
     );
     await store.delete(original.id);
-    assert.equal((await store.history({ sessionId: original.id })).messages.length, 0);
+    assert.equal((await store.history({
+      sessionId: original.id,
+    })).messages.length, 0);
     assert.equal((await store.list()).length, 1);
   });
 }
@@ -89,7 +119,9 @@ for (const adapter of ['sqlite', 'json']) {
 test('normal execution appends messages without updating any saved transcript row', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-append-only-'));
   const filename = path.join(directory, 'private/state.sqlite');
-  const app = await createApplication({ directory });
+  const app = await createApplication({
+    directory,
+  });
   const audit = new DatabaseSync(filename);
   audit.exec(`
     CREATE TABLE rewritten_messages(id TEXT);
@@ -100,7 +132,10 @@ test('normal execution appends messages without updating any saved transcript ro
   t.after(async () => {
     audit.close();
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
   let requests = 0;
   app.models.register({
@@ -164,18 +199,29 @@ test('normal execution appends messages without updating any saved transcript ro
   );
   const { count } = audit.prepare('SELECT count(*) AS count FROM rewritten_messages').get()!;
   assert.equal(count, 0);
-  const session = (await app.sessions.get({ id: created.sessionId }))!;
-  const history = await app.sessions.history({ sessionId: session.id, after: -1, limit: 250 });
+  const session = (await app.sessions.get({
+    id: created.sessionId,
+  }))!;
+  const history = await app.sessions.history({
+    sessionId: session.id,
+    after: -1,
+    limit: 250,
+  });
   assert.equal(session.messageCount, history.messages.length);
   assert.equal(history.messages.filter(({ role }) => role === 'tool').length, 7);
   assert.equal(new Set(history.messages.map(({ id }) => id)).size, history.messages.length);
 });
 
 test('a failed atomic message batch leaves the header and old transcript intact', async () => {
-  const storage = new SqliteStorage({ filename: ':memory:' });
+  const storage = new SqliteStorage({
+    filename: ':memory:',
+  });
   const records = storage.records<{ id: string; value: number }>('fixture');
   try {
-    await records.save({ id: 'saved', value: 1 });
+    await records.save({
+      id: 'saved',
+      value: 1,
+    });
     await assert.rejects(
       records.write({
         delete: { id: 'saved' },
@@ -209,7 +255,9 @@ test('a transcript retains opened pages and catches up with a burst larger than 
   assert.equal((await transcript.earlier()).messages.length, 100);
   messages.push(
     ...Array.from(
-      { length: 123 },
+      {
+        length: 123,
+      },
       (_, index): SessionMessage => ({
         id: 'new-' + index,
         role: 'assistant',

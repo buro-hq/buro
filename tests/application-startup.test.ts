@@ -12,7 +12,9 @@ import { localPort } from './fixtures/local-port.ts';
 
 test(
   'the production launcher connects the real UI and CLI to a fresh service and releases ownership on shutdown',
-  { timeout: 30000 },
+  {
+    timeout: 30000,
+  },
   async (t) => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-production-startup-'));
     const env = {
@@ -32,11 +34,14 @@ test(
       await browser?.close();
       child.kill('SIGTERM');
       await exited;
-      await fs.rm(directory, { recursive: true, force: true });
+      await fs.rm(directory, {
+        recursive: true,
+        force: true,
+      });
     });
     const address = await new Promise<{ ui: string; api: string }>((resolve, reject) => {
-      let output = '',
-        error = '';
+      let output = '';
+      let error = '';
       const timer = setTimeout(
         () => reject(new Error('Launcher did not become ready. ' + error)),
         15000,
@@ -47,11 +52,14 @@ test(
       });
       child.stdout.on('data', (bytes) => {
         output += bytes.toString();
-        const api = output.match(/Buro daemon: (ws:\/\/127\.0\.0\.1:\d+)/)?.[1],
-          ui = output.match(/Buro: (http:\/\/[^\s]+)/)?.[1];
+        const api = output.match(/Buro daemon: (ws:\/\/127\.0\.0\.1:\d+)/)?.[1];
+        const ui = output.match(/Buro: (http:\/\/[^\s]+)/)?.[1];
         if (api && ui) {
           clearTimeout(timer);
-          resolve({ ui, api });
+          resolve({
+            ui,
+            api,
+          });
         }
       });
       child.once('close', () => {
@@ -71,34 +79,54 @@ test(
           [
             'cli/main.ts',
             'projects.connect',
-            JSON.stringify({ root: directory, name: 'Example project' }),
+            JSON.stringify({
+              root: directory,
+              name: 'Example project',
+            }),
           ],
-          { env: cliEnv },
+          {
+            env: cliEnv,
+          },
         )
       ).stdout,
     );
     assert.equal(connected.ok, true);
-    browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage({ viewport: { width: 1366, height: 900 } }),
-      errors: string[] = [];
+    browser = await chromium.launch({
+      headless: true,
+    });
+    const page = await browser.newPage({
+      viewport: { width: 1366, height: 900 },
+    });
+    const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const token = await apiCredential({ directory });
+    const token = await apiCredential({
+      directory,
+    });
     await page.goto(address.ui + '#buro-token=' + token);
     await expect(
-      page.locator('.sidebar').getByText('Service connected', { exact: true }),
+      page.locator('.sidebar').getByText('Service connected', {
+        exact: true,
+      }),
     ).toBeVisible();
     await expect(page.locator('h1')).toContainText('Example project');
     assert.equal(new URL(page.url()).hash, '');
-    await page.locator('.sidebar').getByRole('button', { name: 'Models', exact: true }).click();
+    await page.locator('.sidebar').getByRole('button', {
+      name: 'Models',
+      exact: true,
+    }).click();
     await expect(
-      page.getByText('Add a model connection to start a run.', { exact: true }),
+      page.getByText('Add a model connection to start a run.', {
+        exact: true,
+      }),
     ).toBeVisible();
     assert.deepEqual(errors, []);
     await browser.close();
     browser = undefined;
     child.kill('SIGTERM');
     await exited;
-    const reopened = await createApplication({ directory });
+    const reopened = await createApplication({
+      directory,
+    });
     assert.equal((await reopened.projects.list())[0].name, 'Example project');
     await reopened.close();
   },

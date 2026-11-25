@@ -23,6 +23,8 @@ export class ActivityLog implements ActivityHistory {
 
   /** Returns the observations belonging to a session or run. */
   async list(input: { sessionId?: string; runId?: string } = {}): Promise<Activity[]> {
-    return this.store.list({ where: input });
+    return this.store.list({
+      where: input,
+    });
   }
 }

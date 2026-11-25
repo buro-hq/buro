@@ -18,17 +18,19 @@ import { useOperation } from '../common/operation.ts';
 
 /** Publishing is an explicit user command, separate from completion and local application of changes. */
 export function DeliveriesPanel(input: { runId: string }): ReactElement {
-  const { client } = useApplication(),
-    publishers = useApiQuery('deliveries.publishers', {}),
-    deliveries = useApiQuery('deliveries.list', { runId: input.runId }),
-    action = useOperation();
-  const [publisherId, setPublisherId] = useState<string | null>(null),
-    [title, setTitle] = useState(''),
-    [description, setDescription] = useState(''),
-    [base, setBase] = useState(''),
-    [branch, setBranch] = useState(''),
-    [remote, setRemote] = useState(''),
-    [advanced, setAdvanced] = useState(false);
+  const { client } = useApplication();
+  const publishers = useApiQuery('deliveries.publishers', {});
+  const deliveries = useApiQuery('deliveries.list', {
+    runId: input.runId,
+  });
+  const action = useOperation();
+  const [publisherId, setPublisherId] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [base, setBase] = useState('');
+  const [branch, setBranch] = useState('');
+  const [remote, setRemote] = useState('');
+  const [advanced, setAdvanced] = useState(false);
   return (
     <Stack>
       <Text size="sm" c="dimmed">
@@ -94,8 +96,7 @@ export function DeliveriesPanel(input: { runId: string }): ReactElement {
               remote: remote || undefined,
             });
             return { ok: result.ok, error: result.error };
-          })
-        }
+          })}
       >
         {t('Publish draft PR')}
       </Button>
@@ -108,7 +109,9 @@ export function DeliveriesPanel(input: { runId: string }): ReactElement {
               <Badge>{t(delivery.status)}</Badge>
             </Group>
             <Text size="xs" c="dimmed">
-              {delivery.branch} {delivery.commit?.slice(0, 12)}
+              {delivery.branch}
+              {' '}
+              {delivery.commit?.slice(0, 12)}
             </Text>
             {delivery.workspace && (
               <Text size="xs" style={{ overflowWrap: 'anywhere' }}>

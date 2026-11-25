@@ -8,12 +8,12 @@ import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 
 function AgentEditor(input: { agent?: Agent; onClose(): void }): ReactElement {
-  const { client } = useApplication(),
-    action = useOperation();
-  const [name, setName] = useState(input.agent?.name ?? ''),
-    [description, setDescription] = useState(input.agent?.description ?? ''),
-    [instructions, setInstructions] = useState(input.agent?.instructions ?? ''),
-    [tools, setTools] = useState(input.agent?.tools?.join(', ') ?? '');
+  const { client } = useApplication();
+  const action = useOperation();
+  const [name, setName] = useState(input.agent?.name ?? '');
+  const [description, setDescription] = useState(input.agent?.description ?? '');
+  const [instructions, setInstructions] = useState(input.agent?.instructions ?? '');
+  const [tools, setTools] = useState(input.agent?.tools?.join(', ') ?? '');
   async function save(): Promise<void> {
     const result = await action.perform(async () => {
       await client.call('agents.save', {
@@ -30,7 +30,8 @@ function AgentEditor(input: { agent?: Agent; onClose(): void }): ReactElement {
       });
       return { ok: true };
     });
-    if (result.ok) input.onClose();
+    if (result.ok)
+      input.onClose();
   }
   return (
     <Modal opened onClose={input.onClose} title={t('Agent')} size="lg">
@@ -73,9 +74,9 @@ function AgentEditor(input: { agent?: Agent; onClose(): void }): ReactElement {
 
 /** Reusable collaborators are ordinary descriptions, without reserved names or phases. */
 export function AgentsPage(): ReactElement {
-  const { client } = useApplication(),
-    agents = useApiQuery('agents.list', {}),
-    action = useOperation();
+  const { client } = useApplication();
+  const agents = useApiQuery('agents.list', {});
+  const action = useOperation();
   const [editor, setEditor] = useState<{ agent?: Agent }>();
   return (
     <Panel
@@ -98,7 +99,12 @@ export function AgentsPage(): ReactElement {
                 {agent.instructions}
               </Text>
               <Group>
-                <Button variant="default" onClick={() => setEditor({ agent })}>
+                <Button
+                  variant="default"
+                  onClick={() => setEditor({
+                    agent,
+                  })}
+                >
                   {t('Edit')}
                 </Button>
                 <Button
@@ -106,10 +112,11 @@ export function AgentsPage(): ReactElement {
                   color="red"
                   onClick={() =>
                     void action.perform(async () => {
-                      await client.call('agents.delete', { id: agent.id });
+                      await client.call('agents.delete', {
+                        id: agent.id,
+                      });
                       return { ok: true };
-                    })
-                  }
+                    })}
                 >
                   {t('Delete')}
                 </Button>

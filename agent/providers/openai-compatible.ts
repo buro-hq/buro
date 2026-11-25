@@ -34,10 +34,13 @@ const failure = (
   code: string,
   message: string,
   outcome: 'not-dispatched' | 'rejected' | 'unknown' = 'unknown',
-) => new ProviderFailure(code, message, { outcome });
+) => new ProviderFailure(code, message, {
+  outcome,
+});
 export class OpenAICompatibleProvider implements ModelProvider {
   protected readonly authRequiredMessage: string =
     'Set the configured API key before using this connection.';
+
   readonly structuredToolMode: 'combined' | 'separate-turn';
   readonly structuredOutputMode: 'schema' | 'instruction';
   readonly id: string;
@@ -55,6 +58,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
         'Reasoning budget must be -1 or a nonnegative integer.',
         'not-dispatched',
       );
+
     const endpoint = endpointURL(options.endpoint);
     this.options = {
       ...options,
@@ -69,8 +73,11 @@ export class OpenAICompatibleProvider implements ModelProvider {
       (options.responseFormat ?? 'json_schema') === 'json_schema' ? 'schema' : 'instruction';
     this.gate = options.gate || new RequestGate(2);
   }
+
   private headers(): Record<string, string> {
-    if (!this.options.apiKey) return { 'Content-Type': 'application/json' };
+    if (!this.options.apiKey)
+      return { 'Content-Type': 'application/json' };
+
     let key: string | undefined;
     try {
       key = this.options.apiKey();
@@ -78,30 +85,41 @@ export class OpenAICompatibleProvider implements ModelProvider {
       throw new ProviderFailure(
         'MODEL_AUTH_REQUIRED',
         'The configured API credential is unavailable.',
-        { outcome: 'not-dispatched', cause },
+        {
+          outcome: 'not-dispatched',
+          cause,
+        },
       );
     }
     if (typeof key !== 'string' || !key.trim() || /[\r\n\0]/.test(key))
       throw failure('MODEL_AUTH_REQUIRED', this.authRequiredMessage, 'not-dispatched');
-    return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key };
+
+    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key };
   }
+
   async listModels(signal: AbortSignal) {
     return this.gate.run(signal, async () => {
       const body = object(
-        await json(await request(this.options, 'models', { signal, headers: this.headers() })),
+        await json(await request(this.options, 'models', {
+          signal,
+          headers: this.headers(),
+        })),
       );
       if (!Array.isArray(body.data))
         throw failure('MODEL_INVALID_RESPONSE', 'Model endpoint did not return a model list.');
+
       return body.data
         .map((raw) => object(raw))
         .filter((model) => typeof model.id === 'string')
         .map((model) => ({ id: model.id as string }));
     });
   }
+
   async complete(input: Parameters<ModelProvider['complete']>[0]) {
     return this.gate.run(input.signal, async () => {
       const emit = (event: import('../contracts/model.ts').ModelStreamEvent) => {
-        if (input.onEvent) observer(() => input.onEvent?.(structuredClone(event)));
+        if (input.onEvent)
+          observer(() => input.onEvent?.(structuredClone(event)));
       };
       const messages = input.messages.map((message) => ({
         role: message.role,
@@ -131,8 +149,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
             ? { tools: input.tools.map((tool) => ({ type: 'function', function: tool })) }
             : {}),
           ...(input.schema != null &&
-          (!input.tools.length || this.structuredToolMode === 'combined') &&
-          this.options.responseFormat !== 'instruction'
+            (!input.tools.length || this.structuredToolMode === 'combined') &&
+            this.options.responseFormat !== 'instruction'
             ? {
                 response_format:
                   this.options.responseFormat === 'json_object'
@@ -159,51 +177,74 @@ export class OpenAICompatibleProvider implements ModelProvider {
           stream_options: { include_usage: true },
         }),
       });
-      let content = '',
-        reasoning = '',
-        done = false,
-        finish = '',
-        reportedModel = input.model;
-      let inputTokens: number | undefined, outputTokens: number | undefined;
+      let content = '';
+      let reasoning = '';
+      let done = false;
+      let finish = '';
+      let reportedModel = input.model;
+      let inputTokens: number | undefined;
+      let outputTokens: number | undefined;
       const calls = new Map<number, { id: string; name: string; arguments: string }>();
       for await (const data of sse(response, input.onProgress)) {
         if (data.trim() === '[DONE]') {
           done = true;
           break;
         }
+
         const chunk = object(parseJSON(data));
         if (chunk.error)
           throw failure('MODEL_REQUEST_REJECTED', 'Model endpoint returned a generation error.');
-        if (typeof chunk.model === 'string') reportedModel = chunk.model;
+
+        if (typeof chunk.model === 'string')
+          reportedModel = chunk.model;
+
         const usage = object(chunk.usage);
         inputTokens = tokenCount(usage.prompt_tokens) ?? inputTokens;
         outputTokens = tokenCount(usage.completion_tokens) ?? outputTokens;
         const choices = Array.isArray(chunk.choices) ? chunk.choices.map(object) : [];
         const choice = choices.find((item) => item.index === 0);
-        if (!choice) continue;
+        if (!choice)
+          continue;
+
         const delta = object(choice.delta);
         if (typeof delta.content === 'string') {
           content += delta.content;
-          emit({ type: 'text.delta', text: delta.content });
+          emit({
+            type: 'text.delta',
+            text: delta.content,
+          });
         }
-        if (typeof delta.reasoning_content === 'string') reasoning += delta.reasoning_content;
-        else if (typeof delta.reasoning === 'string') reasoning += delta.reasoning;
-        if (typeof choice.finish_reason === 'string') finish = choice.finish_reason;
+
+        if (typeof delta.reasoning_content === 'string')
+          reasoning += delta.reasoning_content;
+        else if (typeof delta.reasoning === 'string')
+          reasoning += delta.reasoning;
+
+        if (typeof choice.finish_reason === 'string')
+          finish = choice.finish_reason;
+
         if (Array.isArray(delta.tool_calls))
           for (const raw of delta.tool_calls) {
-            const part = object(raw),
-              fn = object(part.function),
-              index = tokenCount(part.index);
+            const part = object(raw);
+            const fn = object(part.function);
+            const index = tokenCount(part.index);
             if (index === undefined)
               throw failure('MODEL_INVALID_RESPONSE', 'A streamed tool call is missing its index.');
+
             const current = calls.get(index) || { id: '', name: '', arguments: '' };
             if (typeof part.id === 'string') {
               if (current.id && current.id !== part.id)
                 throw failure('MODEL_INVALID_RESPONSE', 'A streamed tool call changed its ID.');
+
               current.id = part.id;
             }
-            if (typeof fn.name === 'string') current.name += fn.name;
-            if (typeof fn.arguments === 'string') current.arguments += fn.arguments;
+
+            if (typeof fn.name === 'string')
+              current.name += fn.name;
+
+            if (typeof fn.arguments === 'string')
+              current.arguments += fn.arguments;
+
             calls.set(index, current);
           }
       }
@@ -212,6 +253,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           'MODEL_STREAM_INTERRUPTED',
           'Model endpoint generation ended without a terminal response.',
         );
+
       const toolCalls: ModelToolCall[] = [...calls.entries()]
         .sort(([a], [b]) => a - b)
         .map(([, call]) => {
@@ -220,6 +262,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
               'MODEL_INVALID_RESPONSE',
               'An incomplete streamed tool call was returned.',
             );
+
           return { id: call.id, name: call.name, arguments: parseJSON(call.arguments || '{}') };
         });
       if (!toolCalls.length && finish === 'stop' && !content.trim())
@@ -227,6 +270,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           'MODEL_INVALID_RESPONSE',
           'Model endpoint completed without an assistant answer.',
         );
+
       const completion = {
         model: reportedModel,
         finish:
@@ -247,8 +291,17 @@ export class OpenAICompatibleProvider implements ModelProvider {
           ? { usage: { inputTokens, outputTokens } }
           : {}),
       };
-      if (completion.usage) emit({ type: 'usage', usage: completion.usage });
-      emit({ type: 'response.completed', model: completion.model, finish: completion.finish });
+      if (completion.usage)
+        emit({
+          type: 'usage',
+          usage: completion.usage,
+        });
+
+      emit({
+        type: 'response.completed',
+        model: completion.model,
+        finish: completion.finish,
+      });
       return completion;
     });
   }

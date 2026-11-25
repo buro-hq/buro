@@ -10,12 +10,17 @@ const execute = promisify(execFile);
 
 test('compiled provider entry works in a standalone consumer without repository source, ambient fetch or Codex', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-provider-consumer-'));
-  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  t.after(() => fs.rm(directory, {
+    recursive: true,
+    force: true,
+  }));
   for (const part of ['contracts', 'providers'])
     await fs.cp(path.resolve('agent', part), path.join(directory, 'source', part), {
       recursive: true,
     });
-  await fs.writeFile(path.join(directory, 'package.json'), JSON.stringify({ type: 'module' }));
+  await fs.writeFile(path.join(directory, 'package.json'), JSON.stringify({
+    type: 'module',
+  }));
   await fs.writeFile(
     path.join(directory, 'tsconfig.json'),
     JSON.stringify({
@@ -38,10 +43,14 @@ test('compiled provider entry works in a standalone consumer without repository 
   await execute(
     process.execPath,
     [compiler, '--project', path.join(directory, 'tsconfig.json'), '--pretty', 'false'],
-    { cwd: directory },
+    {
+      cwd: directory,
+    },
   );
   // The consumer below can only load the compiled artifact; all TypeScript sources are gone.
-  await fs.rm(path.join(directory, 'source'), { recursive: true });
+  await fs.rm(path.join(directory, 'source'), {
+    recursive: true,
+  });
   assert.deepEqual((await fs.readdir(directory)).sort(), ['dist', 'package.json', 'tsconfig.json']);
   const script = `
 import assert from 'node:assert/strict';

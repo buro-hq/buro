@@ -19,8 +19,7 @@ const mix = (color: string, ratio: number) => {
       .map((c) =>
         Math.round(c + (255 - c) * ratio)
           .toString(16)
-          .padStart(2, '0'),
-      )
+          .padStart(2, '0'))
       .join('')
   );
 };
@@ -63,10 +62,10 @@ function variables(colors: ThemeColors, scheme: 'light' | 'dark') {
 }
 export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [savedTheme, setTheme] = useLocalStorage<string>({
-      key: 'project-panel-theme',
-      defaultValue: defaultThemeId,
-    }),
-    preset = getThemePreset(savedTheme);
+    key: 'project-panel-theme',
+    defaultValue: defaultThemeId,
+  });
+  const preset = getThemePreset(savedTheme);
   const theme = useMemo(
     () =>
       createTheme({
@@ -113,7 +112,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     [preset],
   );
   const manager = useMemo(
-    () => localStorageColorSchemeManager({ key: 'project-panel-color-scheme' }),
+    () => localStorageColorSchemeManager({
+      key: 'project-panel-color-scheme',
+    }),
     [],
   );
   return (

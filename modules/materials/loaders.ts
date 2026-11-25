@@ -25,7 +25,9 @@ export function materialLoaders(): MaterialLoader[] {
             ? { mimeType, text }
             : { mimeType, note: 'No text was extracted; the original file is available.' };
         } catch (error) {
-          if (signal.aborted) throw error;
+          if (signal.aborted)
+            throw error;
+
           return {
             mimeType,
             note: 'Automatic text extraction is unavailable; the original file is available.',
@@ -47,7 +49,9 @@ export function materialLoaders(): MaterialLoader[] {
       id: 'text',
       matches({ bytes }) {
         try {
-          return !new TextDecoder('utf-8', { fatal: true }).decode(bytes).includes('\0');
+          return !new TextDecoder('utf-8', {
+            fatal: true,
+          }).decode(bytes).includes('\0');
         } catch {
           return false;
         }
@@ -55,7 +59,9 @@ export function materialLoaders(): MaterialLoader[] {
       async load({ name, bytes }) {
         return {
           mimeType: /\.md$/i.test(name) ? 'text/markdown' : 'text/plain',
-          text: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+          text: new TextDecoder('utf-8', {
+            fatal: true,
+          }).decode(bytes),
         };
       },
     },

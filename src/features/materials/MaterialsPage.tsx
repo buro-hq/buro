@@ -8,8 +8,12 @@ import { useOperation } from '../common/operation.ts';
 import { uploadedFile } from './upload.ts';
 
 function MaterialReader(input: { id: string; onClose(): void }): ReactElement {
-  const [line, setLine] = useState(1),
-    material = useApiQuery('materials.read', { id: input.id, line, count: 200 });
+  const [line, setLine] = useState(1);
+  const material = useApiQuery('materials.read', {
+    id: input.id,
+    line,
+    count: 200,
+  });
   return (
     <Modal
       opened
@@ -51,35 +55,45 @@ function MaterialReader(input: { id: string; onClose(): void }): ReactElement {
 
 /** Project context can be uploaded, read and downloaded independently of a run. */
 export function MaterialsPage(input: { projectId: string }): ReactElement {
-  const { client } = useApplication(),
-    materials = useApiQuery('materials.list', { projectId: input.projectId }),
-    action = useOperation();
-  const [files, setFiles] = useState<File[]>([]),
-    [selected, setSelected] = useState<string>();
+  const { client } = useApplication();
+  const materials = useApiQuery('materials.list', {
+    projectId: input.projectId,
+  });
+  const action = useOperation();
+  const [files, setFiles] = useState<File[]>([]);
+  const [selected, setSelected] = useState<string>();
   async function upload(): Promise<void> {
     for (const file of files) {
       const result = await action.perform(async () => {
         const uploaded = await client.call('materials.upload', {
           projectId: input.projectId,
           name: file.name,
-          contentBase64: await uploadedFile({ file }),
+          contentBase64: await uploadedFile({
+            file,
+          }),
         });
         return { ok: uploaded.ok, error: uploaded.error };
       });
-      if (!result.ok) return;
+      if (!result.ok)
+        return;
+
       setFiles((previous) => previous.filter((candidate) => candidate !== file));
     }
   }
   async function download(id: string): Promise<void> {
     await action.perform(async () => {
-      const result = await client.call('materials.download', { id });
+      const result = await client.call('materials.download', {
+        id,
+      });
       if (!result.ok || result.contentBase64 === undefined)
         return { ok: false, error: result.error };
+
       const bytes = Uint8Array.from(atob(result.contentBase64), (character) =>
-          character.charCodeAt(0),
-        ),
-        url = URL.createObjectURL(new Blob([bytes], { type: result.material?.mimeType })),
-        anchor = document.createElement('a');
+        character.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], {
+        type: result.material?.mimeType,
+      }));
+      const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = result.material?.name ?? 'material';
       anchor.click();
@@ -131,10 +145,11 @@ export function MaterialsPage(input: { projectId: string }): ReactElement {
                   color="red"
                   onClick={() =>
                     void action.perform(async () => {
-                      await client.call('materials.delete', { id: material.id });
+                      await client.call('materials.delete', {
+                        id: material.id,
+                      });
                       return { ok: true };
-                    })
-                  }
+                    })}
                 >
                   {t('Delete')}
                 </Button>

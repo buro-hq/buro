@@ -64,9 +64,16 @@ export class ModelBackend implements SessionBackend {
           !['MODEL_STREAM_INTERRUPTED', 'MODEL_UNAVAILABLE'].includes(error.code)
         )
           throw error;
+
         const delayMs = Math.min(30000, this.retryDelayMs * 2 ** attempt);
-        observer(() => onRetry?.({ attempt: attempt + 1, errorCode: error.code, delayMs }));
-        await delay(delayMs, undefined, { signal: request.signal });
+        observer(() => onRetry?.({
+          attempt: attempt + 1,
+          errorCode: error.code,
+          delayMs,
+        }));
+        await delay(delayMs, undefined, {
+          signal: request.signal,
+        });
       }
     }
   }

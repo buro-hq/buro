@@ -7,10 +7,15 @@ import { createApplication } from '../modules/application/create-application.ts'
 
 test('uploaded context is read in ranges through ordinary tools without broadcasting document contents', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-materials-'));
-  const app = await createApplication({ directory });
+  const app = await createApplication({
+    directory,
+  });
   t.after(async () => {
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
   const notifications: unknown[] = [];
   app.events.subscribe((notification) => {
@@ -45,12 +50,19 @@ test('uploaded context is read in ranges through ordinary tools without broadcas
             toolCalls: [{ id: name, name, arguments: args }],
           },
         });
-        if (++requests === 1) return call('materials_list', {});
+        if (++requests === 1)
+          return call('materials_list', {});
+
         if (requests === 2) {
           const listed = JSON.parse(input.messages.at(-1)!.content);
           assert.equal(listed[0].id, uploaded.material!.id);
-          return call('material_read', { id: uploaded.material!.id, line: 2, count: 1 });
+          return call('material_read', {
+            id: uploaded.material!.id,
+            line: 2,
+            count: 1,
+          });
         }
+
         const read = JSON.parse(input.messages.at(-1)!.content);
         assert.equal(read.text, 'Содержимое документа');
         assert.equal(read.totalLines, 3);
@@ -72,19 +84,30 @@ test('uploaded context is read in ranges through ordinary tools without broadcas
   assert.equal(result.ok, true, result.error);
   assert.equal(result.text, 'Used the attached context');
   assert.equal(
-    (await app.materials.download({ id: uploaded.material!.id })).contentBase64,
+    (await app.materials.download({
+      id: uploaded.material!.id,
+    })).contentBase64,
     Buffer.from(original).toString('base64'),
   );
-  await app.materials.delete({ id: uploaded.material!.id });
-  assert.equal((await app.materials.read({ id: uploaded.material!.id })).ok, false);
+  await app.materials.delete({
+    id: uploaded.material!.id,
+  });
+  assert.equal((await app.materials.read({
+    id: uploaded.material!.id,
+  })).ok, false);
 });
 
 test('image references remain available without claiming their pixels were analyzed; loaders need no frozen startup catalog', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-material-loader-'));
-  const app = await createApplication({ directory });
+  const app = await createApplication({
+    directory,
+  });
   t.after(async () => {
     await app.close();
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   });
   const uploaded = await app.materials.upload({
     projectId: 'project',
@@ -93,8 +116,12 @@ test('image references remain available without claiming their pixels were analy
   });
   assert.equal(uploaded.ok, true);
   assert.equal(uploaded.material!.textAvailable, false);
-  const result = await app.materials.read({ id: uploaded.material!.id });
+  const result = await app.materials.read({
+    id: uploaded.material!.id,
+  });
   assert.equal(result.ok, false);
   assert.ok(result.error!.includes('do not include image pixels'));
-  assert.equal((await app.materials.download({ id: uploaded.material!.id })).ok, true);
+  assert.equal((await app.materials.download({
+    id: uploaded.material!.id,
+  })).ok, true);
 });

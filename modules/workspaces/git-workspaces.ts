@@ -22,7 +22,9 @@ export class GitWorkspaces implements Workspaces {
     previous?: Workspace;
     signal?: AbortSignal;
   }): Promise<WorkspaceResult> {
-    if (!/^[a-zA-Z0-9_-]+$/.test(input.runId)) throw new Error('Invalid run workspace ID.');
+    if (!/^[a-zA-Z0-9_-]+$/.test(input.runId))
+      throw new Error('Invalid run workspace ID.');
+
     let root: string;
     try {
       root = await fs.realpath(input.root);
@@ -33,6 +35,7 @@ export class GitWorkspaces implements Workspaces {
         )
       )
         return { ok: false, error: 'The project directory is missing or inaccessible.' };
+
       throw error;
     }
     const previous = this.bookkeeping.get(root) ?? Promise.resolve();
@@ -47,11 +50,17 @@ export class GitWorkspaces implements Workspaces {
               '--end-of-options',
               `${input.base ?? input.previous?.base ?? 'HEAD'}^{commit}`,
             ],
-            { cwd: root, signal: input.signal },
+            {
+              cwd: root,
+              signal: input.signal,
+            },
           )
         ).stdout.trim();
         const target = path.resolve(this.directory, input.runId);
-        await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+        await fs.mkdir(path.dirname(target), {
+          recursive: true,
+          mode: 0o700,
+        });
         await safeGit(['worktree', 'add', '--detach', target, base], {
           cwd: root,
           signal: input.signal,
@@ -59,15 +68,23 @@ export class GitWorkspaces implements Workspaces {
         const workspace: Workspace = { path: await fs.realpath(target), source: root, base };
         try {
           if (input.previous)
-            await this.copyChanges({ previous: input.previous, target: workspace });
+            await this.copyChanges({
+              previous: input.previous,
+              target: workspace,
+            });
           else if (input.base === undefined) {
             await this.copyChanges({
               previous: { path: root, source: root, base },
               target: workspace,
             });
-            const tree = await captureGitTree({ workspace: workspace.path, base });
+            const tree = await captureGitTree({
+              workspace: workspace.path,
+              base,
+            });
             const initialTree = (
-              await safeGit(['rev-parse', `${base}^{tree}`], { cwd: workspace.path })
+              await safeGit(['rev-parse', `${base}^{tree}`], {
+                cwd: workspace.path,
+              })
             ).stdout.trim();
             if (tree !== initialTree) {
               const baseline = (
@@ -84,15 +101,21 @@ export class GitWorkspaces implements Workspaces {
                     '-m',
                     'Buro workspace baseline',
                   ],
-                  { cwd: workspace.path },
+                  {
+                    cwd: workspace.path,
+                  },
                 )
               ).stdout.trim();
-              await safeGit(['reset', '--hard', baseline], { cwd: workspace.path });
+              await safeGit(['reset', '--hard', baseline], {
+                cwd: workspace.path,
+              });
               workspace.base = baseline;
             }
           }
         } catch (error) {
-          await safeGit(['worktree', 'remove', '--force', target], { cwd: root }).catch(() => {});
+          await safeGit(['worktree', 'remove', '--force', target], {
+            cwd: root,
+          }).catch(() => {});
           throw error;
         }
         return workspace;
@@ -111,30 +134,44 @@ export class GitWorkspaces implements Workspaces {
           error:
             'The workspace could not be prepared. Check that the Git repository and base revision exist, Git is installed, and the directory is writable.',
         };
+
       throw error;
     } finally {
-      if (this.bookkeeping.get(root) === operation) this.bookkeeping.delete(root);
+      if (this.bookkeeping.get(root) === operation)
+        this.bookkeeping.delete(root);
     }
   }
 
   private async copyChanges(input: { previous: Workspace; target: Workspace }): Promise<void> {
     const cwd = input.previous.path;
-    const tracked = await safeGit(['diff', '--name-only', '-z', input.previous.base], { cwd });
-    const untracked = await safeGit(['ls-files', '--others', '--exclude-standard', '-z'], { cwd });
+    const tracked = await safeGit(['diff', '--name-only', '-z', input.previous.base], {
+      cwd,
+    });
+    const untracked = await safeGit(['ls-files', '--others', '--exclude-standard', '-z'], {
+      cwd,
+    });
     const files = new Set((tracked.stdout + untracked.stdout).split('\0').filter(Boolean));
     for (const file of [...files].sort((a, b) => a.split('/').length - b.split('/').length)) {
-      if (file.split('/').some((part) => ['.git', '.buro'].includes(part))) continue;
+      if (file.split('/').some((part) => ['.git', '.buro'].includes(part)))
+        continue;
+
       if (
         !(await this.directoryParents(cwd, file)) ||
         !(await this.directoryParents(input.target.path, file))
       )
         continue;
-      const source = path.join(cwd, file),
-        target = path.join(input.target.path, file);
+
+      const source = path.join(cwd, file);
+      const target = path.join(input.target.path, file);
       try {
         await fs.lstat(source);
-        await fs.mkdir(path.dirname(target), { recursive: true });
-        await fs.rm(target, { recursive: true, force: true });
+        await fs.mkdir(path.dirname(target), {
+          recursive: true,
+        });
+        await fs.rm(target, {
+          recursive: true,
+          force: true,
+        });
         await fs.cp(source, target, {
           recursive: true,
           force: true,
@@ -142,8 +179,13 @@ export class GitWorkspaces implements Workspaces {
           verbatimSymlinks: true,
         });
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        await fs.rm(target, { recursive: true, force: true });
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+          throw error;
+
+        await fs.rm(target, {
+          recursive: true,
+          force: true,
+        });
       }
     }
   }
@@ -153,9 +195,12 @@ export class GitWorkspaces implements Workspaces {
     for (const segment of relative.split('/').slice(0, -1)) {
       current = path.join(current, segment);
       try {
-        if (!(await fs.lstat(current)).isDirectory()) return false;
+        if (!(await fs.lstat(current)).isDirectory())
+          return false;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+          return true;
+
         throw error;
       }
     }

@@ -10,6 +10,7 @@ export async function localPort(): Promise<number> {
   const address = server.address();
   if (!address || typeof address === 'string')
     throw new Error('A test listener did not receive a port.');
+
   await new Promise<void>((resolve) => server.close(() => resolve()));
   return address.port;
 }

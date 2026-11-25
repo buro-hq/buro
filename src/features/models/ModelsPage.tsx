@@ -10,10 +10,10 @@ import { ModelEditor } from './ModelEditor.tsx';
 
 /** Connections are application-wide; choosing a model never requires a project profile. */
 export function ModelsPage(): ReactElement {
-  const { client } = useApplication(),
-    models = useApiQuery('models.list', {}),
-    settings = useApiQuery('settings.get', {}),
-    action = useOperation();
+  const { client } = useApplication();
+  const models = useApiQuery('models.list', {});
+  const settings = useApiQuery('settings.get', {});
+  const action = useOperation();
   const [editor, setEditor] = useState<{ model?: ModelConfigurationView }>();
   return (
     <Panel
@@ -43,7 +43,12 @@ export function ModelsPage(): ReactElement {
               </Text>
               {!model.available && <Text c="red">{t('Transport unavailable')}</Text>}
               <Group>
-                <Button variant="default" onClick={() => setEditor({ model })}>
+                <Button
+                  variant="default"
+                  onClick={() => setEditor({
+                    model,
+                  })}
+                >
                   {t('Edit')}
                 </Button>
                 <Button
@@ -51,10 +56,11 @@ export function ModelsPage(): ReactElement {
                   loading={action.busy}
                   onClick={() =>
                     void action.perform(async () => ({
-                      ok: await client.call('models.default', { id: model.id }),
+                      ok: await client.call('models.default', {
+                        id: model.id,
+                      }),
                       error: t('Transport unavailable'),
-                    }))
-                  }
+                    }))}
                 >
                   {t('Use as default')}
                 </Button>
@@ -63,10 +69,11 @@ export function ModelsPage(): ReactElement {
                   variant="subtle"
                   onClick={() =>
                     void action.perform(async () => {
-                      await client.call('models.delete', { id: model.id });
+                      await client.call('models.delete', {
+                        id: model.id,
+                      });
                       return { ok: true };
-                    })
-                  }
+                    })}
                 >
                   {t('Delete')}
                 </Button>

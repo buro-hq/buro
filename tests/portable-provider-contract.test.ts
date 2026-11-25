@@ -39,41 +39,51 @@ function provider(kind: Kind, fetch: typeof globalThis.fetch, gate?: RequestGate
     fetch,
     gate,
   };
-  if (kind === 'openai-compatible') return new OpenAICompatibleProvider(options);
+  if (kind === 'openai-compatible')
+    return new OpenAICompatibleProvider(options);
+
   return kind === 'ollama'
     ? new OllamaProvider(options)
-    : new DeepSeekProvider({ ...options, apiKey: () => 'SYNTHETIC_PORTABLE_KEY' });
+    : new DeepSeekProvider({
+        ...options,
+        apiKey: () => 'SYNTHETIC_PORTABLE_KEY',
+      });
 }
 function textFrame(kind: Kind, text: string, reasoning = '') {
   return kind === 'ollama'
     ? JSON.stringify({
-        model: 'reported-model',
-        message: { role: 'assistant', content: text, thinking: reasoning },
-        done: false,
-      }) + '\n'
+      model: 'reported-model',
+      message: { role: 'assistant', content: text, thinking: reasoning },
+      done: false,
+    }) + '\n'
     : 'data: ' +
-        JSON.stringify({
-          model: 'reported-model',
-          choices: [{ index: 0, delta: { content: text, reasoning_content: reasoning } }],
-        }) +
-        '\r\n\r\n';
+      JSON.stringify({
+        model: 'reported-model',
+        choices: [{ index: 0, delta: { content: text, reasoning_content: reasoning } }],
+      }) +
+      '\r\n\r\n';
 }
 function terminal(kind: Kind, usage = true, finish = 'stop') {
   return kind === 'ollama'
     ? JSON.stringify({
-        message: { role: 'assistant', content: '' },
-        done: true,
-        done_reason: finish,
-        ...(usage ? { prompt_eval_count: 3, eval_count: 2 } : {}),
-      }) + '\n'
+      message: { role: 'assistant', content: '' },
+      done: true,
+      done_reason: finish,
+      ...(usage ? { prompt_eval_count: 3, eval_count: 2 } : {}),
+    }) + '\n'
     : 'data: ' +
-        JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: finish }] }) +
-        '\n\n' +
-        (usage
-          ? 'data: ' +
-            JSON.stringify({ choices: [], usage: { prompt_tokens: 3, completion_tokens: 2 } }) +
-            '\n\n'
-          : '') +
+      JSON.stringify({
+        choices: [{ index: 0, delta: {}, finish_reason: finish }],
+      }) +
+      '\n\n' +
+      (usage
+        ? 'data: ' +
+        JSON.stringify({
+          choices: [],
+          usage: { prompt_tokens: 3, completion_tokens: 2 },
+        }) +
+        '\n\n'
+        : '') +
         'data: [DONE]\n\n';
 }
 const outcome = (code: string, expected: ProviderFailure['outcome']) => (error: unknown) => {
@@ -86,12 +96,14 @@ const outcome = (code: string, expected: ProviderFailure['outcome']) => (error: 
 for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
   test(
     `${kind}: actual UTF-8 stream deltas arrive before completion without exposing reasoning`,
-    { timeout: 5000 },
+    {
+      timeout: 5000,
+    },
     async (t) => {
-      const ready = deferred(),
-        firstText = deferred();
-      let stream!: ReadableStreamDefaultController<Uint8Array>,
-        settled = false;
+      const ready = deferred();
+      const firstText = deferred();
+      let stream!: ReadableStreamDefaultController<Uint8Array>;
+      let settled = false;
       const events: ModelStreamEvent[] = [];
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -101,7 +113,9 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
       t.after(() => {
         try {
           stream.close();
-        } catch {}
+        } catch {
+          // The transport may already have closed the stream.
+        }
       });
       const transport = provider(kind, async () => {
         ready.resolve();
@@ -111,7 +125,8 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
         input({
           onEvent(event) {
             events.push(event);
-            if (event.type === 'text.delta' && event.text) firstText.resolve();
+            if (event.type === 'text.delta' && event.text)
+              firstText.resolve();
           },
         }),
       );
@@ -139,7 +154,10 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
       assert.equal(result.message.content, 'Привет');
       assert.equal(result.model, 'reported-model');
       assert.equal(result.finish, 'stop');
-      assert.deepEqual(result.usage, { inputTokens: 3, outputTokens: 2 });
+      assert.deepEqual(result.usage, {
+        inputTokens: 3,
+        outputTokens: 2,
+      });
       assert.equal(
         events
           .filter((event) => event.type === 'text.delta')
@@ -169,7 +187,9 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
       async () => new Response(textFrame(kind, 'Provisional', privateReasoning)),
     );
     await assert.rejects(
-      transport.complete(input({ onEvent: (event) => events.push(event) })),
+      transport.complete(input({
+        onEvent: (event) => events.push(event),
+      })),
       outcome('MODEL_STREAM_INTERRUPTED', 'unknown'),
     );
     assert.equal(
@@ -190,12 +210,12 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
     const tool =
       kind === 'ollama'
         ? JSON.stringify({
-            message: {
-              role: 'assistant',
-              tool_calls: [{ function: { index: 0, name: 'edit_file', arguments: '{"path":' } }],
-            },
-            done: false,
-          }) + '\n'
+          message: {
+            role: 'assistant',
+            tool_calls: [{ function: { index: 0, name: 'edit_file', arguments: '{"path":' } }],
+          },
+          done: false,
+        }) + '\n'
         : 'data: ' +
           JSON.stringify({
             choices: [
@@ -219,12 +239,14 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
       async () =>
         new Response(
           textFrame(kind, 'Provisional') +
-            tool +
-            terminal(kind, true, kind === 'deepseek' ? 'tool_calls' : 'stop'),
+          tool +
+          terminal(kind, true, kind === 'deepseek' ? 'tool_calls' : 'stop'),
         ),
     );
     await assert.rejects(
-      transport.complete(input({ onEvent: (event) => events.push(event) })),
+      transport.complete(input({
+        onEvent: (event) => events.push(event),
+      })),
       outcome('MODEL_INVALID_RESPONSE', 'unknown'),
     );
     assert.equal(
@@ -239,7 +261,9 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
       kind,
       async () => new Response(textFrame(kind, 'Partial result') + terminal(kind, false, 'length')),
     );
-    const result = await transport.complete(input({ onEvent: (event) => events.push(event) }));
+    const result = await transport.complete(input({
+      onEvent: (event) => events.push(event),
+    }));
     assert.equal(result.finish, 'length');
     assert.equal(result.usage, undefined);
     assert.equal(
@@ -289,11 +313,15 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
     const result = await transport.complete(
       input({
         onEvent(event) {
-          if (event.type === 'usage') event.usage.inputTokens = 99999;
+          if (event.type === 'usage')
+            event.usage.inputTokens = 99999;
         },
       }),
     );
-    assert.deepEqual(result.usage, { inputTokens: 3, outputTokens: 2 });
+    assert.deepEqual(result.usage, {
+      inputTokens: 3,
+      outputTokens: 2,
+    });
     assert.equal(ambientRequests, 0);
   });
 
@@ -324,8 +352,8 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
     t.after(() => {
       process.off('unhandledRejection', observe);
     });
-    let progress = 0,
-      events = 0;
+    let progress = 0;
+    let events = 0;
     const transport = provider(
       kind,
       async () => new Response(textFrame(kind, 'Observed') + terminal(kind)),
@@ -352,7 +380,9 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
 
   test(
     `${kind}: a reader failure after a visible delta remains unknown without a terminal event`,
-    { timeout: 5000 },
+    {
+      timeout: 5000,
+    },
     async () => {
       const firstText = deferred();
       let stream!: ReadableStreamDefaultController<Uint8Array>;
@@ -367,7 +397,8 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
         input({
           onEvent(event) {
             events.push(event);
-            if (event.type === 'text.delta' && event.text) firstText.resolve();
+            if (event.type === 'text.delta' && event.text)
+              firstText.resolve();
           },
         }),
       );
@@ -383,9 +414,9 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
   );
 
   test(`${kind}: pre-abort and queued abort never dispatch a request or inherit an active request outcome`, async () => {
-    const gate = new RequestGate(1),
-      active = deferred(),
-      release = deferred<Response>();
+    const gate = new RequestGate(1);
+    const active = deferred();
+    const release = deferred<Response>();
     let requests = 0;
     const transport = provider(
       kind,
@@ -399,14 +430,19 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
     const alreadyAborted = new AbortController();
     alreadyAborted.abort();
     await assert.rejects(
-      transport.complete(input({ signal: alreadyAborted.signal })),
+      transport.complete(input({
+        signal: alreadyAborted.signal,
+      })),
       outcome('MODEL_ABORTED', 'not-dispatched'),
     );
     assert.equal(requests, 0);
     const first = transport.complete(input());
     await active.promise;
     const queued = new AbortController();
-    const second = transport.complete(input({ requestId: 'queued', signal: queued.signal }));
+    const second = transport.complete(input({
+      requestId: 'queued',
+      signal: queued.signal,
+    }));
     queued.abort();
     await assert.rejects(second, outcome('MODEL_ABORTED', 'not-dispatched'));
     assert.equal(requests, 1);
@@ -418,7 +454,9 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
     let requests = 0;
     const rejected = provider(kind, async () => {
       requests++;
-      return new Response('Do not expose provider details', { status: 401 });
+      return new Response('Do not expose provider details', {
+        status: 401,
+      });
     });
     await assert.rejects(rejected.complete(input()), outcome('MODEL_AUTH_FAILED', 'rejected'));
     assert.equal(requests, 1, 'A negative response cannot silently retry');
@@ -432,7 +470,9 @@ for (const kind of ['ollama', 'deepseek', 'openai-compatible'] as const) {
       throw new DOMException('Interrupted fetch', 'AbortError');
     });
     await assert.rejects(
-      aborted.complete(input({ signal: cancelled.signal })),
+      aborted.complete(input({
+        signal: cancelled.signal,
+      })),
       outcome('MODEL_ABORTED', 'unknown'),
     );
   });
@@ -489,9 +529,13 @@ test('Ollama cannot promote an unknown or failed terminal reason to tools merely
       'ollama',
       async () => new Response(call + terminal('ollama', true, reason)),
     );
-    const result = await transport.complete(input({ onEvent: (event) => events.push(event) }));
+    const result = await transport.complete(input({
+      onEvent: (event) => events.push(event),
+    }));
     assert.equal(result.message.toolCalls?.length, 1);
-    assert.deepEqual(result.message.toolCalls?.[0].arguments, { path: 'src/value.ts' });
+    assert.deepEqual(result.message.toolCalls?.[0].arguments, {
+      path: 'src/value.ts',
+    });
     assert.equal(result.finish, 'failed');
     assert.deepEqual(events.at(-1), {
       type: 'response.completed',
@@ -560,7 +604,9 @@ test('unserializable Ollama schema cannot become a dispatched generation', async
   });
   for (const schema of [cyclic, { invalid: 1n }])
     await assert.rejects(
-      transport.complete(input({ schema })),
+      transport.complete(input({
+        schema,
+      })),
       outcome('MODEL_INVALID_REQUEST', 'not-dispatched'),
     );
   assert.equal(requests, 0);

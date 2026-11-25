@@ -63,7 +63,9 @@ export class RunService implements Runs {
     options?: RunOptions;
     previousRunId?: string;
   }): Promise<RunResult> {
-    if (this.closing) return { ok: false, error: 'Run service is closed.' };
+    if (this.closing)
+      return { ok: false, error: 'Run service is closed.' };
+
     let release!: () => void;
     const entry = {
       controller: new AbortController(),
@@ -77,6 +79,7 @@ export class RunService implements Runs {
     } catch (error) {
       if (entry.controller.signal.aborted)
         return { ok: false, error: 'Run startup was interrupted. Saved work is preserved.' };
+
       throw error;
     } finally {
       this.starting.delete(entry);
@@ -92,8 +95,11 @@ export class RunService implements Runs {
     const previous = input.previousRunId ? await this.store.get(input.previousRunId) : undefined;
     if (input.previousRunId && (!previous || previous.taskId !== input.taskId))
       return { ok: false, error: 'The earlier attempt does not belong to this task.' };
+
     const task =
-      (await this.tasks.get({ id: input.taskId })) ??
+      (await this.tasks.get({
+        id: input.taskId,
+      })) ??
       (previous?.title !== undefined
         ? {
             id: previous.taskId,
@@ -102,14 +108,28 @@ export class RunService implements Runs {
             description: previous.description ?? '',
           }
         : undefined);
-    if (!task) return { ok: false, error: 'Task not found.' };
-    const project = await this.projects.get({ id: task.projectId });
-    if (!project) return { ok: false, error: 'Project not found.' };
+    if (!task)
+      return { ok: false, error: 'Task not found.' };
+
+    const project = await this.projects.get({
+      id: task.projectId,
+    });
+    if (!project)
+      return { ok: false, error: 'Project not found.' };
+
     if (previous && this.jobs.has(previous.id))
       return { ok: false, error: 'Stop the current attempt before starting its successor.' };
-    const history = previous ? await this.sessions.get({ id: previous.sessionId }) : undefined;
+
+    const history = previous
+      ? await this.sessions.get({
+          id: previous.sessionId,
+        })
+      : undefined;
     const settings = await this.settings.get();
-    const materials = await this.materials.list({ projectId: project.id, taskId: task.id });
+    const materials = await this.materials.list({
+      projectId: project.id,
+      taskId: task.id,
+    });
     const id = randomUUID();
     controller.signal.throwIfAborted();
     const prompt = [
@@ -132,7 +152,9 @@ export class RunService implements Runs {
       access: { tools: input.options?.tools, readOnly: input.options?.readOnly },
       sourceSessionId: history?.id,
     });
-    if (!created.ok) return { ok: false, error: created.error };
+    if (!created.ok)
+      return { ok: false, error: created.error };
+
     let workspace;
     try {
       const prepared = await this.workspaces.create({
@@ -145,12 +167,17 @@ export class RunService implements Runs {
           : undefined,
       });
       if (!prepared.ok || !prepared.workspace) {
-        await this.sessions.delete({ id: created.sessionId });
+        await this.sessions.delete({
+          id: created.sessionId,
+        });
         return { ok: false, error: prepared.error };
       }
+
       workspace = prepared.workspace;
     } catch (error) {
-      await this.sessions.delete({ id: created.sessionId });
+      await this.sessions.delete({
+        id: created.sessionId,
+      });
       throw error;
     }
     const run: Run = {
@@ -174,18 +201,24 @@ export class RunService implements Runs {
     const promise = ready
       .then((start) =>
         start
-          ? this.execute({ run, prompt, options: input.options ?? {}, signal: controller.signal })
-          : undefined,
-      )
+          ? this.execute({
+              run,
+              prompt,
+              options: input.options ?? {},
+              signal: controller.signal,
+            })
+          : undefined)
       .finally(() => this.jobs.delete(id));
-    this.jobs.set(id, { controller, promise });
+    this.jobs.set(id, {
+      controller,
+      promise,
+    });
     // Keep background failures observed; callers can still see them through wait/close.
     void promise.catch((error) =>
       this.events.publish({
         type: 'run.error',
         data: { runId: id, error: error instanceof Error ? error.message : String(error) },
-      }),
-    );
+      }));
     try {
       await this.save(run);
       release(true);
@@ -199,9 +232,12 @@ export class RunService implements Runs {
   /** Continues preserved work as a new run with its own workspace and linked conversation. */
   async retry(input: { id: string; options?: RunOptions }): Promise<RunResult> {
     const run = await this.store.get(input.id);
-    if (!run) return { ok: false, error: 'Run not found.' };
+    if (!run)
+      return { ok: false, error: 'Run not found.' };
+
     if (this.jobs.has(run.id))
       return { ok: false, error: 'Stop the current attempt before starting its successor.' };
+
     const { modelId: _initialModel, base: _initialBase, ...retained } = run.options ?? {};
     return this.start({
       taskId: run.taskId,
@@ -237,10 +273,13 @@ export class RunService implements Runs {
   /** Stops model work and waits for every active run to settle before storage closes. */
   async close(): Promise<void> {
     this.closing = true;
-    for (const entry of this.starting) entry.controller.abort();
-    for (const job of this.jobs.values()) job.controller.abort();
+    for (const entry of this.starting)
+      entry.controller.abort();
+    for (const job of this.jobs.values())
+      job.controller.abort();
     await Promise.all([...this.starting].map((entry) => entry.settled));
-    for (const job of this.jobs.values()) job.controller.abort();
+    for (const job of this.jobs.values())
+      job.controller.abort();
     await Promise.allSettled([...this.jobs.values()].map((job) => job.promise));
   }
 
@@ -260,7 +299,9 @@ export class RunService implements Runs {
         readOnly: input.options.readOnly,
         signal: input.signal,
       });
-      await this.sessions.close({ runId: input.run.id });
+      await this.sessions.close({
+        runId: input.run.id,
+      });
       await this.save({
         ...input.run,
         status: result.ok ? 'completed' : result.interrupted ? 'interrupted' : 'failed',
@@ -269,7 +310,9 @@ export class RunService implements Runs {
         finishedAt: new Date().toISOString(),
       });
     } catch (error) {
-      await this.sessions.close({ runId: input.run.id });
+      await this.sessions.close({
+        runId: input.run.id,
+      });
       await this.save({
         ...input.run,
         status: input.signal.aborted ? 'interrupted' : 'failed',
@@ -281,6 +324,9 @@ export class RunService implements Runs {
 
   private async save(run: Run): Promise<void> {
     await this.store.save(run);
-    this.events.publish({ type: 'run.updated', data: run });
+    this.events.publish({
+      type: 'run.updated',
+      data: run,
+    });
   }
 }

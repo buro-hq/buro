@@ -4,11 +4,13 @@ import { t } from '../../i18n/index.ts';
 
 /** Displays concrete action or query feedback without adding an approval step. */
 export function ErrorNotice(input: { error?: string }): ReactElement | null {
-  return input.error ? (
-    <Alert color="red" role="alert">
-      {t(input.error)}
-    </Alert>
-  ) : null;
+  return input.error
+    ? (
+        <Alert color="red" role="alert">
+          {t(input.error)}
+        </Alert>
+      )
+    : null;
 }
 
 /** A small read-state indicator that preserves already displayed data. */

@@ -34,15 +34,17 @@ class MeasuredBackend implements SessionBackend {
     this.id = input.backend.id;
     this.revision = input.backend.revision;
   }
+
   contextMessages: SessionBackend['contextMessages'] = (messages) =>
     this.backend.contextMessages?.(messages) ?? structuredClone([...messages]);
+
   async complete(input: BackendRequest): Promise<ModelCompletion> {
-    const started = performance.now(),
-      measurement: RequestMeasurement = {
-        requestId: input.requestId,
-        sessionId: input.sessionId,
-        wallSeconds: 0,
-      };
+    const started = performance.now();
+    const measurement: RequestMeasurement = {
+      requestId: input.requestId,
+      sessionId: input.sessionId,
+      wallSeconds: 0,
+    };
     this.requests.push(measurement);
     try {
       const response = await this.backend.complete({
@@ -102,13 +104,16 @@ async function verify(input: {
   source: string;
   cases: OracleCase[];
 }): Promise<Verification> {
-  const nonce = randomUUID(),
-    inputs = input.cases.map(({ name: _name, expected: _expected, ...value }) => value);
+  const nonce = randomUUID();
+  const inputs = input.cases.map(({ name: _name, expected: _expected, ...value }) => value);
   const result = await input.commands.run({
     workspace: input.workspace,
     source: input.source,
     argv: [process.execPath, '--input-type=module', '-e', oracle, input.workspace],
-    stdin: JSON.stringify({ nonce, inputs }),
+    stdin: JSON.stringify({
+      nonce,
+      inputs,
+    }),
     readOnly: true,
     allowNetwork: false,
     timeoutMs: 10000,
@@ -123,12 +128,14 @@ async function verify(input: {
         checks,
         error: 'The independent verifier could not complete.',
       };
+
     const reply = JSON.parse(result.stdout) as {
       nonce: string;
       rows: { value?: unknown; unchanged?: boolean }[];
     };
     if (reply.nonce !== nonce || reply.rows.length !== input.cases.length)
       throw new Error('Invalid verifier response.');
+
     checks.forEach((check, index) => {
       check.passed =
         reply.rows[index].unchanged === true &&
@@ -148,21 +155,27 @@ async function verify(input: {
 const scenario = process.argv[2] ?? 'queue';
 if (!['queue', 'review'].includes(scenario))
   throw new Error('Use evaluate-model.ts queue|review [MODEL_CONNECTION_ID].');
+
 const harnessHash = createHash('sha256')
   .update(await fs.readFile(new URL(import.meta.url)))
   .digest('hex');
 let sourceRevision: string | undefined;
 try {
-  sourceRevision = (await safeGit(['rev-parse', 'HEAD'], { cwd: process.cwd() })).stdout.trim();
+  sourceRevision = (await safeGit(['rev-parse', 'HEAD'], {
+    cwd: process.cwd(),
+  })).stdout.trim();
 } catch {
   /* Source distributions may have no host repository. */
 }
-const directory = path.resolve(process.env.PROJECT_DATA_DIR ?? '.buro'),
-  output = path.resolve(
-    'artifacts/model-evaluation',
-    new Date().toISOString().replace(/[:.]/g, '-') + '-' + scenario,
-  );
-await fs.mkdir(output, { recursive: true, mode: 0o700 });
+const directory = path.resolve(process.env.PROJECT_DATA_DIR ?? '.buro');
+const output = path.resolve(
+  'artifacts/model-evaluation',
+  new Date().toISOString().replace(/[:.]/g, '-') + '-' + scenario,
+);
+await fs.mkdir(output, {
+  recursive: true,
+  mode: 0o700,
+});
 const source = path.join(output, 'source');
 await fs.mkdir(source);
 const files: Record<string, string> = structuredClone(fixture.files);
@@ -178,13 +191,20 @@ if (scenario === 'review') {
       'priorityOf(b) - priorityOf(a) || b.id.localeCompare(a.id)',
     );
 }
+
 for (const [relative, text] of Object.entries(files)) {
   const filename = path.join(source, relative);
-  await fs.mkdir(path.dirname(filename), { recursive: true });
+  await fs.mkdir(path.dirname(filename), {
+    recursive: true,
+  });
   await fs.writeFile(filename, text);
 }
-await safeGit(['init', '--initial-branch=main', '--quiet'], { cwd: source });
-await safeGit(['add', '.'], { cwd: source });
+await safeGit(['init', '--initial-branch=main', '--quiet'], {
+  cwd: source,
+});
+await safeGit(['add', '.'], {
+  cwd: source,
+});
 await safeGit(
   [
     '-c',
@@ -196,10 +216,16 @@ await safeGit(
     '-m',
     'Evaluation fixture',
   ],
-  { cwd: source },
+  {
+    cwd: source,
+  },
 );
-const app = await createApplication({ directory }),
-  commands = new SandboxedCommands({ privatePaths: [path.join(directory, 'private')] });
+const app = await createApplication({
+  directory,
+});
+const commands = new SandboxedCommands({
+  privatePaths: [path.join(directory, 'private')],
+});
 const stop = () => {
   process.exitCode = 130;
   void app.stopWork().catch(() => {
@@ -210,20 +236,40 @@ process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
 try {
   const model = app.models.get(process.argv[3] ? { id: process.argv[3] } : undefined);
-  if (!model) throw new Error('Save and select a model connection before evaluating it.');
+  if (!model)
+    throw new Error('Save and select a model connection before evaluating it.');
+
   const configuration = (await app.modelConfigurations.list()).find(
-      (connection) => connection.id === model.id,
-    ),
-    backend = new MeasuredBackend({ backend: model.backend });
-  app.models.register({ ...model, backend });
-  const publicCases = fixture.publicCases as OracleCase[],
-    holdoutCases = fixture.holdoutCases as OracleCase[];
+    (connection) => connection.id === model.id,
+  );
+  const backend = new MeasuredBackend({
+    backend: model.backend,
+  });
+  app.models.register({
+    ...model,
+    backend,
+  });
+  const publicCases = fixture.publicCases as OracleCase[];
+  const holdoutCases = fixture.holdoutCases as OracleCase[];
   const baseline = {
-    public: await verify({ commands, workspace: source, source, cases: publicCases }),
-    holdout: await verify({ commands, workspace: source, source, cases: holdoutCases }),
+    public: await verify({
+      commands,
+      workspace: source,
+      source,
+      cases: publicCases,
+    }),
+    holdout: await verify({
+      commands,
+      workspace: source,
+      source,
+      cases: holdoutCases,
+    }),
   };
   const project = (
-    await app.projects.connect({ root: source, name: `${model.name} · ${scenario}` })
+    await app.projects.connect({
+      root: source,
+      name: `${model.name} · ${scenario}`,
+    })
   ).project!;
   const task = await app.tasks.create({
     projectId: project.id,
@@ -234,9 +280,14 @@ try {
         ? fixture.task.body + '\n\n' + fixture.task.criteria
         : 'The public examples currently pass. Check whether selectReady preserves original input order for tasks with equal priorities, including tasks without dependencies. Start an independent read-only collaborator to review the implementation, read their findings, fix any actual issue, and ask them to review the changes before you finish. Keep the public APIs and inputs unchanged. Change only src/priority.mjs and src/queue.mjs, without editing checks or adding dependencies. Run appropriate tests and report what was verified.',
   });
-  const started = performance.now(),
-    created = await app.runs.start({ taskId: task.id, options: { modelId: model.id } });
-  if (!created.run) throw new Error(created.error ?? 'The evaluation run did not start.');
+  const started = performance.now();
+  const created = await app.runs.start({
+    taskId: task.id,
+    options: { modelId: model.id },
+  });
+  if (!created.run)
+    throw new Error(created.error ?? 'The evaluation run did not start.');
+
   const runId = created.run.id;
   console.log(
     JSON.stringify({
@@ -257,18 +308,40 @@ try {
     )
       if (data.id && statuses.get(data.id) !== data.status) {
         statuses.set(data.id, data.status);
-        console.log(JSON.stringify({ event: notice.type, id: data.id, status: data.status }));
+        console.log(JSON.stringify({
+          event: notice.type,
+          id: data.id,
+          status: data.status,
+        }));
       }
   });
-  const run = (await app.runs.wait({ id: runId }))!,
-    wallSeconds = (performance.now() - started) / 1000;
+  const run = (await app.runs.wait({
+    id: runId,
+  }))!;
+  const wallSeconds = (performance.now() - started) / 1000;
   off();
-  const sessions = await app.sessions.list({ runId }),
-    activities = await app.activity.list({ runId }),
-    changes = await app.results.inspect({ runId });
+  const sessions = await app.sessions.list({
+    runId,
+  });
+  const activities = await app.activity.list({
+    runId,
+  });
+  const changes = await app.results.inspect({
+    runId,
+  });
   const verification = {
-    public: await verify({ commands, workspace: run.workspace, source, cases: publicCases }),
-    holdout: await verify({ commands, workspace: run.workspace, source, cases: holdoutCases }),
+    public: await verify({
+      commands,
+      workspace: run.workspace,
+      source,
+      cases: publicCases,
+    }),
+    holdout: await verify({
+      commands,
+      workspace: run.workspace,
+      source,
+      cases: holdoutCases,
+    }),
   };
   const unexpectedFiles = (changes.files ?? []).filter(
     (file) => !['src/priority.mjs', 'src/queue.mjs'].includes(file.path),
@@ -284,9 +357,14 @@ try {
     let after = -1;
     let count = 0;
     while (after + 1 < session.messageCount) {
-      const page = await app.sessions.history({ sessionId: session.id, after, limit: 250 });
+      const page = await app.sessions.history({
+        sessionId: session.id,
+        after,
+        limit: 250,
+      });
 
-      if (!page.messages.length) break;
+      if (!page.messages.length)
+        break;
 
       count += page.messages.filter((message) => message.role === 'user').length;
       after = page.start + page.messages.length - 1;
@@ -302,7 +380,10 @@ try {
     fixtureHash: createHash('sha256').update(JSON.stringify(files)).digest('hex'),
     baseTaskHash: createHash('sha256').update(JSON.stringify(fixture.task)).digest('hex'),
     actualTaskHash: createHash('sha256')
-      .update(JSON.stringify({ title: task.title, description: task.description }))
+      .update(JSON.stringify({
+        title: task.title,
+        description: task.description,
+      }))
       .digest('hex'),
     model: {
       connectionId: model.id,
@@ -355,7 +436,9 @@ try {
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2) + '\n', {
     mode: 0o600,
   });
-  if (!process.exitCode && (run.status !== 'completed' || !verified)) process.exitCode = 1;
+  if (!process.exitCode && (run.status !== 'completed' || !verified))
+    process.exitCode = 1;
+
   console.log(
     JSON.stringify({
       finished: true,

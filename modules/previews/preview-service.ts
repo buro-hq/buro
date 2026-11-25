@@ -18,6 +18,7 @@ export class PreviewService implements Previews {
     string,
     { controller: AbortController; settled: Promise<void>; preview: Preview }
   >();
+
   private starting = new Set<Promise<void>>();
   private ports = new Set<number>();
   private closing = false;
@@ -56,14 +57,19 @@ export class PreviewService implements Previews {
     env?: Record<string, string>;
     port?: number;
   }): Promise<PreviewOutcome> {
-    if (this.closing) return { ok: false, error: 'Preview service is closed.' };
+    if (this.closing)
+      return { ok: false, error: 'Preview service is closed.' };
+
     let release!: () => void;
     const pending = new Promise<void>((resolve) => {
       release = resolve;
     });
     this.starting.add(pending);
     try {
-      return await this.launch({ ...input, env: input.env ? { ...input.env } : undefined });
+      return await this.launch({
+        ...input,
+        env: input.env ? { ...input.env } : undefined,
+      });
     } finally {
       this.starting.delete(pending);
       release();
@@ -76,23 +82,37 @@ export class PreviewService implements Previews {
     env?: Record<string, string>;
     port?: number;
   }): Promise<PreviewOutcome> {
-    const run = await this.runs.get({ id: input.runId });
-    if (!run) return { ok: false, error: 'Run not found.' };
-    if (!input.command.trim()) return { ok: false, error: 'Enter a foreground preview command.' };
+    const run = await this.runs.get({
+      id: input.runId,
+    });
+    if (!run)
+      return { ok: false, error: 'Run not found.' };
+
+    if (!input.command.trim())
+      return { ok: false, error: 'Enter a foreground preview command.' };
+
     if (
       input.port !== undefined &&
       (!Number.isSafeInteger(input.port) || input.port < 1 || input.port > 65535)
     )
       return { ok: false, error: 'Preview port must be between 1 and 65535.' };
-    const project = await this.projects.get({ id: run.projectId });
-    if (!project) return { ok: false, error: 'Project is disconnected.' };
+
+    const project = await this.projects.get({
+      id: run.projectId,
+    });
+    if (!project)
+      return { ok: false, error: 'Project is disconnected.' };
+
     const reserved = await this.reserve(input.port);
-    if (reserved.error) return { ok: false, error: reserved.error };
+    if (reserved.error)
+      return { ok: false, error: reserved.error };
+
     const port = reserved.port!;
     if (this.closing) {
       this.ports.delete(port);
       return { ok: false, error: 'Preview service is closed.' };
     }
+
     const controller = new AbortController();
     let resolveSettled!: () => void;
     const entry = {
@@ -118,7 +138,10 @@ export class PreviewService implements Previews {
       resolveSettled();
       throw error;
     }
-    this.events.publish({ type: 'preview.updated', data: entry.preview });
+    this.events.publish({
+      type: 'preview.updated',
+      data: entry.preview,
+    });
     const probe = this.waitUntilListening(entry);
     void (async () => {
       try {
@@ -161,7 +184,10 @@ export class PreviewService implements Previews {
         try {
           await probe;
           await this.store.save(entry.preview);
-          this.events.publish({ type: 'preview.updated', data: entry.preview });
+          this.events.publish({
+            type: 'preview.updated',
+            data: entry.preview,
+          });
         } finally {
           this.active.delete(entry.preview.id);
           this.ports.delete(port);
@@ -175,8 +201,7 @@ export class PreviewService implements Previews {
           id: entry.preview.id,
           error: error instanceof Error ? error.message : String(error),
         },
-      }),
-    );
+      }));
     return { ok: true, preview: structuredClone(entry.preview) };
   }
 
@@ -193,19 +218,26 @@ export class PreviewService implements Previews {
   async recover(): Promise<void> {
     for (const preview of await this.store.list())
       if (['starting', 'running'].includes(preview.status))
-        await this.store.save({ ...preview, status: 'interrupted', url: undefined });
+        await this.store.save({
+          ...preview,
+          status: 'interrupted',
+          url: undefined,
+        });
   }
 
   /** Cancels startup and live processes before shared command environments are released. */
   async close(): Promise<void> {
     this.closing = true;
     await Promise.all([...this.starting]);
-    for (const entry of this.active.values()) entry.controller.abort();
+    for (const entry of this.active.values())
+      entry.controller.abort();
     await Promise.all([...this.active.values()].map((entry) => entry.settled));
   }
 
   private async reserve(port?: number): Promise<{ port?: number; error?: string }> {
-    if (port && this.ports.has(port)) return { error: 'Preview port is already in use.' };
+    if (port && this.ports.has(port))
+      return { error: 'Preview port is already in use.' };
+
     const server = net.createServer();
     try {
       await new Promise<void>((resolve, reject) => {
@@ -215,16 +247,20 @@ export class PreviewService implements Previews {
       const address = server.address();
       if (!address || typeof address === 'string')
         throw new Error('Preview did not receive a port.');
+
       if (this.ports.has(address.port))
         return { error: 'Preview port is already reserved. Try again.' };
+
       this.ports.add(address.port);
       return { port: address.port };
     } catch (error) {
       if (['EADDRINUSE', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? ''))
         return { error: 'Preview port is unavailable.' };
+
       throw error;
     } finally {
-      if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (server.listening)
+        await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }
 
@@ -234,7 +270,10 @@ export class PreviewService implements Previews {
   }): Promise<void> {
     while (!entry.controller.signal.aborted) {
       const ready = await new Promise<boolean>((resolve) => {
-        const socket = net.createConnection({ host: '127.0.0.1', port: entry.preview.port });
+        const socket = net.createConnection({
+          host: '127.0.0.1',
+          port: entry.preview.port,
+        });
         socket.setTimeout(300);
         socket.once('connect', () => {
           socket.destroy();
@@ -255,10 +294,16 @@ export class PreviewService implements Previews {
           status: 'running',
           url: `http://127.0.0.1:${entry.preview.port}`,
         };
-        this.events.publish({ type: 'preview.updated', data: entry.preview });
+        this.events.publish({
+          type: 'preview.updated',
+          data: entry.preview,
+        });
         return;
       }
-      await delay(200, undefined, { signal: entry.controller.signal }).catch(() => {});
+
+      await delay(200, undefined, {
+        signal: entry.controller.signal,
+      }).catch(() => {});
     }
   }
 }

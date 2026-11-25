@@ -35,6 +35,9 @@ export async function captureGitTree(input: { workspace: string; base: string })
     });
     return (await safeGit(['write-tree'], options)).stdout.trim();
   } finally {
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   }
 }

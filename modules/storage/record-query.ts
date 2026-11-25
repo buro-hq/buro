@@ -12,11 +12,14 @@ export const selectRecords = <T extends StoredRecord>(input: {
       ([key, value]) => value === undefined || record[key as keyof T] === value,
     );
 
-    if (!matches) return false;
+    if (!matches)
+      return false;
 
-    if (orderBy && before !== undefined && Number(record[orderBy]) >= before) return false;
+    if (orderBy && before !== undefined && Number(record[orderBy]) >= before)
+      return false;
 
-    if (orderBy && after !== undefined && Number(record[orderBy]) <= after) return false;
+    if (orderBy && after !== undefined && Number(record[orderBy]) <= after)
+      return false;
 
     return true;
   });
@@ -29,7 +32,8 @@ export const selectRecords = <T extends StoredRecord>(input: {
 
       return descending ? -comparison : comparison;
     });
-  else if (descending) selected.reverse();
+  else if (descending)
+    selected.reverse();
 
   return selected.slice(offset, limit === undefined ? undefined : offset + limit);
 };

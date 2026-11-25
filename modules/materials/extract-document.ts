@@ -16,7 +16,10 @@ export const extractDocument: DocumentExtractor = async (bytes, format, signal) 
   try {
     await fs.chmod(directory, 0o700);
     const file = path.join(directory, 'input.' + format);
-    await fs.writeFile(file, bytes, { flag: 'wx', mode: 0o600 });
+    await fs.writeFile(file, bytes, {
+      flag: 'wx',
+      mode: 0o600,
+    });
     const options = { timeout: 30000, maxBuffer: 1024 * 1024, signal };
     if (format === 'pdf') {
       if (process.platform === 'darwin')
@@ -33,10 +36,15 @@ export const extractDocument: DocumentExtractor = async (bytes, format, signal) 
             options,
           )
         ).stdout;
+
       return (await exec('pdftotext', [file, '-'], options)).stdout;
     }
+
     return (await exec('/usr/bin/textutil', ['-convert', 'txt', '-stdout', file], options)).stdout;
   } finally {
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory, {
+      recursive: true,
+      force: true,
+    });
   }
 };

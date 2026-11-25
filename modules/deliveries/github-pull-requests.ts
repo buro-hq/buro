@@ -45,11 +45,14 @@ export class GitHubPullRequests implements PullRequests {
         };
       }
     }
+
     repository = repository.replace(/\.git$/, '');
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-pr-')),
-      filename = path.join(directory, 'body.txt');
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-pr-'));
+    const filename = path.join(directory, 'body.txt');
     try {
-      await fs.writeFile(filename, input.description, { mode: 0o600 });
+      await fs.writeFile(filename, input.description, {
+        mode: 0o600,
+      });
       const result = await exec(
         'gh',
         [
@@ -67,7 +70,11 @@ export class GitHubPullRequests implements PullRequests {
           '--body-file',
           filename,
         ],
-        { cwd: input.workspace, signal: input.signal, maxBuffer: 1024 * 1024 },
+        {
+          cwd: input.workspace,
+          signal: input.signal,
+          maxBuffer: 1024 * 1024,
+        },
       );
       const url = result.stdout
         .trim()
@@ -82,7 +89,9 @@ export class GitHubPullRequests implements PullRequests {
               'The branch was pushed, but GitHub CLI did not return a PR URL. Check the remote before retrying.',
           };
     } catch (error) {
-      if (input.signal.aborted) throw error;
+      if (input.signal.aborted)
+        throw error;
+
       if (
         typeof (error as { code?: unknown }).code === 'number' ||
         ['ENOENT', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')
@@ -92,9 +101,13 @@ export class GitHubPullRequests implements PullRequests {
           error:
             'The branch was pushed, but creating its PR failed. Check GitHub CLI authentication and the remote before retrying.',
         };
+
       throw error;
     } finally {
-      await fs.rm(directory, { recursive: true, force: true });
+      await fs.rm(directory, {
+        recursive: true,
+        force: true,
+      });
     }
   }
 }

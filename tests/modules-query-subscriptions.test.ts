@@ -10,7 +10,8 @@ test('continuous notifications refresh the view before the stream stops', async 
   const query = new QuerySubscription({
     read: async () => ++reads,
     update: ({ data }) => {
-      if (data !== undefined) updates.push(data);
+      if (data !== undefined)
+        updates.push(data);
     },
   });
   const stream = setInterval(() => query.invalidate(), 5);
@@ -31,7 +32,8 @@ test('slow reads are applied even when dirty and only one follow-up runs at a ti
     update: (state) => updates.push(state),
   });
   try {
-    for (let index = 0; index < 20; index++) query.invalidate();
+    for (let index = 0; index < 20; index++)
+      query.invalidate();
     await delay(75);
     assert.equal(pending.length, 1, 'The first read is still in flight');
     pending[0](1);
@@ -55,7 +57,9 @@ test('a failed refresh retains the visible data and the next change can recover'
   let reads = 0;
   const query = new QuerySubscription({
     async read() {
-      if (++reads === 2) throw new Error('Fixture disconnected');
+      if (++reads === 2)
+        throw new Error('Fixture disconnected');
+
       return reads;
     },
     update: (state) => updates.push(state),
@@ -71,7 +75,10 @@ test('a failed refresh retains the visible data and the next change can recover'
     });
     query.invalidate();
     await delay(75);
-    assert.deepEqual(updates.at(-1), { data: 3, loading: false });
+    assert.deepEqual(updates.at(-1), {
+      data: 3,
+      loading: false,
+    });
   } finally {
     query.close();
   }
@@ -84,11 +91,19 @@ test('notifications affect their own feature and owner, with conservative deleti
       params: { runId: 'selected' },
       notification: { type, data },
     });
-  assert.equal(affects('preview.output', { runId: 'selected' }), true);
-  assert.equal(affects('preview.output', { runId: 'other' }), false);
-  assert.equal(affects('session.updated', { runId: 'selected' }), false);
+  assert.equal(affects('preview.output', {
+    runId: 'selected',
+  }), true);
+  assert.equal(affects('preview.output', {
+    runId: 'other',
+  }), false);
+  assert.equal(affects('session.updated', {
+    runId: 'selected',
+  }), false);
   assert.equal(affects('model.saved', {}), false);
-  assert.equal(affects('preview.error', { id: 'preview' }), true);
+  assert.equal(affects('preview.error', {
+    id: 'preview',
+  }), true);
   assert.equal(
     queryAffected({
       method: 'tasks.list',

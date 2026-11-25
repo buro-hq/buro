@@ -33,16 +33,26 @@ import { ownApplication, type ApplicationOwnership } from './ownership.ts';
 
 /** Composes one server process with usable defaults and replaceable boundary adapters. */
 export async function createApplication(input: ApplicationOptions): Promise<Application> {
-  const ownership = ownApplication({ directory: input.directory });
+  const ownership = ownApplication({
+    directory: input.directory,
+  });
   let storage: StorageEngine | undefined;
   try {
     storage =
       input.storage ??
-      new SqliteStorage({ filename: path.resolve(input.directory, 'private/state.sqlite') });
-    return await composeApplication({ options: input, storage, ownership });
+      new SqliteStorage({
+        filename: path.resolve(input.directory, 'private/state.sqlite'),
+      });
+    return await composeApplication({
+      options: input,
+      storage,
+      ownership,
+    });
   } catch (error) {
     try {
-      await closeResources({ steps: [() => storage?.close(), () => ownership.close()] });
+      await closeResources({
+        steps: [() => storage?.close(), () => ownership.close()],
+      });
     } catch (cleanup) {
       throw new AggregateError([error, cleanup], 'Application initialization failed.');
     }
@@ -57,30 +67,53 @@ async function composeApplication(scope: {
 }): Promise<Application> {
   const { options: input, storage, ownership } = scope;
   const privateDirectory = path.resolve(input.directory, 'private');
-  const events = new EventBus({ report: input.report });
-  const settings = new SettingsService({ store: storage.records('settings'), events });
-  const models = new ModelRegistry({ adapterState: storage.records('model-continuations') });
+  const events = new EventBus({
+    report: input.report,
+  });
+  const settings = new SettingsService({
+    store: storage.records('settings'),
+    events,
+  });
+  const models = new ModelRegistry({
+    adapterState: storage.records('model-continuations'),
+  });
   const modelConfigurations = new ModelCatalog({
     store: storage.records('model-connections'),
     models,
     settings,
     events,
     transports:
-      input.transports ?? modelTransports({ fetch: input.fetch, privatePaths: [privateDirectory] }),
+      input.transports ?? modelTransports({
+        fetch: input.fetch,
+        privatePaths: [privateDirectory],
+      }),
   });
-  const projects = new ProjectService({ store: storage.records('projects'), events });
-  const tasks = new TaskService({ store: storage.records('tasks'), events });
-  const agents = new AgentService({ store: storage.records('agents'), events });
+  const projects = new ProjectService({
+    store: storage.records('projects'),
+    events,
+  });
+  const tasks = new TaskService({
+    store: storage.records('tasks'),
+    events,
+  });
+  const agents = new AgentService({
+    store: storage.records('agents'),
+    events,
+  });
   const materials = new MaterialService({
     store: storage.records('materials'),
     events,
     loaders: input.materialLoaders,
   });
   const activity = new ActivityLog({
-    store: storage.records('activity', { indexes: [['sessionId'], ['runId']] }),
+    store: storage.records('activity', {
+      indexes: [['sessionId'], ['runId']],
+    }),
   });
   const tools = new ToolRegistry();
-  const conversations = new ConversationStore({ storage });
+  const conversations = new ConversationStore({
+    storage,
+  });
   const sessions = new SessionService({
     store: conversations,
     models,
@@ -88,12 +121,27 @@ async function composeApplication(scope: {
     activity,
     events,
   });
-  const workspaces = new GitWorkspaces({ directory: path.join(input.directory, 'workspaces') });
-  const commands = new SandboxedCommands({ privatePaths: [privateDirectory] });
+  const workspaces = new GitWorkspaces({
+    directory: path.join(input.directory, 'workspaces'),
+  });
+  const commands = new SandboxedCommands({
+    privatePaths: [privateDirectory],
+  });
   for (const tool of [
-    ...fileTools({ commands, projects }),
-    ...commandTools({ commands, projects }),
-    ...sessionTools({ sessions, models, agents, events }),
+    ...fileTools({
+      commands,
+      projects,
+    }),
+    ...commandTools({
+      commands,
+      projects,
+    }),
+    ...sessionTools({
+      sessions,
+      models,
+      agents,
+      events,
+    }),
   ])
     tools.register(tool);
   const runs = new RunService({
@@ -106,7 +154,12 @@ async function composeApplication(scope: {
     materials,
     events,
   });
-  const results = new ResultService({ runs, projects, changes: new GitChanges(), events });
+  const results = new ResultService({
+    runs,
+    projects,
+    changes: new GitChanges(),
+    events,
+  });
   const previews = new PreviewService({
     store: storage.records('previews'),
     runs,
@@ -114,7 +167,10 @@ async function composeApplication(scope: {
     commands,
     events,
   });
-  for (const tool of previewTools({ previews })) tools.register(tool);
+  for (const tool of previewTools({
+    previews,
+  }))
+    tools.register(tool);
   const deliveries = new DeliveryService({
     store: storage.records('deliveries'),
     runs,
@@ -123,10 +179,16 @@ async function composeApplication(scope: {
     results,
     events,
     publishers: input.publishers ?? [
-      new GitHubPublisher({ directory: path.join(input.directory, 'publications') }),
+      new GitHubPublisher({
+        directory: path.join(input.directory, 'publications'),
+      }),
     ],
   });
-  for (const tool of materialTools({ materials, runs })) tools.register(tool);
+  for (const tool of materialTools({
+    materials,
+    runs,
+  }))
+    tools.register(tool);
   try {
     await modelConfigurations.initialize();
     await conversations.migrate();

@@ -1,13 +1,16 @@
 function toml(value: unknown): string {
-  if (Array.isArray(value)) return '[' + value.map(toml).join(',') + ']';
+  if (Array.isArray(value))
+    return '[' + value.map(toml).join(',') + ']';
+
   if (value && typeof value === 'object')
     return (
       '{' +
       Object.entries(value)
         .map(([key, item]) => JSON.stringify(key) + '=' + toml(item))
         .join(',') +
-      '}'
+        '}'
     );
+
   return JSON.stringify(value);
 }
 
@@ -27,15 +30,16 @@ export function codexArguments(input: { prefix?: string[]; deniedPaths?: string[
     ...(input.deniedPaths ?? []),
   ]) {
     filesystem[path.resolve(target)] = 'deny';
-    if (existsSync(target)) filesystem[realpathSync(target)] = 'deny';
+    if (existsSync(target))
+      filesystem[realpathSync(target)] = 'deny';
   }
   const settings: Record<string, unknown> = {
     [`permissions.${permissions}`]: {
       filesystem,
       network: { enabled: false },
     },
-    default_permissions: permissions,
-    mcp_servers: {},
+    'default_permissions': permissions,
+    'mcp_servers': {},
     'features.apps': false,
     'features.plugins': false,
     'features.remote_plugin': false,
@@ -43,7 +47,7 @@ export function codexArguments(input: { prefix?: string[]; deniedPaths?: string[
     'features.memories': false,
     'features.goals': false,
     'features.in_app_browser': false,
-    web_search: 'disabled',
+    'web_search': 'disabled',
     'shell_environment_policy.inherit': 'none',
   };
   return {

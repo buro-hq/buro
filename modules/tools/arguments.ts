@@ -4,6 +4,7 @@ import { ToolFailure } from './tool.ts';
 export function objectArguments(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new ToolFailure('Arguments must be a JSON object.');
+
   return value as Record<string, unknown>;
 }
 
@@ -14,7 +15,11 @@ export function textArgument(input: {
   optional?: boolean;
 }): string | undefined {
   const value = input.arguments[input.name];
-  if (value === undefined && input.optional) return undefined;
-  if (typeof value !== 'string') throw new ToolFailure(`${input.name} must be a string.`);
+  if (value === undefined && input.optional)
+    return undefined;
+
+  if (typeof value !== 'string')
+    throw new ToolFailure(`${input.name} must be a string.`);
+
   return value;
 }

@@ -18,9 +18,9 @@ import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 
 function InstructionsEditor(input: { instructions: string }): ReactElement {
-  const { client } = useApplication(),
-    action = useOperation(),
-    [instructions, setInstructions] = useState(input.instructions);
+  const { client } = useApplication();
+  const action = useOperation();
+  const [instructions, setInstructions] = useState(input.instructions);
   return (
     <Stack>
       <Textarea
@@ -35,10 +35,11 @@ function InstructionsEditor(input: { instructions: string }): ReactElement {
         loading={action.busy}
         onClick={() =>
           void action.perform(async () => {
-            await client.call('settings.update', { instructions });
+            await client.call('settings.update', {
+              instructions,
+            });
             return { ok: true };
-          })
-        }
+          })}
       >
         {t('Save instructions')}
       </Button>
@@ -48,11 +49,11 @@ function InstructionsEditor(input: { instructions: string }): ReactElement {
 
 /** Application defaults and local appearance preferences remain independent of projects. */
 export function PreferencesPage(): ReactElement {
-  const settings = useApiQuery('settings.get', {}),
-    locale = useLocale(),
-    { themeId, setThemeId } = useAppearance(),
-    { colorScheme, setColorScheme } = useMantineColorScheme(),
-    computed = useComputedColorScheme('light');
+  const settings = useApiQuery('settings.get', {});
+  const locale = useLocale();
+  const { themeId, setThemeId } = useAppearance();
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const computed = useComputedColorScheme('light');
   const schemes = [
     { id: 'light', label: t('Light'), icon: Sun },
     { id: 'dark', label: t('Dark'), icon: Moon },

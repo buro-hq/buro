@@ -67,7 +67,10 @@ export class ModelCatalog implements ModelConfigurations {
       }
     }
     const settings = await this.settings.get();
-    if (settings.defaultModelId) this.models.select({ id: settings.defaultModelId });
+    if (settings.defaultModelId)
+      this.models.select({
+        id: settings.defaultModelId,
+      });
   }
 
   /** Lists connection settings without disclosing credential contents. */
@@ -76,7 +79,9 @@ export class ModelCatalog implements ModelConfigurations {
     return (await this.store.list()).map(({ configuration, apiKey }) => ({
       ...configuration,
       hasApiKey: !!apiKey,
-      available: !!this.models.get({ id: configuration.id }),
+      available: !!this.models.get({
+        id: configuration.id,
+      }),
     }));
   }
 
@@ -87,9 +92,11 @@ export class ModelCatalog implements ModelConfigurations {
 
   /** Reads metadata for a draft connection; no placeholder model is persisted. */
   async discover(input: ModelDiscoveryInput): Promise<ModelDiscoveryResult> {
-    if (this.closing) return { ok: false, error: 'Model discovery is closed.' };
-    const controller = new AbortController(),
-      timer = setTimeout(() => controller.abort(), 15000);
+    if (this.closing)
+      return { ok: false, error: 'Model discovery is closed.' };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
     let release!: () => void;
     this.discoveries.set(
       controller,
@@ -109,7 +116,8 @@ export class ModelCatalog implements ModelConfigurations {
   /** Releases catalogue requests owned by this process, including native listing processes. */
   async close(): Promise<void> {
     this.closing = true;
-    for (const controller of this.discoveries.keys()) controller.abort();
+    for (const controller of this.discoveries.keys())
+      controller.abort();
     await Promise.all([this.mutations, ...this.discoveries.values()]);
   }
 
@@ -135,17 +143,25 @@ export class ModelCatalog implements ModelConfigurations {
       transport: input.configuration.transport,
     };
     const transport = this.factories.get(configuration.transport);
-    if (!transport) return { ok: false, error: 'Model transport is unavailable.' };
+    if (!transport)
+      return { ok: false, error: 'Model transport is unavailable.' };
+
     const apiKey = input.apiKey === undefined ? previous?.apiKey : input.apiKey || undefined;
     try {
       signal.throwIfAborted();
-      const backend = transport.create({ configuration, apiKey });
+      const backend = transport.create({
+        configuration,
+        apiKey,
+      });
       if (!backend.listModels)
         return {
           ok: false,
           error: 'This backend does not provide a model catalogue. Enter its model ID directly.',
         };
-      return { ok: true, models: await backend.listModels({ signal }) };
+
+      return { ok: true, models: await backend.listModels({
+        signal,
+      }) };
     } catch (error) {
       return {
         ok: false,
@@ -162,7 +178,9 @@ export class ModelCatalog implements ModelConfigurations {
 
   /** Persists validated boundary input and replaces a transport without changing session identity. */
   async save(input: ModelConfigurationInput): Promise<ModelConfigurationResult> {
-    if (this.closing) return { ok: false, error: 'Model configuration is closed.' };
+    if (this.closing)
+      return { ok: false, error: 'Model configuration is closed.' };
+
     const copy = structuredClone(input);
     return this.mutate(() => this.saveConfiguration(copy));
   }
@@ -187,9 +205,12 @@ export class ModelCatalog implements ModelConfigurations {
       revision: randomUUID(),
     };
     const transport = this.factories.get(configuration.transport);
-    if (!transport) return { ok: false, error: 'Model transport is unavailable.' };
+    if (!transport)
+      return { ok: false, error: 'Model transport is unavailable.' };
+
     if (!configuration.name.trim() || !configuration.model.trim())
       return { ok: false, error: 'Model name and model ID are required.' };
+
     if (
       !Number.isSafeInteger(configuration.contextTokens) ||
       !Number.isSafeInteger(configuration.outputTokens) ||
@@ -200,55 +221,87 @@ export class ModelCatalog implements ModelConfigurations {
         ok: false,
         error: 'Context must be larger than the positive output token allowance.',
       };
+
     if (
       configuration.capacity !== undefined &&
       (!Number.isSafeInteger(configuration.capacity) || configuration.capacity < 1)
     )
       return { ok: false, error: 'Endpoint capacity must be a positive integer.' };
+
     if (input.apiKey !== undefined && input.apiKey !== null && /[\r\n\0]/.test(input.apiKey))
       return { ok: false, error: 'API key contains invalid characters.' };
+
     if (
       configuration.retries !== undefined &&
       (!Number.isSafeInteger(configuration.retries) || configuration.retries < 0)
     )
       return { ok: false, error: 'HTTP retries must be a nonnegative integer.' };
+
     const apiKey = input.apiKey === undefined ? previous?.apiKey : input.apiKey || undefined;
     // Construct before persisting so invalid endpoints do not become active settings.
     let backend;
     try {
-      backend = transport.create({ configuration, apiKey });
+      backend = transport.create({
+        configuration,
+        apiKey,
+      });
     } catch (error) {
       if (isProviderFailure(error) && error.outcome === 'not-dispatched')
         return { ok: false, error: error.message };
+
       throw error;
     }
-    await this.store.save({ id: configuration.id, configuration, apiKey });
-    this.models.register({ ...configuration, backend, default: input.default });
+    await this.store.save({
+      id: configuration.id,
+      configuration,
+      apiKey,
+    });
+    this.models.register({
+      ...configuration,
+      backend,
+      default: input.default,
+    });
     if (input.default || !(await this.settings.get()).defaultModelId) {
-      await this.settings.update({ defaultModelId: configuration.id });
-      this.models.select({ id: configuration.id });
+      await this.settings.update({
+        defaultModelId: configuration.id,
+      });
+      this.models.select({
+        id: configuration.id,
+      });
     }
+
     const view = { ...configuration, hasApiKey: !!apiKey, available: true };
-    this.events.publish({ type: 'model.saved', data: view });
+    this.events.publish({
+      type: 'model.saved',
+      data: view,
+    });
     return { ok: true, configuration: view };
   }
 
   /** Selects a default for new sessions; existing conversations retain their model. */
   async select(input: { id: string }): Promise<boolean> {
-    if (this.closing) return false;
+    if (this.closing)
+      return false;
+
     const copy = { ...input };
     return this.mutate(() => this.selectDefault(copy));
   }
 
   private async selectDefault(input: { id: string }): Promise<boolean> {
-    if (!this.models.get(input)) return false;
-    await this.settings.update({ defaultModelId: input.id });
+    if (!this.models.get(input))
+      return false;
+
+    await this.settings.update({
+      defaultModelId: input.id,
+    });
     return this.models.select(input);
   }
 
   /** Removes a connection and its private credential; history remains available. */
   async delete(input: { id: string }): Promise<void> {
-    if (this.closing) throw new Error('Model configuration is closed.');
+    if (this.closing)
+      throw new Error('Model configuration is closed.');
+
     const copy = { ...input };
     return this.mutate(() => this.removeConfiguration(copy));
   }
@@ -257,18 +310,29 @@ export class ModelCatalog implements ModelConfigurations {
     await this.store.delete(input.id);
     this.models.remove(input);
     if ((await this.settings.get()).defaultModelId === input.id)
-      await this.settings.update({ defaultModelId: this.models.get()?.id });
-    this.events.publish({ type: 'model.deleted', data: input });
+      await this.settings.update({
+        defaultModelId: this.models.get()?.id,
+      });
+
+    this.events.publish({
+      type: 'model.deleted',
+      data: input,
+    });
   }
 
   private async activate(id: string): Promise<void> {
     const connection = await this.store.get(id);
     const configuration = connection?.configuration;
     const transport = configuration && this.factories.get(configuration.transport);
-    if (!configuration || !transport) return;
+    if (!configuration || !transport)
+      return;
+
     this.models.register({
       ...configuration,
-      backend: transport.create({ configuration, apiKey: connection?.apiKey }),
+      backend: transport.create({
+        configuration,
+        apiKey: connection?.apiKey,
+      }),
     });
   }
 
