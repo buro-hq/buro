@@ -661,7 +661,7 @@ Choose a code change, command or review to inspect its evidence.</pre
     </main>
     <script id="data" type="application/json">
       {
-        "generatedAt": "2026-11-25T22:43:24.407000+00:00",
+        "generatedAt": "2026-11-25T22:51:39.583050+00:00",
         "cases": [
           {
             "id": "small-qwen",
@@ -40758,7 +40758,7 @@ Choose a code change, command or review to inspect its evidence.</pre
         "nativePreflights": [
           {
             "label": "Qwen3.8",
-            "status": "Waiting for Gemma before Qwen3.8 Q3+MTP follow-up",
+            "status": "Qwen3.8 native preflight complete; full Buro quality tasks still required",
             "error": null,
             "experiments": [
               {
@@ -41235,22 +41235,297 @@ Choose a code change, command or review to inspect its evidence.</pre
                 "status": "completed",
                 "after": { "freeRamKB": 14843912, "gpu": ["10432, 1682, 0"] },
                 "finishedAt": 1795646479.181115
+              },
+              {
+                "name": "qwen38-q3-mtp",
+                "startedAt": 1795646722.071077,
+                "configuration": [
+                  "--model",
+                  "C:\\Users\\User\\AppData\\Local\\Buro\\models\\qwen38-2026-11-26\\Qwen3.8-27B-UD-Q3_K_XL.gguf",
+                  "--alias",
+                  "local-qwen38",
+                  "--host",
+                  "127.0.0.1",
+                  "--port",
+                  "18086",
+                  "--ctx-size",
+                  "8192",
+                  "--parallel",
+                  "1",
+                  "--fit",
+                  "on",
+                  "--fit-target",
+                  "1024",
+                  "--flash-attn",
+                  "on",
+                  "--cache-type-k",
+                  "q8_0",
+                  "--cache-type-v",
+                  "q8_0",
+                  "--jinja",
+                  "--metrics",
+                  "--perf",
+                  "--spec-type",
+                  "draft-mtp",
+                  "--model-draft",
+                  "C:\\Users\\User\\AppData\\Local\\Buro\\models\\qwen38-2026-11-26\\mtp-Qwen3.8-27B-Q4_0.gguf",
+                  "--spec-draft-n-max",
+                  "3",
+                  "--log-file",
+                  "C:\\Users\\User\\AppData\\Local\\Buro\\benchmarks\\qwen38-2026-11-26\\qwen38-q3-mtp.native.log"
+                ],
+                "requests": [
+                  {
+                    "label": "cold",
+                    "wallSeconds": 34.21178889274597,
+                    "usage": {
+                      "completion_tokens": 256,
+                      "prompt_tokens": 56,
+                      "total_tokens": 312,
+                      "prompt_tokens_details": { "cached_tokens": 0 }
+                    },
+                    "timings": {
+                      "cache_n": 0,
+                      "prompt_n": 56,
+                      "prompt_ms": 1664.634,
+                      "prompt_per_token_ms": 29.725607142857143,
+                      "prompt_per_second": 33.6410285984787,
+                      "predicted_n": 256,
+                      "predicted_ms": 32531.49,
+                      "predicted_per_token_ms": 127.5744705882353,
+                      "predicted_per_second": 7.838558885559807,
+                      "draft_n": 216,
+                      "draft_n_accepted": 182
+                    },
+                    "thinkingObserved": true,
+                    "finish": "length"
+                  },
+                  {
+                    "label": "warm",
+                    "wallSeconds": 38.108879804611206,
+                    "usage": {
+                      "completion_tokens": 256,
+                      "prompt_tokens": 56,
+                      "total_tokens": 312,
+                      "prompt_tokens_details": { "cached_tokens": 52 }
+                    },
+                    "timings": {
+                      "cache_n": 52,
+                      "prompt_n": 4,
+                      "prompt_ms": 575.469,
+                      "prompt_per_token_ms": 143.86725,
+                      "prompt_per_second": 6.950852261372897,
+                      "predicted_n": 256,
+                      "predicted_ms": 37400.345,
+                      "predicted_per_token_ms": 146.66801960784315,
+                      "predicted_per_second": 6.818118923769285,
+                      "draft_n": 230,
+                      "draft_n_accepted": 178
+                    },
+                    "thinkingObserved": true,
+                    "finish": "length"
+                  },
+                  {
+                    "label": "context",
+                    "wallSeconds": 48.93215799331665,
+                    "usage": {
+                      "completion_tokens": 256,
+                      "prompt_tokens": 1832,
+                      "total_tokens": 2088,
+                      "prompt_tokens_details": { "cached_tokens": 0 }
+                    },
+                    "timings": {
+                      "cache_n": 0,
+                      "prompt_n": 1832,
+                      "prompt_ms": 5642.926,
+                      "prompt_per_token_ms": 3.0801997816593887,
+                      "prompt_per_second": 324.65426624414357,
+                      "predicted_n": 256,
+                      "predicted_ms": 43166.645,
+                      "predicted_per_token_ms": 169.28096078431372,
+                      "predicted_per_second": 5.907338872409474,
+                      "draft_n": 266,
+                      "draft_n_accepted": 165
+                    },
+                    "thinkingObserved": true,
+                    "finish": "length"
+                  },
+                  {
+                    "label": "native tool call",
+                    "wallSeconds": 9.893318891525269,
+                    "usage": {
+                      "completion_tokens": 52,
+                      "prompt_tokens": 325,
+                      "total_tokens": 377,
+                      "prompt_tokens_details": { "cached_tokens": 0 }
+                    },
+                    "timings": {
+                      "cache_n": 0,
+                      "prompt_n": 325,
+                      "prompt_ms": 2496.027,
+                      "prompt_per_token_ms": 7.6800830769230775,
+                      "prompt_per_second": 130.2069248449636,
+                      "predicted_n": 52,
+                      "predicted_ms": 7229.395,
+                      "predicted_per_token_ms": 141.7528431372549,
+                      "predicted_per_second": 7.054532225725665,
+                      "draft_n": 45,
+                      "draft_n_accepted": 36
+                    }
+                  },
+                  {
+                    "label": "tool result followup",
+                    "wallSeconds": 70.44173121452332,
+                    "usage": {
+                      "completion_tokens": 439,
+                      "prompt_tokens": 426,
+                      "total_tokens": 865,
+                      "prompt_tokens_details": { "cached_tokens": 376 }
+                    },
+                    "timings": {
+                      "cache_n": 376,
+                      "prompt_n": 50,
+                      "prompt_ms": 1235.93,
+                      "prompt_per_token_ms": 24.718600000000002,
+                      "prompt_per_second": 40.45536559513888,
+                      "predicted_n": 439,
+                      "predicted_ms": 69192.409,
+                      "predicted_per_token_ms": 157.97353652968036,
+                      "predicted_per_second": 6.330174166937879,
+                      "draft_n": 426,
+                      "draft_n_accepted": 297
+                    }
+                  }
+                ],
+                "before": { "freeRamKB": 16448480, "gpu": ["93, 12021, 0"] },
+                "servedModels": ["local-qwen38"],
+                "nativeToolCallObserved": true,
+                "toolFollowup": "I read the file. Here's what it contains and the bug:\n\n```ts\nexport const ratio = (done: number, total: number): number => done / total;\n// Expected ratio(0, 0) to return 0.\n```\n\n**The bug:** the function divides unconditionally, so it doesn't handle the case where `total` is `0`.\n\n- `ratio(0, 0)` evaluates `0 / 0`, which in JavaScript/TypeScript is **`NaN`**, not the expected `0`.\n- Any `ratio(n, 0)` with `n ≠ 0` returns **`Infinity`** (or `-Infinity` if `n` is negative), which will silently poison downstream calculations.\n\n**Fix:** guard against a zero denominator, e.g.:\n\n```ts\nexport const ratio = (done: number, total: number): number =>\n  total === 0 ? 0 : done / total;\n```\n\nDepending on your domain semantics, you might also want to consider whether returning `0` for a zero `total` is the right choice, or whether `NaN`/throwing is more honest — but per the stated expectation (`ratio(0, 0)` → `0`), the guard above is what makes the code match the contract.",
+                "status": "completed",
+                "after": { "freeRamKB": 13256516, "gpu": ["10534, 1580, 2"] },
+                "finishedAt": 1795646941.670871
               }
             ],
             "requests": [],
             "nativeToolCallObserved": null,
             "artifact": null,
-            "revision": "4af51b3542f775b0a8e4b310bfb3f17e01c306c9"
+            "revision": "4af51b3542f775b0a8e4b310bfb3f17e01c306c9",
+            "parameters": null,
+            "runtimeEvidence": null
           },
           {
             "label": "Gemma 4 12B",
-            "status": "Downloading Gemma 4 12B",
+            "status": "Native preflight complete; full Buro quality tasks still required",
             "error": null,
             "experiments": [],
-            "requests": [],
-            "nativeToolCallObserved": null,
-            "artifact": null,
-            "revision": null
+            "requests": [
+              {
+                "done": true,
+                "done_reason": "length",
+                "prompt_eval_count": 53,
+                "eval_count": 256,
+                "prompt_eval_duration": 5872704000,
+                "eval_duration": 3416647000,
+                "load_duration": 22364800500,
+                "total_duration": 31705353800,
+                "label": "cold",
+                "wallSeconds": 31.712543964385986,
+                "thinkingObserved": true,
+                "decodeTokensPerSecond": 74.92726055691442
+              },
+              {
+                "done": true,
+                "done_reason": "length",
+                "prompt_eval_count": 53,
+                "eval_count": 256,
+                "prompt_eval_duration": 83379000,
+                "eval_duration": 3594229000,
+                "load_duration": 30309200,
+                "total_duration": 3767072700,
+                "label": "warm",
+                "wallSeconds": 3.8056797981262207,
+                "thinkingObserved": true,
+                "decodeTokensPerSecond": 71.22528920666991
+              },
+              {
+                "done": true,
+                "done_reason": "length",
+                "prompt_eval_count": 1831,
+                "eval_count": 256,
+                "prompt_eval_duration": 1708658000,
+                "eval_duration": 4171234000,
+                "load_duration": 6489100,
+                "total_duration": 5942198700,
+                "label": "context",
+                "wallSeconds": 5.9697771072387695,
+                "thinkingObserved": true,
+                "decodeTokensPerSecond": 61.37272567302625
+              },
+              {
+                "done": true,
+                "done_reason": "stop",
+                "prompt_eval_count": 80,
+                "eval_count": 67,
+                "prompt_eval_duration": 117284000,
+                "eval_duration": 816300000,
+                "load_duration": 14530800,
+                "total_duration": 1070178300,
+                "label": "native tool call",
+                "wallSeconds": 1.0762529373168945,
+                "thinkingObserved": true,
+                "decodeTokensPerSecond": 82.07766752419454
+              },
+              {
+                "done": true,
+                "done_reason": "stop",
+                "prompt_eval_count": 197,
+                "eval_count": 265,
+                "prompt_eval_duration": 170864000,
+                "eval_duration": 3384462000,
+                "load_duration": 7398300,
+                "total_duration": 3567687900,
+                "label": "tool followup",
+                "wallSeconds": 3.591930866241455,
+                "thinkingObserved": true,
+                "decodeTokensPerSecond": 78.29900291390479
+              }
+            ],
+            "nativeToolCallObserved": true,
+            "artifact": {
+              "name": "gemma4:12b",
+              "model": "gemma4:12b",
+              "modified_at": "2026-11-26T01:44:29.7510071+03:00",
+              "size": 8021618941,
+              "digest": "6114515d63c17436a7c0417d82820ac65ad643e2806c5a3c89cb62846436ed0b",
+              "details": {
+                "parent_model": "imatrix-20260927-12b/model-q4_K_M.gguf",
+                "format": "gguf",
+                "family": "gemma4",
+                "families": ["gemma4"],
+                "parameter_size": "11.9B",
+                "quantization_level": "Q4_K_M",
+                "context_length": 262144,
+                "embedding_length": 3840,
+                "runner": "llamacpp"
+              },
+              "capabilities": ["completion", "vision", "audio", "tools", "thinking"]
+            },
+            "revision": null,
+            "parameters": "draft_num_predict              3\ntemperature                    1\ntop_k                          64\ntop_p                          0.95",
+            "runtimeEvidence": {
+              "source": "Observed Ollama native engine log during these requests",
+              "targetArchitecture": "gemma4",
+              "targetParameters": "11.91B",
+              "targetGpuLayers": "49/49",
+              "targetCudaModelMiB": 7024.41,
+              "assistantArchitecture": "gemma4-assistant",
+              "assistantParameters": "422.86M",
+              "assistantGpuLayers": "5/5",
+              "assistantCudaModelMiB": 428.53,
+              "speculativeType": "draft-mtp",
+              "maxDraftTokens": 3,
+              "allocationCaveat": "Ollama /api/ps reported only about 1.45 GB for this package, inconsistent with native target and assistant buffers. Do not use that field as total VRAM consumption."
+            }
           }
         ],
         "schemaRepair": {
@@ -41654,7 +41929,56 @@ Choose a code change, command or review to inspect its evidence.</pre
         if (data.prefetch.error) a.append(n('p', data.prefetch.error, 'fail'));
         $('native-results').append(a);
       }
+      const nativeTable = n('table');
+      const nativeHead = n('thead');
+      const nativeHeader = n('tr');
+      for (const title of [
+        'Configuration',
+        'Warm decode, tokens/s',
+        'Context decode, tokens/s',
+        'Native tools',
+        'Repository quality',
+      ])
+        nativeHeader.append(n('th', title));
+      nativeHead.append(nativeHeader);
+      nativeTable.append(nativeHead);
+      const nativeBody = n('tbody');
+      nativeTable.append(nativeBody);
+      const nativeScroll = n('div', undefined, 'scroll');
+      nativeScroll.append(nativeTable);
+      $('native-results').append(nativeScroll);
       for (const preflight of data.nativePreflights || []) {
+        const experiments = preflight.experiments?.length
+          ? preflight.experiments
+          : [
+              {
+                name: preflight.label,
+                status: preflight.status,
+                requests: preflight.requests,
+                nativeToolCallObserved: preflight.nativeToolCallObserved,
+              },
+            ];
+        for (const experiment of experiments) {
+          const rate = (label) => {
+            const r = (experiment.requests || []).find((x) => x.label === label);
+            const speed = r?.timings?.predicted_per_second ?? r?.decodeTokensPerSecond;
+            return speed ? speed.toFixed(2) : 'Pending';
+          };
+          const row = n('tr');
+          for (const value of [
+            experiment.name,
+            rate('warm'),
+            rate('context'),
+            experiment.nativeToolCallObserved === true
+              ? 'Observed'
+              : experiment.nativeToolCallObserved === false
+                ? 'Not observed'
+                : 'Pending',
+            'Not tested',
+          ])
+            row.append(n('td', value));
+          nativeBody.append(row);
+        }
         const a = n('article');
         a.append(n('h3', preflight.label), n('p', preflight.status));
         if (preflight.error) a.append(n('p', preflight.error, 'fail'));
@@ -41695,6 +42019,20 @@ Choose a code change, command or review to inspect its evidence.</pre
                 's wall',
             ),
           );
+        if (preflight.runtimeEvidence) {
+          a.append(
+            n(
+              'p',
+              'Installed Ollama package uses native MTP with three draft tokens. Engine log: 49/49 target layers and 5/5 assistant layers offloaded to GPU. Native tools were observed; full Buro quality tasks remain pending.',
+            ),
+          );
+          const details = n('details');
+          details.append(
+            n('summary', 'Observed runtime evidence'),
+            n('pre', JSON.stringify(preflight.runtimeEvidence, null, 2), 'wrap'),
+          );
+          a.append(details);
+        }
         $('native-results').append(a);
       }
       if (data.schemaRepair) {
