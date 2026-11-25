@@ -14,6 +14,8 @@ export type {
   ModelProvider,
   ModelMessage,
   ModelUsage,
+  ModelCompletion,
+  ModelTiming,
   ModelStreamEvent,
   ModelToolCall,
   ToolDefinition,

@@ -5,6 +5,7 @@ import type {
   ModelToolCall,
   ModelCompletion,
   AvailableModel,
+  ModelTiming,
 } from '../contracts/model.ts';
 import {
   RequestGate,
@@ -44,6 +45,24 @@ const failure = (code: string, message: string) =>
   new ProviderFailure(code, message, {
     outcome: 'unknown',
   });
+
+const reportedTiming = (chunk: Record<string, unknown>): ModelTiming | undefined => {
+  const timing: ModelTiming = {};
+  for (const [field, wire] of [
+    ['totalSeconds', 'total_duration'],
+    ['loadSeconds', 'load_duration'],
+    ['inputSeconds', 'prompt_eval_duration'],
+    ['outputSeconds', 'eval_duration'],
+  ] as const) {
+    const nanoseconds = tokenCount(chunk[wire]);
+    if (nanoseconds !== undefined)
+      timing[field] = nanoseconds / 1e9;
+  }
+  if (!Object.keys(timing).length)
+    return undefined;
+
+  return timing;
+};
 export class OllamaProvider implements ModelProvider {
   readonly structuredToolMode = 'separate-turn' as const;
   readonly structuredOutputMode = 'schema' as const;
@@ -239,6 +258,7 @@ export class OllamaProvider implements ModelProvider {
       let reportedModel = input.model;
       let inputTokens: number | undefined;
       let outputTokens: number | undefined;
+      let timing: ModelTiming | undefined;
       const calls = new Map<number, { name: string; fragments: string; args?: unknown }>();
       for await (const line of lines(response, input.onProgress)) {
         if (!line.trim())
@@ -302,6 +322,7 @@ export class OllamaProvider implements ModelProvider {
           reason = typeof chunk.done_reason === 'string' ? chunk.done_reason : 'stop';
           inputTokens = tokenCount(chunk.prompt_eval_count);
           outputTokens = tokenCount(chunk.eval_count);
+          timing = reportedTiming(chunk);
           break;
         }
       }
@@ -331,6 +352,7 @@ export class OllamaProvider implements ModelProvider {
 
       const completion = {
         model: reportedModel,
+        ...(timing ? { timing } : {}),
         finish:
           reason === 'length'
             ? ('length' as const)

@@ -6,7 +6,7 @@ import { createApplication } from '../modules/application/create-application.ts'
 import { SandboxedCommands } from '../modules/commands/sandboxed-commands.ts';
 import { safeGit } from '../modules/repositories/git.ts';
 import type { SessionBackend, BackendRequest } from '../modules/engines/backend.ts';
-import type { ModelCompletion } from '../agent/contracts/model.ts';
+import type { ModelCompletion, ModelTiming } from '../agent/contracts/model.ts';
 import fixture from './fixtures/ready-queue.json' with { type: 'json' };
 
 interface RequestMeasurement {
@@ -16,6 +16,7 @@ interface RequestMeasurement {
   reportedModel?: string;
   inputTokens?: number;
   outputTokens?: number;
+  timing?: ModelTiming;
   privateContinuationObserved?: boolean;
   finish?: string;
   failed?: boolean;
@@ -58,6 +59,7 @@ class MeasuredBackend implements SessionBackend {
         reportedModel: response.model,
         inputTokens: response.usage?.inputTokens,
         outputTokens: response.usage?.outputTokens,
+        timing: response.timing,
         privateContinuationObserved: response.message.continuation !== undefined,
         finish: response.finish,
       });
@@ -352,6 +354,10 @@ try {
   const outputTokens = backend.requests.some((request) => request.outputTokens !== undefined)
     ? backend.requests.reduce((total, request) => total + (request.outputTokens ?? 0), 0)
     : undefined;
+  const timedRequests = backend.requests.filter((request) =>
+    request.outputTokens !== undefined && (request.timing?.outputSeconds ?? 0) > 0);
+  const decodeSeconds = timedRequests.reduce((sum, request) => sum + request.timing!.outputSeconds!, 0);
+  const decodeTokens = timedRequests.reduce((sum, request) => sum + request.outputTokens!, 0);
   const userTurns = new Map<string, number>();
   for (const session of sessions) {
     let after = -1;
@@ -394,6 +400,7 @@ try {
       thinkingRequested: configuration?.thinking,
       contextTokens: model.contextTokens,
       outputTokens: model.outputTokens,
+      sampling: configuration?.sampling,
     },
     run: {
       id: run.id,
@@ -415,7 +422,11 @@ try {
     reportedOutputTokens: outputTokens,
     reportedOutputTokensPerWallSecond:
       outputTokens === undefined ? undefined : outputTokens / wallSeconds,
-    decodeTokensPerSecond: null,
+    // Timings describe reported terminal responses; failed/retried attempts remain in wall time.
+    decodeTimingRequests: timedRequests.length,
+    decodeTimedOutputTokens: decodeTokens,
+    decodeSeconds,
+    decodeTokensPerSecond: decodeSeconds > 0 ? decodeTokens / decodeSeconds : null,
     sessions: sessions.map((session) => ({
       id: session.id,
       parentId: session.parentId,

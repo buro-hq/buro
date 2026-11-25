@@ -11,6 +11,38 @@ type Kind = 'ollama' | 'deepseek' | 'openai-compatible';
 type Input = Parameters<ModelProvider['complete']>[0];
 const privateReasoning = 'PRIVATE_PORTABLE_REASONING';
 const encoder = new TextEncoder();
+
+test('Ollama reports server timing in seconds and leaves absent or invalid durations unknown', async () => {
+  for (const sample of [
+    {
+      wire: { total_duration: 8e9, load_duration: 0, prompt_eval_duration: 2e9, eval_duration: 5e9 },
+      expected: { totalSeconds: 8, loadSeconds: 0, inputSeconds: 2, outputSeconds: 5 },
+    },
+    { wire: {}, expected: undefined },
+    {
+      wire: { eval_duration: -1, load_duration: '100', total_duration: 0.5, prompt_eval_duration: null },
+      expected: undefined,
+    },
+    { wire: { eval_duration: 500_000_000 }, expected: { outputSeconds: 0.5 } },
+  ]) {
+    const transport = new OllamaProvider({
+      id: 'timing',
+      revision: 'test',
+      local: true,
+      endpoint: 'http://127.0.0.1:11434',
+      fetch: async () => new Response(JSON.stringify({
+        message: { role: 'assistant', content: 'Ready' },
+        done: true,
+        eval_count: 20,
+        ...sample.wire,
+      }) + '\n'),
+    });
+    const completion = await transport.complete(input());
+    assert.deepEqual(completion.timing, sample.expected);
+    assert.equal(completion.usage?.outputTokens, 20);
+  }
+});
+
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((accept) => {

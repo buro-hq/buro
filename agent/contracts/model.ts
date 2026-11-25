@@ -15,6 +15,13 @@ export type ModelMessage = {
   continuation?: unknown;
 };
 export type ModelUsage = { inputTokens?: number; outputTokens?: number };
+/** Server-reported durations in seconds; absent fields are unknown, never client estimates. */
+export interface ModelTiming {
+  totalSeconds?: number;
+  loadSeconds?: number;
+  inputSeconds?: number;
+  outputSeconds?: number;
+}
 /** A discoverable model identifier, without connection credentials. */
 export interface AvailableModel {
   id: string;
@@ -26,6 +33,7 @@ export type ModelCompletion = {
   message: ModelMessage & { role: 'assistant' };
   model: string;
   usage?: ModelUsage;
+  timing?: ModelTiming;
   finish: ModelFinish;
 };
 /**
