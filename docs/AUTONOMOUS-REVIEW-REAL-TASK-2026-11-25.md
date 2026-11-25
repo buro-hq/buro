@@ -2,6 +2,8 @@
 
 The [standalone HTML report](reports/autonomous-review-real-task-2026-11-25.html) contains the exact task, actual session stages and command receipts, the initial implementation, the unchanged final model patch, and the parent's adjustments.
 
+For the subsequent matched run on the repaired fixture with Qwen, DeepSeek Flash and Pro, see the [cloud/local comparison](CLOUD-LOCAL-REVIEW-COMPARISON-2026-11-25.md). The earlier measurements below remain unchanged.
+
 ## Task and configuration
 
 Qwen 3.6 35B-A3B Q4_K_M moved generic feedback components and `useOperation` out of `src/features/common` into the shared UI/library modules. The task required public named exports, updated consumers, separate component files, unchanged behavior and a short structure-document update.
