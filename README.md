@@ -68,3 +68,5 @@ See [architecture, diagrams and comparisons](ARCHITECTURE.md), [model connection
 For an explicitly requested live model check, use `npm run evaluate:model -- queue MODEL_CONNECTION_ID` or `npm run evaluate:model -- review MODEL_CONNECTION_ID` while the daemon is stopped. These create synthetic projects and call the saved model connection. Reports retain the fixture identity, code revision, final independent checks, actual sessions, reported tokens and whole-run time. Token throughput over wall time is separate from provider decode speed.
 
 The [DeepSeek Flash thinking validation](docs/FLASH-VALIDATION-2026-11-25.md) records the live functional checks, collaboration trace, whole-run timings and current limitations.
+
+The [RTX thinking matrix](docs/RTX-THINKING-VALIDATION-2026-11-25.md) compares five local models on ordinary and review tasks, including actual tool execution, final file checks, whole-task time and server-reported generation rates.

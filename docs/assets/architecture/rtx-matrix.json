@@ -1,0 +1,523 @@
+{
+  "measuredOn": "2026-11-25",
+  "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+  "fixtureId": "synthetic-ready-queue-v1",
+  "hardware": {
+    "gpu": "RTX 3060 12 GB",
+    "ramGB": 32
+  },
+  "configuration": {
+    "transport": "ollama",
+    "thinking": true,
+    "contextTokens": 32768,
+    "outputTokens": 8192,
+    "sampling": {
+      "temperature": 0.6,
+      "topP": 0.95,
+      "presencePenalty": 0
+    },
+    "capacity": 1,
+    "retries": 0,
+    "loadPolicy": "unload before each scenario; wall time includes model loading"
+  },
+  "scenarios": [
+    {
+      "model": "qwen3.5:9b-q4_K_M",
+      "scenario": "queue",
+      "status": "completed",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 7,
+      "wallSeconds": 65.099677708,
+      "decodeTokensPerSecond": 54.53471842609964,
+      "modelRequests": 7,
+      "collaborators": 0,
+      "toolCalls": 11,
+      "changedFiles": [
+        {
+          "status": "M",
+          "path": "src/priority.mjs"
+        },
+        {
+          "status": "M",
+          "path": "src/queue.mjs"
+        }
+      ],
+      "baseline": {
+        "public": {
+          "passed": 0,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 3,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "verified": true,
+      "failedRequests": 0,
+      "truncatedRequests": 0,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+      "actualTaskHash": "04bc8d31923c3e5f83213b28ba5cfcbf9890ac55e61f6678d4366237b0423791",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T12-31-37-012Z-queue/report.json",
+      "sampledLoadedModel": {
+        "size": 6575221636,
+        "size_vram": 6575221636,
+        "context_length": 32768
+      }
+    },
+    {
+      "model": "qwen3.5:9b-q4_K_M",
+      "scenario": "review",
+      "status": "interrupted",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 260,
+      "wallSeconds": 1893.807344208,
+      "decodeTokensPerSecond": 52.83692080859436,
+      "modelRequests": 261,
+      "collaborators": 9,
+      "toolCalls": 256,
+      "changedFiles": [],
+      "baseline": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 4,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 4,
+          "total": 5
+        }
+      },
+      "verified": false,
+      "failedRequests": 1,
+      "truncatedRequests": 2,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "b906763b23f0e3defac14a1628624e649199104d5c0aee86b8be4da753ec66f4",
+      "actualTaskHash": "7189c692839452bb45ecdeb28abed2b719d8075943c20175bf2955121fd52207",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T12-32-44-584Z-review/report.json",
+      "sampledLoadedModel": {
+        "size": 6575221636,
+        "size_vram": 6575221636,
+        "context_length": 32768
+      }
+    },
+    {
+      "model": "qwen3.6:35b-a3b-q4_K_M",
+      "scenario": "queue",
+      "status": "completed",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 7,
+      "wallSeconds": 68.55789658299999,
+      "decodeTokensPerSecond": 45.621599024862014,
+      "modelRequests": 7,
+      "collaborators": 0,
+      "toolCalls": 11,
+      "changedFiles": [
+        {
+          "status": "M",
+          "path": "src/priority.mjs"
+        },
+        {
+          "status": "M",
+          "path": "src/queue.mjs"
+        }
+      ],
+      "baseline": {
+        "public": {
+          "passed": 0,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 3,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "verified": true,
+      "failedRequests": 0,
+      "truncatedRequests": 0,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+      "actualTaskHash": "04bc8d31923c3e5f83213b28ba5cfcbf9890ac55e61f6678d4366237b0423791",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T13-04-21-388Z-queue/report.json",
+      "sampledLoadedModel": {
+        "size": 23872741044,
+        "size_vram": 9928085338,
+        "context_length": 32768
+      }
+    },
+    {
+      "model": "qwen3.6:35b-a3b-q4_K_M",
+      "scenario": "review",
+      "status": "completed",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 70,
+      "wallSeconds": 647.768538083,
+      "decodeTokensPerSecond": 45.38004486863764,
+      "modelRequests": 70,
+      "collaborators": 7,
+      "toolCalls": 73,
+      "changedFiles": [
+        {
+          "status": "M",
+          "path": "src/queue.mjs"
+        }
+      ],
+      "baseline": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 4,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "verified": true,
+      "failedRequests": 0,
+      "truncatedRequests": 0,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "b906763b23f0e3defac14a1628624e649199104d5c0aee86b8be4da753ec66f4",
+      "actualTaskHash": "7189c692839452bb45ecdeb28abed2b719d8075943c20175bf2955121fd52207",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T13-05-32-721Z-review/report.json",
+      "sampledLoadedModel": {
+        "size": 23872741044,
+        "size_vram": 9928085338,
+        "context_length": 32768
+      }
+    },
+    {
+      "model": "flint:40b-a2b-q4_1",
+      "scenario": "queue",
+      "status": "completed",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 40,
+      "wallSeconds": 777.2339655419999,
+      "decodeTokensPerSecond": 46.4829358563777,
+      "modelRequests": 40,
+      "collaborators": 0,
+      "toolCalls": 52,
+      "changedFiles": [
+        {
+          "status": "M",
+          "path": "src/priority.mjs"
+        },
+        {
+          "status": "M",
+          "path": "src/queue.mjs"
+        }
+      ],
+      "baseline": {
+        "public": {
+          "passed": 0,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 3,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "verified": true,
+      "failedRequests": 0,
+      "truncatedRequests": 0,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+      "actualTaskHash": "04bc8d31923c3e5f83213b28ba5cfcbf9890ac55e61f6678d4366237b0423791",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T13-16-22-823Z-queue/report.json",
+      "sampledLoadedModel": {
+        "size": 26388704787,
+        "size_vram": 9666696314,
+        "context_length": 32768
+      }
+    },
+    {
+      "model": "flint:40b-a2b-q4_1",
+      "scenario": "review",
+      "status": "completed",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 155,
+      "wallSeconds": 1151.95934375,
+      "decodeTokensPerSecond": 47.410656072235234,
+      "modelRequests": 156,
+      "collaborators": 3,
+      "toolCalls": 172,
+      "changedFiles": [
+        {
+          "status": "M",
+          "path": "src/queue.mjs"
+        }
+      ],
+      "baseline": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 4,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "verified": true,
+      "failedRequests": 1,
+      "truncatedRequests": 0,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "b906763b23f0e3defac14a1628624e649199104d5c0aee86b8be4da753ec66f4",
+      "actualTaskHash": "7189c692839452bb45ecdeb28abed2b719d8075943c20175bf2955121fd52207",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T13-29-22-468Z-review/report.json",
+      "sampledLoadedModel": {
+        "size": 26388704787,
+        "size_vram": 9666696314,
+        "context_length": 32768
+      }
+    },
+    {
+      "model": "deepseek-r1:14b",
+      "scenario": "queue",
+      "status": "completed",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 1,
+      "wallSeconds": 105.56445266699998,
+      "decodeTokensPerSecond": 9.6349492992891,
+      "modelRequests": 1,
+      "collaborators": 0,
+      "toolCalls": 0,
+      "changedFiles": [],
+      "baseline": {
+        "public": {
+          "passed": 0,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 3,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 0,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 3,
+          "total": 5
+        }
+      },
+      "verified": false,
+      "failedRequests": 0,
+      "truncatedRequests": 0,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+      "actualTaskHash": "04bc8d31923c3e5f83213b28ba5cfcbf9890ac55e61f6678d4366237b0423791",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T13-48-36-845Z-queue/report.json",
+      "sampledLoadedModel": {
+        "size": 15720922479,
+        "size_vram": 10693713592,
+        "context_length": 32768
+      }
+    },
+    {
+      "model": "deepseek-r1:14b",
+      "scenario": "review",
+      "status": "completed",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 1,
+      "wallSeconds": 67.746215333,
+      "decodeTokensPerSecond": 9.917635016691461,
+      "modelRequests": 1,
+      "collaborators": 0,
+      "toolCalls": 0,
+      "changedFiles": [],
+      "baseline": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 4,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 4,
+          "total": 5
+        }
+      },
+      "verified": false,
+      "failedRequests": 0,
+      "truncatedRequests": 0,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "b906763b23f0e3defac14a1628624e649199104d5c0aee86b8be4da753ec66f4",
+      "actualTaskHash": "7189c692839452bb45ecdeb28abed2b719d8075943c20175bf2955121fd52207",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T13-50-24-899Z-review/report.json",
+      "sampledLoadedModel": {
+        "size": 15720922479,
+        "size_vram": 10693713592,
+        "context_length": 32768
+      }
+    },
+    {
+      "model": "deepseek-r1:32b",
+      "scenario": "queue",
+      "status": "completed",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 1,
+      "wallSeconds": 748.4070921670001,
+      "decodeTokensPerSecond": 2.5107877219929224,
+      "modelRequests": 1,
+      "collaborators": 0,
+      "toolCalls": 0,
+      "changedFiles": [],
+      "baseline": {
+        "public": {
+          "passed": 0,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 3,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 0,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 3,
+          "total": 5
+        }
+      },
+      "verified": false,
+      "failedRequests": 0,
+      "truncatedRequests": 0,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "a2df64ce73693bdf82b7e88e230072831497fb7612ce949e0575901cc7c07c7d",
+      "actualTaskHash": "04bc8d31923c3e5f83213b28ba5cfcbf9890ac55e61f6678d4366237b0423791",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T13-51-34-698Z-queue/report.json",
+      "sampledLoadedModel": {
+        "size": 28847751822,
+        "size_vram": 10455256924,
+        "context_length": 32768
+      }
+    },
+    {
+      "model": "deepseek-r1:32b",
+      "scenario": "review",
+      "status": "completed",
+      "thinkingRequested": true,
+      "thinkingObservedRequests": 1,
+      "wallSeconds": 257.523313667,
+      "decodeTokensPerSecond": 2.607127925367586,
+      "modelRequests": 1,
+      "collaborators": 0,
+      "toolCalls": 0,
+      "changedFiles": [],
+      "baseline": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 4,
+          "total": 5
+        }
+      },
+      "checks": {
+        "public": {
+          "passed": 3,
+          "total": 3
+        },
+        "holdout": {
+          "passed": 4,
+          "total": 5
+        }
+      },
+      "verified": false,
+      "failedRequests": 0,
+      "truncatedRequests": 0,
+      "sourceRevision": "88fecc9e70e33077e20e2ff5485d0566754d4d1e",
+      "harnessHash": "3181bd16c1095fdf1da2f54be46bf25f81c24928b402084892a93d6af67eba46",
+      "fixtureHash": "b906763b23f0e3defac14a1628624e649199104d5c0aee86b8be4da753ec66f4",
+      "actualTaskHash": "7189c692839452bb45ecdeb28abed2b719d8075943c20175bf2955121fd52207",
+      "reportArtifact": "artifacts/model-evaluation/2026-11-25T14-04-05-385Z-review/report.json",
+      "sampledLoadedModel": {
+        "size": 28847751822,
+        "size_vram": 10455256924,
+        "context_length": 32768
+      }
+    }
+  ],
+  "priorServerRestored": true
+}
