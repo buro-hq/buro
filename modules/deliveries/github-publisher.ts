@@ -1,6 +1,6 @@
-import { safeGit } from '../../adapters/processes/safe-git.ts';
+import { safeGit } from '../repositories/git.ts';
 import { GitWorkspaces } from '../workspaces/git-workspaces.ts';
-import { captureGitTree } from '../workspaces/git-snapshot.ts';
+import { captureGitTree } from '../repositories/snapshot.ts';
 import { GitChanges } from '../results/git-changes.ts';
 import type { ResultPublisher } from './delivery.ts';
 import { GitHubPullRequests, type PullRequests } from './github-pull-requests.ts';

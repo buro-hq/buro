@@ -4,19 +4,11 @@ a:focus-visible {
   outline: 2px solid var(--accent-text);
   outline-offset: 3px;
 }
-.green-text {
-  color: var(--accent-text);
-}
-.micro,
-.eyebrow {
-  font-size: 10px;
-}
 .content-panel {
   background: var(--panel);
   border-color: var(--line);
 }
-.content-panel h2,
-.office-heading h2 {
+.content-panel h2 {
   color: var(--text);
 }
 .section-heading {
@@ -26,8 +18,7 @@ a:focus-visible {
   max-width: 70ch;
 }
 .caption,
-.empty,
-.source-path {
+.empty {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -37,12 +28,7 @@ a:focus-visible {
   border: 0;
   text-align: left;
 }
-.top-avatar {
-  border: 1px solid var(--line);
-  color: var(--text);
-}
-.profile:hover,
-.top-avatar:hover {
+.profile:hover {
   background: var(--panel-hover);
 }
 .mantine-Input-input,
@@ -88,23 +74,7 @@ a:focus-visible {
 .mantine-Button-root[data-variant='filled'] {
   color: var(--on-accent);
 }
-.source-select .mantine-Input-input,
-.role-form .mantine-Select-input {
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  border-color: var(--line);
-  font-size: 11px;
-}
-.goal-form .mantine-Input-input,
-.goal-form .mantine-Textarea-input,
-.profile-form .mantine-Input-input {
-  background: var(--bg);
-  color: var(--text);
-  border-color: var(--line);
-}
-.notice,
-.source-notice,
-.form-error {
+.notice {
   font-size: 12px;
   line-height: 1.65;
   border: 1px solid var(--line);
@@ -114,56 +84,12 @@ a:focus-visible {
   padding: 12px 14px;
   overflow-wrap: anywhere;
 }
-.notice-error,
-.form-error {
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
-}
-.notice-success {
-  color: var(--success);
-  background: color-mix(in srgb, var(--success) 8%, var(--panel));
-}
-.notice-warning {
-  color: var(--orange);
-  background: color-mix(in srgb, var(--orange) 8%, var(--panel));
-}
-.result-failed {
-  background: color-mix(in srgb, var(--orange) 12%, var(--panel));
-  color: var(--orange);
-}
 .desk {
   border-color: color-mix(in srgb, var(--agent-color) 32%, var(--line));
   background: color-mix(in srgb, var(--agent-color) 7%, var(--panel));
 }
 .desk:hover {
   background: color-mix(in srgb, var(--agent-color) 12%, var(--panel));
-}
-.desk-monitor {
-  border-color: color-mix(in srgb, var(--agent-color) 30%, var(--line));
-  background: var(--bg);
-  color: var(--agent-color);
-}
-.desk-legs {
-  border-color: color-mix(in srgb, var(--agent-color) 30%, var(--line));
-}
-.team-role-icon,
-.agent-avatar {
-  color: var(--agent-color, var(--accent-text));
-}
-.diff-line.add {
-  background: color-mix(in srgb, var(--success) 9%, transparent);
-}
-.diff-line.remove {
-  background: color-mix(in srgb, var(--danger) 9%, transparent);
-}
-.diff-line.add code,
-.diff-line.add b {
-  color: var(--success);
-}
-.diff-line.remove code,
-.diff-line.remove b {
-  color: var(--danger);
 }
 @media (max-width: 640px) {
   .section-heading {
@@ -179,85 +105,8 @@ a:focus-visible {
   border: 1px solid var(--line);
   border-radius: 10px;
 }
-.player {
-  background: color-mix(in srgb, var(--panel) 97%, transparent);
-  box-shadow: 0 -6px 25px #00000015;
-}
-.hero-actions .mantine-Button-root {
-  color: var(--on-accent);
-}
-.side-goals > button {
-  min-width: 0;
-  max-width: 100%;
-}
-.side-goals > button > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.side-goals small {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-.coordinator-goal {
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.recovery-actions {
-  margin-bottom: 18px;
-}
 @media (max-width: 640px) {
   .content-panel {
     padding: 18px 14px;
   }
-}
-.project-storage-panel {
-  margin-top: 20px;
-}
-.project-storage-panel > .mantine-Button-root {
-  margin-top: 14px;
-}
-.project-research-panel {
-  margin: 18px 0;
-}
-.project-research-panel .setting-row > div {
-  min-width: 0;
-}
-.project-research-panel .setting-row p,
-.setup-events li {
-  overflow-wrap: anywhere;
-}
-.setup-events {
-  padding-left: 20px;
-  color: var(--muted);
-}
-.setup-events li {
-  margin-bottom: 8px;
-}
-.result-operations {
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  padding: 22px 0;
-  margin: 22px 0;
-}
-.result-operations .team-grid {
-  margin: 18px 0;
-}
-.result-operations .form-actions {
-  justify-content: flex-start;
-  margin: 16px 0;
-}
-.result-operations details {
-  margin: 12px 0;
-}
-.delivery-result {
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-}
-.delivery-result > .mantine-Button-root {
-  margin-top: 12px;
 }

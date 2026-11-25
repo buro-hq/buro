@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { safeGit } from '../../adapters/processes/safe-git.ts';
+import { safeGit } from '../repositories/git.ts';
 
 /** A remote PR operation is separate from local workspace and commit preparation. */
 export interface PullRequests {

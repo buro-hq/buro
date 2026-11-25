@@ -566,50 +566,14 @@ test('unserializable Ollama schema cannot become a dispatched generation', async
   assert.equal(requests, 0);
 });
 
-test('Buro Ollama discovery failure is not mistaken for an unknown generation', async () => {
-  const { OllamaProvider: BuroOllamaProvider } = await import('../adapters/models/ollama.ts');
-  const { isKnownTurnRejection } = await import('../core/run-reconciliation.ts');
-  const routes: string[] = [];
-  const transport = new BuroOllamaProvider({
-    id: 'fixture',
-    endpoint: 'http://127.0.0.1:11434',
-    fetch: async (url) => {
-      routes.push(new URL(String(url)).pathname);
-      return new Response('', { status: 503 });
-    },
-  });
+test('a streamed provider error remains an unknown request outcome and keeps private details out of errors', async () => {
+  const transport = provider(
+    'deepseek',
+    async () => new Response('data: {"error":{"message":"PRIVATE_PARTIAL_PROVIDER_DETAILS"}}\n\n'),
+  );
   await assert.rejects(transport.complete(input()), (error: unknown) => {
-    assert.ok(error instanceof Error && error.cause instanceof ProviderFailure);
-    assert.equal(
-      error.cause.outcome,
-      'unknown',
-      'The failed discovery HTTP operation itself remains unknown.',
-    );
-    assert.equal(
-      isKnownTurnRejection(error),
-      true,
-      'The host knows api/chat was never dispatched.',
-    );
-    return true;
-  });
-  assert.deepEqual(routes, ['/api/show']);
-});
-
-test('a streamed provider error cannot become a known rejection merely because its code resembles HTTP preflight', async () => {
-  const { DeepSeekProvider: BuroDeepSeekProvider } = await import('../adapters/models/deepseek.ts');
-  const { isKnownTurnRejection } = await import('../core/run-reconciliation.ts');
-  const transport = new BuroDeepSeekProvider({
-    id: 'fixture',
-    endpoint: 'https://provider.invalid',
-    apiKey: () => 'SYNTHETIC_PORTABLE_KEY',
-    fetch: async () =>
-      new Response('data: {"error":{"message":"PRIVATE_PARTIAL_PROVIDER_DETAILS"}}\n\n'),
-  });
-  await assert.rejects(transport.complete(input()), (error: unknown) => {
-    assert.ok(error instanceof Error && error.cause instanceof ProviderFailure);
-    assert.equal(error.cause.code, 'MODEL_REQUEST_REJECTED');
-    assert.equal(error.cause.outcome, 'unknown');
-    assert.equal(isKnownTurnRejection(error), false);
+    assert.ok(error instanceof ProviderFailure);
+    assert.equal(error.outcome, 'unknown');
     assert.doesNotMatch(error.message, /PRIVATE_PARTIAL_PROVIDER_DETAILS/);
     return true;
   });

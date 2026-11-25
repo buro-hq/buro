@@ -19,6 +19,8 @@ export class RunService implements Runs {
   private settings: Settings;
   private materials: Materials;
   private jobs = new Map<string, { controller: AbortController; promise: Promise<void> }>();
+  private starting = new Set<{ controller: AbortController; settled: Promise<void> }>();
+  private closing = false;
 
   /** Connects feature APIs through ordinary calls, without a workflow engine or role catalog. */
   constructor(input: {
@@ -61,20 +63,55 @@ export class RunService implements Runs {
     options?: RunOptions;
     previousRunId?: string;
   }): Promise<RunResult> {
+    if (this.closing) return { ok: false, error: 'Run service is closed.' };
+    let release!: () => void;
+    const entry = {
+      controller: new AbortController(),
+      settled: new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    };
+    this.starting.add(entry);
+    try {
+      return await this.startAttempt(structuredClone(input), entry.controller);
+    } catch (error) {
+      if (entry.controller.signal.aborted)
+        return { ok: false, error: 'Run startup was interrupted. Saved work is preserved.' };
+      throw error;
+    } finally {
+      this.starting.delete(entry);
+      release();
+    }
+  }
+
+  private async startAttempt(
+    input: { taskId: string; options?: RunOptions; previousRunId?: string },
+    controller: AbortController,
+  ): Promise<RunResult> {
     input = structuredClone(input);
-    const task = await this.tasks.get({ id: input.taskId });
+    const previous = input.previousRunId ? await this.store.get(input.previousRunId) : undefined;
+    if (input.previousRunId && (!previous || previous.taskId !== input.taskId))
+      return { ok: false, error: 'The earlier attempt does not belong to this task.' };
+    const task =
+      (await this.tasks.get({ id: input.taskId })) ??
+      (previous?.title !== undefined
+        ? {
+            id: previous.taskId,
+            projectId: previous.projectId,
+            title: previous.title,
+            description: previous.description ?? '',
+          }
+        : undefined);
     if (!task) return { ok: false, error: 'Task not found.' };
     const project = await this.projects.get({ id: task.projectId });
     if (!project) return { ok: false, error: 'Project not found.' };
-    const previous = input.previousRunId ? await this.store.get(input.previousRunId) : undefined;
-    if (input.previousRunId && (!previous || previous.taskId !== task.id))
-      return { ok: false, error: 'The earlier attempt does not belong to this task.' };
     if (previous && this.jobs.has(previous.id))
       return { ok: false, error: 'Stop the current attempt before starting its successor.' };
     const history = previous ? await this.sessions.get({ id: previous.sessionId }) : undefined;
     const settings = await this.settings.get();
     const materials = await this.materials.list({ projectId: project.id, taskId: task.id });
     const id = randomUUID();
+    controller.signal.throwIfAborted();
     const created = await this.sessions.create({
       runId: id,
       modelId: input.options?.modelId ?? history?.modelId ?? settings.defaultModelId,
@@ -90,6 +127,7 @@ export class RunService implements Runs {
         runId: id,
         root: project.root,
         base: input.options?.base,
+        signal: controller.signal,
         previous: previous
           ? { path: previous.workspace, base: previous.base, source: project.root }
           : undefined,
@@ -106,6 +144,8 @@ export class RunService implements Runs {
     const run: Run = {
       id,
       taskId: task.id,
+      title: task.title,
+      description: task.description,
       projectId: project.id,
       sessionId: created.sessionId,
       workspace: workspace.path,
@@ -115,7 +155,6 @@ export class RunService implements Runs {
       previousRunId: previous?.id,
       options: structuredClone(input.options ?? {}),
     };
-    const controller = new AbortController();
     const prompt = [
       task.title,
       task.description,
@@ -197,6 +236,10 @@ export class RunService implements Runs {
 
   /** Stops model work and waits for every active run to settle before storage closes. */
   async close(): Promise<void> {
+    this.closing = true;
+    for (const entry of this.starting) entry.controller.abort();
+    for (const job of this.jobs.values()) job.controller.abort();
+    await Promise.all([...this.starting].map((entry) => entry.settled));
     for (const job of this.jobs.values()) job.controller.abort();
     await Promise.allSettled([...this.jobs.values()].map((job) => job.promise));
   }

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { safeGit } from '../../adapters/processes/safe-git.ts';
-import { captureGitTree } from './git-snapshot.ts';
+import { safeGit } from '../repositories/git.ts';
+import { captureGitTree } from '../repositories/snapshot.ts';
 import type { Workspace, WorkspaceResult, Workspaces } from './workspace.ts';
 
 /** Isolates run files using Git worktrees; only Git bookkeeping is serialized per repository. */

@@ -134,6 +134,17 @@ async function composeApplication(scope: {
     throw error;
   }
   let closing: Promise<void> | undefined;
+  let stopping: Promise<void> | undefined;
+  const stopWork = () =>
+    (stopping ??= closeResources({
+      steps: [
+        () => runs.close(),
+        () => sessions.close(),
+        () => modelConfigurations.close(),
+        () => deliveries.close(),
+        () => previews.close(),
+      ],
+    }));
   return {
     agents,
     events,
@@ -150,17 +161,10 @@ async function composeApplication(scope: {
     activity,
     settings,
     tools,
+    stopWork,
     close() {
       return (closing ??= closeResources({
-        steps: [
-          () => runs.close(),
-          () => sessions.close(),
-          () => deliveries.close(),
-          () => previews.close(),
-          () => commands.close(),
-          () => storage.close(),
-          () => ownership.close(),
-        ],
+        steps: [stopWork, () => commands.close(), () => storage.close(), () => ownership.close()],
       }));
     },
   };

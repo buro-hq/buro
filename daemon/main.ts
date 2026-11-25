@@ -1,27 +1,47 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createBuroApplication } from './application.ts';
-import { websocketPlugin } from './websocket.ts';
+import { createApplication } from '../modules/application/create-application.ts';
+import { startApiServer } from '../modules/api/server.ts';
+import { apiCredential } from '../modules/api/credentials.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const port = Number(process.env.PROJECT_DAEMON_PORT || 4341);
-if (!Number.isInteger(port) || port < 0 || port > 65535) throw Error('Invalid daemon port.');
-const directory = process.env.PROJECT_DATA_DIR || path.join(root, '.buro');
-const host = await createBuroApplication({ root, directory, demo: process.env.BURO_DEMO === '1' });
+const port = Number(process.env.PROJECT_DAEMON_PORT ?? 4341);
+if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid daemon port.');
+const directory = path.resolve(process.env.PROJECT_DATA_DIR ?? path.join(root, '.buro'));
+const report = (error: unknown) => console.error(error);
+const application = await createApplication({ directory, report });
+let server: Awaited<ReturnType<typeof startApiServer>>;
 try {
-  await host.ctx.plugin(websocketPlugin, {
+  server = await startApiServer({
+    application,
+    token: await apiCredential({ directory }),
     port,
-    onListen: (p) => console.log(`Buro daemon: ws://127.0.0.1:${p} · data: ${directory}`),
+    report,
+    onClosing: () => application.stopWork(),
   });
 } catch (error) {
-  await host.dispose().catch(() => {});
+  await application.close();
   throw error;
 }
-let stopping = false;
-async function stop() {
-  if (stopping) return;
-  stopping = true;
-  await host.dispose();
+console.log(`Buro daemon: ws://127.0.0.1:${server.port}`);
+process.send?.({ type: 'buro.ready', port: server.port });
+let stopping: Promise<void> | undefined;
+function stop(): Promise<void> {
+  return (stopping ??= (async () => {
+    try {
+      await server.close();
+    } finally {
+      await application.close();
+    }
+  })());
 }
-process.on('SIGINT', () => void stop().then(() => process.exit(0)));
-process.on('SIGTERM', () => void stop().then(() => process.exit(0)));
+const shutdown = () =>
+  void stop().then(
+    () => process.exit(0),
+    (error) => {
+      report(error);
+      process.exit(1);
+    },
+  );
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

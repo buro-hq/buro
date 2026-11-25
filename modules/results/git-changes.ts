@@ -2,8 +2,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { safeGit } from '../../adapters/processes/safe-git.ts';
-import { captureGitTree } from '../workspaces/git-snapshot.ts';
+import { safeGit } from '../repositories/git.ts';
+import { captureGitTree } from '../repositories/snapshot.ts';
 import type { RepositoryChanges, ResultOutcome } from './result.ts';
 
 /** Uses an isolated temporary index, preserving binary changes, executable modes and new files. */

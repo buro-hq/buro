@@ -1,183 +1,105 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import os from 'node:os';
-import { execFile } from 'node:child_process';
+import path from 'node:path';
+import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createBuroApplication } from '../daemon/application.ts';
-import { PROJECT_DIRECTORY } from '../protocol/project-directory.ts';
-import { demoBootstrap } from '../daemon/demo.ts';
+import { chromium, expect } from '@playwright/test';
+import { apiCredential } from '../modules/api/credentials.ts';
+import { createApplication } from '../modules/application/create-application.ts';
+import { localPort } from './fixtures/local-port.ts';
 
-test('production and demo reject a linked default metadata directory before opening stores', async (t) => {
-  const directory = await fs.realpath(
-    await fs.mkdtemp(path.join(os.tmpdir(), 'buro-startup-metadata-')),
-  );
-  t.after(() => fs.rm(directory, { recursive: true, force: true }));
-  const root = path.join(directory, 'host');
-  const target = path.join(directory, 'outside');
-  await fs.mkdir(root);
-  await fs.mkdir(target);
-  const metadata = path.join(root, PROJECT_DIRECTORY);
-  await fs.symlink(target, metadata, 'dir');
-  for (const demo of [false, true]) {
-    let configured = false;
-    await assert.rejects(
-      createBuroApplication({
-        root,
-        directory: metadata,
-        demo,
-        configure: () => {
-          configured = true;
-        },
-      }),
-      { code: 'UNSAFE_PATH' },
+test(
+  'the production launcher connects the real UI and CLI to a fresh service and releases ownership on shutdown',
+  { timeout: 30000 },
+  async (t) => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-production-startup-'));
+    const env = {
+      ...process.env,
+      PROJECT_DATA_DIR: directory,
+      PROJECT_DAEMON_PORT: '0',
+      BURO_UI_PORT: String(await localPort()),
+      BURO_OPEN_BROWSER: '0',
+    };
+    const child = spawn(process.execPath, ['scripts/start-dev.mjs'], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const exited = new Promise<void>((resolve) => child.once('close', () => resolve()));
+    let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+    t.after(async () => {
+      await browser?.close();
+      child.kill('SIGTERM');
+      await exited;
+      await fs.rm(directory, { recursive: true, force: true });
+    });
+    const address = await new Promise<{ ui: string; api: string }>((resolve, reject) => {
+      let output = '',
+        error = '';
+      const timer = setTimeout(
+        () => reject(new Error('Launcher did not become ready. ' + error)),
+        15000,
+      );
+      child.on('error', reject);
+      child.stderr.on('data', (bytes) => {
+        error += bytes.toString();
+      });
+      child.stdout.on('data', (bytes) => {
+        output += bytes.toString();
+        const api = output.match(/Buro daemon: (ws:\/\/127\.0\.0\.1:\d+)/)?.[1],
+          ui = output.match(/Buro: (http:\/\/[^\s]+)/)?.[1];
+        if (api && ui) {
+          clearTimeout(timer);
+          resolve({ ui, api });
+        }
+      });
+      child.once('close', () => {
+        clearTimeout(timer);
+        reject(new Error('Launcher exited. ' + error));
+      });
+    });
+    const cliEnv = { ...env, PROJECT_DAEMON_URL: address.api };
+    const status = await promisify(execFile)(process.execPath, ['cli/main.ts', 'status'], {
+      env: cliEnv,
+    });
+    assert.deepEqual(JSON.parse(status.stdout).projects, []);
+    const connected = JSON.parse(
+      (
+        await promisify(execFile)(
+          process.execPath,
+          [
+            'cli/main.ts',
+            'projects.connect',
+            JSON.stringify({ root: directory, name: 'Example project' }),
+          ],
+          { env: cliEnv },
+        )
+      ).stdout,
     );
-    assert.equal(configured, false);
-    assert.deepEqual(await fs.readdir(target), []);
-    assert.equal((await fs.lstat(metadata)).isSymbolicLink(), true);
-  }
-});
-const execute = promisify(execFile);
-const meta = { id: 'startup-read', fingerprint: 'startup-read' };
-
-test('actual production composition starts without opening any project or invoking a model', async (t) => {
-  const directory = await fs.realpath(
-    await fs.mkdtemp(path.join(os.tmpdir(), 'buro-application-')),
-  );
-  let modelCalls = 0;
-  let storeOpens = 0;
-  const app = await createBuroApplication({
-    root: process.cwd(),
-    directory,
-    fetch: async () => {
-      modelCalls++;
-      throw Error('Unexpected model request');
-    },
-    credentials: () => undefined,
-    storeFactory: {
-      open: async () => {
-        storeOpens++;
-        throw Error('Unexpected seeded project');
-      },
-    },
-  });
-  t.after(async () => {
-    await app.dispose();
-    await fs.rm(directory, { recursive: true, force: true });
-  });
-  const info = await app.ctx.commands.bus.execute({ method: 'service.info', params: {} }, meta);
-  assert.deepEqual(info.projects, []);
-  assert.deepEqual(app.ctx.projects.registry.list(), []);
-  for (const method of ['project.connect', 'project.inspect', 'resources.list', 'filesystem.list'])
-    assert.ok(info.capabilities.includes(method), method);
-  assert.equal(storeOpens, 0);
-  assert.equal(modelCalls, 0);
-  const resources = await app.ctx.commands.bus.execute(
-    { method: 'resources.list', params: {} },
-    meta,
-  );
-  assert.equal(resources.defaultProfile, null);
-  assert.deepEqual(resources.connections, []);
-  assert.deepEqual(resources.runtimes, []);
-  assert.deepEqual(resources.profiles, []);
-  assert.equal(resources.selected, undefined);
-  assert.deepEqual(app.ctx.agentRuntime.registry.list(), []);
-  assert.deepEqual(
-    (await fs.readdir(directory)).filter((name) => name !== 'local'),
-    [],
-  );
-});
-
-test('production composition connects and restores a real first repository without demo state or model work', async (t) => {
-  const directory = await fs.realpath(
-    await fs.mkdtemp(path.join(os.tmpdir(), 'buro-first-repository-')),
-  );
-  let app: Awaited<ReturnType<typeof createBuroApplication>> | undefined;
-  t.after(async () => {
-    await app?.dispose();
-    await fs.rm(directory, { recursive: true, force: true });
-  });
-  const repository = path.join(directory, 'repository');
-  const state = path.join(directory, 'service');
-  await fs.mkdir(repository);
-  await fs.writeFile(path.join(repository, 'README.md'), 'Temporary project.\n');
-  const git = (...args: string[]) => execute('git', args, { cwd: repository });
-  await git('init', '-b', 'main');
-  await git('add', 'README.md');
-  await git(
-    '-c',
-    'user.name=Buro test',
-    '-c',
-    'user.email=buro@example.invalid',
-    'commit',
-    '--no-verify',
-    '-m',
-    'Initial',
-  );
-  let modelCalls = 0;
-  const options = {
-    root: process.cwd(),
-    directory: state,
-    fetch: async () => {
-      modelCalls++;
-      throw Error('Unexpected model request');
-    },
-    credentials: () => undefined,
-  };
-  app = await createBuroApplication(options);
-  const bus = app.ctx.commands.bus;
-  const inspected = await bus.execute(
-    { method: 'project.inspect', params: { root: repository } },
-    meta,
-  );
-  const connected = await bus.execute(
-    {
-      method: 'project.connect',
-      params: { root: repository, name: 'First repository', profile: inspected.profile },
-    },
-    { id: 'connect-first', fingerprint: 'connect-first' },
-  );
-  const snapshot = app.ctx.projects.registry.get(connected.id).snapshot();
-  assert.equal(snapshot.project.root, repository);
-  assert.deepEqual(snapshot.goals, []);
-  assert.deepEqual(snapshot.runs, []);
-  assert.deepEqual(snapshot.roles, []);
-  const resources = await bus.execute(
-    { method: 'resources.list', params: { projectId: connected.id } },
-    meta,
-  );
-  assert.equal(resources.selected, undefined);
-  assert.equal(resources.selectionIssue?.code, 'RESOURCE_PROFILE_REQUIRED');
-  const sequence = app.ctx.projects.registry.get(connected.id).snapshot().sequence;
-  await assert.rejects(
-    bus.execute(
-      { method: 'project.research', params: { projectId: connected.id } },
-      { id: 'unconfigured-research', fingerprint: 'unconfigured-research' },
-    ),
-    { code: 'RESOURCE_PROFILE_REQUIRED' },
-  );
-  assert.equal(app.ctx.projects.registry.get(connected.id).snapshot().sequence, sequence);
-  assert.equal(app.ctx.projects.registry.get(connected.id).snapshot().research, undefined);
-  assert.deepEqual(
-    app.ctx.projects.registry.list().map((project) => project.id),
-    [connected.id],
-  );
-  await app.dispose();
-  app = undefined;
-  app = await createBuroApplication(options);
-  assert.deepEqual(app.ctx.projects.registry.list(), [snapshot.project]);
-  assert.deepEqual(app.ctx.projects.registry.get(connected.id).snapshot(), snapshot);
-  assert.equal(modelCalls, 0);
-});
-
-test('explicit demo uses isolated addresses and contributes its own fixtures', () => {
-  const demo = demoBootstrap('/source', '/state');
-  assert.deepEqual(
-    demo.projects.map(({ project }) => project.id),
-    ['demo-buro', 'demo-goals'],
-  );
-  assert.ok(demo.projects.every(({ storageAddress }) => storageAddress.startsWith('/state/demo/')));
-  assert.deepEqual(Object.keys(demo.policies), ['demo-buro', 'demo-goals']);
-  assert.deepEqual(Object.keys(demo.checks), ['demo-buro', 'demo-goals']);
-});
+    assert.equal(connected.ok, true);
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({ viewport: { width: 1366, height: 900 } }),
+      errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    const token = await apiCredential({ directory });
+    await page.goto(address.ui + '#buro-token=' + token);
+    await expect(
+      page.locator('.sidebar').getByText('Service connected', { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('h1')).toContainText('Example project');
+    assert.equal(new URL(page.url()).hash, '');
+    await page.locator('.sidebar').getByRole('button', { name: 'Models', exact: true }).click();
+    await expect(
+      page.getByText('Add a model connection to start a run.', { exact: true }),
+    ).toBeVisible();
+    assert.deepEqual(errors, []);
+    await browser.close();
+    browser = undefined;
+    child.kill('SIGTERM');
+    await exited;
+    const reopened = await createApplication({ directory });
+    assert.equal((await reopened.projects.list())[0].name, 'Example project');
+    await reopened.close();
+  },
+);

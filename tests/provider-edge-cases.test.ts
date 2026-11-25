@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { OllamaProvider } from '../adapters/models/ollama.ts';
-import { DeepSeekProvider } from '../adapters/models/deepseek.ts';
-import { endpointURL, lines } from '../adapters/models/http.ts';
+import { OllamaProvider } from '../agent/providers/ollama.ts';
+import { DeepSeekProvider } from '../agent/providers/deepseek.ts';
+import { endpointURL, lines } from '../agent/providers/http.ts';
 import type { ModelProvider } from '../agent/contracts/model.ts';
 
 const input = (): Parameters<ModelProvider['complete']>[0] => ({
@@ -18,6 +18,7 @@ const input = (): Parameters<ModelProvider['complete']>[0] => ({
 });
 const deepseek = (fetch: typeof globalThis.fetch) =>
   new DeepSeekProvider({
+    ...{ revision: 'fixture', local: false, fetch: globalThis.fetch },
     id: 'fixture',
     endpoint: 'https://provider.invalid',
     apiKey: () => 'fixture-key',
@@ -25,6 +26,7 @@ const deepseek = (fetch: typeof globalThis.fetch) =>
   });
 const ollama = (chat: () => Response) =>
   new OllamaProvider({
+    ...{ revision: 'fixture', local: true, fetch: globalThis.fetch },
     id: 'fixture',
     endpoint: 'http://127.0.0.1:11434',
     fetch: async (url) =>
@@ -32,26 +34,6 @@ const ollama = (chat: () => Response) =>
         ? Response.json({ capabilities: ['tools'], model_info: { 'fixture.context_length': 4000 } })
         : chat(),
   });
-
-test('provider protocol is part of durable configuration identity', () => {
-  const local = new OllamaProvider({
-    id: 'same',
-    endpoint: 'https://same.invalid',
-    think: 'disabled',
-  });
-  const cloud = new DeepSeekProvider({
-    id: 'same',
-    endpoint: 'https://same.invalid',
-    thinking: 'disabled',
-    apiKey: () => 'unused',
-  });
-  assert.notEqual(local.revision, cloud.revision);
-  assert.equal(
-    local.revision,
-    new OllamaProvider({ id: 'same', endpoint: 'https://same.invalid', think: 'disabled' })
-      .revision,
-  );
-});
 
 test('terminal empty responses and unexpected choice indexes never look like completed answers', async () => {
   await assert.rejects(

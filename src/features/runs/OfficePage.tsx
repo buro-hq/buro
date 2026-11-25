@@ -8,7 +8,6 @@ import { QueryFeedback } from '../common/feedback.tsx';
 /** The office follows actual sessions, with no reserved desks, names or team size. */
 export function OfficePage(input: { projectId: string; onRun(id: string): void }): ReactElement {
   const runs = useApiQuery('runs.list', { projectId: input.projectId }),
-    tasks = useApiQuery('tasks.list', { projectId: input.projectId }),
     agents = useApiQuery('agents.list', {}),
     models = useApiQuery('models.list', {});
   const [runId, setRunId] = useState<string | null>(null);
@@ -44,7 +43,7 @@ export function OfficePage(input: { projectId: string; onRun(id: string): void }
           data={
             runs.data?.map((candidate) => ({
               value: candidate.id,
-              label: `${tasks.data?.find((task) => task.id === candidate.taskId)?.title ?? candidate.taskId} · ${t(candidate.status)} · ${candidate.id.slice(0, 8)}`,
+              label: `${candidate.title ?? candidate.taskId} · ${t(candidate.status)} · ${candidate.id.slice(0, 8)}`,
             })) ?? []
           }
         />

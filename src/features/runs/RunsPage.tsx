@@ -12,8 +12,7 @@ export function RunsPage(input: {
   selectedId?: string;
   onSelect(id?: string): void;
 }): ReactElement {
-  const runs = useApiQuery('runs.list', { projectId: input.projectId }),
-    tasks = useApiQuery('tasks.list', { projectId: input.projectId });
+  const runs = useApiQuery('runs.list', { projectId: input.projectId });
   return (
     <Panel title={t('Runs')}>
       {input.selectedId ? (
@@ -34,9 +33,7 @@ export function RunsPage(input: {
               <Paper withBorder p="md" key={run.id}>
                 <Group justify="space-between">
                   <div>
-                    <Text fw={600}>
-                      {tasks.data?.find((task) => task.id === run.taskId)?.title ?? run.taskId}
-                    </Text>
+                    <Text fw={600}>{run.title ?? run.taskId}</Text>
                     <Text c="dimmed" size="xs">
                       {new Date(run.createdAt).toLocaleString()} · {run.id.slice(0, 8)}
                     </Text>

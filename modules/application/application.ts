@@ -46,6 +46,8 @@ export interface Application {
   settings: Settings;
   tasks: Tasks;
   tools: Tools;
+  /** Stops execution while transport owners drain outstanding API operations. */
+  stopWork(): Promise<void>;
   /** Stops work before releasing environment and storage resources. */
   close(): Promise<void>;
 }

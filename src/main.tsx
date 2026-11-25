@@ -1,16 +1,17 @@
 import '@mantine/core/styles.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
-import { ProjectProvider } from './data/provider';
+import Application from './Application';
+import { ApplicationProvider } from './data/application';
 import './styles.css';
+import './styles/features.css';
 import { AppearanceProvider } from './theme/AppearanceProvider';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AppearanceProvider>
-      <ProjectProvider>
-        <App />
-      </ProjectProvider>
+      <ApplicationProvider>
+        <Application />
+      </ApplicationProvider>
     </AppearanceProvider>
   </React.StrictMode>,
 );

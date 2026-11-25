@@ -96,6 +96,8 @@ export interface ModelConfigurations {
   select(input: { id: string }): Promise<boolean>;
   /** Removes settings and credentials without deleting historical conversations. */
   delete(input: { id: string }): Promise<void>;
+  /** Cancels and joins pending catalogue requests before storage and native processes close. */
+  close(): Promise<void>;
 }
 
 /** The model feature owns its private connection records. */

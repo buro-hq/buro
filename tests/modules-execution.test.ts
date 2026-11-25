@@ -484,6 +484,33 @@ test('cancelling a newly announced run takes effect before its first model reque
   assert.equal(requests, 0);
 });
 
+test('closing the run owner joins startup before storage can close and does not start inference afterward', async (t) => {
+  const f = await projectFixture(t);
+  let requests = 0;
+  f.model('local', async () => {
+    requests++;
+    return reply('Must not start');
+  });
+  const starting = f.runs.start({ taskId: f.task.id });
+  await f.runs.close();
+  assert.equal((await starting).ok, false);
+  assert.equal(requests, 0);
+  assert.equal((await f.runs.start({ taskId: f.task.id })).ok, false);
+});
+
+test('a saved attempt can continue after its editable task is removed', async (t) => {
+  const f = await projectFixture(t);
+  f.model('local', async () => reply('Done'));
+  const first = (await f.runs.start({ taskId: f.task.id })).run!;
+  await f.runs.wait({ id: first.id });
+  await f.tasks.delete({ id: f.task.id });
+  const retried = await f.runs.retry({ id: first.id });
+  assert.equal(retried.ok, true, retried.error);
+  assert.equal(retried.run?.title, f.task.title);
+  assert.equal(retried.run?.description, f.task.description);
+  assert.equal((await f.runs.wait({ id: retried.run!.id }))?.status, 'completed');
+});
+
 test('retry keeps the last selected model and original baseline unless the caller explicitly replaces them', async (t) => {
   const f = await projectFixture(t);
   f.model('initial', async () => reply('Initial result'));

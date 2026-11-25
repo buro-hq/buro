@@ -129,3 +129,46 @@ test('model discovery uses a draft or a saved private credential without saving 
   await assert.rejects(cli.call({ method: 'tasks.create', params: { title: 42 } }), /Invalid API/);
   await assert.rejects(cli.watch({ id: 'missing' }), /Run not found/);
 });
+
+test('application shutdown cancels and joins catalogue requests before releasing storage', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-catalogue-shutdown-'));
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const app = await createApplication({
+    directory,
+    transports: [
+      {
+        id: 'fixture',
+        create({ configuration }) {
+          return {
+            id: configuration.id,
+            revision: configuration.revision,
+            async listModels({ signal }) {
+              entered();
+              await new Promise<void>((_, reject) => {
+                signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+                if (signal.aborted) reject(signal.reason);
+              });
+              return [];
+            },
+            async complete() {
+              throw new Error('Inference must not start');
+            },
+          };
+        },
+      },
+    ],
+  });
+  t.after(async () => {
+    await app.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  const pending = app.modelConfigurations.discover({ configuration: { transport: 'fixture' } });
+  await started;
+  await app.close();
+  assert.equal((await pending).ok, false);
+  const reopened = await createApplication({ directory });
+  await reopened.close();
+});

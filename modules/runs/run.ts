@@ -4,6 +4,8 @@ import type { RecordStore } from '../storage/record-store.ts';
 export interface Run {
   id: string;
   taskId: string;
+  title?: string;
+  description?: string;
   projectId: string;
   sessionId: string;
   workspace: string;

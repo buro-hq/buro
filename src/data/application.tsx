@@ -51,7 +51,10 @@ const context = createContext<ApplicationContext | undefined>(undefined);
 /** Shares transport and invalidation, while each feature owns its query data. */
 export function ApplicationProvider(input: { children: ReactNode; url?: string }): ReactElement {
   const [token, setToken] = useState(browserCredential);
-  const client = useMemo(() => new ApiClient({ url: input.url, token }), [input.url, token]);
+  const client = useMemo(
+    () => new ApiClient({ url: input.url ?? import.meta.env.VITE_BURO_API_URL, token }),
+    [input.url, token],
+  );
   const [revision, refresh] = useReducer((value: number) => value + 1, 0);
   const [connection, setConnection] = useState<ApiConnection>({ connected: false });
   useEffect(() => {

@@ -9,6 +9,7 @@ import { chromium, expect } from '@playwright/test';
 import { createServer } from 'vite';
 import { createApplication } from '../modules/application/create-application.ts';
 import { startApiServer } from '../modules/api/server.ts';
+import { localPort } from './fixtures/local-port.ts';
 
 const exec = promisify(execFile);
 
@@ -93,7 +94,8 @@ test(
     const api = await startApiServer({ application: app, token: 'test-ui-token', port: 0 });
     t.after(() => api.close());
     const vite = await createServer({
-      server: { host: '127.0.0.1', port: 0, open: false },
+      cacheDir: path.join(directory, 'vite-cache'),
+      server: { host: '127.0.0.1', port: await localPort(), open: false },
       plugins: [
         {
           name: 'feature-client-test-entry',

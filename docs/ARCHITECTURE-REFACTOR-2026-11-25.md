@@ -17,11 +17,16 @@ HTTP model transports and the native Codex adapter use the same tool broker. Pri
 - Explicit draft PR publication onto a fresh remote base, excluding initial user edits; PR bodies stay empty by default.
 - Application-directory ownership acquired before recovery, so a second server cannot interrupt the first server's work.
 
-## Still required before production cutover
+## Production cutover completed
 
-- Finish the CLI entrypoint and launcher authentication.
-- Archive the existing working state, switch production entrypoints, and remove obsolete runtime and client code.
-- Reconcile the public documentation and run the complete release checks and self-review.
-- Run the completed application against the configured DeepSeek Flash with thinking. Use comparable tasks and settings to Qwen, inspect the finished code and agent collaboration, and report wall time separately from provider-reported token speed. No live model quality result has been collected for this implementation yet.
+The launcher, daemon, CLI and browser now use the feature APIs. The obsolete Cordis runtime, workflow admission, profile hierarchy and old client snapshot have been removed. Portable model transports remain independently consumable. Historical designs are under `docs/archive`; previous source and retired workflow tests are retained in Git history.
+
+The local state and a source bundle are archived on the Desktop. Four older linked workspaces already referred to missing Git metadata before the move; their files and references are preserved in that archive. The new database starts independently, with the explicitly requested DeepSeek Flash thinking connection selected.
+
+The current suite passes 102 behavioral checks, including real launcher/UI/CLI startup, parallel browser fixtures, shutdown during startup and publication, cancellation of catalogue requests, and restarting a saved attempt after its task is removed. Type checking, production build and formatting pass. Earlier totals counted the retired implementation's tests and do not describe the current suite.
+
+## Remaining validation
+
+Run the completed application against DeepSeek Flash with thinking on a comparable Qwen task and a review/repair scenario. Inspect finished code, actual collaboration and wall time. Decode speed is reported only if the provider supplies the measurements. No live generation has been run for this implementation at this checkpoint.
 
 Code and architecture preferences are saved on the user's Desktop in `buro-code-architecture-preferences.md`. The stopping threshold is actual weekly remaining capacity below 20%; before stopping, finish a tested checkpoint, commit and push it, and record outstanding work.

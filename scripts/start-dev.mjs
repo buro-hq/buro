@@ -1,40 +1,68 @@
 import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'vite';
+import { openUi } from '../cli/open-ui.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const require = createRequire(import.meta.url);
-const vite = path.join(path.dirname(require.resolve('vite/package.json')), 'bin/vite.js');
-const children = new Set();
-let stopping = false;
-let killTimer;
-
-function stop(code, signal = 'SIGTERM') {
-  if (stopping) return;
-  stopping = true;
-  process.exitCode = code;
-  for (const child of children) child.kill(signal);
-  killTimer = setTimeout(() => {
-    for (const child of children) child.kill('SIGKILL');
-  }, 10_000);
-  killTimer.unref();
+const directory = path.resolve(process.env.PROJECT_DATA_DIR ?? path.join(root, '.buro'));
+let frontend, daemon, stopping;
+function stop(code = 0) {
+  return (stopping ??= (async () => {
+    process.exitCode = code;
+    const exited =
+      daemon && daemon.exitCode === null
+        ? new Promise((resolve) => daemon.once('close', resolve))
+        : Promise.resolve();
+    daemon?.kill('SIGTERM');
+    const timer = setTimeout(() => daemon?.kill('SIGKILL'), 10000);
+    timer.unref();
+    try {
+      await Promise.all([frontend?.close(), exited]);
+    } finally {
+      clearTimeout(timer);
+    }
+  })());
 }
-
-process.on('SIGINT', () => stop(130, 'SIGINT'));
-process.on('SIGTERM', () => stop(143));
-
-for (const entry of [path.join(root, 'daemon/main.ts'), vite]) {
-  const args = entry === vite ? process.argv.slice(2) : [];
-  const child = spawn(process.execPath, [entry, ...args], { cwd: root, stdio: 'inherit' });
-  children.add(child);
-  child.on('error', (error) => {
-    console.error(`Could not start ${entry}:`, error.message);
-    stop(1);
+process.once('SIGINT', () => void stop(130));
+process.once('SIGTERM', () => void stop(143));
+try {
+  daemon = spawn(process.execPath, [path.join(root, 'daemon/main.ts')], {
+    cwd: root,
+    stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
   });
-  child.on('close', (code) => {
-    children.delete(child);
-    if (!stopping) stop(code ?? 1);
-    if (children.size === 0) clearTimeout(killTimer);
+  const ready = new Promise((resolve, reject) => {
+    daemon.once('error', reject);
+    daemon.on('message', (message) => {
+      if (message?.type === 'buro.ready') resolve(message);
+    });
+    daemon.once('close', (code) => {
+      reject(new Error('Buro service exited during startup.'));
+      if (!stopping) void stop(code ?? 1);
+    });
   });
+  const address = await ready;
+  if (!stopping) {
+    process.env.VITE_BURO_API_URL = `ws://127.0.0.1:${address.port}`;
+    frontend = await createServer({
+      root,
+      cacheDir: path.join(directory, 'cache/vite'),
+      server: {
+        host: '127.0.0.1',
+        port: Number(process.env.BURO_UI_PORT ?? 4317),
+        strictPort: true,
+        open: false,
+      },
+    });
+    await frontend.listen();
+    const url = frontend.resolvedUrls.local[0];
+    console.log(`Buro: ${url}`);
+    if (process.env.BURO_OPEN_BROWSER !== '0')
+      await openUi({ directory, url }).catch(() =>
+        console.error('Could not open the browser. Run npm run cli -- open.'),
+      );
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  await stop(1);
 }

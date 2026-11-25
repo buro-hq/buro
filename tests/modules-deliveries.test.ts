@@ -61,11 +61,36 @@ test('explicit publication pushes only the run delta to a fresh base, keeps a bl
       },
     },
   });
+  let entered!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
   const app = await createApplication({
     directory: path.join(directory, 'state'),
-    publishers: [publisher],
+    publishers: [
+      publisher,
+      {
+        id: 'blocked',
+        name: 'Interrupted publication',
+        async publish(input) {
+          entered();
+          await new Promise<void>((_, reject) => {
+            input.signal.addEventListener('abort', () => reject(input.signal.reason), {
+              once: true,
+            });
+            if (input.signal.aborted) reject(input.signal.reason);
+          });
+          return { ok: true };
+        },
+      },
+    ],
   });
-  const api = await startApiServer({ application: app, token: 'test-delivery-token', port: 0 }),
+  const api = await startApiServer({
+      application: app,
+      token: 'test-delivery-token',
+      port: 0,
+      onClosing: () => app.stopWork(),
+    }),
     client = new ApiClient({ url: `ws://127.0.0.1:${api.port}`, token: 'test-delivery-token' });
   t.after(async () => {
     client.close();
@@ -145,4 +170,12 @@ test('explicit publication pushes only the run delta to a fresh base, keeps a bl
     /^[a-f0-9]{40}/,
   );
   assert.equal((await client.call('deliveries.list', { runId: run.id })).length, 2);
+  const interrupted = assert.rejects(
+    client.call('deliveries.publish', { runId: run.id, publisherId: 'blocked' }),
+    /Connection lost/,
+  );
+  await blocked;
+  await api.close();
+  await interrupted;
+  assert.equal((await app.deliveries.list({ runId: run.id })).at(-1)?.status, 'interrupted');
 });

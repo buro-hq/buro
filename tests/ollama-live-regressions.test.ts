@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { OllamaProvider } from '../adapters/models/ollama.ts';
-import { DeepSeekProvider } from '../adapters/models/deepseek.ts';
+import { OllamaProvider } from '../agent/providers/ollama.ts';
+import { DeepSeekProvider } from '../agent/providers/deepseek.ts';
 import type { ModelMessage, ModelProvider } from '../agent/contracts/model.ts';
 
 const request = (): Parameters<ModelProvider['complete']>[0] => ({
@@ -50,6 +49,7 @@ const terminal = {
 function fixture(responses: unknown[][]) {
   const bodies: any[] = [];
   const provider = new OllamaProvider({
+    ...{ revision: 'fixture', local: true, fetch: globalThis.fetch },
     id: 'ollama',
     endpoint: 'http://127.0.0.1:11434',
     think: false,
@@ -267,10 +267,16 @@ test('ambiguous duplicate or missing call/result identities preserve the entire 
 test('thinking/default Ollama histories remain complete and DeepSeek has no commentary projection', () => {
   const messages = deepFreeze(evidenceHistory());
   for (const think of [undefined, true, 'low']) {
-    const provider = new OllamaProvider({ id: 'local', endpoint: 'http://127.0.0.1:11434', think });
+    const provider = new OllamaProvider({
+      ...{ revision: 'fixture', local: true, fetch: globalThis.fetch },
+      id: 'local',
+      endpoint: 'http://127.0.0.1:11434',
+      think,
+    });
     assert.deepEqual(provider.contextMessages(messages), messages);
   }
   const deepseek: ModelProvider = new DeepSeekProvider({
+    ...{ revision: 'fixture', local: false, fetch: globalThis.fetch },
     id: 'remote',
     endpoint: 'https://api.deepseek.com',
     apiKey: () => 'unused-fixture-key',
@@ -338,7 +344,12 @@ test('unmarked or invalid intermediate provenance cannot omit an ordinary assist
   ])
     assert.deepEqual(provider.contextMessages(deepFreeze(messages), context), messages);
   for (const think of [undefined, true, 'low']) {
-    const thinking = new OllamaProvider({ id: 'local', endpoint: 'http://127.0.0.1:11434', think });
+    const thinking = new OllamaProvider({
+      ...{ revision: 'fixture', local: true, fetch: globalThis.fetch },
+      id: 'local',
+      endpoint: 'http://127.0.0.1:11434',
+      think,
+    });
     assert.deepEqual(
       thinking.contextMessages(messages, { phase: 'final', intermediateMessageIndexes: [2] }),
       messages,
@@ -367,7 +378,7 @@ test('unmarked or invalid intermediate provenance cannot omit an ordinary assist
   );
 });
 
-test('projected non-thinking evidence is serialized with complete native calls/results/continuation and a new revision', async () => {
+test('projected non-thinking evidence is serialized with complete native calls/results/continuation without changing saved evidence', async () => {
   const { provider, bodies } = fixture([
     [{ ...terminal, message: { role: 'assistant', content: '{"ok":true}' } }],
   ]);
@@ -386,8 +397,4 @@ test('projected non-thinking evidence is serialized with complete native calls/r
   assert.equal(bodies[0].messages[3].content, messages[3].content);
   assert.equal(bodies[0].messages[4].content, messages[4].content);
   assert.equal(messages[2].content.length > 10000, true);
-  const oldRevision = createHash('sha256')
-    .update(JSON.stringify(['ollama-native-v1', 'http://127.0.0.1:11434/', false]))
-    .digest('hex');
-  assert.notEqual(provider.revision, oldRevision);
 });

@@ -32,6 +32,8 @@ export class ModelCatalog implements ModelConfigurations {
   private settings: Settings;
   private events: Notifications;
   private factories: Map<string, ModelTransport>;
+  private discoveries = new Map<AbortController, Promise<void>>();
+  private closing = false;
 
   /** Connects safe configuration, private credentials and runtime routing. */
   constructor(input: {
@@ -83,6 +85,36 @@ export class ModelCatalog implements ModelConfigurations {
 
   /** Reads metadata for a draft connection; no placeholder model is persisted. */
   async discover(input: ModelDiscoveryInput): Promise<ModelDiscoveryResult> {
+    if (this.closing) return { ok: false, error: 'Model discovery is closed.' };
+    const controller = new AbortController(),
+      timer = setTimeout(() => controller.abort(), 15000);
+    let release!: () => void;
+    this.discoveries.set(
+      controller,
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    try {
+      return await this.readCatalogue(input, controller.signal);
+    } finally {
+      clearTimeout(timer);
+      this.discoveries.delete(controller);
+      release();
+    }
+  }
+
+  /** Releases catalogue requests owned by this process, including native listing processes. */
+  async close(): Promise<void> {
+    this.closing = true;
+    for (const controller of this.discoveries.keys()) controller.abort();
+    await Promise.all([...this.discoveries.values()]);
+  }
+
+  private async readCatalogue(
+    input: ModelDiscoveryInput,
+    signal: AbortSignal,
+  ): Promise<ModelDiscoveryResult> {
     const previous = input.configuration.id
       ? await this.store.get(input.configuration.id)
       : undefined;
@@ -102,27 +134,26 @@ export class ModelCatalog implements ModelConfigurations {
     const transport = this.factories.get(configuration.transport);
     if (!transport) return { ok: false, error: 'Model transport is unavailable.' };
     const apiKey = input.apiKey === undefined ? previous?.apiKey : input.apiKey || undefined;
-    const controller = new AbortController(),
-      timer = setTimeout(() => controller.abort(), 15000);
     try {
+      signal.throwIfAborted();
       const backend = transport.create({ configuration, apiKey });
       if (!backend.listModels)
         return {
           ok: false,
           error: 'This backend does not provide a model catalogue. Enter its model ID directly.',
         };
-      return { ok: true, models: await backend.listModels({ signal: controller.signal }) };
+      return { ok: true, models: await backend.listModels({ signal }) };
     } catch (error) {
       return {
         ok: false,
-        error: controller.signal.aborted
-          ? 'Model discovery timed out. You can enter its ID directly.'
+        error: signal.aborted
+          ? this.closing
+            ? 'Model discovery interrupted.'
+            : 'Model discovery timed out. You can enter its ID directly.'
           : error instanceof Error
             ? error.message
             : String(error),
       };
-    } finally {
-      clearTimeout(timer);
     }
   }
 

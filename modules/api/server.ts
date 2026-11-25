@@ -36,6 +36,7 @@ export async function startApiServer(input: {
   token: string;
   port?: number;
   report?: (error: unknown) => void;
+  onClosing?: () => Promise<void>;
 }): Promise<ApiServer> {
   const app = input.application;
   const methods = apiMethods(app);
@@ -126,10 +127,14 @@ export async function startApiServer(input: {
       return (closing ??= (async () => {
         unsubscribe();
         for (const socket of server.clients) socket.terminate();
-        await new Promise<void>((resolve, reject) =>
+        const disconnected = new Promise<void>((resolve, reject) =>
           server.close((error) => (error ? reject(error) : resolve())),
         );
-        await Promise.allSettled([...pending]);
+        const results = await Promise.allSettled([disconnected, input.onClosing?.(), ...pending]);
+        const errors = results
+          .filter((result) => result.status === 'rejected')
+          .map((result) => result.reason);
+        if (errors.length) throw new AggregateError(errors, 'API shutdown failed.');
       })());
     },
   };
