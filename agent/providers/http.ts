@@ -7,7 +7,8 @@ const failure = (
 ) => new ProviderFailure(code, message, {
   outcome,
 });
-export function observer(callback: (() => void) | undefined) {
+/** Delivers optional progress without allowing observer failures to change the request. */
+export const observer = (callback: (() => void) | undefined): void => {
   if (!callback)
     return;
 
@@ -16,28 +17,35 @@ export function observer(callback: (() => void) | undefined) {
   } catch {
     // Progress telemetry never controls the model request or its outcome.
   }
-}
+};
 const aborted = (outcome: 'not-dispatched' | 'unknown') =>
   failure('MODEL_ABORTED', 'Interrupted', outcome);
+
+const isValidCapacity = (capacity: number): boolean => {
+  const isWhole = Number.isSafeInteger(capacity);
+  const isPositive = isWhole && capacity > 0;
+
+  return isWhole && isPositive;
+};
 
 export class RequestGate {
   private active = 0;
   private waiting: { grant: () => void; signal: AbortSignal }[] = [];
-  constructor(privateCapacity: number) {
-    if (!Number.isSafeInteger(privateCapacity) || privateCapacity < 1)
+  constructor(capacity: number) {
+    if (!isValidCapacity(capacity))
       throw failure(
         'INVALID_PROVIDER_CONFIGURATION',
         'Invalid endpoint capacity.',
         'not-dispatched',
       );
 
-    this.capacity = privateCapacity;
+    this.capacity = capacity;
   }
 
   private capacity: number;
   /** Apply a capacity change without dropping active work or queued cancellation handlers. */
-  setCapacity(capacity: number) {
-    if (!Number.isSafeInteger(capacity) || capacity < 1)
+  setCapacity(capacity: number): void {
+    if (!isValidCapacity(capacity))
       throw failure(
         'INVALID_PROVIDER_CONFIGURATION',
         'Invalid endpoint capacity.',
@@ -101,7 +109,8 @@ export interface RequestLimiter {
   run<T>(signal: AbortSignal, action: () => Promise<T>): Promise<T>;
 }
 export type HttpOptions = { endpoint: string; fetch: typeof fetch; gate?: RequestLimiter };
-export function endpointURL(endpoint: string) {
+/** Validates a credential-free HTTP endpoint at the transport boundary. */
+export const endpointURL = (endpoint: string): URL => {
   let url: URL;
   try {
     url = new URL(endpoint.endsWith('/') ? endpoint : endpoint + '/');
@@ -112,16 +121,12 @@ export function endpointURL(endpoint: string) {
       'not-dispatched',
     );
   }
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    endpoint.includes('?') ||
-    endpoint.includes('#') ||
-    endpoint.match(/^[a-z][a-z\d+.-]*:\/\/([^/?#]*)/i)?.[1]?.includes('@')
-  )
+  const usesHttp = ['http:', 'https:'].includes(url.protocol);
+  const hasCredentials = Boolean(url.username || url.password);
+  const hasQuery = Boolean(url.search) || endpoint.includes('?');
+  const hasFragment = Boolean(url.hash) || endpoint.includes('#');
+  const hasUserInfo = endpoint.match(/^[a-z][a-z\d+.-]*:\/\/([^/?#]*)/i)?.[1]?.includes('@');
+  if (!usesHttp || hasCredentials || hasQuery || hasFragment || hasUserInfo)
     throw failure(
       'INVALID_ENDPOINT',
       'Use an HTTP(S) endpoint without embedded credentials, query or fragment.',
@@ -129,16 +134,28 @@ export function endpointURL(endpoint: string) {
     );
 
   return url;
-}
-export const object = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-export function tokenCount(value: unknown) {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
-}
+};
+/** Reads an object-shaped wire value without trusting its fields. */
+export const object = (value: unknown): Record<string, unknown> => {
+  const isObject = value !== null && typeof value === 'object';
+  const isRecord = isObject && !Array.isArray(value);
+  if (!isRecord)
+    return {};
 
-export function encodeJSON(value: unknown): string {
+  return value as Record<string, unknown>;
+};
+/** Returns a reported nonnegative integer count, or no count when unavailable. */
+export const tokenCount = (value: unknown): number | undefined => {
+  const isWhole = typeof value === 'number' && Number.isSafeInteger(value);
+  const isNonnegative = isWhole && value >= 0;
+  if (!isNonnegative)
+    return undefined;
+
+  return value;
+};
+
+/** Serializes outgoing data without exposing its private contents through an error. */
+export const encodeJSON = (value: unknown): string => {
   try {
     const result = JSON.stringify(value);
     if (result === undefined)
@@ -155,9 +172,10 @@ export function encodeJSON(value: unknown): string {
       },
     );
   }
-}
+};
 
-export async function request(options: HttpOptions, route: string, init: RequestInit) {
+/** Dispatches one HTTP request and preserves whether a failed request reached the endpoint. */
+export const request = async (options: HttpOptions, route: string, init: RequestInit): Promise<Response> => {
   if (init.signal?.aborted)
     throw aborted('not-dispatched');
 
@@ -206,9 +224,10 @@ export async function request(options: HttpOptions, route: string, init: Request
   }
 
   return response;
-}
+};
 
-export async function* lines(response: Response, onProgress: () => void) {
+/** Reads bounded UTF-8 lines and releases the response reader on completion or cancellation. */
+export const lines = async function* (response: Response, onProgress: () => void): AsyncGenerator<string> {
   if (!response.body)
     throw failure('MODEL_INVALID_RESPONSE', 'The model response has no body.');
 
@@ -267,7 +286,8 @@ export async function* lines(response: Response, onProgress: () => void) {
       });
     }
 
-    if (error instanceof DOMException && error.name === 'AbortError')
+    const wasAborted = error instanceof DOMException && error.name === 'AbortError';
+    if (wasAborted)
       throw aborted('unknown');
 
     throw new ProviderFailure(
@@ -284,8 +304,9 @@ export async function* lines(response: Response, onProgress: () => void) {
 
     reader.releaseLock();
   }
-}
-export async function json(response: Response) {
+};
+/** Reads one bounded JSON response without assigning trusted domain types. */
+export const json = async (response: Response): Promise<unknown> => {
   let body = '';
   for await (const line of lines(response, () => {}))
     body += line + '\n';
@@ -294,15 +315,17 @@ export async function json(response: Response) {
   } catch {
     throw failure('MODEL_INVALID_RESPONSE', 'The endpoint returned invalid JSON.');
   }
-}
-export function parseJSON(value: string): unknown {
+};
+/** Parses model JSON while keeping malformed payload contents out of public errors. */
+export const parseJSON = (value: string): unknown => {
   try {
     return JSON.parse(value);
   } catch {
     throw failure('MODEL_INVALID_RESPONSE', 'The model returned malformed JSON or tool arguments.');
   }
-}
-export async function* sse(response: Response, onProgress: () => void) {
+};
+/** Yields complete SSE data frames, preserving request cancellation and stream failures. */
+export const sse = async function* (response: Response, onProgress: () => void): AsyncGenerator<string> {
   let data: string[] = [];
   for await (const line of lines(response, onProgress)) {
     if (!line) {
@@ -315,4 +338,4 @@ export async function* sse(response: Response, onProgress: () => void) {
   }
   if (data.length)
     yield data.join('\n');
-}
+};

@@ -17,7 +17,7 @@ import { themePresets } from '../../theme/presets.ts';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 
-function InstructionsEditor(input: { instructions: string }): ReactElement {
+const InstructionsEditor = (input: { instructions: string }): ReactElement => {
   const { client } = useApplication();
   const action = useOperation();
   const [instructions, setInstructions] = useState(input.instructions);
@@ -45,10 +45,10 @@ function InstructionsEditor(input: { instructions: string }): ReactElement {
       </Button>
     </Stack>
   );
-}
+};
 
 /** Application defaults and local appearance preferences remain independent of projects. */
-export function PreferencesPage(): ReactElement {
+export const PreferencesPage = (): ReactElement => {
   const settings = useApiQuery('settings.get', {});
   const locale = useLocale();
   const { themeId, setThemeId } = useAppearance();
@@ -120,4 +120,4 @@ export function PreferencesPage(): ReactElement {
       </Stack>
     </Panel>
   );
-}
+};

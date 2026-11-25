@@ -8,66 +8,69 @@ import { useOperation } from '../common/operation.ts';
 import { useSessionHistory } from './use-session-history.ts';
 
 /** Displays portable conversation history and provisional text separately. */
-export function SessionView(input: { session: Session }): ReactElement {
+export const SessionView = (input: { session: Session }): ReactElement => {
+  const { session } = input;
+  const { id: sessionId, modelId, status, error, usage } = session;
   const { client } = useApplication();
   const models = useApiQuery('models.list', {});
   const action = useOperation();
   const [stream, setStream] = useState('');
   const history = useSessionHistory({
-    sessionId: input.session.id,
+    sessionId,
   });
   useEffect(
     () =>
       client.subscribe((notice) => {
         const data = notice.data as { sessionId?: string; id?: string; text?: string };
-        if (
-          notice.type === 'session.text' &&
-          data.sessionId === input.session.id &&
-          typeof data.text === 'string'
-        )
-          setStream((previous) => previous + data.text);
+        const isCurrentText = notice.type === 'session.text' && data.sessionId === sessionId;
+        const text = data.text;
+        const hasText = typeof text === 'string';
+        if (isCurrentText && hasText)
+          setStream((previous) => previous + text);
 
-        if (notice.type === 'session.messages' && data.id === input.session.id)
+        const messagesChanged = notice.type === 'session.messages' && data.id === sessionId;
+        if (messagesChanged)
           setStream('');
 
-        if (notice.type === 'session.retry' && data.sessionId === input.session.id)
+        const requestRestarted = notice.type === 'session.retry' && data.sessionId === sessionId;
+        if (requestRestarted)
           setStream('');
       }),
-    [client, input.session.id],
+    [client, sessionId],
   );
   return (
     <Stack>
       <Group>
-        <Badge variant="light">{t(input.session.status)}</Badge>
+        <Badge variant="light">{t(status)}</Badge>
         <Text size="xs" c="dimmed">
-          {input.session.id}
+          {sessionId}
         </Text>
       </Group>
       <Select
         label={t('Model for the next request')}
-        value={input.session.modelId}
+        value={modelId}
         data={[
           ...(models.data?.map((model) => ({ value: model.id, label: model.name })) ?? []),
-          ...(!models.data?.some((model) => model.id === input.session.modelId)
-            ? [{ value: input.session.modelId, label: input.session.modelId }]
+          ...(!models.data?.some((model) => model.id === modelId)
+            ? [{ value: modelId, label: modelId }]
             : []),
         ]}
-        onChange={(modelId) => {
-          if (modelId)
+        onChange={(nextModelId) => {
+          if (nextModelId)
             void action.perform(async () => ({
               ok: await client.call('sessions.model', {
-                sessionId: input.session.id,
-                modelId,
+                sessionId: sessionId,
+                modelId: nextModelId,
               }),
               error: t('Model unavailable'),
             }));
         }}
       />
-      <ErrorNotice error={action.error ?? input.session.error} />
-      {input.session.usage && (
+      <ErrorNotice error={action.error ?? error} />
+      {usage && (
         <Text size="xs" c="dimmed">
-          {t('Reported tokens')} · {t('Input')}: {input.session.usage.inputTokens ?? '—'} ·{' '}
-          {t('Output')}: {input.session.usage.outputTokens ?? '—'}
+          {t('Reported tokens')} · {t('Input')}: {usage.inputTokens ?? '—'} ·{' '}
+          {t('Output')}: {usage.outputTokens ?? '—'}
         </Text>
       )}
       <QueryFeedback loading={history.loading} error={history.error} />
@@ -109,4 +112,4 @@ export function SessionView(input: { session: Session }): ReactElement {
       )}
     </Stack>
   );
-}
+};

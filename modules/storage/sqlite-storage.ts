@@ -69,7 +69,10 @@ export class SqliteStorage implements StorageEngine {
         const row = database
           .prepare('SELECT data FROM records WHERE namespace=? AND id=?')
           .get(namespace, id);
-        return row ? (JSON.parse(String(row.data)) as T) : undefined;
+        if (!row)
+          return undefined;
+
+        return JSON.parse(String(row.data)) as T;
       },
       async list(input = {}) {
         const { sql, values } = selection(input.where);

@@ -36,22 +36,21 @@ process.send?.({
   port: server.port,
 });
 let stopping: Promise<void> | undefined;
-function stop(): Promise<void> {
-  return (stopping ??= (async () => {
-    try {
-      await server.close();
-    } finally {
-      await application.close();
-    }
-  })());
-}
-const shutdown = () =>
-  void stop().then(
-    () => process.exit(0),
-    (error) => {
-      report(error);
-      process.exit(1);
-    },
-  );
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+const stop = (): Promise<void> => (stopping ??= (async () => {
+  try {
+    await server.close();
+  } finally {
+    await application.close();
+  }
+})());
+const shutdown = async (): Promise<void> => {
+  try {
+    await stop();
+    process.exit(0);
+  } catch (error) {
+    report(error);
+    process.exit(1);
+  }
+};
+process.on('SIGINT', () => void shutdown());
+process.on('SIGTERM', () => void shutdown());

@@ -7,17 +7,17 @@ import { useOperation } from '../common/operation.ts';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 
 /** Chooses a source directory without requiring a model, team or execution profile. */
-export function ProjectPicker(input: {
+export const ProjectPicker = (input: {
   opened: boolean;
   onClose(): void;
   onSelect(project: Project): void;
-}): ReactElement {
+}): ReactElement => {
   const { client } = useApplication();
   const projects = useApiQuery('projects.list', {});
   const action = useOperation();
   const [root, setRoot] = useState('');
   const [name, setName] = useState('');
-  async function connect(): Promise<void> {
+  const connect = async (): Promise<void> => {
     const result = await action.perform(async () => {
       const connected = await client.call('projects.connect', {
         root,
@@ -31,7 +31,7 @@ export function ProjectPicker(input: {
       setRoot('');
       setName('');
     }
-  }
+  };
   return (
     <Modal opened={input.opened} onClose={input.onClose} title={t('Projects')} size="lg">
       <Stack>
@@ -98,4 +98,4 @@ export function ProjectPicker(input: {
       </Stack>
     </Modal>
   );
-}
+};

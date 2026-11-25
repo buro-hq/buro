@@ -30,7 +30,10 @@ export const selectRecords = <T extends StoredRecord>(input: {
       const b = right[orderBy] as string | number;
       const comparison = a < b ? -1 : a > b ? 1 : 0;
 
-      return descending ? -comparison : comparison;
+      if (descending)
+        return -comparison;
+
+      return comparison;
     });
   else if (descending)
     selected.reverse();

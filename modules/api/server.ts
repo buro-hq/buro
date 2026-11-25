@@ -33,13 +33,13 @@ const allowedOrigin = (origin?: string) => {
 };
 
 /** Starts a loopback-only API using ordinary feature methods and detached notifications. */
-export async function startApiServer(input: {
+export const startApiServer = async (input: {
   application: Application;
   token: string;
   port?: number;
   report?: (error: unknown) => void;
   onClosing?: () => Promise<void>;
-}): Promise<ApiServer> {
+}): Promise<ApiServer> => {
   const app = input.application;
   const methods = apiMethods(app);
   const server = new WebSocketServer({
@@ -87,11 +87,10 @@ export async function startApiServer(input: {
               .safeParse(body);
             const actual = Buffer.from(auth.success ? auth.data.token : '');
             const expected = Buffer.from(input.token);
-            if (
-              !auth.success ||
-              actual.length !== expected.length ||
-              !timingSafeEqual(actual, expected)
-            ) {
+            const isAuthRequest = auth.success;
+            const hasExpectedLength = actual.length === expected.length;
+            const hasValidToken = isAuthRequest && hasExpectedLength && timingSafeEqual(actual, expected);
+            if (!hasValidToken) {
               socket.close(1008, 'Authentication required');
               return;
             }
@@ -124,14 +123,15 @@ export async function startApiServer(input: {
             result,
           });
         } catch (error) {
-          if (!(error instanceof z.ZodError) && !(error instanceof SyntaxError))
+          const isInvalidInput = error instanceof z.ZodError || error instanceof SyntaxError;
+          if (!isInvalidInput)
             input.report?.(error);
 
           send(socket, {
             id,
             ok: false,
             error:
-              error instanceof z.ZodError || error instanceof SyntaxError
+              isInvalidInput
                 ? 'Invalid API request or parameters.'
                 : 'The operation failed. See the server log for details.',
           });
@@ -142,7 +142,8 @@ export async function startApiServer(input: {
     });
   });
   const address = server.address();
-  if (!address || typeof address === 'string')
+  const hasTcpAddress = address && typeof address !== 'string';
+  if (!hasTcpAddress)
     throw new Error('The API did not receive a TCP port.');
 
   let closing: Promise<void> | undefined;
@@ -164,4 +165,4 @@ export async function startApiServer(input: {
       })());
     },
   };
-}
+};

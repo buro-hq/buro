@@ -4,6 +4,12 @@ import { constants } from 'node:fs';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
+/** Captured output from a completed local Git command. */
+export interface GitCommandResult {
+  stdout: string;
+  stderr: string;
+}
+
 type Options = {
   cwd: string;
   maxBuffer?: number;
@@ -18,7 +24,7 @@ type Options = {
 };
 
 /** Local repository bookkeeping must never activate executable repository configuration. */
-export async function safeGit(args: string[], options: Options) {
+export const safeGit = async (args: string[], options: Options): Promise<GitCommandResult> => {
   const identity = /^GIT_(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE)$/;
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_') || identity.test(name)),
@@ -156,4 +162,4 @@ export async function safeGit(args: string[], options: Options) {
   } finally {
     await destination.close();
   }
-}
+};

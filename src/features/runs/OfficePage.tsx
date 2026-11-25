@@ -6,7 +6,7 @@ import { t } from '../../i18n/index.ts';
 import { QueryFeedback } from '../common/feedback.tsx';
 
 /** The office follows actual sessions, with no reserved desks, names or team size. */
-export function OfficePage(input: { projectId: string; onRun(id: string): void }): ReactElement {
+export const OfficePage = (input: { projectId: string; onRun(id: string): void }): ReactElement => {
   const runs = useApiQuery('runs.list', {
     projectId: input.projectId,
   });
@@ -84,4 +84,4 @@ export function OfficePage(input: { projectId: string; onRun(id: string): void }
       </Stack>
     </Panel>
   );
-}
+};

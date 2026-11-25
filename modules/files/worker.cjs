@@ -22,10 +22,10 @@ try {
     /^\.env(?:\.|$)/i.test(name) ||
     /\.(pem|key|p12|pfx|keystore)$/i.test(name);
   const inside = (filename) => filename === root || filename.startsWith(root + path.sep);
-  function allowed(filename) {
+  const allowed = (filename) => {
     if (!inside(filename) || path.relative(root, filename).split(path.sep).some(privateName))
       throw Error('Path is outside the workspace or contains private metadata.');
-  }
+  };
   if (typeof args.path !== 'string' || args.path.includes('\0'))
     throw Error('path must be a string without null bytes.');
 

@@ -32,7 +32,7 @@ import { closeResources } from './close-resources.ts';
 import { ownApplication, type ApplicationOwnership } from './ownership.ts';
 
 /** Composes one server process with usable defaults and replaceable boundary adapters. */
-export async function createApplication(input: ApplicationOptions): Promise<Application> {
+export const createApplication = async (input: ApplicationOptions): Promise<Application> => {
   const ownership = ownApplication({
     directory: input.directory,
   });
@@ -58,13 +58,13 @@ export async function createApplication(input: ApplicationOptions): Promise<Appl
     }
     throw error;
   }
-}
+};
 
-async function composeApplication(scope: {
+const composeApplication = async (scope: {
   options: ApplicationOptions;
   storage: StorageEngine;
   ownership: ApplicationOwnership;
-}): Promise<Application> {
+}): Promise<Application> => {
   const { options: input, storage, ownership } = scope;
   const privateDirectory = path.resolve(input.directory, 'private');
   const events = new EventBus({
@@ -235,4 +235,4 @@ async function composeApplication(scope: {
       }));
     },
   };
-}
+};

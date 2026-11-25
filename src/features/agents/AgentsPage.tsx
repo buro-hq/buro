@@ -7,14 +7,14 @@ import { t } from '../../i18n/index.ts';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 
-function AgentEditor(input: { agent?: Agent; onClose(): void }): ReactElement {
+const AgentEditor = (input: { agent?: Agent; onClose(): void }): ReactElement => {
   const { client } = useApplication();
   const action = useOperation();
   const [name, setName] = useState(input.agent?.name ?? '');
   const [description, setDescription] = useState(input.agent?.description ?? '');
   const [instructions, setInstructions] = useState(input.agent?.instructions ?? '');
   const [tools, setTools] = useState(input.agent?.tools?.join(', ') ?? '');
-  async function save(): Promise<void> {
+  const save = async (): Promise<void> => {
     const result = await action.perform(async () => {
       await client.call('agents.save', {
         id: input.agent?.id,
@@ -32,7 +32,7 @@ function AgentEditor(input: { agent?: Agent; onClose(): void }): ReactElement {
     });
     if (result.ok)
       input.onClose();
-  }
+  };
   return (
     <Modal opened onClose={input.onClose} title={t('Agent')} size="lg">
       <Stack>
@@ -70,10 +70,10 @@ function AgentEditor(input: { agent?: Agent; onClose(): void }): ReactElement {
       </Stack>
     </Modal>
   );
-}
+};
 
 /** Reusable collaborators are ordinary descriptions, without reserved names or phases. */
-export function AgentsPage(): ReactElement {
+export const AgentsPage = (): ReactElement => {
   const { client } = useApplication();
   const agents = useApiQuery('agents.list', {});
   const action = useOperation();
@@ -134,4 +134,4 @@ export function AgentsPage(): ReactElement {
       )}
     </Panel>
   );
-}
+};

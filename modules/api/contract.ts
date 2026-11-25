@@ -82,6 +82,11 @@ export interface ApiCommands {
 /** Browser, CLI and external callers share one transport for feature APIs. */
 export interface ApiMethods extends ApiQueries, ApiCommands {}
 
+/** Validated dispatch entry points with the result type of each public operation. */
+export type ApiHandlers = {
+  [K in keyof ApiMethods]: (params: unknown) => Promise<ApiMethods[K]['result']>;
+};
+
 /** Public messages contain no private transport continuation or API credentials. */
 export interface ApiRequest {
   id: string;

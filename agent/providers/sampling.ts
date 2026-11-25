@@ -5,7 +5,8 @@ export type ModelSamplingSettings = {
   presencePenalty?: number;
 };
 
-export function samplingParameters(settings?: ModelSamplingSettings): Record<string, number> {
+/** Projects explicitly supplied sampling settings to the provider wire names. */
+export const samplingParameters = (settings?: ModelSamplingSettings): Record<string, number> => {
   const params: Record<string, number> = {};
   for (const [key, wire] of [
     ['temperature', 'temperature'],
@@ -17,4 +18,4 @@ export function samplingParameters(settings?: ModelSamplingSettings): Record<str
       params[wire] = value;
   }
   return params;
-}
+};

@@ -186,6 +186,7 @@ export const themePresets: ThemePreset[] = [
     },
   },
 ];
-export const getThemePreset = (id: string) =>
+/** Resolves a saved theme, falling back to the application default. */
+export const getThemePreset = (id: string): ThemePreset =>
   themePresets.find((theme) => theme.id === id) ||
   themePresets.find((theme) => theme.id === defaultThemeId)!;

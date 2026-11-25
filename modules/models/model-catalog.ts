@@ -16,14 +16,12 @@ import type {
   ModelConfiguration,
 } from './model-configuration.ts';
 
-function draft(input: ModelConfigurationDraft): Partial<ModelConfiguration> {
-  return Object.fromEntries(
-    Object.entries(structuredClone(input)).map(([key, value]) => [
-      key,
-      value === null ? undefined : value,
-    ]),
-  );
-}
+const draft = (input: ModelConfigurationDraft): Partial<ModelConfiguration> => Object.fromEntries(
+  Object.entries(structuredClone(input)).map(([key, value]) => [
+    key,
+    value === null ? undefined : value,
+  ]),
+);
 
 /** Owns persisted connections and activates them through replaceable transport factories. */
 export class ModelCatalog implements ModelConfigurations {
@@ -208,33 +206,39 @@ export class ModelCatalog implements ModelConfigurations {
     if (!transport)
       return { ok: false, error: 'Model transport is unavailable.' };
 
-    if (!configuration.name.trim() || !configuration.model.trim())
+    const hasName = Boolean(configuration.name.trim());
+    const hasModel = Boolean(configuration.model.trim());
+    if (!hasName || !hasModel)
       return { ok: false, error: 'Model name and model ID are required.' };
 
-    if (
-      !Number.isSafeInteger(configuration.contextTokens) ||
-      !Number.isSafeInteger(configuration.outputTokens) ||
-      configuration.outputTokens < 1 ||
-      configuration.contextTokens <= configuration.outputTokens
-    )
+    const hasWholeContext = Number.isSafeInteger(configuration.contextTokens);
+    const hasWholeOutput = Number.isSafeInteger(configuration.outputTokens);
+    const hasPositiveOutput = hasWholeOutput && configuration.outputTokens > 0;
+    const hasInputRoom = hasWholeContext && hasPositiveOutput &&
+      configuration.contextTokens > configuration.outputTokens;
+    if (!hasWholeContext || !hasWholeOutput || !hasPositiveOutput || !hasInputRoom)
       return {
         ok: false,
         error: 'Context must be larger than the positive output token allowance.',
       };
 
-    if (
-      configuration.capacity !== undefined &&
-      (!Number.isSafeInteger(configuration.capacity) || configuration.capacity < 1)
-    )
+    const { capacity, retries } = configuration;
+    const hasCapacity = capacity !== undefined;
+    const hasValidCapacity = !hasCapacity ||
+      (Number.isSafeInteger(capacity) && capacity >= 1);
+    if (!hasValidCapacity)
       return { ok: false, error: 'Endpoint capacity must be a positive integer.' };
 
-    if (input.apiKey !== undefined && input.apiKey !== null && /[\r\n\0]/.test(input.apiKey))
+    const providedKey = input.apiKey;
+    const hasKey = providedKey !== undefined && providedKey !== null;
+    const hasInvalidKey = hasKey && /[\r\n\0]/.test(providedKey);
+    if (hasInvalidKey)
       return { ok: false, error: 'API key contains invalid characters.' };
 
-    if (
-      configuration.retries !== undefined &&
-      (!Number.isSafeInteger(configuration.retries) || configuration.retries < 0)
-    )
+    const hasRetries = retries !== undefined;
+    const hasValidRetries = !hasRetries ||
+      (Number.isSafeInteger(retries) && retries >= 0);
+    if (!hasValidRetries)
       return { ok: false, error: 'HTTP retries must be a nonnegative integer.' };
 
     const apiKey = input.apiKey === undefined ? previous?.apiKey : input.apiKey || undefined;
@@ -246,7 +250,8 @@ export class ModelCatalog implements ModelConfigurations {
         apiKey,
       });
     } catch (error) {
-      if (isProviderFailure(error) && error.outcome === 'not-dispatched')
+      const wasRejectedBeforeDispatch = isProviderFailure(error) && error.outcome === 'not-dispatched';
+      if (wasRejectedBeforeDispatch)
         return { ok: false, error: error.message };
 
       throw error;
@@ -261,7 +266,8 @@ export class ModelCatalog implements ModelConfigurations {
       backend,
       default: input.default,
     });
-    if (input.default || !(await this.settings.get()).defaultModelId) {
+    const shouldSelectDefault = input.default || !(await this.settings.get()).defaultModelId;
+    if (shouldSelectDefault) {
       await this.settings.update({
         defaultModelId: configuration.id,
       });
@@ -324,7 +330,8 @@ export class ModelCatalog implements ModelConfigurations {
     const connection = await this.store.get(id);
     const configuration = connection?.configuration;
     const transport = configuration && this.factories.get(configuration.transport);
-    if (!configuration || !transport)
+    const canActivate = configuration && transport;
+    if (!canActivate)
       return;
 
     this.models.register({
@@ -337,6 +344,7 @@ export class ModelCatalog implements ModelConfigurations {
   }
 
   private mutate<T>(work: () => Promise<T>): Promise<T> {
+    // Reserve the next mutation before yielding; a rejected edit must not poison the queue.
     const pending = this.mutations.then(work);
     this.mutations = pending.then(
       () => {},

@@ -7,9 +7,9 @@ import { ModelBackend } from '../engines/model-backend.ts';
 import { CodexBackend } from '../engines/codex-backend.ts';
 
 /** Supplies the existing portable transports; callers can register additional implementations. */
-export function modelTransports(
+export const modelTransports = (
   input: { fetch?: typeof fetch; privatePaths?: string[] } = {},
-): ModelTransport[] {
+): ModelTransport[] => {
   const request = input.fetch ?? fetch;
   return [
     {
@@ -90,4 +90,4 @@ export function modelTransports(
       },
     },
   ];
-}
+};

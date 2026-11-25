@@ -62,6 +62,7 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
   }
 
   private update(update: (records: T[]) => T[]): Promise<void> {
+    // Link writers before the first await so concurrent edits share one atomic-file queue.
     const work = this.queue.then(async () => {
       const records = update(await this.read());
       await fs.mkdir(path.dirname(this.filename), {
@@ -156,7 +157,10 @@ class JsonRecordStore<T extends StoredRecord> implements RecordStore<T> {
         return updated;
       });
     });
-    return updated ? structuredClone(updated) : undefined;
+    if (!updated)
+      return undefined;
+
+    return structuredClone(updated);
   }
 
   async flush(): Promise<void> {

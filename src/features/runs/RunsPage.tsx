@@ -7,11 +7,11 @@ import { QueryFeedback } from '../common/feedback.tsx';
 import { RunDetail } from './RunDetail.tsx';
 
 /** Reads attempts independently from editable goals and reusable agent descriptions. */
-export function RunsPage(input: {
+export const RunsPage = (input: {
   projectId: string;
   selectedId?: string;
   onSelect(id?: string): void;
-}): ReactElement {
+}): ReactElement => {
   const runs = useApiQuery('runs.list', {
     projectId: input.projectId,
   });
@@ -55,4 +55,4 @@ export function RunsPage(input: {
           )}
     </Panel>
   );
-}
+};

@@ -9,7 +9,7 @@ export interface ApplicationOwnership {
 }
 
 /** Acquires ownership before recovery can modify records belonging to a running server. */
-export function ownApplication(input: { directory: string }): ApplicationOwnership {
+export const ownApplication = (input: { directory: string }): ApplicationOwnership => {
   const directory = path.resolve(input.directory, 'private');
   fs.mkdirSync(directory, {
     recursive: true,
@@ -37,4 +37,4 @@ export function ownApplication(input: { directory: string }): ApplicationOwnersh
       database.close();
     },
   };
-}
+};

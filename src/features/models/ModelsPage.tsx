@@ -9,7 +9,7 @@ import { useOperation } from '../common/operation.ts';
 import { ModelEditor } from './ModelEditor.tsx';
 
 /** Connections are application-wide; choosing a model never requires a project profile. */
-export function ModelsPage(): ReactElement {
+export const ModelsPage = (): ReactElement => {
   const { client } = useApplication();
   const models = useApiQuery('models.list', {});
   const settings = useApiQuery('settings.get', {});
@@ -91,4 +91,4 @@ export function ModelsPage(): ReactElement {
       )}
     </Panel>
   );
-}
+};

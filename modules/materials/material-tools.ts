@@ -4,18 +4,21 @@ import { objectArguments, textArgument } from '../tools/arguments.ts';
 import type { Materials } from './material.ts';
 
 /** Adds context queries without making document availability an admission or completion gate. */
-export function materialTools(input: { materials: Materials; runs: Runs }): Tool[] {
-  async function scope(
+export const materialTools = (input: { materials: Materials; runs: Runs }): Tool[] => {
+  const scope = async (
     context: ToolContext,
-  ): Promise<{ projectId: string; taskId?: string } | undefined> {
+  ): Promise<{ projectId: string; taskId?: string } | undefined> => {
     const run = context.runId
       ? await input.runs.get({
           id: context.runId,
         })
       : undefined;
     const projectId = run?.projectId ?? context.projectId;
-    return projectId ? { projectId, taskId: run?.taskId } : undefined;
-  }
+    if (!projectId)
+      return undefined;
+
+    return { projectId, taskId: run?.taskId };
+  };
   return [
     {
       effect: 'read',
@@ -74,4 +77,4 @@ export function materialTools(input: { materials: Materials; runs: Runs }): Tool
       },
     },
   ];
-}
+};

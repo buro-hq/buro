@@ -5,9 +5,15 @@ import {
   type CSSVariablesResolver,
 } from '@mantine/core';
 import { useLocalStorage } from '@mantine/hooks';
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode, type ReactElement } from 'react';
 import { defaultThemeId, getThemePreset, type ThemeColors } from './presets';
-const AppearanceContext = createContext<{ themeId: string; setThemeId: (value: string) => void }>({
+/** The selected appearance and its update action, independent of page data. */
+export interface Appearance {
+  themeId: string;
+  setThemeId(value: string): void;
+}
+
+const AppearanceContext = createContext<Appearance>({
   themeId: defaultThemeId,
   setThemeId: () => {},
 });
@@ -23,7 +29,7 @@ const mix = (color: string, ratio: number) => {
       .join('')
   );
 };
-function variables(colors: ThemeColors, scheme: 'light' | 'dark') {
+const variables = (colors: ThemeColors, scheme: 'light' | 'dark') => {
   const dark = scheme === 'dark';
   return {
     '--bg': colors.bg,
@@ -59,8 +65,9 @@ function variables(colors: ThemeColors, scheme: 'light' | 'dark') {
     '--mantine-color-sage-light-color': colors.accentText,
     '--mantine-color-sage-outline': colors.accentText,
   };
-}
-export function AppearanceProvider({ children }: { children: ReactNode }) {
+};
+/** Applies the selected palette and color scheme to the interface. */
+export const AppearanceProvider = ({ children }: { children: ReactNode }): ReactElement => {
   const [savedTheme, setTheme] = useLocalStorage<string>({
     key: 'project-panel-theme',
     defaultValue: defaultThemeId,
@@ -131,5 +138,6 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       </MantineProvider>
     </AppearanceContext.Provider>
   );
-}
-export const useAppearance = () => useContext(AppearanceContext);
+};
+/** Reads the current theme selection and its explicit update action. */
+export const useAppearance = (): Appearance => useContext(AppearanceContext);

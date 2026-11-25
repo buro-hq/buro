@@ -7,7 +7,7 @@ import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 import { uploadedFile } from './upload.ts';
 
-function MaterialReader(input: { id: string; onClose(): void }): ReactElement {
+const MaterialReader = (input: { id: string; onClose(): void }): ReactElement => {
   const [line, setLine] = useState(1);
   const material = useApiQuery('materials.read', {
     id: input.id,
@@ -51,10 +51,10 @@ function MaterialReader(input: { id: string; onClose(): void }): ReactElement {
       </Stack>
     </Modal>
   );
-}
+};
 
 /** Project context can be uploaded, read and downloaded independently of a run. */
-export function MaterialsPage(input: { projectId: string }): ReactElement {
+export const MaterialsPage = (input: { projectId: string }): ReactElement => {
   const { client } = useApplication();
   const materials = useApiQuery('materials.list', {
     projectId: input.projectId,
@@ -62,7 +62,7 @@ export function MaterialsPage(input: { projectId: string }): ReactElement {
   const action = useOperation();
   const [files, setFiles] = useState<File[]>([]);
   const [selected, setSelected] = useState<string>();
-  async function upload(): Promise<void> {
+  const upload = async (): Promise<void> => {
     for (const file of files) {
       const result = await action.perform(async () => {
         const uploaded = await client.call('materials.upload', {
@@ -79,8 +79,8 @@ export function MaterialsPage(input: { projectId: string }): ReactElement {
 
       setFiles((previous) => previous.filter((candidate) => candidate !== file));
     }
-  }
-  async function download(id: string): Promise<void> {
+  };
+  const download = async (id: string): Promise<void> => {
     await action.perform(async () => {
       const result = await client.call('materials.download', {
         id,
@@ -100,7 +100,7 @@ export function MaterialsPage(input: { projectId: string }): ReactElement {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       return { ok: true };
     });
-  }
+  };
   return (
     <Panel
       title={t('Materials')}
@@ -163,4 +163,4 @@ export function MaterialsPage(input: { projectId: string }): ReactElement {
       )}
     </Panel>
   );
-}
+};

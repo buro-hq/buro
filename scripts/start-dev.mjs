@@ -9,23 +9,21 @@ const directory = path.resolve(process.env.PROJECT_DATA_DIR ?? path.join(root, '
 let frontend;
 let daemon;
 let stopping;
-function stop(code = 0) {
-  return (stopping ??= (async () => {
-    process.exitCode = code;
-    const exited =
-      daemon && daemon.exitCode === null
-        ? new Promise((resolve) => daemon.once('close', resolve))
-        : Promise.resolve();
-    daemon?.kill('SIGTERM');
-    const timer = setTimeout(() => daemon?.kill('SIGKILL'), 10000);
-    timer.unref();
-    try {
-      await Promise.all([frontend?.close(), exited]);
-    } finally {
-      clearTimeout(timer);
-    }
-  })());
-}
+const stop = (code = 0) => (stopping ??= (async () => {
+  process.exitCode = code;
+  const exited =
+    daemon && daemon.exitCode === null
+      ? new Promise((resolve) => daemon.once('close', resolve))
+      : Promise.resolve();
+  daemon?.kill('SIGTERM');
+  const timer = setTimeout(() => daemon?.kill('SIGKILL'), 10000);
+  timer.unref();
+  try {
+    await Promise.all([frontend?.close(), exited]);
+  } finally {
+    clearTimeout(timer);
+  }
+})());
 process.once('SIGINT', () => void stop(130));
 process.once('SIGTERM', () => void stop(143));
 try {

@@ -45,9 +45,13 @@ export class ModelRegistry implements Models {
         const state = message.id
           ? await this.adapterState!.get(`${input.sessionId}:${message.id}`)
           : undefined;
-        return state?.modelId === input.modelId && state.providerRevision === input.providerRevision
-          ? { ...structuredClone(message), continuation: state.continuation }
-          : structuredClone(message);
+        const sameModel = state?.modelId === input.modelId;
+        const sameRevision = state?.providerRevision === input.providerRevision;
+        const canContinue = state && sameModel && sameRevision;
+        if (canContinue)
+          return { ...structuredClone(message), continuation: state.continuation };
+
+        return structuredClone(message);
       }),
     );
   }
@@ -72,7 +76,10 @@ export class ModelRegistry implements Models {
   /** Returns a selected model, using the application default only when no ID was supplied. */
   get(input: { id?: string } = {}): Model | undefined {
     const model = this.models.get(input.id ?? this.defaultId ?? '');
-    return model ? { ...model } : undefined;
+    if (!model)
+      return undefined;
+
+    return { ...model };
   }
 
   /** Returns safe metadata for model selectors, tools and clients. */

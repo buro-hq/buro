@@ -6,7 +6,7 @@ import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 
 /** Preview processes remain optional and independent of the attempt's completion. */
-export function PreviewsPanel(input: { runId: string }): ReactElement {
+export const PreviewsPanel = (input: { runId: string }): ReactElement => {
   const { client } = useApplication();
   const previews = useApiQuery('previews.list', {
     runId: input.runId,
@@ -98,4 +98,4 @@ export function PreviewsPanel(input: { runId: string }): ReactElement {
       ))}
     </Stack>
   );
-}
+};

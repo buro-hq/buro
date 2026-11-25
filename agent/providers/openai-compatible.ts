@@ -1,4 +1,4 @@
-import type { ModelProvider, ModelToolCall } from '../contracts/model.ts';
+import type { ModelProvider, ModelToolCall, ModelCompletion, AvailableModel } from '../contracts/model.ts';
 import {
   RequestGate,
   observer,
@@ -49,10 +49,11 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private options: Options;
   private gate: NonNullable<HttpOptions['gate']>;
   constructor(options: Options) {
-    if (
-      options.reasoningBudgetTokens !== undefined &&
-      (!Number.isSafeInteger(options.reasoningBudgetTokens) || options.reasoningBudgetTokens < -1)
-    )
+    const { reasoningBudgetTokens } = options;
+    const hasBudget = reasoningBudgetTokens !== undefined;
+    const hasValidBudget = !hasBudget ||
+      (Number.isSafeInteger(reasoningBudgetTokens) && reasoningBudgetTokens >= -1);
+    if (!hasValidBudget)
       throw failure(
         'INVALID_PROVIDER_CONFIGURATION',
         'Reasoning budget must be -1 or a nonnegative integer.',
@@ -91,13 +92,18 @@ export class OpenAICompatibleProvider implements ModelProvider {
         },
       );
     }
-    if (typeof key !== 'string' || !key.trim() || /[\r\n\0]/.test(key))
+    const credential = key;
+    const isText = typeof credential === 'string';
+    const hasContent = isText && Boolean(credential.trim());
+    const hasInvalidCharacters = hasContent && /[\r\n\0]/.test(credential);
+    if (!hasContent || hasInvalidCharacters)
       throw failure('MODEL_AUTH_REQUIRED', this.authRequiredMessage, 'not-dispatched');
 
-    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key };
+    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + credential };
   }
 
-  async listModels(signal: AbortSignal) {
+  /** Lists identifiers without starting a model request. */
+  async listModels(signal: AbortSignal): Promise<AvailableModel[]> {
     return this.gate.run(signal, async () => {
       const body = object(
         await json(await request(this.options, 'models', {
@@ -115,7 +121,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
     });
   }
 
-  async complete(input: Parameters<ModelProvider['complete']>[0]) {
+  /** Completes one request, exposing effects only through a validated terminal response. */
+  async complete(input: Parameters<ModelProvider['complete']>[0]): Promise<ModelCompletion> {
     return this.gate.run(input.signal, async () => {
       const emit = (event: import('../contracts/model.ts').ModelStreamEvent) => {
         if (input.onEvent)
@@ -233,7 +240,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
             const current = calls.get(index) || { id: '', name: '', arguments: '' };
             if (typeof part.id === 'string') {
-              if (current.id && current.id !== part.id)
+              const hasDifferentId = current.id && current.id !== part.id;
+              if (hasDifferentId)
                 throw failure('MODEL_INVALID_RESPONSE', 'A streamed tool call changed its ID.');
 
               current.id = part.id;
@@ -248,7 +256,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
             calls.set(index, current);
           }
       }
-      if (!done || !finish)
+      const hasTerminal = done && finish;
+      if (!hasTerminal)
         throw failure(
           'MODEL_STREAM_INTERRUPTED',
           'Model endpoint generation ended without a terminal response.',
@@ -257,7 +266,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
       const toolCalls: ModelToolCall[] = [...calls.entries()]
         .sort(([a], [b]) => a - b)
         .map(([, call]) => {
-          if (!call.id || !call.name)
+          const hasIdentity = call.id && call.name;
+          if (!hasIdentity)
             throw failure(
               'MODEL_INVALID_RESPONSE',
               'An incomplete streamed tool call was returned.',
@@ -265,7 +275,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
           return { id: call.id, name: call.name, arguments: parseJSON(call.arguments || '{}') };
         });
-      if (!toolCalls.length && finish === 'stop' && !content.trim())
+      const hasCalls = toolCalls.length > 0;
+      const hasAnswer = Boolean(content.trim());
+      const stoppedWithoutAnswer = !hasCalls && finish === 'stop' && !hasAnswer;
+      if (stoppedWithoutAnswer)
         throw failure(
           'MODEL_INVALID_RESPONSE',
           'Model endpoint completed without an assistant answer.',

@@ -28,19 +28,19 @@ const topics: Record<keyof ApiQueries, readonly string[]> = {
 };
 
 /** Refreshes only affected feature reads; missing owner metadata keeps deletion visible. */
-export function queryAffected(input: {
+export const queryAffected = (input: {
   method: keyof ApiQueries;
   params: object;
   notification: Notification;
-}): boolean {
+}): boolean => {
   const { method, params, notification } = input;
-  if (notification.type === 'session.text' || notification.type === 'session.retry')
+  const isProvisional = ['session.text', 'session.retry'].includes(notification.type);
+  if (isProvisional)
     return false;
 
-  if (
-    method === 'sessions.messages' &&
-    !['session.messages', 'session.deleted'].includes(notification.type)
-  )
+  const readsMessages = method === 'sessions.messages';
+  const messagesChanged = ['session.messages', 'session.deleted'].includes(notification.type);
+  if (readsMessages && !messagesChanged)
     return false;
 
   const topic = notification.type.split('.')[0];
@@ -48,7 +48,8 @@ export function queryAffected(input: {
     return false;
 
   const data = notification.data as Record<string, unknown> | undefined;
-  if (!data || typeof data !== 'object')
+  const hasMetadata = data && typeof data === 'object';
+  if (!hasMetadata)
     return true;
 
   for (const [key, value] of Object.entries(params)) {
@@ -56,15 +57,17 @@ export function queryAffected(input: {
       continue;
 
     // Tasks may move between projects; both the old and new lists must refresh.
-    if (method === 'tasks.list' && notification.type === 'task.updated')
+    const taskMayHaveMoved = method === 'tasks.list' && notification.type === 'task.updated';
+    if (taskMayHaveMoved)
       continue;
 
-    const ownerKey =
-      (key === 'runId' && topic === 'run') || (key === 'sessionId' && topic === 'session')
-        ? 'id'
-        : key;
-    if (data[ownerKey] !== undefined && data[ownerKey] !== value)
+    const refersToRun = key === 'runId' && topic === 'run';
+    const refersToSession = key === 'sessionId' && topic === 'session';
+    const ownerKey = refersToRun || refersToSession ? 'id' : key;
+    const observedOwner = data[ownerKey];
+    const hasDifferentOwner = observedOwner !== undefined && observedOwner !== value;
+    if (hasDifferentOwner)
       return false;
   }
   return true;
-}
+};

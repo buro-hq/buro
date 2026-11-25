@@ -14,13 +14,13 @@ const parameters = (properties: Record<string, unknown>, required: string[] = []
 });
 
 /** Registers optional collaboration as ordinary tools; no agent name selects a workflow. */
-export function sessionTools(input: {
+export const sessionTools = (input: {
   sessions: Sessions;
   models: Models;
   agents: Agents;
   events: Notifications;
-}): Tool[] {
-  async function related(argumentsValue: unknown, context: ToolContext): Promise<Session> {
+}): Tool[] => {
+  const related = async (argumentsValue: unknown, context: ToolContext): Promise<Session> => {
     const args = objectArguments(argumentsValue);
     const id = textArgument({
       arguments: args,
@@ -29,32 +29,30 @@ export function sessionTools(input: {
     const session = await input.sessions.get({
       id,
     });
-    if (
-      !session ||
-      (context.runId
-        ? session.runId !== context.runId
-        : session.id !== context.sessionId && session.parentId !== context.sessionId)
-    )
+    const sharesRun = session?.runId === context.runId;
+    const isCaller = session?.id === context.sessionId;
+    const isCollaborator = session?.parentId === context.sessionId;
+    const isRelated = context.runId ? sharesRun : isCaller || isCollaborator;
+    const isAccessible = session && isRelated;
+    if (!isAccessible)
       throw new ToolFailure('No such conversation in this work.');
 
     return session;
-  }
+  };
 
-  function summary(session: Session | undefined): string {
-    return JSON.stringify(
-      session
-        ? {
-            sessionId: session.id,
-            parentId: session.parentId,
-            agentId: session.agentId,
-            modelId: session.modelId,
-            status: session.status,
-            result: session.result,
-            error: session.error,
-          }
-        : { error: 'Session not found.' },
-    );
-  }
+  const summary = (session: Session | undefined): string => JSON.stringify(
+    session
+      ? {
+          sessionId: session.id,
+          parentId: session.parentId,
+          agentId: session.agentId,
+          modelId: session.modelId,
+          status: session.status,
+          result: session.result,
+          error: session.error,
+        }
+      : { error: 'Session not found.' },
+  );
 
   return [
     {
@@ -136,7 +134,8 @@ export function sessionTools(input: {
               id: agentId,
             })
           : undefined;
-        if (agentId && !agent)
+        const descriptionMissing = agentId && !agent;
+        if (descriptionMissing)
           throw new ToolFailure('Agent description not found.');
 
         const modelId = textArgument({
@@ -149,13 +148,16 @@ export function sessionTools(input: {
           name: 'instructions',
           optional: true,
         });
-        if (args.readOnly !== undefined && typeof args.readOnly !== 'boolean')
+        const hasReadOnly = args.readOnly !== undefined;
+        const invalidReadOnly = hasReadOnly && typeof args.readOnly !== 'boolean';
+        if (invalidReadOnly)
           throw new ToolFailure('readOnly must be a boolean.');
 
-        if (
-          args.tools !== undefined &&
-          (!Array.isArray(args.tools) || args.tools.some((name) => typeof name !== 'string'))
-        )
+        const { tools: requestedTools } = args;
+        const hasTools = requestedTools !== undefined;
+        const invalidTools = hasTools &&
+          (!Array.isArray(requestedTools) || requestedTools.some((name) => typeof name !== 'string'));
+        if (invalidTools)
           throw new ToolFailure('tools must be an array of tool names.');
 
         const requested = (args.tools as string[] | undefined) ?? agent?.tools;
@@ -291,4 +293,4 @@ export function sessionTools(input: {
       },
     },
   ];
-}
+};

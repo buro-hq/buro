@@ -52,6 +52,7 @@ export default [
       // Splitting inline JSX text can remove significant spaces between expressions.
       '@stylistic/jsx-one-expression-per-line': 'off',
       'one-var': ['error', 'never'],
+      'arrow-body-style': ['error', 'as-needed'],
       '@stylistic/linebreak-style': ['error', 'unix'],
       '@stylistic/nonblock-statement-body-position': ['error', 'below'],
       '@stylistic/operator-linebreak': ['error', 'after', { overrides: { '?': 'before', ':': 'before', '|': 'before', '&': 'before' } }],

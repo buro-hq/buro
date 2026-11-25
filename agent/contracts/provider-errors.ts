@@ -28,11 +28,12 @@ export class ProviderFailure extends Error {
 }
 
 /** Plain response data or a similarly named Error cannot declare a trusted transport outcome. */
-export function isProviderFailure(error: unknown): error is ProviderFailure {
-  return error instanceof ProviderFailure;
-}
+export const isProviderFailure = (error: unknown): error is ProviderFailure => error instanceof ProviderFailure;
 
 /** Inspect only a real direct failure; the host owns any explicit error/cause translation. */
-export function providerFailureOutcome(error: unknown): ProviderOutcome | undefined {
-  return isProviderFailure(error) ? error.outcome : undefined;
-}
+export const providerFailureOutcome = (error: unknown): ProviderOutcome | undefined => {
+  if (!isProviderFailure(error))
+    return undefined;
+
+  return error.outcome;
+};

@@ -37,7 +37,7 @@ const navigation = [
 type Page = (typeof navigation)[number]['id'];
 
 /** The frame owns navigation only. Feature pages read and mutate their own data. */
-export default function Application(): ReactElement {
+export const Application = (): ReactElement => {
   useLocale();
   const { connection } = useApplication();
   const projects = useApiQuery('projects.list', {});
@@ -51,10 +51,10 @@ export default function Application(): ReactElement {
   });
   const project =
     projects.data?.find((candidate) => candidate.id === projectId) ?? projects.data?.[0];
-  function navigate(next: Page): void {
+  const navigate = (next: Page): void => {
     setPage(next);
     setMobile(false);
-  }
+  };
   const sidebar = (
     <>
       <button className="brand" onClick={() => navigate('tasks')}>
@@ -205,4 +205,4 @@ export default function Application(): ReactElement {
       />
     </div>
   );
-}
+};

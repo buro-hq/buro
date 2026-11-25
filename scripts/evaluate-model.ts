@@ -98,12 +98,12 @@ interface Verification {
 }
 
 /** Evaluates behavior in a read-only process, keeping expected values in the parent. */
-async function verify(input: {
+const verify = async (input: {
   commands: SandboxedCommands;
   workspace: string;
   source: string;
   cases: OracleCase[];
-}): Promise<Verification> {
+}): Promise<Verification> => {
   const nonce = randomUUID();
   const inputs = input.cases.map(({ name: _name, expected: _expected, ...value }) => value);
   const result = await input.commands.run({
@@ -150,7 +150,7 @@ async function verify(input: {
       error: 'The independent verifier returned an invalid response.',
     };
   }
-}
+};
 
 const scenario = process.argv[2] ?? 'queue';
 if (!['queue', 'review'].includes(scenario))

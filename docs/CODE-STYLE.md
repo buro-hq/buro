@@ -10,6 +10,7 @@ ESLint Stylistic owns TS, TSX, JS and their module variants. Prettier owns CSS, 
 
 - Put the body of an unbraced `if` on the next line; a single `return` does not require braces. Existing braced blocks remain valid.
 - Separate successive checks and the following work with a blank line. Elsewhere, blank lines separate logical groups, rather than every statement.
+- Use concise expression bodies for arrows that only return a value. Async generators retain function expressions because JavaScript has no generator arrows.
 - Declare variables separately. Short arrays, method chains, positional arguments and returned objects can remain on one line.
 - Give every property of a nonempty object argument its own line, including constructor arguments and objects wrapped in TypeScript assertions or `satisfies`. Other short object literals can remain inline.
 - Keep spaces inside object, destructuring and import braces. Continued logical operators belong at the end of the previous line; type unions retain leading separators.
@@ -25,7 +26,7 @@ The 100-column ruler is an editing guide. ESLint formatting preserves authored l
 
 `eslint.config.mjs` adds correctness checks to the shared style configuration: ordinary JavaScript errors, unused values, duplicate imports, unobserved/misused promises in application code and the classic React Hooks rules. React dependency diagnostics are warnings. Existing TypeScript configurations remain responsible for type checking. Error-cause construction follows module contracts; `AggregateError` can already retain multiple failures without a mandated single cause.
 
-Names should be short when their context is clear. Name the parts of a compound condition, then combine those variables in one `if`. Prefer arrow functions outside classes, concise expression bodies, `async/await`, named exports and explicit public contracts. Framework configuration files may require default exports. Comments inside functions explain nonobvious reasons. These semantic choices remain review guidance; formatting does not rewrite function definitions, choose names, or rearrange execution.
+Names should be short when their context is clear. Name the parts of a compound condition, then combine those variables in one `if`. Prefer arrow functions outside classes, concise expression bodies, `async/await`, named exports and explicit public contracts. Framework configuration files may require default exports. Comments inside functions explain nonobvious reasons. These semantic choices remain review guidance; formatting does not convert declarations to arrows, choose names, or rearrange execution. Promise tails that reserve serialized work before yielding remain explicit; changing them to a simple await can introduce races.
 
 ## Commands and editors
 

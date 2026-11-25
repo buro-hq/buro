@@ -24,7 +24,7 @@ const privatePatterns = [
 ].map((pattern) => ':(glob,exclude,icase)' + pattern);
 
 /** Captures files through a private index, without changing the workspace's staged changes. */
-export async function captureGitTree(input: { workspace: string; base: string }): Promise<string> {
+export const captureGitTree = async (input: { workspace: string; base: string }): Promise<string> => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-snapshot-'));
   const options = { cwd: input.workspace, indexFile: path.join(directory, 'index') };
   try {
@@ -40,4 +40,4 @@ export async function captureGitTree(input: { workspace: string; base: string })
       force: true,
     });
   }
-}
+};

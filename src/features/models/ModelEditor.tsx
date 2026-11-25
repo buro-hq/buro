@@ -22,50 +22,49 @@ import { ErrorNotice } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 
 /** Edits a connection without starting inference or replacing an omitted credential. */
-export function ModelEditor(input: {
+export const ModelEditor = (input: {
   model?: ModelConfigurationView;
   onClose(): void;
-}): ReactElement {
+}): ReactElement => {
+  const { model: connection, onClose } = input;
   const { client } = useApplication();
   const transports = useApiQuery('models.transports', {});
   const action = useOperation();
   const discovery = useOperation();
-  const [name, setName] = useState(input.model?.name ?? '');
-  const [transport, setTransport] = useState(input.model?.transport ?? 'openai-compatible');
-  const [endpoint, setEndpoint] = useState(input.model?.endpoint ?? '');
-  const [model, setModel] = useState(input.model?.model ?? '');
+  const [name, setName] = useState(connection?.name ?? '');
+  const [transport, setTransport] = useState(connection?.transport ?? 'openai-compatible');
+  const [endpoint, setEndpoint] = useState(connection?.endpoint ?? '');
+  const [modelId, setModelId] = useState(connection?.model ?? '');
   const [key, setKey] = useState('');
   const [removeKey, setRemoveKey] = useState(false);
-  const [local, setLocal] = useState(input.model?.local ?? true);
-  const [thinking, setThinking] = useState(input.model?.thinking ?? true);
+  const [local, setLocal] = useState(connection?.local ?? true);
+  const [thinking, setThinking] = useState(connection?.thinking ?? true);
   const [contextTokens, setContextTokens] = useState<string | number>(
-    input.model?.contextTokens ?? 32768,
+    connection?.contextTokens ?? 32768,
   );
-  const [outputTokens, setOutputTokens] = useState<string | number>(input.model?.outputTokens ?? 8192);
-  const [effort, setEffort] = useState(input.model?.reasoningEffort ?? '');
-  const [capacity, setCapacity] = useState<string | number>(input.model?.capacity ?? '');
-  const [retries, setRetries] = useState<string | number>(input.model?.retries ?? '');
+  const [outputTokens, setOutputTokens] = useState<string | number>(connection?.outputTokens ?? 8192);
+  const [effort, setEffort] = useState(connection?.reasoningEffort ?? '');
+  const [capacity, setCapacity] = useState<string | number>(connection?.capacity ?? '');
+  const [retries, setRetries] = useState<string | number>(connection?.retries ?? '');
   const [advanced, setAdvanced] = useState(false);
   const [asDefault, setAsDefault] = useState(false);
   const [catalogue, setCatalogue] = useState<AvailableModel[]>([]);
-  function configuration(): ModelConfigurationInput['configuration'] {
-    return {
-      id: input.model?.id,
-      name,
-      transport,
-      endpoint: endpoint.trim(),
-      model: model.trim(),
-      local,
-      thinking,
-      contextTokens: Number(contextTokens),
-      outputTokens: Number(outputTokens),
-      reasoningEffort: effort.trim() || null,
-      capacity: capacity === '' ? null : Number(capacity),
-      retries: retries === '' ? null : Number(retries),
-    };
-  }
+  const configuration = (): ModelConfigurationInput['configuration'] => ({
+    id: connection?.id,
+    name,
+    transport,
+    endpoint: endpoint.trim(),
+    model: modelId.trim(),
+    local,
+    thinking,
+    contextTokens: Number(contextTokens),
+    outputTokens: Number(outputTokens),
+    reasoningEffort: effort.trim() || null,
+    capacity: capacity === '' ? null : Number(capacity),
+    retries: retries === '' ? null : Number(retries),
+  });
   const credential = () => (removeKey ? null : key || undefined);
-  async function discover(): Promise<void> {
+  const discover = async (): Promise<void> => {
     const found = await discovery.perform(async () => {
       const result = await client.call('models.discover', {
         configuration: configuration(),
@@ -75,8 +74,8 @@ export function ModelEditor(input: {
     });
     if (found.value)
       setCatalogue(found.value);
-  }
-  async function save(): Promise<void> {
+  };
+  const save = async (): Promise<void> => {
     const saved = await action.perform(async () => {
       const result = await client.call('models.save', {
         configuration: configuration(),
@@ -86,13 +85,13 @@ export function ModelEditor(input: {
       return { ok: result.ok, error: result.error };
     });
     if (saved.ok)
-      input.onClose();
-  }
+      onClose();
+  };
   return (
     <Modal
       opened
-      onClose={input.onClose}
-      title={t(input.model ? 'Edit model' : 'Add model')}
+      onClose={onClose}
+      title={t(connection ? 'Edit model' : 'Add model')}
       size="lg"
     >
       <Stack>
@@ -127,13 +126,13 @@ export function ModelEditor(input: {
         />
         <PasswordInput
           label={t('API key')}
-          placeholder={input.model?.hasApiKey ? t('Leave empty to keep the saved key') : ''}
+          placeholder={connection?.hasApiKey ? t('Leave empty to keep the saved key') : ''}
           value={key}
           onChange={(event) => setKey(event.currentTarget.value)}
           disabled={removeKey}
           autoComplete="new-password"
         />
-        {input.model?.hasApiKey && (
+        {connection?.hasApiKey && (
           <Checkbox
             label={t('Remove saved key')}
             checked={removeKey}
@@ -143,8 +142,8 @@ export function ModelEditor(input: {
         <Group align="end">
           <TextInput
             label={t('Model ID')}
-            value={model}
-            onChange={(event) => setModel(event.currentTarget.value)}
+            value={modelId}
+            onChange={(event) => setModelId(event.currentTarget.value)}
             style={{ flex: 1 }}
           />
           <Button variant="default" loading={discovery.busy} onClick={() => void discover()}>
@@ -156,10 +155,10 @@ export function ModelEditor(input: {
           <Select
             label={t('Available models')}
             searchable
-            value={catalogue.some((item) => item.id === model) ? model : null}
+            value={catalogue.some((item) => item.id === modelId) ? modelId : null}
             onChange={(value) => {
               if (value)
-                setModel(value);
+                setModelId(value);
             }}
             data={catalogue.map((item) => ({
               value: item.id,
@@ -226,7 +225,7 @@ export function ModelEditor(input: {
         />
         <ErrorNotice error={action.error} />
         <Group justify="end">
-          <Button variant="default" onClick={input.onClose}>
+          <Button variant="default" onClick={onClose}>
             {t('Cancel')}
           </Button>
           <Button loading={action.busy} onClick={() => void save()}>
@@ -236,4 +235,4 @@ export function ModelEditor(input: {
       </Stack>
     </Modal>
   );
-}
+};

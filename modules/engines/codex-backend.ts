@@ -120,13 +120,16 @@ export class CodexBackend implements SessionBackend {
           throw new Error('This native server request is unsupported.');
 
         const params = object(message.params);
-        if (typeof params.callId !== 'string' || typeof params.tool !== 'string')
+        const { callId, tool } = params;
+        const hasCallId = typeof callId === 'string';
+        const hasTool = typeof tool === 'string';
+        if (!hasCallId || !hasTool)
           throw new Error('Invalid native tool request.');
 
         try {
           const result = await input.executeTool({
-            id: params.callId,
-            name: params.tool,
+            id: callId,
+            name: tool,
             arguments: params.arguments,
           });
           return {
@@ -167,11 +170,13 @@ export class CodexBackend implements SessionBackend {
       }
 
       const params = object(message.params);
-      if (params.threadId !== threadId || !threadId)
+      const belongsToTurn = threadId && params.threadId === threadId;
+      if (!belongsToTurn)
         return;
 
       observer(input.onProgress);
-      if (message.method === 'item/agentMessage/delta' && typeof params.delta === 'string')
+      const isTextDelta = message.method === 'item/agentMessage/delta' && typeof params.delta === 'string';
+      if (isTextDelta)
         observer(() => input.onEvent?.({
           type: 'text.delta',
           text: String(params.delta),
@@ -179,8 +184,10 @@ export class CodexBackend implements SessionBackend {
 
       if (message.method === 'item/completed') {
         const item = object(params.item);
-        if (item.type === 'agentMessage' && typeof item.text === 'string')
-          answer = item.text;
+        const { type, text } = item;
+        const isAssistantText = type === 'agentMessage' && typeof text === 'string';
+        if (isAssistantText)
+          answer = text;
       }
 
       if (message.method === 'thread/tokenUsage/updated') {

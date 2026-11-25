@@ -8,20 +8,20 @@ import { useOperation } from '../common/operation.ts';
 import { uploadedFile } from '../materials/upload.ts';
 
 /** Saves user intent and optional attachments without imposing an acceptance form. */
-export function TaskEditor(input: {
+export const TaskEditor = (input: {
   projectId: string;
   task?: Task;
   opened: boolean;
   onClose(): void;
   onSaved(task: Task, start: boolean): void;
-}): ReactElement {
+}): ReactElement => {
   const { client } = useApplication();
   const action = useOperation();
   const [id, setId] = useState(input.task?.id);
   const [title, setTitle] = useState(input.task?.title ?? '');
   const [description, setDescription] = useState(input.task?.description ?? '');
   const [files, setFiles] = useState<File[]>([]);
-  async function save(start: boolean): Promise<void> {
+  const save = async (start: boolean): Promise<void> => {
     const result = await action.perform(async () => {
       const fields = { projectId: input.projectId, title, description };
       const task = id
@@ -52,7 +52,7 @@ export function TaskEditor(input: {
     });
     if (result.value)
       input.onSaved(result.value, start);
-  }
+  };
   return (
     <Modal
       opened={input.opened}
@@ -107,4 +107,4 @@ export function TaskEditor(input: {
       </form>
     </Modal>
   );
-}
+};

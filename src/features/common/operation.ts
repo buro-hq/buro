@@ -18,7 +18,7 @@ export interface Operation {
 }
 
 /** Captures action feedback without replaying failed mutations after reconnecting. */
-export function useOperation(): Operation {
+export const useOperation = (): Operation => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   return {
@@ -43,4 +43,4 @@ export function useOperation(): Operation {
       }
     },
   };
-}
+};

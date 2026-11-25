@@ -24,7 +24,9 @@ export class ModelBackend implements SessionBackend {
     this.revision = input.provider.revision;
     this.retries = input.retries ?? 2;
     this.retryDelayMs = input.retryDelayMs ?? 250;
-    if (!Number.isSafeInteger(this.retries) || this.retries < 0)
+    const hasWholeRetries = Number.isSafeInteger(this.retries);
+    const hasNonnegativeRetries = this.retries >= 0;
+    if (!hasWholeRetries || !hasNonnegativeRetries)
       throw new Error('HTTP retries must be a nonnegative integer.');
   }
 
@@ -35,7 +37,10 @@ export class ModelBackend implements SessionBackend {
 
   /** Delegates optional transport metadata discovery. */
   async listModels(input: { signal: AbortSignal }): Promise<AvailableModel[]> {
-    return this.provider.listModels ? this.provider.listModels(input.signal) : [];
+    if (!this.provider.listModels)
+      return [];
+
+    return this.provider.listModels(input.signal);
   }
 
   /** Sends only portable request fields to the model provider. */
@@ -57,12 +62,11 @@ export class ModelBackend implements SessionBackend {
           schema: structuredClone(request.schema),
         });
       } catch (error) {
-        if (
-          request.signal.aborted ||
-          attempt >= this.retries ||
-          !isProviderFailure(error) ||
-          !['MODEL_STREAM_INTERRUPTED', 'MODEL_UNAVAILABLE'].includes(error.code)
-        )
+        const wasAborted = request.signal.aborted;
+        const retriesExhausted = attempt >= this.retries;
+        const isTemporaryFailure = isProviderFailure(error) &&
+          ['MODEL_STREAM_INTERRUPTED', 'MODEL_UNAVAILABLE'].includes(error.code);
+        if (wasAborted || retriesExhausted || !isTemporaryFailure)
           throw error;
 
         const delayMs = Math.min(30000, this.retryDelayMs * 2 ** attempt);

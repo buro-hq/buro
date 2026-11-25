@@ -10,10 +10,8 @@ export interface ContextInput {
 }
 
 /** Builds a bounded portable request while retaining whole tool-call/result exchanges. */
-export function conversationContext(input: ContextInput): ModelMessage[] {
-  const messages = input.messages.map(({ modelId: _modelId, id: _id, ...message }) => {
-    return structuredClone(message);
-  });
+export const conversationContext = (input: ContextInput): ModelMessage[] => {
+  const messages = input.messages.map(({ modelId: _modelId, id: _id, ...message }) => structuredClone(message));
   const groups: ModelMessage[][] = [];
   for (const message of messages) {
     if (message.role === 'tool' && groups.length)
@@ -85,4 +83,4 @@ export function conversationContext(input: ContextInput): ModelMessage[] {
     }
   }
   return result;
-}
+};

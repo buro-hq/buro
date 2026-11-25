@@ -1,5 +1,5 @@
 /** Portable provider entry point. No application runtime, filesystem, or Codex dependency. */
-export { OllamaProvider, type OllamaOptions } from './ollama.ts';
+export { OllamaProvider, type OllamaOptions, type OllamaModelInfo } from './ollama.ts';
 export { DeepSeekProvider, type DeepSeekOptions } from './deepseek.ts';
 export { OpenAICompatibleProvider, type OpenAICompatibleOptions } from './openai-compatible.ts';
 export type { ModelSamplingSettings } from './sampling.ts';

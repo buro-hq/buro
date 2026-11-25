@@ -157,7 +157,7 @@ export class NativeSandbox implements CommandSandbox {
     if (existsSync(gitMetadata))
       args.push('--ro-bind', gitMetadata, gitMetadata);
 
-    async function inspect(directory: string): Promise<void> {
+    const inspect = async (directory: string): Promise<void> => {
       input.signal.throwIfAborted();
       for (const entry of await fs.readdir(directory, {
         withFileTypes: true,
@@ -190,7 +190,7 @@ export class NativeSandbox implements CommandSandbox {
         )
           await inspect(filename);
       }
-    }
+    };
     for (const root of new Set([source, workspace]))
       await inspect(root);
     for (const value of protectedPaths)

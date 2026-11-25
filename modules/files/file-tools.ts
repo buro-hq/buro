@@ -9,7 +9,7 @@ const string = { type: 'string' };
 const integer = { type: 'integer', minimum: 1 };
 
 /** File operations execute inside the command sandbox, including their final filesystem access. */
-export function fileTools(input: { commands: Commands; projects: Projects }): Tool[] {
+export const fileTools = (input: { commands: Commands; projects: Projects }): Tool[] => {
   const definitions = [
     {
       name: 'list_files',
@@ -96,4 +96,4 @@ export function fileTools(input: { commands: Commands; projects: Projects }): To
       };
     },
   }));
-}
+};

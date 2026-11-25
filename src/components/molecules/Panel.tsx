@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
-export function Panel({
+import type { ReactNode, ReactElement } from 'react';
+/** Groups a feature title, optional context and its content. */
+export const Panel = ({
   title,
   description,
   aside,
@@ -11,17 +12,15 @@ export function Panel({
   aside?: ReactNode;
   children?: ReactNode;
   className?: string;
-}) {
-  return (
-    <section className={`content-panel ${className}`}>
-      <div className="section-heading">
-        <div>
-          <h2>{title}</h2>
-          {description && <p className="caption">{description}</p>}
-        </div>
-        {aside}
+}): ReactElement => (
+  <section className={`content-panel ${className}`}>
+    <div className="section-heading">
+      <div>
+        <h2>{title}</h2>
+        {description && <p className="caption">{description}</p>}
       </div>
-      {children}
-    </section>
-  );
-}
+      {aside}
+    </div>
+    {children}
+  </section>
+);

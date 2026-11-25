@@ -3,6 +3,8 @@ import type {
   ModelMessage,
   ModelProvider,
   ModelToolCall,
+  ModelCompletion,
+  AvailableModel,
 } from '../contracts/model.ts';
 import {
   RequestGate,
@@ -28,6 +30,16 @@ export type OllamaOptions = HttpOptions & {
   sampling?: ModelSamplingSettings;
 };
 type Options = OllamaOptions;
+/** Observed endpoint metadata; the caller decides which capabilities its work needs. */
+export interface OllamaModelInfo {
+  id: string;
+  local: boolean;
+  remote: boolean;
+  capabilities: string[];
+  contextTokens?: number;
+  thinkingValues: unknown[];
+}
+
 const failure = (code: string, message: string) =>
   new ProviderFailure(code, message, {
     outcome: 'unknown',
@@ -126,7 +138,8 @@ export class OllamaProvider implements ModelProvider {
     return projected;
   }
 
-  async listModels(signal: AbortSignal) {
+  /** Lists installed model identifiers without loading them for generation. */
+  async listModels(signal: AbortSignal): Promise<AvailableModel[]> {
     return this.gate.run(signal, async () => {
       const result = object(await json(await request(this.options, 'api/tags', {
         signal,
@@ -144,7 +157,8 @@ export class OllamaProvider implements ModelProvider {
     });
   }
 
-  async inspect(model: string, signal: AbortSignal) {
+  /** Reads current capabilities and context metadata from the configured endpoint. */
+  async inspect(model: string, signal: AbortSignal): Promise<OllamaModelInfo> {
     return this.gate.run(signal, async () => {
       const result = object(
         await json(
@@ -178,7 +192,8 @@ export class OllamaProvider implements ModelProvider {
     });
   }
 
-  async complete(input: Parameters<ModelProvider['complete']>[0]) {
+  /** Completes one streamed request, keeping thinking separate from portable public text. */
+  async complete(input: Parameters<ModelProvider['complete']>[0]): Promise<ModelCompletion> {
     return this.gate.run(input.signal, async () => {
       const emit = (event: import('../contracts/model.ts').ModelStreamEvent) => {
         if (input.onEvent)
@@ -254,7 +269,8 @@ export class OllamaProvider implements ModelProvider {
             const fn = object(call.function);
             const index = tokenCount(call.index) ?? tokenCount(fn.index) ?? calls.size;
             const current = calls.get(index) || { name: '', fragments: '' };
-            if (typeof fn.name === 'string' && fn.name !== current.name)
+            const hasNameFragment = typeof fn.name === 'string' && fn.name !== current.name;
+            if (hasNameFragment)
               current.name += fn.name;
 
             if (typeof fn.arguments === 'string') {
@@ -266,10 +282,10 @@ export class OllamaProvider implements ModelProvider {
               if (current.fragments)
                 throw failure('MODEL_INVALID_RESPONSE', 'Ollama mixed tool argument formats.');
 
-              if (
-                current.args !== undefined &&
-                JSON.stringify(current.args) !== JSON.stringify(fn.arguments)
-              )
+              const hasArguments = current.args !== undefined;
+              const hasConflictingArguments = hasArguments &&
+                JSON.stringify(current.args) !== JSON.stringify(fn.arguments);
+              if (hasConflictingArguments)
                 throw failure(
                   'MODEL_INVALID_RESPONSE',
                   'Ollama returned conflicting tool arguments.',
@@ -307,7 +323,10 @@ export class OllamaProvider implements ModelProvider {
             arguments: call.fragments ? parseJSON(call.fragments) : (call.args ?? {}),
           };
         });
-      if (!toolCalls.length && reason === 'stop' && !content.trim())
+      const hasCalls = toolCalls.length > 0;
+      const hasAnswer = Boolean(content.trim());
+      const stoppedWithoutAnswer = !hasCalls && reason === 'stop' && !hasAnswer;
+      if (stoppedWithoutAnswer)
         throw failure('MODEL_INVALID_RESPONSE', 'Ollama completed without an assistant answer.');
 
       const completion = {

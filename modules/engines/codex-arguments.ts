@@ -1,4 +1,7 @@
-function toml(value: unknown): string {
+import os from 'node:os';
+import path from 'node:path';
+import { existsSync, realpathSync } from 'node:fs';
+const toml = (value: unknown): string => {
   if (Array.isArray(value))
     return '[' + value.map(toml).join(',') + ']';
 
@@ -12,13 +15,16 @@ function toml(value: unknown): string {
     );
 
   return JSON.stringify(value);
+};
+
+/** Native launch settings built from the host's explicit tool permissions. */
+export interface CodexArguments {
+  args: string[];
+  permissions: string;
 }
 
 /** Keeps native workspace effects in the registered host tools, independently of agent instructions. */
-export function codexArguments(input: { prefix?: string[]; deniedPaths?: string[] } = {}): {
-  args: string[];
-  permissions: string;
-} {
+export const codexArguments = (input: { prefix?: string[]; deniedPaths?: string[] } = {}): CodexArguments => {
   const permissions = 'buro_tool_host';
   const filesystem: Record<string, string> = { '/': 'deny', ':minimal': 'read' };
   for (const target of [
@@ -59,7 +65,4 @@ export function codexArguments(input: { prefix?: string[]; deniedPaths?: string[
       '--stdio',
     ],
   };
-}
-import os from 'node:os';
-import path from 'node:path';
-import { existsSync, realpathSync } from 'node:fs';
+};

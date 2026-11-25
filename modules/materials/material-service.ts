@@ -10,10 +10,10 @@ import type {
   Materials,
 } from './material.ts';
 
-function metadata(record: MaterialRecord): Material {
+const metadata = (record: MaterialRecord): Material => {
   const { text: _text, contentBase64: _bytes, ...material } = record;
   return material;
-}
+};
 
 /** Owns context copies; format selection is ordinary registration order with working defaults. */
 export class MaterialService implements Materials {
@@ -42,7 +42,10 @@ export class MaterialService implements Materials {
   /** Reads metadata without returning document text or bytes. */
   async get(input: { id: string }): Promise<Material | undefined> {
     const record = await this.store.get(input.id);
-    return record ? metadata(record) : undefined;
+    if (!record)
+      return undefined;
+
+    return metadata(record);
   }
 
   /** Saves uploaded content as one atomic record and emits only metadata. */

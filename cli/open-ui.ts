@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { apiCredential } from '../modules/api/credentials.ts';
 
 /** Opens the local UI with a temporary fragment credential, removed by the browser on startup. */
-export async function openUi(input: { directory: string; url?: string }): Promise<void> {
+export const openUi = async (input: { directory: string; url?: string }): Promise<void> => {
   const url = new URL(input.url ?? 'http://127.0.0.1:4317');
   if (
     !['http:', 'https:'].includes(url.protocol) ||
@@ -29,4 +29,4 @@ export async function openUi(input: { directory: string; url?: string }): Promis
   } catch {
     throw new Error('The browser could not be opened. Start Buro again to reconnect it.');
   }
-}
+};

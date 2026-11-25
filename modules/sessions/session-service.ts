@@ -37,11 +37,14 @@ const latestAssistant = (messages: SessionMessage[]): SessionMessage | undefined
   return undefined;
 };
 
-function reportedTokens(input: { previous?: number; current?: number }): number | undefined {
-  return input.previous === undefined && input.current === undefined
-    ? undefined
-    : (input.previous ?? 0) + (input.current ?? 0);
-}
+const reportedTokens = (input: { previous?: number; current?: number }): number | undefined => {
+  const { previous, current } = input;
+  const hasReportedUsage = previous !== undefined || current !== undefined;
+  if (!hasReportedUsage)
+    return undefined;
+
+  return (previous ?? 0) + (current ?? 0);
+};
 
 /** Runs one common model/tool loop for any task and any agent description. */
 export class SessionService implements Sessions {
@@ -151,7 +154,10 @@ export class SessionService implements Sessions {
         return { ok: false, interrupted: true, error: 'Waiting was interrupted.' };
 
       const session = await this.store.get(input.id);
-      return session ? { ok: true, session } : { ok: false, error: 'Session not found.' };
+      if (!session)
+        return { ok: false, error: 'Session not found.' };
+
+      return { ok: true, session };
     } finally {
       input.signal?.removeEventListener('abort', onAbort);
       if (caller)
@@ -195,9 +201,10 @@ export class SessionService implements Sessions {
   /** Selects the next model without changing identity or dropping shared history. */
   async switchModel(input: { sessionId: string; modelId: string }): Promise<boolean> {
     const session = await this.store.get(input.sessionId);
-    if (!session || !this.models.get({
+    const canSelect = session && this.models.get({
       id: input.modelId,
-    }))
+    });
+    if (!canSelect)
       return false;
 
     const active = this.active.get(input.sessionId);
@@ -316,7 +323,9 @@ export class SessionService implements Sessions {
             error: 'The selected model is unavailable.',
           });
 
-        if (input.maxRequests !== undefined && requests >= input.maxRequests)
+        const { maxRequests } = input;
+        const allowanceReached = maxRequests !== undefined && requests >= maxRequests;
+        if (allowanceReached)
           return await this.finish(session, {
             ok: false,
             sessionId: session.id,
@@ -419,10 +428,9 @@ export class SessionService implements Sessions {
         // Correlation IDs are a transport boundary, not an agent policy. Invalid batches
         // cannot be executed or appended as an ambiguous tool exchange.
         const calls = response.message.toolCalls ?? [];
-        if (
-          calls.some((call) => !call.id || !call.name) ||
-          new Set(calls.map((call) => call.id)).size !== calls.length
-        )
+        const hasIncompleteCalls = calls.some(({ id, name }) => !id || !name);
+        const hasDuplicateCalls = new Set(calls.map(({ id }) => id)).size !== calls.length;
+        if (hasIncompleteCalls || hasDuplicateCalls)
           return await this.finish(session, {
             ok: false,
             sessionId: session.id,
@@ -458,7 +466,8 @@ export class SessionService implements Sessions {
         });
         await this.save(session);
         const switched = this.active.get(session.id)?.modelId;
-        if (switched && switched !== model.id) {
+        const modelChanged = switched && switched !== model.id;
+        if (modelChanged) {
           session = {
             ...session,
             modelId: switched,
@@ -484,7 +493,9 @@ export class SessionService implements Sessions {
           continue;
         }
 
-        if (response.finish === 'length' || (calls.length > 0 && response.finish === 'stop')) {
+        const outputTruncated = response.finish === 'length';
+        const proposalIncomplete = calls.length > 0 && response.finish === 'stop';
+        if (outputTruncated || proposalIncomplete) {
           session = {
             ...session,
             messages: [

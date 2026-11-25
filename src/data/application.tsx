@@ -15,7 +15,7 @@ export type { QueryResult } from './query-subscription.ts';
 
 const credentialKey = 'buro.local-api-credential';
 
-function browserCredential(): string {
+const browserCredential = (): string => {
   const fragment = new URLSearchParams(window.location.hash.slice(1));
   const token = fragment.get('buro-token');
   if (token) {
@@ -42,7 +42,7 @@ function browserCredential(): string {
   } catch {
     return '';
   }
-}
+};
 
 interface ApplicationContext {
   client: ApiClient;
@@ -52,7 +52,7 @@ interface ApplicationContext {
 const context = createContext<ApplicationContext | undefined>(undefined);
 
 /** Shares the connection while each feature owns its query data and subscriptions. */
-export function ApplicationProvider(input: { children: ReactNode; url?: string }): ReactElement {
+export const ApplicationProvider = (input: { children: ReactNode; url?: string }): ReactElement => {
   const [token, setToken] = useState(browserCredential);
   const client = useMemo(
     () => new ApiClient({
@@ -95,22 +95,22 @@ export function ApplicationProvider(input: { children: ReactNode; url?: string }
     };
   }, [client]);
   return <context.Provider value={{ client, connection }}>{input.children}</context.Provider>;
-}
+};
 
 /** Returns the shared local connection, never a mutable server-state projection. */
-export function useApplication(): ApplicationContext {
+export const useApplication = (): ApplicationContext => {
   const value = useContext(context);
   if (!value)
     throw new Error('ApplicationProvider is missing.');
 
   return value;
-}
+};
 
 /** Refreshes read operations only; commands cannot accidentally be replayed by this hook. */
-export function useApiQuery<K extends keyof ApiQueries>(
+export const useApiQuery = <K extends keyof ApiQueries>(
   method: K,
   params: ApiQueries[K]['params'] | undefined,
-): QueryResult<ApiQueries[K]['result']> {
+): QueryResult<ApiQueries[K]['result']> => {
   const { client } = useApplication();
   const serialized = JSON.stringify(params);
   const key = method + ':' + serialized;
@@ -153,5 +153,9 @@ export function useApiQuery<K extends keyof ApiQueries>(
       offConnection();
     };
   }, [client, method, serialized, key]);
-  return state.key === key ? state : { loading: params !== undefined };
-}
+  const isCurrentQuery = state.key === key;
+  if (isCurrentQuery)
+    return state;
+
+  return { loading: params !== undefined };
+};

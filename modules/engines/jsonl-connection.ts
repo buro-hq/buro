@@ -64,7 +64,9 @@ export class JsonlConnection {
       let message: RpcMessage;
       try {
         const value: unknown = JSON.parse(line);
-        if (!value || typeof value !== 'object' || Array.isArray(value))
+        const isObject = value && typeof value === 'object';
+        const isFrame = isObject && !Array.isArray(value);
+        if (!isFrame)
           throw new Error('Invalid frame');
 
         message = value as RpcMessage;
@@ -73,7 +75,9 @@ export class JsonlConnection {
         void this.close();
         return;
       }
-      if (message.id !== undefined && !message.method) {
+      const hasId = message.id !== undefined;
+      const hasMethod = Boolean(message.method);
+      if (hasId && !hasMethod) {
         const pending = typeof message.id === 'number' ? this.pending.get(message.id) : undefined;
         if (!pending)
           return;
@@ -83,7 +87,7 @@ export class JsonlConnection {
           pending.reject(new Error(message.error.message ?? 'Native RPC request failed.'));
         else
           pending.resolve(message.result);
-      } else if (message.id !== undefined && message.method) {
+      } else if (hasId && hasMethod) {
         if (!this.request) {
           this.send({
             id: message.id,
@@ -92,17 +96,7 @@ export class JsonlConnection {
           return;
         }
 
-        void this.request(message).then(
-          (result) => this.send({
-            id: message.id,
-            result,
-          }),
-          () =>
-            this.send({
-              id: message.id,
-              error: { message: 'The host could not execute this tool.' },
-            }),
-        );
+        void this.respond(message).catch((error) => this.fail(error));
       } else
         this.notify(message);
     });
@@ -124,7 +118,8 @@ export class JsonlConnection {
 
   /** Calls a native method; cancellation is owned by the surrounding backend request. */
   call(method: string, params: unknown): Promise<unknown> {
-    if (this.closed || this.closing)
+    const isClosing = this.closed || this.closing;
+    if (isClosing)
       return Promise.reject(new Error('The native controller is closed.'));
 
     const id = ++this.sequence;
@@ -177,6 +172,16 @@ export class JsonlConnection {
       this.lines.close();
       this.fail(new Error('The native controller is closed.'));
     })());
+  }
+
+  private async respond(message: RpcMessage): Promise<void> {
+    let response: RpcMessage;
+    try {
+      response = { id: message.id, result: await this.request!(message) };
+    } catch {
+      response = { id: message.id, error: { message: 'The host could not execute this tool.' } };
+    }
+    this.send(response);
   }
 
   private fail(error: Error): void {

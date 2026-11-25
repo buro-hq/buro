@@ -10,7 +10,7 @@ export type DocumentExtractor = (
   signal: AbortSignal,
 ) => Promise<string>;
 /** Document tools can only see a private temporary copy of the already authorized bytes. */
-export const extractDocument: DocumentExtractor = async (bytes, format, signal) => {
+export const extractDocument: DocumentExtractor = async (bytes, format, signal): Promise<string> => {
   signal.throwIfAborted();
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-document-'));
   try {

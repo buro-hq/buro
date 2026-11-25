@@ -20,7 +20,7 @@ import { useOperation } from '../common/operation.ts';
 import { TaskEditor } from './TaskEditor.tsx';
 
 /** Owns task editing and explicit run options; it never reconstructs server state from events. */
-export function TasksPage(input: { projectId: string; onRun(id: string): void }): ReactElement {
+export const TasksPage = (input: { projectId: string; onRun(id: string): void }): ReactElement => {
   const { client } = useApplication();
   const tasks = useApiQuery('tasks.list', {
     projectId: input.projectId,
@@ -32,7 +32,7 @@ export function TasksPage(input: { projectId: string; onRun(id: string): void })
   const [modelId, setModelId] = useState<string | null>(null);
   const [instructions, setInstructions] = useState('');
   const [readOnly, setReadOnly] = useState(false);
-  async function start(taskId: string): Promise<void> {
+  const start = async (taskId: string): Promise<void> => {
     const options: RunOptions = {
       ...(modelId ? { modelId } : {}),
       ...(instructions ? { instructions } : {}),
@@ -47,7 +47,7 @@ export function TasksPage(input: { projectId: string; onRun(id: string): void })
     });
     if (result.value)
       input.onRun(result.value.id);
-  }
+  };
   return (
     <Panel
       title={t('Goals')}
@@ -144,4 +144,4 @@ export function TasksPage(input: { projectId: string; onRun(id: string): void })
       )}
     </Panel>
   );
-}
+};

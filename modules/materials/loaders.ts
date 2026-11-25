@@ -2,7 +2,7 @@ import { extractDocument } from './extract-document.ts';
 import type { MaterialLoader } from './material.ts';
 
 /** Format adapters preserve a reference when extraction is unavailable; they never claim to analyze absent pixels. */
-export function materialLoaders(): MaterialLoader[] {
+export const materialLoaders = (): MaterialLoader[] => {
   const images: Record<string, string> = {
     png: 'image/png',
     jpg: 'image/jpeg',
@@ -66,4 +66,4 @@ export function materialLoaders(): MaterialLoader[] {
       },
     },
   ];
-}
+};

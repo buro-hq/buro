@@ -146,7 +146,7 @@ test(
                   '/__features.html',
                   `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module">
           import '@mantine/core/styles.css'; import '/src/styles.css'; import '/src/styles/features.css';
-          import React from 'react'; import {createRoot} from 'react-dom/client'; import Application from '/src/Application.tsx';
+          import React from 'react'; import {createRoot} from 'react-dom/client'; import {Application} from '/src/Application.tsx';
           import {AppearanceProvider} from '/src/theme/AppearanceProvider.tsx'; import {ApplicationProvider} from '/src/data/application.tsx';
           createRoot(document.getElementById('root')).render(React.createElement(AppearanceProvider,null,React.createElement(ApplicationProvider,{url:'ws://127.0.0.1:${api.port}'},React.createElement(Application))));
         </script></body></html>`,

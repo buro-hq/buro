@@ -19,7 +19,7 @@ const fileStatusLabels: Record<string, string> = {
 const changedFileStatus = (file: ChangedFile): string =>
   t(fileStatusLabels[file.status] ?? 'Changed');
 
-function Changes(input: { runId: string }): ReactElement {
+const Changes = (input: { runId: string }): ReactElement => {
   const { client } = useApplication();
   const changes = useApiQuery('results.inspect', {
     runId: input.runId,
@@ -54,14 +54,14 @@ function Changes(input: { runId: string }): ReactElement {
       )}
     </Stack>
   );
-}
+};
 
 /** A run owns its workspace and sessions; combining its result stays an explicit user action. */
-export function RunDetail(input: {
+export const RunDetail = (input: {
   id: string;
   onRun(id: string): void;
   onBack(): void;
-}): ReactElement {
+}): ReactElement => {
   const { client } = useApplication();
   const run = useApiQuery('runs.get', {
     id: input.id,
@@ -163,4 +163,4 @@ export function RunDetail(input: {
       </Tabs>
     </Stack>
   );
-}
+};

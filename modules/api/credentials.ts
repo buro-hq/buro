@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 
 /** Reads or creates the local UI/CLI credential without publishing it through a network endpoint. */
-export async function apiCredential(input: { directory: string }): Promise<string> {
+export const apiCredential = async (input: { directory: string }): Promise<string> => {
   const directory = path.resolve(input.directory, 'private');
   const filename = path.join(directory, 'api-token');
   await fs.mkdir(directory, {
@@ -50,4 +50,4 @@ export async function apiCredential(input: { directory: string }): Promise<strin
   } finally {
     await file.close();
   }
-}
+};

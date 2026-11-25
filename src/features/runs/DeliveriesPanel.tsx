@@ -17,7 +17,7 @@ import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 
 /** Publishing is an explicit user command, separate from completion and local application of changes. */
-export function DeliveriesPanel(input: { runId: string }): ReactElement {
+export const DeliveriesPanel = (input: { runId: string }): ReactElement => {
   const { client } = useApplication();
   const publishers = useApiQuery('deliveries.publishers', {});
   const deliveries = useApiQuery('deliveries.list', {
@@ -135,4 +135,4 @@ export function DeliveriesPanel(input: { runId: string }): ReactElement {
       ))}
     </Stack>
   );
-}
+};

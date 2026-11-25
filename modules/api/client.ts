@@ -72,7 +72,8 @@ export class ApiClient {
             | ApiResponse
             | ApiNotification
             | ApiAuthenticated;
-          if ('type' in message && message.type === 'authenticated') {
+          const authenticationAccepted = 'type' in message && message.type === 'authenticated';
+          if (authenticationAccepted) {
             resolve();
             this.notifyConnection({
               connected: true,
@@ -80,7 +81,8 @@ export class ApiClient {
             return;
           }
 
-          if ('type' in message && message.type === 'notification') {
+          const isNotification = 'type' in message && message.type === 'notification';
+          if (isNotification) {
             for (const listener of this.listeners) {
               try {
                 listener(structuredClone(message.notification));

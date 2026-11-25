@@ -1,7 +1,7 @@
 import type { SessionMessage } from './session.ts';
 
 /** Makes saved history usable for a new turn without assuming an unrecorded action did or did not happen. */
-export function settledHistory(messages: SessionMessage[]): SessionMessage[] {
+export const settledHistory = (messages: SessionMessage[]): SessionMessage[] => {
   const history = structuredClone(messages);
   const result: SessionMessage[] = [];
   for (let index = 0; index < history.length; index++) {
@@ -30,4 +30,4 @@ export function settledHistory(messages: SessionMessage[]): SessionMessage[] {
       );
   }
   return result;
-}
+};

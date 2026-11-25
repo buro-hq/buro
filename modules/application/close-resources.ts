@@ -1,7 +1,7 @@
 /** Runs every cleanup step in ownership order, preserving failures after resources are released. */
-export async function closeResources(input: {
+export const closeResources = async (input: {
   steps: (() => void | Promise<void>)[];
-}): Promise<void> {
+}): Promise<void> => {
   const errors: unknown[] = [];
   for (const close of input.steps) {
     try {
@@ -12,4 +12,4 @@ export async function closeResources(input: {
   }
   if (errors.length)
     throw new AggregateError(errors, 'Application cleanup failed.');
-}
+};

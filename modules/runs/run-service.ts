@@ -198,17 +198,20 @@ export class RunService implements Runs {
     const ready = new Promise<boolean>((resolve) => {
       release = resolve;
     });
-    const promise = ready
-      .then((start) =>
-        start
-          ? this.execute({
-              run,
-              prompt,
-              options: input.options ?? {},
-              signal: controller.signal,
-            })
-          : undefined)
-      .finally(() => this.jobs.delete(id));
+    const promise = (async () => {
+      try {
+        const start = await ready;
+        if (start)
+          await this.execute({
+            run,
+            prompt,
+            options: input.options ?? {},
+            signal: controller.signal,
+          });
+      } finally {
+        this.jobs.delete(id);
+      }
+    })();
     this.jobs.set(id, {
       controller,
       promise,
