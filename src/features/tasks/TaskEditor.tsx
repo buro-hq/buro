@@ -83,7 +83,8 @@ export const TaskEditor = (input: {
           />
           <FileInput
             multiple
-            label={t('Attachments · optional')}
+            label={t('Attachments')}
+            description={t('Optional')}
             value={files}
             onChange={setFiles}
             clearable

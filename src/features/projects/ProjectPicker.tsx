@@ -85,7 +85,8 @@ export const ProjectPicker = (input: {
               placeholder="/path/to/project"
             />
             <TextInput
-              label={t('Name · optional')}
+              label={t('Name')}
+              description={t('Optional')}
               value={name}
               onChange={(event) => setName(event.currentTarget.value)}
             />

@@ -1,4 +1,4 @@
-import { Button, FileInput, Group, Modal, Paper, Stack, Text } from '@mantine/core';
+import { Badge, Button, FileInput, Group, Modal, Paper, Stack, Text } from '@mantine/core';
 import { useState, type ReactElement } from 'react';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
 import { Panel } from '../../components/molecules/Panel.tsx';
@@ -128,10 +128,11 @@ export const MaterialsPage = (input: { projectId: string }): ReactElement => {
             <Group justify="space-between">
               <div>
                 <Text fw={500}>{material.name}</Text>
-                <Text size="xs" c="dimmed">
-                  {material.mimeType} · {(material.bytes / 1024).toFixed(1)} KB
-                  {material.taskId ? ` · ${t('Task attachment')}` : ''}
-                </Text>
+                <Group gap="sm">
+                  <Text size="xs" c="dimmed">{material.mimeType}</Text>
+                  <Text size="xs" c="dimmed">{(material.bytes / 1024).toFixed(1)} KB</Text>
+                  {material.taskId && <Badge variant="light">{t('Task attachment')}</Badge>}
+                </Group>
               </div>
               <Group>
                 <Button variant="default" onClick={() => setSelected(material.id)}>

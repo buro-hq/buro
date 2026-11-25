@@ -54,7 +54,8 @@ const AgentEditor = (input: { agent?: Agent; onClose(): void }): ReactElement =>
           minRows={6}
         />
         <TextInput
-          label={t('Tools · comma separated, all when empty')}
+          label={t('Tools')}
+          description={t('Comma separated; all tools when empty')}
           value={tools}
           onChange={(event) => setTools(event.currentTarget.value)}
         />

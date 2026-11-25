@@ -8,6 +8,7 @@ import {
   PasswordInput,
   Select,
   Stack,
+  Text,
   TextInput,
 } from '@mantine/core';
 import { useState, type ReactElement } from 'react';
@@ -117,7 +118,8 @@ export const ModelEditor = (input: {
           }
         />
         <TextInput
-          label={t('Base URL · optional for native engines')}
+          label={t('Base URL')}
+          description={t('Optional for native engines')}
           value={endpoint}
           onChange={(event) => {
             setEndpoint(event.currentTarget.value);
@@ -160,9 +162,20 @@ export const ModelEditor = (input: {
               if (value)
                 setModelId(value);
             }}
+            renderOption={({ option }) => {
+              const model = catalogue.find((item) => item.id === option.value);
+              return (
+                <Stack gap={2}>
+                  <Text size="sm">{model?.name ?? option.value}</Text>
+                  {model?.name && model.name !== option.value && (
+                    <Text size="xs" c="dimmed">{option.value}</Text>
+                  )}
+                </Stack>
+              );
+            }}
             data={catalogue.map((item) => ({
               value: item.id,
-              label: item.name ? `${item.name} · ${item.id}` : item.id,
+              label: item.name ? `${item.name} (${item.id})` : item.id,
             }))}
           />
         )}
@@ -198,19 +211,22 @@ export const ModelEditor = (input: {
               />
             </Group>
             <TextInput
-              label={t('Reasoning effort · provider setting')}
+              label={t('Reasoning effort')}
+              description={t('Provider setting')}
               value={effort}
               onChange={(event) => setEffort(event.currentTarget.value)}
             />
             <NumberInput
-              label={t('Parallel requests · automatic when empty')}
+              label={t('Parallel requests')}
+              description={t('Automatic when empty')}
               value={capacity}
               onChange={setCapacity}
               min={1}
               allowDecimal={false}
             />
             <NumberInput
-              label={t('HTTP retries · two when empty')}
+              label={t('HTTP retries')}
+              description={t('Two retries when empty')}
               value={retries}
               onChange={setRetries}
               min={0}

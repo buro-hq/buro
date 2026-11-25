@@ -35,9 +35,10 @@ export const ModelsPage = (): ReactElement => {
                 {settings.data?.defaultModelId === model.id && <Badge>{t('Default')}</Badge>}
                 {model.thinking && <Badge variant="light">{t('Thinking')}</Badge>}
               </Group>
-              <Text size="sm" c="dimmed">
-                {model.transport} · {model.model}
-              </Text>
+              <Group gap="sm">
+                <Badge variant="outline">{model.transport}</Badge>
+                <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{model.model}</Text>
+              </Group>
               <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
                 {model.endpoint}
               </Text>

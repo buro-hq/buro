@@ -38,9 +38,10 @@ export const RunsPage = (input: {
                     <Group justify="space-between">
                       <div>
                         <Text fw={600}>{run.title ?? run.taskId}</Text>
-                        <Text c="dimmed" size="xs">
-                          {new Date(run.createdAt).toLocaleString()} · {run.id.slice(0, 8)}
-                        </Text>
+                        <Group gap="sm">
+                          <Text c="dimmed" size="xs">{new Date(run.createdAt).toLocaleString()}</Text>
+                          <Text c="dimmed" size="xs">{run.id.slice(0, 8)}</Text>
+                        </Group>
                       </div>
                       <Group>
                         <Badge variant="light">{t(run.status)}</Badge>

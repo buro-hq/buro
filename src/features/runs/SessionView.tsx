@@ -68,10 +68,13 @@ export const SessionView = (input: { session: Session }): ReactElement => {
       />
       <ErrorNotice error={action.error ?? error} />
       {usage && (
-        <Text size="xs" c="dimmed">
-          {t('Reported tokens')} · {t('Input')}: {usage.inputTokens ?? '—'} ·{' '}
-          {t('Output')}: {usage.outputTokens ?? '—'}
-        </Text>
+        <Stack gap={4}>
+          <Text size="xs" c="dimmed">{t('Reported tokens')}</Text>
+          <Group gap="sm">
+            <Text size="xs" c="dimmed">{t('Input')}: {usage.inputTokens ?? '—'}</Text>
+            <Text size="xs" c="dimmed">{t('Output')}: {usage.outputTokens ?? '—'}</Text>
+          </Group>
+        </Stack>
       )}
       <QueryFeedback loading={history.loading} error={history.error} />
       {!!history.data?.start && (
@@ -88,10 +91,10 @@ export const SessionView = (input: { session: Session }): ReactElement => {
         .map((message, index) => (
           <Paper key={message.id ?? index} withBorder p="md">
             <Stack gap="xs">
-              <Text size="xs" fw={600}>
-                {t(message.role)}
-                {message.toolName ? ` · ${message.toolName}` : ''}
-              </Text>
+              <Group gap="sm">
+                <Text size="xs" fw={600}>{t(message.role)}</Text>
+                {message.toolName && <Badge variant="light">{message.toolName}</Badge>}
+              </Group>
               {message.content && <pre className="feature-pre">{message.content}</pre>}
               {message.toolCalls?.map((call) => (
                 <details key={call.id}>

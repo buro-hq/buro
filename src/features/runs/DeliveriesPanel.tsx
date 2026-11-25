@@ -48,7 +48,8 @@ export const DeliveriesPanel = (input: { runId: string }): ReactElement => {
         }
       />
       <TextInput
-        label={t('Title · goal title when empty')}
+        label={t('Title')}
+        description={t('Goal title when empty')}
         value={title}
         onChange={(event) => setTitle(event.currentTarget.value)}
       />
@@ -58,22 +59,26 @@ export const DeliveriesPanel = (input: { runId: string }): ReactElement => {
       <Collapse in={advanced}>
         <Stack>
           <TextInput
-            label={t('Base branch · remote default when empty')}
+            label={t('Base branch')}
+            description={t('Remote default when empty')}
             value={base}
             onChange={(event) => setBase(event.currentTarget.value)}
           />
           <TextInput
-            label={t('Branch · generated when empty')}
+            label={t('Branch')}
+            description={t('Generated when empty')}
             value={branch}
             onChange={(event) => setBranch(event.currentTarget.value)}
           />
           <TextInput
-            label={t('Remote · origin when empty')}
+            label={t('Remote')}
+            description={t('Origin when empty')}
             value={remote}
             onChange={(event) => setRemote(event.currentTarget.value)}
           />
           <Textarea
-            label={t('PR description · optional')}
+            label={t('PR description')}
+            description={t('Optional')}
             value={description}
             onChange={(event) => setDescription(event.currentTarget.value)}
             autosize

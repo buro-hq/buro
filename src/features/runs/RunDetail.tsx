@@ -141,10 +141,19 @@ export const RunDetail = (input: {
               label={t('Session')}
               value={selected?.id ?? null}
               onChange={setSessionId}
+              renderOption={({ option }) => {
+                const session = sessions.data?.find((item) => item.id === option.value);
+                return (
+                  <Group justify="space-between" w="100%">
+                    <Text size="sm">{option.label}</Text>
+                    {session && <Badge variant="light">{t(session.status)}</Badge>}
+                  </Group>
+                );
+              }}
               data={
                 sessions.data?.map((session) => ({
                   value: session.id,
-                  label: `${session.parentId ? t('Collaborator') : t('Main conversation')} · ${t(session.status)} · ${session.id.slice(0, 8)}`,
+                  label: `${session.parentId ? t('Collaborator') : t('Main conversation')} (${session.id.slice(0, 8)})`,
                 })) ?? []
               }
             />

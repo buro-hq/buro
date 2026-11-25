@@ -42,10 +42,19 @@ export const OfficePage = (input: { projectId: string; onRun(id: string): void }
           label={t('Run')}
           value={run?.id ?? null}
           onChange={setRunId}
+          renderOption={({ option }) => {
+            const candidate = runs.data?.find((item) => item.id === option.value);
+            return (
+              <Group justify="space-between" w="100%">
+                <Text size="sm">{option.label}</Text>
+                {candidate && <Badge variant="light">{t(candidate.status)}</Badge>}
+              </Group>
+            );
+          }}
           data={
             runs.data?.map((candidate) => ({
               value: candidate.id,
-              label: `${candidate.title ?? candidate.taskId} · ${t(candidate.status)} · ${candidate.id.slice(0, 8)}`,
+              label: `${candidate.title ?? candidate.taskId} (${candidate.id.slice(0, 8)})`,
             })) ?? []
           }
         />
@@ -70,9 +79,10 @@ export const OfficePage = (input: { projectId: string; onRun(id: string): void }
                   <Text size="sm" lineClamp={5} style={{ whiteSpace: 'pre-wrap' }}>
                     {session.error ?? latest ?? t('Waiting for the first response')}
                   </Text>
-                  <Text size="xs" c="dimmed">
-                    {session.id.slice(0, 8)} · {new Date(session.updatedAt).toLocaleTimeString()}
-                  </Text>
+                  <Group gap="sm">
+                    <Text size="xs" c="dimmed">{session.id.slice(0, 8)}</Text>
+                    <Text size="xs" c="dimmed">{new Date(session.updatedAt).toLocaleTimeString()}</Text>
+                  </Group>
                   <Button variant="subtle" onClick={() => input.onRun(session.runId ?? run!.id)}>
                     {t('Open conversation')}
                   </Button>

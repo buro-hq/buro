@@ -72,7 +72,8 @@ export const TasksPage = (input: { projectId: string; onRun(id: string): void })
         <Collapse in={advanced}>
           <Stack>
             <Textarea
-              label={t('Instructions override · optional')}
+              label={t('Instructions override')}
+              description={t('Optional')}
               value={instructions}
               onChange={(event) => setInstructions(event.currentTarget.value)}
               autosize
