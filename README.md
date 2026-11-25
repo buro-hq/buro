@@ -59,6 +59,8 @@ npm run check:ui
 
 EditorConfig sets two-space indentation and LF line endings. ESLint Stylistic formats TS/JS/TSX; Prettier formats the other supported text files. `npm run format` changes formatting only, `npm run fix` also applies available lint fixes, and `npm run check` checks lint, formatting and types. GitHub Actions runs these checks and the formatter regression tests.
 
+`npm test` keeps native failure details, diagnostics, skipped tests and totals while omitting successful test listings. `npm run test:verbose` lists every test. Both commands discover all root and nested test suites and retain Node's exit status.
+
 VS Code workspace settings apply ESLint fixes on save for source code and Prettier for the other formats. Install the recommended extensions when prompted. The 100-column ruler is a guide: source formatting preserves deliberate line breaks and logical groups. See [code style](docs/CODE-STYLE.md) for the selected conventions and automatic checks.
 
 The test suite covers portable model streams, thinking and tool calls, feature persistence, cancellation, real Git workspaces, OS process isolation, publication to a local test remote, and browser interactions. These checks do not make live model calls or publish real PRs.
