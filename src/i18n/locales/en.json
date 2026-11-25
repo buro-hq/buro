@@ -1278,5 +1278,21 @@
   "Start a goal to see its agents here.": "Start a goal to see its agents here.",
   "Waiting for the first response": "Waiting for the first response",
   "Open conversation": "Open conversation",
-  "Disconnect": "Disconnect"
+  "Disconnect": "Disconnect",
+  "Run a foreground server command. PORT and HOST are assigned automatically.": "Run a foreground server command. PORT and HOST are assigned automatically.",
+  "Preview command": "Preview command",
+  "Start preview": "Start preview",
+  "Stop preview": "Stop preview",
+  "Open preview": "Open preview",
+  "Output truncated": "Output truncated",
+  "Publish the run changes as a draft PR. The description is empty unless you enter one.": "Publish the run changes as a draft PR. The description is empty unless you enter one.",
+  "Publication method": "Publication method",
+  "Title · goal title when empty": "Title · goal title when empty",
+  "Publication options": "Publication options",
+  "Base branch · remote default when empty": "Base branch · remote default when empty",
+  "Branch · generated when empty": "Branch · generated when empty",
+  "Remote · origin when empty": "Remote · origin when empty",
+  "PR description · optional": "PR description · optional",
+  "Publish draft PR": "Publish draft PR",
+  "Publish": "Publish"
 }

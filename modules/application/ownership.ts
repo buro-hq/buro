@@ -14,8 +14,8 @@ export function ownApplication(input: { directory: string }): ApplicationOwnersh
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const filename = path.join(directory, 'owner.sqlite'),
     database = new DatabaseSync(filename);
-  fs.chmodSync(filename, 0o600);
   try {
+    fs.chmodSync(filename, 0o600);
     database.exec('PRAGMA busy_timeout=0; BEGIN EXCLUSIVE');
   } catch (error) {
     database.close();

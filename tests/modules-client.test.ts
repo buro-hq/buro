@@ -9,6 +9,29 @@ import { startApiServer } from '../modules/api/server.ts';
 import type { Application } from '../modules/application/application.ts';
 import { FeatureCli } from '../cli/feature-cli.ts';
 
+test('failed composition releases storage and application ownership before the next startup', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-failed-composition-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  let closed = false;
+  await assert.rejects(
+    createApplication({
+      directory,
+      storage: {
+        records() {
+          throw new Error('Fixture storage failure');
+        },
+        async close() {
+          closed = true;
+        },
+      },
+    }),
+    /Fixture storage failure/,
+  );
+  assert.equal(closed, true);
+  const app = await createApplication({ directory });
+  await app.close();
+});
+
 test('a second application cannot interrupt work owned by the first, and ownership is released on close', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'buro-application-owner-'));
   let first: Application | undefined, second: Application | undefined;

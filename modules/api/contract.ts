@@ -8,6 +8,8 @@ import type {
   ModelDiscoveryResult,
 } from '../models/model-configuration.ts';
 import type { Project, ProjectResult } from '../projects/project.ts';
+import type { Preview, PreviewOutcome } from '../previews/preview.ts';
+import type { Delivery, DeliveryOutcome, Deliveries } from '../deliveries/delivery.ts';
 import type { Run, RunOptions, RunResult } from '../runs/run.ts';
 import type { ResultOutcome } from '../results/result.ts';
 import type { Material, MaterialOutcome } from '../materials/material.ts';
@@ -20,6 +22,10 @@ import type { Task, TaskInput } from '../tasks/task.ts';
 export interface ApiQueries {
   'projects.list': { params: {}; result: Project[] };
   'projects.get': { params: { id: string }; result: Project | undefined };
+  'previews.list': { params: { runId?: string }; result: Preview[] };
+  'previews.get': { params: { id: string }; result: Preview | undefined };
+  'deliveries.list': { params: { runId?: string }; result: Delivery[] };
+  'deliveries.publishers': { params: {}; result: { id: string; name: string }[] };
   'tasks.list': { params: { projectId?: string }; result: Task[] };
   'tasks.get': { params: { id: string }; result: Task | undefined };
   'runs.list': { params: { projectId?: string; taskId?: string }; result: Run[] };
@@ -45,6 +51,12 @@ export interface ApiQueries {
 export interface ApiCommands {
   'projects.connect': { params: { root: string; name?: string }; result: ProjectResult };
   'projects.disconnect': { params: { id: string }; result: void };
+  'previews.start': {
+    params: { runId: string; command: string; env?: Record<string, string>; port?: number };
+    result: PreviewOutcome;
+  };
+  'previews.stop': { params: { id: string }; result: void };
+  'deliveries.publish': { params: Parameters<Deliveries['publish']>[0]; result: DeliveryOutcome };
   'tasks.create': { params: TaskInput; result: Task };
   'tasks.update': { params: TaskInput & { id: string }; result: Task | undefined };
   'tasks.delete': { params: { id: string }; result: void };

@@ -3,11 +3,14 @@ export interface CommandInput {
   workspace: string;
   source?: string;
   argv: string[];
+  env?: Record<string, string>;
   stdin?: string;
   readOnly?: boolean;
   allowNetwork?: boolean;
   timeoutMs?: number;
   maxOutputBytes?: number;
+  /** Best-effort output observation; it never changes process execution. */
+  onOutput?: (output: { stdout: string; stderr: string; truncated: boolean }) => void;
   signal: AbortSignal;
 }
 

@@ -5,6 +5,8 @@ import { t } from '../../i18n/index.ts';
 import { ErrorNotice, QueryFeedback } from '../common/feedback.tsx';
 import { useOperation } from '../common/operation.ts';
 import { SessionView } from './SessionView.tsx';
+import { PreviewsPanel } from './PreviewsPanel.tsx';
+import { DeliveriesPanel } from './DeliveriesPanel.tsx';
 
 function Changes(input: { runId: string }): ReactElement {
   const { client } = useApplication(),
@@ -108,6 +110,8 @@ export function RunDetail(input: {
         <Tabs.List>
           <Tabs.Tab value="conversation">{t('Conversations')}</Tabs.Tab>
           <Tabs.Tab value="changes">{t('Changes')}</Tabs.Tab>
+          <Tabs.Tab value="preview">{t('Preview')}</Tabs.Tab>
+          <Tabs.Tab value="publish">{t('Publish')}</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="conversation" pt="md">
           <Stack>
@@ -128,6 +132,12 @@ export function RunDetail(input: {
         </Tabs.Panel>
         <Tabs.Panel value="changes" pt="md">
           {tab === 'changes' && <Changes runId={input.id} />}
+        </Tabs.Panel>
+        <Tabs.Panel value="preview" pt="md">
+          {tab === 'preview' && <PreviewsPanel runId={input.id} />}
+        </Tabs.Panel>
+        <Tabs.Panel value="publish" pt="md">
+          {tab === 'publish' && <DeliveriesPanel runId={input.id} />}
         </Tabs.Panel>
       </Tabs>
     </Stack>

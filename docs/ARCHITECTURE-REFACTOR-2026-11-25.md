@@ -13,12 +13,13 @@ HTTP model transports and the native Codex adapter use the same tool broker. Pri
 - Thinking transports, native model discovery without inference, configurable concurrency and a common session history.
 - Authenticated feature API, CLI transport wrapper, feature-owned UI queries, feature pages and an office view following arbitrary sessions.
 - Browser test covering project connection, goal creation, a sandboxed file edit, conversation history and explicit result application; desktop and mobile navigation.
+- Independent previews with live output and separate ports, stopped with their application owner.
+- Explicit draft PR publication onto a fresh remote base, excluding initial user edits; PR bodies stay empty by default.
 - Application-directory ownership acquired before recovery, so a second server cannot interrupt the first server's work.
 
 ## Still required before production cutover
 
 - Finish the CLI entrypoint and launcher authentication.
-- Preserve optional preview and delivery actions independently of run completion.
 - Archive the existing working state, switch production entrypoints, and remove obsolete runtime and client code.
 - Reconcile the public documentation and run the complete release checks and self-review.
 - Run the completed application against the configured DeepSeek Flash with thinking. Use comparable tasks and settings to Qwen, inspect the finished code and agent collaboration, and report wall time separately from provider-reported token speed. No live model quality result has been collected for this implementation yet.

@@ -10,9 +10,11 @@ import { ModelRegistry } from '../models/model-registry.ts';
 import { modelTransports } from '../models/transports.ts';
 import { MaterialService } from '../materials/material-service.ts';
 import { materialTools } from '../materials/material-tools.ts';
-import type { MaterialLoader } from '../materials/material.ts';
-import type { ModelTransport } from '../models/model-configuration.ts';
 import { ProjectService } from '../projects/project-service.ts';
+import { PreviewService } from '../previews/preview-service.ts';
+import { DeliveryService } from '../deliveries/delivery-service.ts';
+import { GitHubPublisher } from '../deliveries/github-publisher.ts';
+import { previewTools } from '../previews/preview-tools.ts';
 import { RunService } from '../runs/run-service.ts';
 import { ResultService } from '../results/result-service.ts';
 import { GitChanges } from '../results/git-changes.ts';
@@ -24,28 +26,36 @@ import { SqliteStorage } from '../storage/sqlite-storage.ts';
 import { TaskService } from '../tasks/task-service.ts';
 import { ToolRegistry } from '../tools/tool-registry.ts';
 import { GitWorkspaces } from '../workspaces/git-workspaces.ts';
-import type { Application } from './application.ts';
-import { ownApplication } from './ownership.ts';
+import type { Application, ApplicationOptions } from './application.ts';
+import { closeResources } from './close-resources.ts';
+import { ownApplication, type ApplicationOwnership } from './ownership.ts';
 
 /** Composes one server process with usable defaults and replaceable boundary adapters. */
-export async function createApplication(input: {
-  directory: string;
-  storage?: StorageEngine;
-  transports?: ModelTransport[];
-  materialLoaders?: MaterialLoader[];
-  fetch?: typeof fetch;
-  report?: (error: unknown) => void;
-}): Promise<Application> {
-  const privateDirectory = path.resolve(input.directory, 'private');
+export async function createApplication(input: ApplicationOptions): Promise<Application> {
   const ownership = ownApplication({ directory: input.directory });
-  let storage: StorageEngine;
+  let storage: StorageEngine | undefined;
   try {
     storage =
-      input.storage ?? new SqliteStorage({ filename: path.join(privateDirectory, 'state.sqlite') });
+      input.storage ??
+      new SqliteStorage({ filename: path.resolve(input.directory, 'private/state.sqlite') });
+    return await composeApplication({ options: input, storage, ownership });
   } catch (error) {
-    ownership.close();
+    try {
+      await closeResources({ steps: [() => storage?.close(), () => ownership.close()] });
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], 'Application initialization failed.');
+    }
     throw error;
   }
+}
+
+async function composeApplication(scope: {
+  options: ApplicationOptions;
+  storage: StorageEngine;
+  ownership: ApplicationOwnership;
+}): Promise<Application> {
+  const { options: input, storage, ownership } = scope;
+  const privateDirectory = path.resolve(input.directory, 'private');
   const events = new EventBus({ report: input.report });
   const settings = new SettingsService({ store: storage.records('settings'), events });
   const models = new ModelRegistry({ adapterState: storage.records('model-continuations') });
@@ -93,18 +103,34 @@ export async function createApplication(input: {
     events,
   });
   const results = new ResultService({ runs, projects, changes: new GitChanges(), events });
+  const previews = new PreviewService({
+    store: storage.records('previews'),
+    runs,
+    projects,
+    commands,
+    events,
+  });
+  for (const tool of previewTools({ previews })) tools.register(tool);
+  const deliveries = new DeliveryService({
+    store: storage.records('deliveries'),
+    runs,
+    projects,
+    tasks,
+    results,
+    events,
+    publishers: input.publishers ?? [
+      new GitHubPublisher({ directory: path.join(input.directory, 'publications') }),
+    ],
+  });
   for (const tool of materialTools({ materials, runs })) tools.register(tool);
   try {
     await modelConfigurations.initialize();
     await sessions.recover();
     await runs.recover();
+    await previews.recover();
+    await deliveries.recover();
   } catch (error) {
-    try {
-      await commands.close();
-      await storage.close();
-    } finally {
-      ownership.close();
-    }
+    await commands.close();
     throw error;
   }
   let closing: Promise<void> | undefined;
@@ -115,6 +141,8 @@ export async function createApplication(input: {
     materials,
     modelConfigurations,
     projects,
+    previews,
+    deliveries,
     tasks,
     runs,
     results,
@@ -123,22 +151,17 @@ export async function createApplication(input: {
     settings,
     tools,
     close() {
-      return (closing ??= (async () => {
-        try {
-          await runs.close();
-          await sessions.close();
-        } finally {
-          try {
-            await commands.close();
-          } finally {
-            try {
-              await storage.close();
-            } finally {
-              ownership.close();
-            }
-          }
-        }
-      })());
+      return (closing ??= closeResources({
+        steps: [
+          () => runs.close(),
+          () => sessions.close(),
+          () => deliveries.close(),
+          () => previews.close(),
+          () => commands.close(),
+          () => storage.close(),
+          () => ownership.close(),
+        ],
+      }));
     },
   };
 }

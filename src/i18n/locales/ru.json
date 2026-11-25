@@ -1278,5 +1278,21 @@
   "Start a goal to see its agents here.": "Запустите задачу, чтобы увидеть ее агентов.",
   "Waiting for the first response": "Ожидание первого ответа",
   "Open conversation": "Открыть диалог",
-  "Disconnect": "Отключить"
+  "Disconnect": "Отключить",
+  "Run a foreground server command. PORT and HOST are assigned automatically.": "Запустите сервер в основном процессе команды. PORT и HOST назначаются автоматически.",
+  "Preview command": "Команда предпросмотра",
+  "Start preview": "Запустить предпросмотр",
+  "Stop preview": "Остановить предпросмотр",
+  "Open preview": "Открыть предпросмотр",
+  "Output truncated": "Вывод сокращен",
+  "Publish the run changes as a draft PR. The description is empty unless you enter one.": "Опубликуйте изменения запуска в черновик PR. Описание останется пустым, если его не заполнить.",
+  "Publication method": "Способ публикации",
+  "Title · goal title when empty": "Заголовок · название задачи, если пусто",
+  "Publication options": "Параметры публикации",
+  "Base branch · remote default when empty": "Базовая ветка · по умолчанию из удаленного репозитория",
+  "Branch · generated when empty": "Ветка · создается автоматически, если пусто",
+  "Remote · origin when empty": "Удаленный репозиторий · origin, если пусто",
+  "PR description · optional": "Описание PR · необязательно",
+  "Publish draft PR": "Опубликовать черновик PR",
+  "Publish": "Публикация"
 }

@@ -54,6 +54,37 @@ export function apiMethods(app: Application): {
       (input) => app.projects.connect(input),
     ),
     'projects.disconnect': method(id, (input) => app.projects.disconnect(input)),
+    'previews.list': method(z.object({ runId: z.string().optional() }), (input) =>
+      app.previews.list(input),
+    ),
+    'previews.get': method(id, (input) => app.previews.get(input)),
+    'previews.start': method(
+      z.object({
+        runId: z.string(),
+        command: z.string(),
+        port: z.number().int().min(1).max(65535).optional(),
+        env: z.record(z.string(), z.string()).optional(),
+      }),
+      (input) => app.previews.start(input),
+    ),
+    'previews.stop': method(id, (input) => app.previews.stop(input)),
+    'deliveries.list': method(z.object({ runId: z.string().optional() }), (input) =>
+      app.deliveries.list(input),
+    ),
+    'deliveries.publishers': method(empty, () => app.deliveries.publishers()),
+    'deliveries.publish': method(
+      z.object({
+        runId: z.string(),
+        publisherId: z.string().optional(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        remote: z.string().optional(),
+        branch: z.string().optional(),
+        base: z.string().optional(),
+        revision: z.string().optional(),
+      }),
+      (input) => app.deliveries.publish(input),
+    ),
     'tasks.list': method(z.object({ projectId: z.string().optional() }), (input) =>
       app.tasks.list(input),
     ),

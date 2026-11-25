@@ -43,6 +43,7 @@ export class NativeSandbox implements CommandSandbox {
       PIP_CACHE_DIR: path.join(cache, 'pip'),
       WORKSPACE: workspace,
       PROJECT_ROOT: source,
+      ...input.env,
     };
     const userHome = os.homedir();
     const reads = new Set(

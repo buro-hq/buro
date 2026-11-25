@@ -30,7 +30,12 @@ export class SandboxedCommands implements Commands {
     };
     this.active.add(entry);
     try {
-      return await this.execute({ ...input, signal: controller.signal });
+      return await this.execute({
+        ...input,
+        argv: [...input.argv],
+        env: input.env ? { ...input.env } : undefined,
+        signal: controller.signal,
+      });
     } finally {
       input.signal.removeEventListener('abort', abort);
       this.active.delete(entry);
@@ -86,11 +91,24 @@ export class SandboxedCommands implements Commands {
         if (chunk.length > remaining) truncated = true;
         return Buffer.concat([previous, chunk.subarray(0, remaining)]);
       };
+      const observe = () => {
+        try {
+          input.onOutput?.({
+            stdout: stdout.toString('utf8'),
+            stderr: stderr.toString('utf8'),
+            truncated,
+          });
+        } catch {
+          /* Output observers cannot terminate a process. */
+        }
+      };
       child.stdout.on('data', (chunk: Buffer) => {
         stdout = capture(stdout, chunk);
+        observe();
       });
       child.stderr.on('data', (chunk: Buffer) => {
         stderr = capture(stderr, chunk);
+        observe();
       });
       child.once('error', (failure) => {
         error = failure.message;
