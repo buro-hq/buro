@@ -42,3 +42,6 @@ with plt.rc_context({"font.family": "DejaVu Sans", "font.size": 10, "svg.fonttyp
     figure.supxlabel("8/8 проверок у обеих моделей; один прогон на модель, без ревьюера", fontsize=10)
     figure.savefig(directory / "rtx-sample.svg", metadata={"Date": None})
     plt.close(figure)
+
+svg = directory / "rtx-sample.svg"
+svg.write_text("\n".join(line.rstrip() for line in svg.read_text().splitlines()) + "\n")
