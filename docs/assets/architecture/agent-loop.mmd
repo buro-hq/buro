@@ -1,0 +1,12 @@
+flowchart TD
+  start["Assignment and Session"] --> load["History and selected model"]
+  load --> context["Context and available tools"]
+  context --> model["SessionBackend.complete"]
+  model --> answer{"Response outcome"}
+  answer -->|"Complete tool call"| tool["ToolRegistry.execute"]
+  tool --> save["Save tool result"]
+  save --> load
+  answer -->|"Truncated / incomplete proposal"| again["Record: action was not executed"]
+  again --> load
+  answer -->|"Final answer"| done["Save Session result"]
+  answer -->|"Error / cancellation"| stopped["Save outcome and history"]

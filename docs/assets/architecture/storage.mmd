@@ -1,0 +1,11 @@
+flowchart TB
+  features["Owning modules"] --> records["RecordStore / SessionStore"]
+  records --> sqlite[("SQLite: private/state.sqlite")]
+  records -. "replaceable record adapter" .-> json["JSON adapter"]
+  sqlite --> headers["conversations: headers and messages"]
+  sqlite --> entities["tasks / runs / projects / materials / ..."]
+  sqlite --> private["Private connections and continuation"]
+  sqlite --> activity["Activity: diagnostics"]
+  features -. "after commit" .-> events["EventBus"]
+  events -.-> ui["UI: refresh affected queries"]
+  ui --> features

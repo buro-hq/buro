@@ -1,256 +1,195 @@
-# Архитектура Буро
+# Architecture
 
-Буро — локальное рабочее пространство для задач, которые выполняют агенты. Пользователь задает результат, приложение создает отдельную попытку с рабочей копией, а агенты выбирают инструменты, модели и способ сотрудничества. Сервер отвечает за состояние, файлы и жизненный цикл исполнения; качество решения зависит от модели и выбранного ею процесса работы.
+Buro is a local workspace for tasks carried out by agents. The user describes an outcome, the application creates an isolated attempt, and agents choose tools, models and collaborators. The server owns state, files and execution lifetimes; the quality of the result also depends on the model and how it organizes the work.
 
-Документ сверяется с кодом на 25 ноября 2026 года. Схемы описывают текущую реализацию; будущие изменения отмечены отдельно. Другие проекты сравниваются по официальной документации, а не по качеству их моделей.
+This page reflects the implementation on November 25, 2026. Planned changes are marked separately. Comparisons use official project documentation, not measurements of their models' coding quality.
 
-| Статус                   | Что сюда относится                                                                                                                |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Работает                 | Один сервер, независимые модули, SQLite, общий цикл сессий, смена моделей, помощники, Git worktrees, UI/CLI, preview и публикация |
-| Выбрано, перенос впереди | FSD для UI, общая shared/, короткие имена файлов, публичные index.ts, алиасы и группы тестов                                      |
-| Требует проверки         | Устойчивость командной работы небольших моделей и эффективность контекста на больших проектах                                     |
+| Status                      | Scope                                                                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Implemented                 | One server, independent modules, SQLite, a shared session loop, model switching, collaborators, Git worktrees, UI/CLI, previews and publication |
+| Selected, migration pending | UI FSD, shared contracts, short filenames, public index.ts entry points, import aliases and test groups                                         |
+| Under evaluation            | Reliable collaboration with small models and efficient context on large projects                                                                |
 
-## 1. Общая схема
+## 1. System overview
 
-```mermaid
-flowchart TB
-  subgraph host["Машина с Буро"]
-    clients["Браузер / CLI"] --> api["Локальный WebSocket API"]
-    api --> app["Application: композиция модулей"]
-    app --> runs["Runs: попытки и рабочие копии"]
-    runs --> sessions["Sessions: цикл модель / инструменты"]
-    sessions --> models["Models + SessionBackend"]
-    models --> local["Локальная модель / Codex CLI"]
-    sessions --> tools["Tools: исполнение действий"]
-    tools --> sandbox["Команды и файлы в OS sandbox"]
-    sandbox --> files["Git worktree попытки"]
-    runs --> files
-    app --> storage[("SQLite: состояние модулей")]
-    app -. "уведомления об изменениях" .-> api
-  end
-  models --> remote["API модели на другой машине / в облаке"]
+![Buro host, clients, feature modules, execution tools, storage and model endpoints](docs/assets/architecture/system.png)
+
+[Diagram source](docs/assets/architecture/system.mmd)
+
+One server process composes feature modules through ordinary method calls. Commands, previews and native Codex run in child processes. A remote model endpoint moves generation to another host; Buro's tools still execute on the application host.
+
+`Application` composes interfaces and closes resources. Each feature owns its records instead of sharing one mutable application snapshot. Constructors receive the dependencies they need. See [createApplication](modules/application/create-application.ts) and the [Application interface](modules/application/application.ts).
+
+The API binds to loopback and requires authentication. UI and CLI use the same methods. Commands return results directly; notifications identify data to refresh. Subscribers do not orchestrate execution. See the [API server](modules/api/server.ts), [contract](modules/api/contract.ts) and [EventBus](modules/events/event-bus.ts).
+
+## 2. Entities and relationships
+
+![Logical relationships between projects, tasks, runs, sessions, models, agents, materials, previews and deliveries](docs/assets/architecture/entities.png)
+
+[Diagram source](docs/assets/architecture/entities.mmd)
+
+These are logical identifier references, not SQL foreign-key constraints. Historical runs may survive deletion of their task or model connection. A session can also exist without a run.
+
+| Entity           | Owns                                                                      |
+| ---------------- | ------------------------------------------------------------------------- |
+| Project          | A connected source directory                                              |
+| Task             | Editable intent and description, independent of attempts                  |
+| Run              | One attempt, worktree, root session and outcome                           |
+| Session          | Conversation, selected model, messages, access and result                 |
+| Agent            | Optional reusable description and instructions; names grant no privileges |
+| Model connection | Transport configuration and its private credential                        |
+| Material         | A retained attachment, metadata and extracted text                        |
+| Preview          | A preview process and its port                                            |
+| Delivery         | An explicitly requested publication and its observed outcome              |
+
+A task can have multiple attempts. A session keeps its identity when its model changes. `parentId` links collaborators; `previousRunId` links attempts. They represent different relationships.
+
+## 3. Agent loop
+
+![Session execution through context selection, model completion, tool dispatch and result persistence](docs/assets/architecture/agent-loop.png)
+
+[Diagram source](docs/assets/architecture/agent-loop.mmd)
+
+[SessionService](modules/sessions/session-service.ts) implements the loop. HTTP adapters return tool proposals; native backends may invoke tools through a callback. Both paths use the same [ToolRegistry](modules/tools/tool-registry.ts).
+
+The response is saved before its proposed tools execute. Incomplete proposals do not become actions. Expected tool failures return as results the model can act on. Configurable retries of temporary HTTP failures repeat generation, not commands that have already executed.
+
+A model can be selected for a run or session and changed for the next request through `model_select`. There is no mandatory router based on agent roles. An individual `SessionTurn` can receive an optional `maxRequests` allowance; it is unset by default and belongs to the caller's execution options, not quality evaluation.
+
+`completed` means execution returned a result. Tests, review or manual inspection establish whether the code is correct. Synthetic benchmark assertions are outside the ordinary run. The loop defines no fixed roles, team size, phase order or minimum score.
+
+## 4. Collaboration
+
+![Starting a collaborator, working concurrently, waiting for its result and sending follow-up work](docs/assets/architecture/collaboration.png)
+
+[Diagram source](docs/assets/architecture/collaboration.mmd)
+
+A collaborator is another session using the same loop. A saved agent description is optional: callers can supply the assignment, instructions and model directly. A collaborator inherits shared task background, explicitly labeled as reference information; its current assignment arrives in a separate conversation message. The parent's full history is not copied automatically.
+
+Read-only access is inherited, and the available tool set can narrow. Waiting tracks circular dependencies between sessions. When a run's root work finishes, its background sessions are stopped and joined before the attempt finishes. See [session tools](modules/agents/session-tools.ts) and [Sessions.wait](modules/sessions/session-service.ts).
+
+Review is an ordinary exchange: request an independent opinion, read findings, fix the code and send the revision back. It does not require a separate workflow engine.
+
+Delegation freedom alone does not prevent coordination failures. In the current Qwen 9B diagnostic, agents repeatedly delegated the same assignment and reread files. The scenario was stopped after 31.6 minutes: 9 collaborators and 261 requests. Model behavior, shared context and tool descriptions have not yet been isolated experimentally as causes.
+
+Qwen 35B completed the review scenario on the same code revision with 8/8 checks in 647.8 seconds, using 7 collaborators and 70 requests. Its result was correct on this task, but collaboration remained expensive. Aggregates for both scenarios are in the [measurement snapshot](docs/assets/architecture/rtx-sample.json); these are individual experiments, not a general model ranking.
+
+## 5. Backends, models and context
+
+![A common session backend boundary with HTTP providers and native Codex execution](docs/assets/architecture/backends.png)
+
+[Diagram source](docs/assets/architecture/backends.mmd)
+
+[SessionBackend](modules/engines/backend.ts) separates the application loop from execution mechanics. [ModelProvider](agent/contracts/model.ts) defines portable messages, tools, completions, usage and text streams. `agent/` contains these contracts and providers; the loop that owns files and processes currently remains in `modules/`.
+
+History stores messages, not requests already formatted for one provider. Before a request, the application attaches compatible private adapter continuation and constructs a bounded context view. Private state is associated with the model, backend revision and message identity; switching models does not attach another adapter's continuation. Projection does not alter saved history.
+
+Context size currently uses an approximate serialized-size estimate. Instructions, the initial and current assignments, and complete tool-call/result exchanges are retained. Large tool results may be shortened in the request view. Exact tokenization, semantic summarization and a repository index are not implemented yet. See [conversationContext](modules/sessions/context.ts) and [ModelRegistry](modules/models/model-registry.ts).
+
+## 6. Persistence and UI updates
+
+![Module-owned records, replaceable storage, diagnostic activity and UI change notifications](docs/assets/architecture/storage.png)
+
+[Diagram source](docs/assets/architecture/storage.mmd)
+
+SQLite stores records in module-owned namespaces within one file. `RecordStore` returns detached values and allows a different storage implementation. Diagnostic activity is separate from current entity state and is not replayed to reconstruct the application.
+
+Conversation metadata and individual messages share a namespace, allowing an atomic append of new messages and the updated header. Ordinary turns do not rewrite earlier messages. Session lists return metadata; `sessions.messages` reads bounded pages using stable positions. Execution loads the selected conversation into memory in pages. The JSON adapter preserves the contract but physically rewrites its namespace file. See [ConversationStore](modules/sessions/conversation-store.ts) and [SqliteStorage](modules/storage/sqlite-storage.ts).
+
+Credentials and private continuation stay out of public messages and notifications. This is a logical separation: the server owns both kinds of records. The application targets one local user; tenant isolation is not implemented.
+
+UI queries subscribe to relevant entity and owner changes. A bounded refresh window coalesces notifications without postponing updates indefinitely. Changes during an in-flight read trigger another read after it finishes. Reconnection refreshes records without replaying commands. Provisional response text is displayed separately. See [queryAffected](src/data/query-notifications.ts), [QuerySubscription](src/data/query-subscription.ts) and [SessionView](src/features/runs/SessionView.tsx).
+
+## 7. Files, results and recovery
+
+![Run worktree isolation, result inspection, explicit application and publication, and restart as a new attempt](docs/assets/architecture/workspaces.png)
+
+[Diagram source](docs/assets/architecture/workspaces.mmd)
+
+On an ordinary start, existing user changes become the run's baseline. The result is the agent's subsequent delta. Worktree creation serializes only Git bookkeeping for a repository; independent runs still execute concurrently.
+
+Collaborators within one run share files and must coordinate writes. Different runs use separate worktrees. A worktree isolates attempt files; the OS sandbox separately constrains processes. Commands and file tools use macOS `sandbox-exec` or Linux `bubblewrap`. A supported Windows command sandbox is not implemented yet. Previews use the same command adapter with a separate lifetime.
+
+Applying and publishing are independent of completion. Publication creates a workspace on a remote base and applies only the attempt's patch. PR descriptions remain empty unless explicitly supplied. See [GitWorkspaces](modules/workspaces/git-workspaces.ts), [ResultService](modules/results/result-service.ts) and [DeliveryService](modules/deliveries/delivery-service.ts).
+
+Startup acquires ownership of the application directory before marking abandoned work interrupted. Continuing creates a new attempt with saved files and portable history. It does not restore an exact internal instruction pointer or automatically repeat actions with uncertain external outcomes. Interrupted publications are not automatically restarted.
+
+## 8. Extension boundaries and source layout
+
+| Contract                     | Replace or add                                | Definition                                                                                    |
+| ---------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| SessionBackend               | HTTP model or native agent process            | [backend.ts](modules/engines/backend.ts)                                                      |
+| ModelTransport               | Backend construction from connection settings | [model-configuration.ts](modules/models/model-configuration.ts)                               |
+| Tool                         | Action definition, effect and implementation  | [tool.ts](modules/tools/tool.ts)                                                              |
+| StorageEngine / SessionStore | Records and conversation persistence          | [record-store.ts](modules/storage/record-store.ts), [session.ts](modules/sessions/session.ts) |
+| CommandSandbox               | Process execution environment                 | [sandbox.ts](modules/commands/sandbox.ts)                                                     |
+| MaterialLoader               | Attachment format extraction                  | [material.ts](modules/materials/material.ts)                                                  |
+| ResultPublisher              | External publication mechanism                | [delivery.ts](modules/deliveries/delivery.ts)                                                 |
+
+Adapters are composed in `createApplication`; tools register through `Tools.register`. Replacing a backend does not require another role or a branch in the session loop. Plugin installation, discovery and versioning are not implemented. Existing interfaces provide boundaries for packaging modules later.
+
+Small server modules remain flat. The selected UI conventions are FSD and Atomic Design within shared components. Public `index.ts` entry points, aliases and root `shared/contracts` for common DTOs are planned. Internal storage interfaces remain with their owners. This migration is pending; see [folder conventions](docs/STRUCTURE.md) for target paths.
+
+## 9. Related projects
+
+This comparison concerns architecture. Agents SDK is a library for building applications; the other projects are agent tools or platforms. The table does not imply that unlisted features are absent.
+
+| Project           | Main approach                                                                                                                                                                                                                                                                            | Relevant lesson for Buro                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Buro              | Task / Run / Session, an attempt worktree, one loop and direct module calls                                                                                                                                                                                                              | Keep intent, attempts and conversations distinct; replace adapters independently |
+| OpenCode          | Server APIs for sessions, models, tools and events; primary/subagent/all profiles and child conversations; packaged and local plugins. [API](https://opencode.ai/docs/api), [agents](https://opencode.ai/docs/agents/), [plugins](https://opencode.ai/docs/plugins/)                     | Clear capability APIs, separate collaborator context and extension entry points  |
+| OpenHands         | Agent Canvas is separate from SDK and Agent Server. The SDK defines conversations, tools and workspaces; environments can use Local, Docker or RemoteAPI workspaces. [Components](https://docs.openhands.dev/overview/introduction), [SDK](https://docs.openhands.dev/sdk/arch/overview) | Separate remote execution from the client and model when needed                  |
+| Aider             | Git commits and undo; a repository map selects relevant symbols using a dependency graph and context budget. [Git](https://aider.chat/docs/git.html), [repository map](https://aider.chat/docs/repomap.html)                                                                             | Compact code navigation and understandable changes                               |
+| OpenAI Agents SDK | Agents combine instructions, models and tools. Agents-as-tools keeps control with the caller; handoffs transfer the conversation. [Composition](https://openai.github.io/openai-agents-js/guides/agents/#composition-patterns)                                                           | Distinguish a collaborator assignment from transferring control                  |
+
+OpenCode documents fresh context in child sessions. Buro also uses separate collaborator history, but inherits shared run background. **Our hypothesis:** test an explicit assignment packet containing the task, relevant facts and expected result to reduce ambiguity. This is not a demonstrated fix for the observed loop. [Comparison basis](https://opencode.ai/docs/agents/#modes).
+
+OpenHands offers a useful distinction between conversations and workspaces; its distributed infrastructure is not currently needed for Buro's local deployment. Aider's repository map could become an optional capability. Agents SDK helps distinguish tool-like delegation from handoffs; Buro's current `session_start` / `session_wait` is closer to the former. These are our design conclusions from the cited sources.
+
+## 10. Performance and observability
+
+Whole-task time includes loading the model, processing context, generation, tools, persistence and waiting for collaborators. Concurrent sessions share the endpoint's configured capacity. Agent counts and tokens/second alone do not measure task completion speed.
+
+![Whole-task time and generation speed for two models on an RTX 3060](docs/assets/architecture/rtx-sample.svg)
+
+| One ordinary task run   | Checks | Whole-task time | Server-reported generation rate | Requests |
+| ----------------------- | ------ | --------------- | ------------------------------- | -------- |
+| Qwen 3.5 9B Q4_K_M      | 8/8    | 65.1 s          | 54.5 tokens/s                   | 7        |
+| Qwen 3.6 35B-A3B Q4_K_M | 8/8    | 68.6 s          | 45.6 tokens/s                   | 7        |
+
+Both use thinking, an RTX 3060 12 GB with 32 GB RAM, revision `88fecc9`, fixture `synthetic-ready-queue-v1`, 32,768 context tokens and an 8,192-token output allowance. The loaded model is unloaded before each scenario, so wall time includes loading. Sampling settings match and are retained in the [measurement snapshot](docs/assets/architecture/rtx-sample.json).
+
+These are single measurements of a small task without collaborators, confidence intervals or a general quality ranking. The five-model matrix is still in progress. Generation rate is total reported output tokens divided by total `eval_duration` for completed timed responses. All seven requests in each row report timing and observed private continuation. Output tokens divided by whole-task time is a different metric. Ollama durations are converted from nanoseconds to seconds. [Response format](https://docs.ollama.com/api/chat#response-eval-duration).
+
+Private reports remain in ignored `artifacts/model-evaluation/`. Only aggregates and code, harness and fixture hashes are committed. Earlier functional checks and their limits are recorded in [Flash validation](docs/FLASH-VALIDATION-2026-11-25.md).
+
+## 11. Next changes
+
+| Area                | Next step                                                    | Intended outcome                                                  |
+| ------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Source organization | Apply the agreed folder, contract and import migration       | Understand module boundaries without reading every implementation |
+| Coordination        | Compare thinking runs and investigate repeated delegation    | Fewer unnecessary turns while retaining quality                   |
+| Context             | Test explicit collaborator facts, then repository navigation | Less ambiguous assignments and repeated reading                   |
+| Long histories      | Measure conversation loading and context estimates           | Observable cost of long sessions                                  |
+| Extensions          | Package a module when a real consumer needs it               | Packaging does not change the execution loop                      |
+
+These are development directions, not mandatory phases of each run. Architecture is exercised by completing a real task, retaining an understandable history, checking changes and producing a usable result.
+
+## Maintaining this page
+
+Repository documentation, comments, identifiers and figure labels use English. Localization resources and intentional Unicode test data can contain other languages.
+
+Diagrams are committed PNG images so the page does not depend on a browser's live Mermaid renderer. Editable `.mmd` sources and the shared renderer configuration live beside them. Regenerate the diagrams from the repository root:
+
+```sh
+for source in docs/assets/architecture/*.mmd; do
+  npx --yes @mermaid-js/mermaid-cli@11.12.0 \
+    -i "$source" -o "${source%.mmd}.png" \
+    -c docs/assets/architecture/mermaid-config.json \
+    -b white -w 1100 -s 2
+done
 ```
 
-Один серверный процесс связывает модули обычными вызовами. Отдельные процессы создаются для команд, preview и нативного Codex. Удаленное размещение модели переносит туда генерацию; инструменты Буро продолжают работать на машине приложения.
+Regenerate the measured chart with `uv run docs/assets/architecture/plot.py`.
 
-`Application` собирает интерфейсы и закрывает ресурсы. Общего изменяемого объекта со всеми сущностями нет. Зависимости передаются через конструкторы. Точка сборки — [createApplication](modules/application/create-application.ts), набор возможностей — [Application](modules/application/application.ts).
-
-API работает на loopback с аутентификацией. UI и CLI используют одни методы. Команды возвращают результат напрямую, уведомления сообщают, что перечитать. Подписчики не управляют исполнением задачи. См. [API](modules/api/server.ts), [контракт](modules/api/contract.ts), [EventBus](modules/events/event-bus.ts).
-
-## 2. Сущности и связи
-
-```mermaid
-erDiagram
-  PROJECT ||--o{ TASK : projectId
-  PROJECT ||--o{ RUN : projectId
-  PROJECT ||--o{ MATERIAL : projectId
-  TASK ||--o{ RUN : taskId
-  RUN o|--|{ SESSION : runId
-  AGENT o|--o{ SESSION : agentId
-  MODEL_CONNECTION ||--o{ SESSION : modelId
-  RUN ||--o{ PREVIEW : runId
-  RUN ||--o{ DELIVERY : runId
-```
-
-Это логические связи по идентификаторам, а не SQL `FOREIGN KEY`. Исторический Run может сохраняться после удаления задачи или подключения модели. Session может существовать отдельно от Run.
-
-| Сущность         | Ответственность                                                          |
-| ---------------- | ------------------------------------------------------------------------ |
-| Project          | Подключенный исходный каталог                                            |
-| Task             | Редактируемая цель и описание, независимо от попыток                     |
-| Run              | Одна попытка, worktree, главная Session и итог                           |
-| Session          | Разговор, выбранная модель, сообщения, доступ и результат                |
-| Agent            | Необязательное сохраненное описание и инструкции; имя не дает привилегий |
-| Model connection | Настройки транспорта и приватный ключ                                    |
-| Material         | Копия вложения, метаданные и извлеченный текст                           |
-| Preview          | Процесс предпросмотра и его порт                                         |
-| Delivery         | Явно запрошенная публикация и ее исход                                   |
-
-Одну Task можно запускать много раз. Session сохраняет идентичность при смене модели. `parentId` связывает помощника с родителем; `previousRunId` связывает попытки. Это разные отношения.
-
-## 3. Цикл агента
-
-```mermaid
-flowchart TD
-  start["Поручение и Session"] --> load["История и текущая модель"]
-  load --> context["Контекст и доступные инструменты"]
-  context --> model["SessionBackend.complete"]
-  model --> answer{"Исход ответа"}
-  answer -->|"Завершенный вызов инструмента"| tool["ToolRegistry.execute"]
-  tool --> save["Сохранить результат инструмента"]
-  save --> load
-  answer -->|"Обрезанное / незавершенное предложение"| again["Зафиксировать: действие не выполнялось"]
-  again --> load
-  answer -->|"Итоговый ответ"| done["Сохранить результат Session"]
-  answer -->|"Ошибка / отмена"| stopped["Сохранить исход и историю"]
-```
-
-Реализация — [SessionService](modules/sessions/session-service.ts). HTTP-адаптеры возвращают предложения инструментов; нативный backend может вызывать их через callback. Оба пути используют общий [ToolRegistry](modules/tools/tool-registry.ts).
-
-Ответ сохраняется до исполнения его инструментов. Незавершенное предложение не превращается в действие. Ожидаемая ошибка инструмента возвращается модели как результат, с которым можно продолжить работу. Настраиваемые повторы временных HTTP-сбоев относятся к генерации, а не к повторному исполнению уже выполненной команды.
-
-Модель выбирается для Run или Session и меняется на следующий запрос через `model_select`. Обязательного маршрутизатора по ролям нет. У отдельного вызова существует необязательный `SessionTurn.maxRequests`; по умолчанию он не задан. Это параметр вызывающего кода, а не оценка качества.
-
-`completed` означает, что агент вернул результат. Корректность кода подтверждается тестами, ревью или ручной проверкой. Критерии синтетического бенчмарка не встроены в обычный Run. Фиксированных ролей, обязательного количества участников, порядка этапов и минимального балла в цикле нет.
-
-## 4. Сотрудничество
-
-```mermaid
-sequenceDiagram
-  participant Main as Текущая Session
-  participant Tools as Инструменты сессий
-  participant Child as Session помощника
-  participant Files as Общий worktree Run
-  Main->>Tools: session_start(input, modelId?, readOnly?, tools?)
-  Tools->>Child: Создать Session и начать поручение
-  Tools-->>Main: sessionId сразу
-  Main->>Files: Выполнять собственную часть работы
-  Child->>Files: Читать / менять файлы согласно доступу
-  Main->>Tools: session_wait(sessionId)
-  Child-->>Tools: Результат текущего поручения
-  Tools-->>Main: Состояние и результат
-  Main->>Tools: session_send(sessionId, новое поручение)
-  Tools->>Child: Следующий ход в том же разговоре
-  Child-->>Tools: Ответ с учетом прежней истории
-  Tools-->>Main: Результат следующего хода
-```
-
-Помощник — такая же Session с тем же циклом. Сохраненный Agent необязателен: поручение, инструкции и модель можно передать прямо при создании. Помощник наследует общий фон задачи, помеченный как справочная информация; текущее поручение передается отдельным сообщением. Полная история родителя автоматически не копируется.
-
-Read-only наследуется, список инструментов может сужаться. Ожидание другой Session отслеживает циклические зависимости. Когда главная работа Run заканчивается, его фоновые Session останавливаются и присоединяются к завершению. См. [sessionTools](modules/agents/session-tools.ts) и [Sessions.wait](modules/sessions/session-service.ts).
-
-Ревью — обычный цикл поручений: запросить независимый взгляд, получить замечания, исправить код, отправить новую версию на повторное чтение. Для этого не нужен отдельный workflow engine.
-
-Свобода делегирования сама по себе не устраняет ошибки координации. В текущей диагностике Qwen 9B повторно делегировал одно поручение и многократно читал файлы. Прогон остановлен через 31,6 минуты: 9 помощников, 261 запрос. Влияние модели, контекста и описаний инструментов еще не разделено экспериментом; объяснять все только размером модели преждевременно.
-
-Qwen 35B на той же версии кода завершил сценарий ревью с 8/8 проверок за 647,8 с: 7 помощников и 70 запросов. Результат корректен на этой задаче, но командная работа остается дорогой. Агрегаты обоих прогонов сохранены в [снимке измерений](docs/assets/architecture/rtx-sample.json); это отдельные эксперименты, не общий рейтинг моделей.
-
-## 5. Backend, модель и контекст
-
-```mermaid
-flowchart LR
-  sessions["SessionService"] --> backend["SessionBackend"]
-  backend --> http["ModelBackend: HTTP и повторы"]
-  backend --> native["CodexBackend: нативный процесс"]
-  http --> providers["ModelProvider: Ollama / DeepSeek / OpenAI compatible"]
-  native --> callback["executeTool callback"]
-  callback --> tools["Общий ToolRegistry"]
-  providers --> api["API выбранной модели"]
-```
-
-[SessionBackend](modules/engines/backend.ts) отделяет цикл приложения от способа исполнения. [ModelProvider](agent/contracts/model.ts) — переносимый контракт моделей: сообщения, инструменты, ответ, usage и поток текста. В `agent/` находятся контракты и провайдеры; сам цикл с файлами и процессами пока остается в `modules/`.
-
-История хранит сообщения, а не готовые запросы одному провайдеру. Перед запросом приложение присоединяет совместимое приватное продолжение адаптера и строит ограниченное представление контекста. Приватные данные привязаны к модели, ревизии backend и сообщению; чужое продолжение при смене модели не подставляется. Сохраненная история от проекции не меняется.
-
-Размер контекста сейчас оценивается приближенно по сериализованным данным. Сохраняются инструкции, начальное и текущее поручения, целые обмены вызов/результат. Большие результаты инструментов могут сокращаться в представлении запроса. Точного токенизатора, семантического сжатия и индекса репозитория пока нет. См. [conversationContext](modules/sessions/context.ts), [ModelRegistry](modules/models/model-registry.ts).
-
-## 6. Хранение и обновление UI
-
-```mermaid
-flowchart TB
-  features["Модули-владельцы"] --> records["RecordStore / SessionStore"]
-  records --> sqlite[("SQLite: private/state.sqlite")]
-  records -. "сменный адаптер записей" .-> json["JSON adapter"]
-  sqlite --> headers["conversations: заголовки и сообщения"]
-  sqlite --> entities["tasks / runs / projects / materials / ..."]
-  sqlite --> private["Приватные подключения и continuation"]
-  sqlite --> activity["Activity: диагностика"]
-  features -. "после сохранения" .-> events["EventBus"]
-  events -.-> ui["UI: обновить затронутые запросы"]
-  ui --> features
-```
-
-SQLite хранит записи модулей в отдельных namespaces одного файла. `RecordStore` возвращает отделенные значения и позволяет заменить реализацию хранения. Activity отделена от актуального состояния сущностей и не проигрывается для восстановления приложения.
-
-Метаданные разговора и отдельные сообщения находятся в одном namespace: новая порция сообщений и заголовок коммитятся атомарно. Обычный ход дописывает новые сообщения, не переписывая прежние. Списки Session возвращают метаданные; `sessions.messages` читает ограниченную страницу по стабильным позициям. Перед исполнением выбранная история загружается в память порциями. JSON-адаптер сохраняет контракт, но физически переписывает файл namespace. См. [ConversationStore](modules/sessions/conversation-store.ts), [SqliteStorage](modules/storage/sqlite-storage.ts).
-
-Ключи и приватное продолжение отсутствуют в публичных сообщениях и уведомлениях. Разделение логическое: сервер владеет обоими видами записей. Это локальное приложение одного пользователя; многопользовательской изоляции арендаторов нет.
-
-UI подписывает запросы на изменения своей сущности и владельца. Серия уведомлений объединяется коротким окном без бесконечного откладывания. Изменение во время чтения вызывает еще одно чтение после ответа. При reconnect перечитываются записи; команды не переигрываются. Текст показывается отдельно как предварительный поток. См. [queryAffected](src/data/query-notifications.ts), [QuerySubscription](src/data/query-subscription.ts), [SessionView](src/features/runs/SessionView.tsx).
-
-## 7. Файлы, результат и восстановление
-
-```mermaid
-flowchart TB
-  source["Проект и текущие правки пользователя"] --> baseline["Базовый снимок попытки"]
-  baseline --> a["Run A: отдельный worktree"]
-  baseline --> b["Run B: отдельный worktree"]
-  a --> delta["Results: изменения относительно базы Run A"]
-  delta --> inspect["Пользователь смотрит diff"]
-  inspect --> apply["Явное применение патча к проекту"]
-  inspect --> publish["Явная публикация на remote base"]
-  publish --> pr["Ветка и draft PR"]
-  a --> interrupted["Попытка прервана"]
-  interrupted --> next["Новый Run: сохраненные файлы и история"]
-```
-
-При обычном старте текущие правки пользователя входят в базовый снимок Run. Результат — последующая разница агента. Создание worktree сериализует только Git bookkeeping репозитория; выполнение независимых Run остается параллельным.
-
-Помощники одного Run разделяют файлы и должны согласовывать запись. Разные Run имеют разные worktrees. Worktree изолирует файлы попытки; OS sandbox отдельно ограничивает процесс. Команды и файловые инструменты используют macOS `sandbox-exec` или Linux `bubblewrap`; поддерживаемого command sandbox на Windows пока нет. Preview использует тот же адаптер команд, но имеет отдельный жизненный цикл.
-
-Применение и публикация независимы от завершения Run. Публикация создает рабочую копию от удаленной базы и применяет только патч попытки. Описание PR пустое, пока пользователь не передаст его явно. См. [GitWorkspaces](modules/workspaces/git-workspaces.ts), [ResultService](modules/results/result-service.ts), [DeliveryService](modules/deliveries/delivery-service.ts).
-
-При запуске сначала захватывается владение каталогом приложения, затем незавершенные операции помечаются прерванными. Продолжение создает новую попытку с сохраненными файлами и переносимой историей. Точный внутренний шаг не восстанавливается; действие с неизвестным внешним исходом автоматически не повторяется. Прерванная публикация сама заново не запускается.
-
-## 8. Расширения и структура кода
-
-| Контракт                     | Что заменяем или добавляем                | Определение                                                                                   |
-| ---------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------- |
-| SessionBackend               | HTTP-модель или нативный агентный процесс | [backend.ts](modules/engines/backend.ts)                                                      |
-| ModelTransport               | Создание backend из настроек подключения  | [model-configuration.ts](modules/models/model-configuration.ts)                               |
-| Tool                         | Действие: определение, эффект, реализация | [tool.ts](modules/tools/tool.ts)                                                              |
-| StorageEngine / SessionStore | Хранение записей и разговоров             | [record-store.ts](modules/storage/record-store.ts), [session.ts](modules/sessions/session.ts) |
-| CommandSandbox               | Подготовка среды исполнения процесса      | [sandbox.ts](modules/commands/sandbox.ts)                                                     |
-| MaterialLoader               | Чтение формата вложения                   | [material.ts](modules/materials/material.ts)                                                  |
-| ResultPublisher              | Способ внешней публикации результата      | [delivery.ts](modules/deliveries/delivery.ts)                                                 |
-
-Адаптеры собираются в `createApplication`, инструменты регистрируются через `Tools.register`. Замена backend не требует новой роли или ветки в цикле сессии. Установки, discovery и версионирования плагинов пока нет; интерфейсы дают границы для будущей упаковки модулей.
-
-Серверные модули остаются небольшими и плоскими. Для UI выбраны FSD и Atomic Design внутри общих компонентов. Запланированы явные `index.ts`, алиасы и общая `shared/contracts` для DTO. Внутренние хранилища остаются у владельцев. Это еще не выполненный перенос; примеры будущих путей — в [правилах структуры](docs/STRUCTURE.md).
-
-## 9. Близкие проекты
-
-Сравниваются способы организации. Agents SDK — библиотека для построения систем; остальные строки описывают готовые инструменты или платформы. Таблица не утверждает отсутствие возможностей, не рассмотренных в источниках.
-
-| Проект            | Основной подход                                                                                                                                                                                                                                                               | Что полезно для Буро                                                          |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Буро              | Task / Run / Session, отдельный worktree попытки, один цикл, обычные вызовы модулей                                                                                                                                                                                           | Сохранять различие цели, попытки и разговора; менять адаптеры независимо      |
-| OpenCode          | Серверный API сессий, моделей, инструментов и событий; профили primary/subagent/all и отдельные дочерние разговоры; пакеты и локальные плагины. [API](https://opencode.ai/docs/api), [агенты](https://opencode.ai/docs/agents/), [плагины](https://opencode.ai/docs/plugins/) | Четкие API возможностей, самостоятельный контекст помощника, точки расширения |
-| OpenHands         | Agent Canvas отделен от SDK и Agent Server. SDK определяет разговоры, инструменты и workspaces; среда меняется между Local, Docker и RemoteAPI. [Компоненты](https://docs.openhands.dev/overview/introduction), [SDK](https://docs.openhands.dev/sdk/arch/overview)           | Отделять удаленное исполнение от клиента и модели, когда появится потребность |
-| Aider             | Работа с Git-коммитами и undo; repo map отбирает важные символы графа зависимостей в пределах бюджета контекста. [Git](https://aider.chat/docs/git.html), [repo map](https://aider.chat/docs/repomap.html)                                                                    | Компактная карта кода и понятный результат изменений                          |
-| OpenAI Agents SDK | Agent объединяет инструкции, модель и инструменты. Agents-as-tools оставляет управление у вызывающего агента, handoff передает разговор другому. [Композиция](https://openai.github.io/openai-agents-js/guides/agents/#composition-patterns)                                  | Различать поручение помощнику и передачу управления                           |
-
-OpenCode описывает свежий контекст дочерних сессий. В Буро история помощника тоже отдельная, но общий фон Run наследуется. **Наша гипотеза:** проверить явный пакет «поручение + нужные факты + ожидаемый результат», чтобы уменьшить неоднозначность. Это не готовое исправление зацикливания. [Основание сравнения](https://opencode.ai/docs/agents/#modes).
-
-Из OpenHands полезно разделение conversation и workspace; распределенная инфраструктура локальному приложению сейчас не требуется. Из Aider — адресная карта репозитория как дополнительная возможность. Из Agents SDK — различение вызова помощника и handoff; текущие `session_start` / `session_wait` ближе к первому варианту. Это наши проектные выводы из приведенных источников.
-
-## 10. Производительность и наблюдаемость
-
-Полное время включает загрузку модели, обработку контекста, генерацию, инструменты, запись истории и ожидание помощников. Параллельные Session делят заданную пропускную способность endpoint. Количество агентов и токены/с по отдельности не показывают скорость решения задачи.
-
-![Время задачи и скорость генерации двух моделей на RTX 3060](docs/assets/architecture/rtx-sample.svg)
-
-| Один прогон обычной задачи | Проверки | Полное время | Серверная скорость генерации | Запросы |
-| -------------------------- | -------- | ------------ | ---------------------------- | ------- |
-| Qwen 3.5 9B Q4_K_M         | 8/8      | 65,1 с       | 54,5 токена/с                | 7       |
-| Qwen 3.6 35B-A3B Q4_K_M    | 8/8      | 68,6 с       | 45,6 токена/с                | 7       |
-
-Обе модели: thinking, RTX 3060 12 ГБ + 32 ГБ RAM, код `88fecc9`, fixture `synthetic-ready-queue-v1`, контекст 32 768, выходной лимит 8 192. Перед сценарием модель выгружается, поэтому полное время включает загрузку. Sampling одинаков и сохранен в [снимке измерений](docs/assets/architecture/rtx-sample.json).
-
-Это единичные замеры небольшой задачи без помощников, без доверительных интервалов и общего рейтинга качества. Матрица пяти моделей еще не закончена. Серверная скорость — сумма output tokens / сумма `eval_duration` завершенных ответов. Все семь запросов каждой строки имеют тайминг и наблюдаемое приватное продолжение. Output tokens / полное время — другая метрика. Длительности Ollama переводятся из наносекунд в секунды. [Формат ответа](https://docs.ollama.com/api/chat#response-eval-duration).
-
-Приватные отчеты остаются в игнорируемом `artifacts/model-evaluation/`. В Git сохранены только агрегаты и хеши кода, harness и fixture. График воспроизводится командой `uv run docs/assets/architecture/plot.py`. Более ранние проверки и их ограничения — в [Flash validation](docs/FLASH-VALIDATION-2026-11-25.md).
-
-## 11. Дальнейшие изменения
-
-| Область         | Следующий шаг                                                       | Ожидаемый результат                                |
-| --------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
-| Структура кода  | Согласованный перенос папок, контрактов и импортов                  | Границы модулей видны без чтения всей реализации   |
-| Координация     | Сравнить thinking-прогоны и изучить повторную делегацию             | Меньше лишних ходов при сохранении качества        |
-| Контекст        | Проверить явную передачу фактов помощникам, затем карту репозитория | Меньше двусмысленных поручений и повторного чтения |
-| Длинные истории | Измерять загрузку разговора в память и точность оценки контекста    | Наблюдаемая стоимость длинной Session              |
-| Расширения      | Выносить модуль в пакет при реальном потребителе                    | Упаковка не меняет цикл исполнения                 |
-
-Это направления развития, а не обязательные этапы каждого Run. Проверка архитектуры — выполнить реальную задачу, сохранить понятную историю, проверить изменения и получить применимый результат.
-
-См. также: [запуск и CLI](README.md), [подключения моделей](docs/MODELS.md), [кодстайл](docs/CODE-STYLE.md), [состояние рефакторинга](docs/ARCHITECTURE-REFACTOR-2026-11-25.md).
+See also: [startup and CLI](README.md), [model connections](docs/MODELS.md), [code style](docs/CODE-STYLE.md) and the [refactor checkpoint](docs/ARCHITECTURE-REFACTOR-2026-11-25.md).

@@ -2,6 +2,8 @@
 
 The conventions follow the user's code, architecture and code-style quizzes. The complete answers remain in `buro-code-architecture-preferences.md` on the user's Desktop.
 
+Repository documentation, comments, identifiers and figure labels use English. Other languages are intentional in localization resources and Unicode test fixtures.
+
 ## Formatting
 
 EditorConfig defines UTF-8, LF, two-space indentation and a final newline. The editor's Tab key inserts spaces. Markdown retains intentional trailing spaces for line breaks.

@@ -2,7 +2,7 @@
 
 Open [the brand explorer](index.html) to compare six logo shapes, nine palettes, solid and gradient variants, interface mockups, background colors and avatar crops. The page works offline and exports SVG/PNG directly. Cobalt, Iris, Ocean, Graphite and Sage match application palettes; Amber, Coral, Rose and Sand are additional proposals.
 
-The approved mark is **Links** (Связи): four connected workspaces. The name stays **Buro** across GitHub, the application and documentation.
+The approved mark is **Links**: four connected workspaces. The name stays **Buro** across GitHub, the application and documentation.
 
 | Asset | Use |
 | --- | --- |

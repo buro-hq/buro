@@ -1,0 +1,8 @@
+flowchart LR
+  sessions["SessionService"] --> backend["SessionBackend"]
+  backend --> http["ModelBackend: HTTP and retries"]
+  backend --> native["CodexBackend: native process"]
+  http --> providers["ModelProvider: Ollama / DeepSeek / OpenAI compatible"]
+  native --> callback["executeTool callback"]
+  callback --> tools["Shared ToolRegistry"]
+  providers --> api["Selected model API"]

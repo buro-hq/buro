@@ -1,0 +1,17 @@
+sequenceDiagram
+  participant Main as Current Session
+  participant Tools as Session tools
+  participant Child as Collaborator Session
+  participant Files as Shared Run worktree
+  Main->>Tools: session_start(input, modelId?, readOnly?, tools?)
+  Tools->>Child: Create Session and start assignment
+  Tools-->>Main: sessionId immediately
+  Main->>Files: Continue own work
+  Child->>Files: Read / edit files within granted access
+  Main->>Tools: session_wait(sessionId)
+  Child-->>Tools: Assignment result
+  Tools-->>Main: Status and result
+  Main->>Tools: session_send(sessionId, follow-up assignment)
+  Tools->>Child: Next turn in the same conversation
+  Child-->>Tools: Answer using existing history
+  Tools-->>Main: Follow-up result

@@ -21,11 +21,11 @@ colors = ["#4563b7", "#227a79"]
 with plt.rc_context({"font.family": "DejaVu Sans", "font.size": 10, "svg.fonttype": "path", "svg.hashsalt": "buro-architecture-rtx-v1"}):
     figure, axes = plt.subplots(1, 2, figsize=(10.8, 3.5), layout="constrained")
     figure.set_facecolor("#ffffff")
-    figure.suptitle("Одна задача, thinking, RTX 3060 12 ГБ", fontsize=15, weight="bold")
+    figure.suptitle("One task, thinking enabled, RTX 3060 12 GB", fontsize=15, weight="bold")
 
     for axis, field, title, limit in [
-        (axes[0], "wallSeconds", "Полное время задачи, с\nМеньше лучше", 85),
-        (axes[1], "decodeTokensPerSecond", "Генерация, токенов/с\nБольше лучше", 70),
+        (axes[0], "wallSeconds", "Whole-task time, seconds\nLower is better", 85),
+        (axes[1], "decodeTokensPerSecond", "Generation, tokens/second\nHigher is better", 70),
     ]:
         values = [sample[field] for sample in samples]
         axis.barh(labels, values, color=colors, height=0.48, zorder=3)
@@ -39,7 +39,7 @@ with plt.rc_context({"font.family": "DejaVu Sans", "font.size": 10, "svg.fonttyp
         for position, value in enumerate(values):
             axis.text(value + 1, position, f"{value:.1f}", va="center", weight="bold")
 
-    figure.supxlabel("8/8 проверок у обеих моделей; один прогон на модель, без ревьюера", fontsize=10)
+    figure.supxlabel("Both models pass 8/8 checks; one run per model, no collaborator", fontsize=10)
     figure.savefig(directory / "rtx-sample.svg", metadata={"Date": None})
     plt.close(figure)
 

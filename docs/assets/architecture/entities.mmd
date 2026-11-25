@@ -1,0 +1,10 @@
+erDiagram
+  PROJECT ||--o{ TASK : projectId
+  PROJECT ||--o{ RUN : projectId
+  PROJECT ||--o{ MATERIAL : projectId
+  TASK ||--o{ RUN : taskId
+  RUN o|--|{ SESSION : runId
+  AGENT o|--o{ SESSION : agentId
+  MODEL_CONNECTION ||--o{ SESSION : modelId
+  RUN ||--o{ PREVIEW : runId
+  RUN ||--o{ DELIVERY : runId

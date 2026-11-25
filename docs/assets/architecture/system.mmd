@@ -1,0 +1,16 @@
+flowchart TB
+  subgraph host["Buro host"]
+    clients["Browser / CLI"] --> api["Local WebSocket API"]
+    api --> app["Application: module composition"]
+    app --> runs["Runs: attempts and workspaces"]
+    runs --> sessions["Sessions: model / tool loop"]
+    sessions --> models["Models + SessionBackend"]
+    models --> local["Local model / Codex CLI"]
+    sessions --> tools["Tools: action dispatch"]
+    tools --> sandbox["Commands and files in OS sandbox"]
+    sandbox --> files["Run Git worktree"]
+    runs --> files
+    app --> storage[("SQLite: module state")]
+    app -. "change notifications" .-> api
+  end
+  models --> remote["Model API on another host / in the cloud"]

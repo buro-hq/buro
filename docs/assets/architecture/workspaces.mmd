@@ -1,0 +1,11 @@
+flowchart TB
+  source["Project and existing user changes"] --> baseline["Run baseline snapshot"]
+  baseline --> a["Run A: separate worktree"]
+  baseline --> b["Run B: separate worktree"]
+  a --> delta["Results: delta from Run A baseline"]
+  delta --> inspect["User inspects the diff"]
+  inspect --> apply["Explicitly apply patch to project"]
+  inspect --> publish["Explicit publication on remote base"]
+  publish --> pr["Branch and draft PR"]
+  a --> interrupted["Attempt interrupted"]
+  interrupted --> next["New Run: saved files and history"]
