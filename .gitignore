@@ -10,11 +10,10 @@
 *.log
 /.buro/
 
-# Local credentials and legacy runtime state.
+# Local credentials.
 .codex/
 .npmrc
 .netrc
-.проект/
 *.pem
 *.p12
 *.pfx

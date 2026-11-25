@@ -253,7 +253,13 @@ test('format owners agree on source and exclude generated and private state', as
     assert.equal(await formatter.isPathIgnored(file), false, file);
   }
 
-  for (const file of ['.buro/private/state.json', '.codex/settings.json', '.проект/state.ts', '.firecrawl/result.ts', 'artifacts/check.ts', 'docs/archive/old.ts']) {
+  for (const file of [
+    '.buro/private/state.json',
+    '.codex/settings.json',
+    '.firecrawl/result.ts',
+    'artifacts/check.ts',
+    'docs/archive/old.ts',
+  ]) {
     assert.equal(await formatter.isPathIgnored(file), true, file);
     assert.equal((await getFileInfo(file, {
       ignorePath: '.prettierignore',

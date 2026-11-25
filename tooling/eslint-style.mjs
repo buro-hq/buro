@@ -14,7 +14,6 @@ export const ignoredFiles = [
   'dist/**',
   '.buro/**',
   '.codex/**',
-  '.проект/**',
   '.firecrawl/**',
   'artifacts/**',
   'archive/**',
