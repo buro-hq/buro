@@ -917,8 +917,15 @@ test('a collaborator can use another model, return feedback and retain explicit 
   assert.equal(conversations.find((session) => session.parentId)?.modelId, 'helper');
 });
 
-test('run instructions become shared policy while a collaborator’s own instructions never inherit downward', async (t) => {
+test('a run instructions override applies only to the main session while the shared policy reaches every collaborator', async (t) => {
   const f = await projectFixture(t);
+  const settings = new SettingsService({
+    store: f.storage.records('settings'),
+    events: f.events,
+  });
+  await settings.update({
+    instructions: 'Shared policy',
+  });
   const agents = new AgentService({
     store: f.storage.records('agents'),
     events: f.events,
@@ -935,7 +942,8 @@ test('run instructions become shared policy while a collaborator’s own instruc
   f.model('root', async (input) => {
     rootRequests++;
     if (rootRequests === 1) {
-      assert.ok(input.messages[0].content.includes('<work_policy>\nHouse policy\n</work_policy>'));
+      assert.ok(input.messages[0].content.includes('Main-only role'));
+      assert.ok(input.messages[0].content.includes('<work_policy>\nShared policy\n</work_policy>'));
       return tool('session_start', {
         input: 'Summarize the task',
         modelId: 'helper',
@@ -956,8 +964,9 @@ test('run instructions become shared policy while a collaborator’s own instruc
     helperRequests++;
     if (helperRequests === 1) {
       const system = input.messages[0].content;
-      assert.ok(system.includes('<work_policy>\nHouse policy\n</work_policy>'));
+      assert.ok(system.includes('<work_policy>\nShared policy\n</work_policy>'));
       assert.ok(system.includes('Helper rules.'));
+      assert.ok(!system.includes('Main-only role'));
       return tool('session_start', {
         input: 'Draft a line',
         modelId: 'grandchild',
@@ -975,13 +984,14 @@ test('run instructions become shared policy while a collaborator’s own instruc
   });
   f.model('grandchild', async (input) => {
     const system = input.messages[0].content;
-    assert.ok(system.includes('<work_policy>\nHouse policy\n</work_policy>'));
+    assert.ok(system.includes('<work_policy>\nShared policy\n</work_policy>'));
     assert.ok(!system.includes('Helper rules.'));
+    assert.ok(!system.includes('Main-only role'));
     return reply('Grandchild done');
   });
   const started = (await f.runs.start({
     taskId: f.task.id,
-    options: { instructions: 'House policy' },
+    options: { instructions: 'Main-only role' },
   })).run!;
   const finished = (await f.runs.wait({
     id: started.id,
@@ -994,16 +1004,23 @@ test('run instructions become shared policy while a collaborator’s own instruc
   const main = conversations.find((session) => session.id === started.sessionId)!;
   const helper = conversations.find((session) => session.parentId === main.id)!;
   const grandchild = conversations.find((session) => session.parentId === helper.id)!;
-  assert.equal(main.policy, 'House policy');
-  assert.equal(main.instructions, '');
-  assert.equal(helper.policy, 'House policy');
+  assert.equal(main.policy, 'Shared policy');
+  assert.equal(main.instructions, 'Main-only role');
+  assert.equal(helper.policy, 'Shared policy');
   assert.equal(helper.instructions, 'Helper rules.');
-  assert.equal(grandchild.policy, 'House policy');
+  assert.equal(grandchild.policy, 'Shared policy');
   assert.equal(grandchild.instructions, '');
 });
 
 test('a collaborator started from a saved agent description keeps its own instructions and the shared policy', async (t) => {
   const f = await projectFixture(t);
+  const settings = new SettingsService({
+    store: f.storage.records('settings'),
+    events: f.events,
+  });
+  await settings.update({
+    instructions: 'Shared policy',
+  });
   const agents = new AgentService({
     store: f.storage.records('agents'),
     events: f.events,
@@ -1040,13 +1057,12 @@ test('a collaborator started from a saved agent description keeps its own instru
   });
   f.model('helper', async (input) => {
     const system = input.messages[0].content;
-    assert.ok(system.includes('<work_policy>\nHouse policy\n</work_policy>'));
+    assert.ok(system.includes('<work_policy>\nShared policy\n</work_policy>'));
     assert.ok(system.includes('Description rules.'));
     return reply('Review done');
   });
   const started = (await f.runs.start({
     taskId: f.task.id,
-    options: { instructions: 'House policy' },
   })).run!;
   await f.runs.wait({
     id: started.id,
@@ -1057,10 +1073,10 @@ test('a collaborator started from a saved agent description keeps its own instru
   const child = conversations.find((session) => session.parentId === started.sessionId)!;
   assert.equal(child.agentId, description.id);
   assert.equal(child.instructions, 'Description rules.');
-  assert.equal(child.policy, 'House policy');
+  assert.equal(child.policy, 'Shared policy');
 });
 
-test('an explicit empty instructions override suppresses the application default policy', async (t) => {
+test('an explicit empty instructions override keeps the main session without run instructions but leaves the shared policy', async (t) => {
   const f = await projectFixture(t);
   const settings = new SettingsService({
     store: f.storage.records('settings'),
@@ -1070,7 +1086,7 @@ test('an explicit empty instructions override suppresses the application default
     instructions: 'Application default policy',
   });
   f.model('local', async (input) => {
-    assert.ok(!input.messages[0].content.includes('Application default policy'));
+    assert.ok(input.messages[0].content.includes('Application default policy'));
     return reply('Done');
   });
   const started = (await f.runs.start({
@@ -1080,9 +1096,11 @@ test('an explicit empty instructions override suppresses the application default
   await f.runs.wait({
     id: started.id,
   });
-  assert.equal((await f.sessions.get({
+  const session = await f.sessions.get({
     id: started.sessionId,
-  }))!.policy, '');
+  });
+  assert.equal(session!.instructions, '');
+  assert.equal(session!.policy, 'Application default policy');
 });
 
 test('application default instructions become the shared policy of every conversation in a run', async (t) => {

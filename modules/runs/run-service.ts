@@ -150,13 +150,14 @@ export class RunService implements Runs {
     ]
       .filter(Boolean)
       .join('\n\n');
-    // Run-level instructions are the shared policy for every conversation in this attempt.
-    const policy = input.options?.instructions ?? history?.policy ?? settings.instructions;
+    // Application default instructions are the shared policy; a run's instructions
+    // override belongs to the main session only and is never inherited downward.
     const created = await this.sessions.create({
       runId: id,
       context: prompt,
       modelId: input.options?.modelId ?? history?.modelId ?? settings.defaultModelId,
-      policy,
+      policy: settings.instructions,
+      instructions: input.options?.instructions,
       access: { tools: input.options?.tools, readOnly: input.options?.readOnly },
       sourceSessionId: history?.id,
     });

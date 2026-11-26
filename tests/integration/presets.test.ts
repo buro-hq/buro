@@ -274,7 +274,10 @@ test('preset copies, saved runs and defaults remain independent after mutations,
   assert.equal(run.review, undefined);
   assert.equal((await f.app.sessions.get({
     id: run.sessionId,
-  }))!.policy, '');
+  }))!.instructions, '');
+  assert.equal((await f.app.sessions.get({
+    id: run.sessionId,
+  }))!.policy, 'Application instructions');
   assert.deepEqual(await f.app.settings.get(), defaults);
   const ordinary = await f.app.runs.start({
     taskId: f.taskId,

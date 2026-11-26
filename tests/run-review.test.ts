@@ -209,11 +209,14 @@ test('a run can disable application review without changing the defaults', async
   assert.equal((await f.app.settings.get()).review?.enabled, true);
 });
 
-test('review participants receive the shared run policy while keeping their own instructions', async (t) => {
+test('review participants receive the shared policy while keeping their own instructions', async (t) => {
   const f = await fixture(t);
+  await f.app.settings.update({
+    instructions: 'Shared review policy',
+  });
   const started = await f.app.runs.start({
     taskId: f.task.id,
-    options: { review: { ...f.review, maxRounds: 1 }, instructions: 'House review policy' },
+    options: { review: { ...f.review, maxRounds: 1 } },
   });
   const run = (await f.app.runs.wait({
     id: started.run!.id,
@@ -223,7 +226,7 @@ test('review participants receive the shared run policy while keeping their own 
     runId: run.id,
   })).filter((session) => session.id !== run.sessionId);
   assert.equal(reviewSessions.length, 2);
-  assert.equal(reviewSessions.every((session) => session.policy === 'House review policy'), true);
+  assert.equal(reviewSessions.every((session) => session.policy === 'Shared review policy'), true);
   assert.equal(reviewSessions.every((session) => session.instructions.includes('Independently review the actual task result')), true);
 });
 
@@ -360,14 +363,15 @@ test('startup recovery marks unfinished review records interrupted without repla
   assert.equal(f.requests.length, requests);
 });
 
-test('a continuation reuses the policy saved by the previous attempt', async (t) => {
+test('a continuation reuses the run instructions and keeps the shared policy', async (t) => {
   const f = await fixture(t);
   await f.app.settings.update({
     review: { enabled: false },
+    instructions: 'Shared continuation policy',
   });
   const started = await f.app.runs.start({
     taskId: f.task.id,
-    options: { instructions: 'House continuation policy' },
+    options: { instructions: 'House continuation role' },
   });
   const first = (await f.app.runs.wait({
     id: started.run!.id,
@@ -381,6 +385,6 @@ test('a continuation reuses the policy saved by the previous attempt', async (t)
   const continued = await f.app.sessions.get({
     id: second.sessionId,
   });
-  assert.equal(continued?.policy, 'House continuation policy');
-  assert.equal(continued?.instructions, '');
+  assert.equal(continued?.instructions, 'House continuation role');
+  assert.equal(continued?.policy, 'Shared continuation policy');
 });

@@ -66,7 +66,7 @@ A model can be selected for a run or session and changed for the next request th
 
 A collaborator is another session using the same loop. A saved agent description is optional: callers can supply the assignment, instructions and model directly. A collaborator inherits shared task background, explicitly labeled as reference information; its current assignment arrives in a separate conversation message. The parent's full history is not copied automatically.
 
-Run-level instructions are a shared policy: they reach every conversation in the attempt, collaborators and reviewers included. A collaborator's own instructions stay local to it and are never inherited by the sessions it starts, so a coordination assignment cannot silently propagate downward.
+Application default instructions are a shared policy: they reach every conversation in the attempt, collaborators and reviewers included. A run's instructions override applies to the main session only and is never inherited by collaborators; a collaborator's own instructions stay local to it and are never inherited by the sessions it starts, so a coordination assignment cannot silently propagate downward.
 
 Read-only access is inherited, and the available tool set can narrow. Waiting tracks circular dependencies between sessions. When a run's root turn finishes, its background sessions are stopped and joined. Optional team review can then continue the attempt through new sessions. See [session tools](modules/agents/session-tools.ts) and [Sessions.wait](modules/sessions/session-service.ts).
 

@@ -234,7 +234,10 @@ test('UI creates, edits, selects and adjusts a preset, launches ordinary runs an
   assert.equal(first.review, undefined);
   assert.equal((await f.app.sessions.get({
     id: first.sessionId,
-  }))!.policy, '');
+  }))!.instructions, '');
+  assert.equal((await f.app.sessions.get({
+    id: first.sessionId,
+  }))!.policy, 'Application instructions');
   assert.equal((await f.app.presets.get({
     id: saved.id,
   }))!.options.instructions, 'New saved instructions');
