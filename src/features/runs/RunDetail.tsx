@@ -1,8 +1,10 @@
 import { Badge, Button, Group, Paper, Select, Stack, Tabs, Text } from '@mantine/core';
 import { useState, type ReactElement } from 'react';
 import type { ChangedFile } from '../../../modules/results/result.ts';
+import type { Run } from '../../../modules/runs/run.ts';
+import type { Session } from '../../../modules/sessions/session.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
-import { t } from '../../i18n/index.ts';
+import { getFormattingLocale, t } from '../../i18n/index.ts';
 import { ErrorNotice, QueryFeedback } from '@/shared/ui';
 import { useOperation } from '@/shared/lib';
 import { SessionView } from './SessionView.tsx';
@@ -19,6 +21,52 @@ const fileStatusLabels: Record<string, string> = {
 
 const changedFileStatus = (file: ChangedFile): string =>
   t(fileStatusLabels[file.status] ?? 'Changed');
+
+const formatDuration = (ms: number): string => {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60)
+    return `${seconds}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60)
+    return `${minutes}m ${seconds % 60}s`;
+
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+};
+
+const formatNumber = (value: number): string => value.toLocaleString(getFormattingLocale());
+
+/** Aggregates reported token usage and elapsed time; unreported usage is stated, not zeroed. */
+const UsageSummary = (input: { run: Run; sessions: Session[] }): ReactElement | null => {
+  const { run, sessions } = input;
+  const reported = sessions.filter((session) => session.usage);
+  const inputTokens = reported.reduce((total, session) => total + (session.usage?.inputTokens ?? 0), 0);
+  const outputTokens = reported.reduce((total, session) => total + (session.usage?.outputTokens ?? 0), 0);
+  const unreported = sessions.length - reported.length;
+  const elapsed = run.finishedAt ? Date.parse(run.finishedAt) - Date.parse(run.createdAt) : undefined;
+  if (!reported.length && elapsed === undefined)
+    return null;
+
+  return (
+    <Group gap="lg">
+      {reported.length > 0 && (
+        <Text size="xs" c="dimmed">
+          {t('Reported tokens')}: {t('Input')} {formatNumber(inputTokens)} · {t('Output')} {formatNumber(outputTokens)}
+        </Text>
+      )}
+      {unreported > 0 && (
+        <Text size="xs" c="dimmed">
+          {t('Conversations without reported usage')}: {unreported}
+        </Text>
+      )}
+      {elapsed !== undefined && (
+        <Text size="xs" c="dimmed">
+          {t('Elapsed')}: {formatDuration(elapsed)}
+        </Text>
+      )}
+    </Group>
+  );
+};
 
 const Changes = (input: { runId: string }): ReactElement => {
   const { client } = useApplication();
@@ -125,6 +173,7 @@ export const RunDetail = (input: {
           <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
             {run.data.workspace}
           </Text>
+          {sessions.data && <UsageSummary run={run.data} sessions={sessions.data} />}
           {run.data.result && <pre className="feature-pre">{run.data.result}</pre>}
         </Paper>
       )}

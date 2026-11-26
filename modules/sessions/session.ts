@@ -8,6 +8,7 @@ export interface Session {
   agentId?: string;
   modelId: string;
   instructions: string;
+  policy?: string;
   context?: string;
   messageCount: number;
   preview?: string;
@@ -87,6 +88,7 @@ export interface SessionResult {
 export interface SessionInput {
   modelId?: string;
   instructions?: string;
+  policy?: string;
   context?: string;
   runId?: string;
   parentId?: string;

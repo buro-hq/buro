@@ -104,6 +104,8 @@
   "Read-only workspace": "Рабочая копия только для чтения",
   "Remove saved key": "Удалить сохраненный ключ",
   "Reported tokens": "Токены по данным модели",
+  "Elapsed": "Время работы",
+  "Conversations without reported usage": "Диалоги без данных о токенах",
   "Run options": "Параметры запуска",
   "Save and start": "Сохранить и запустить",
   "Save instructions": "Сохранить инструкции",

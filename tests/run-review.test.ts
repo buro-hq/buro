@@ -209,6 +209,24 @@ test('a run can disable application review without changing the defaults', async
   assert.equal((await f.app.settings.get()).review?.enabled, true);
 });
 
+test('review participants receive the shared run policy while keeping their own instructions', async (t) => {
+  const f = await fixture(t);
+  const started = await f.app.runs.start({
+    taskId: f.task.id,
+    options: { review: { ...f.review, maxRounds: 1 }, instructions: 'House review policy' },
+  });
+  const run = (await f.app.runs.wait({
+    id: started.run!.id,
+  }))!;
+  assert.equal(run.review === undefined, false);
+  const reviewSessions = (await f.app.sessions.list({
+    runId: run.id,
+  })).filter((session) => session.id !== run.sessionId);
+  assert.equal(reviewSessions.length, 2);
+  assert.equal(reviewSessions.every((session) => session.policy === 'House review policy'), true);
+  assert.equal(reviewSessions.every((session) => session.instructions.includes('Independently review the actual task result')), true);
+});
+
 test('a review report failure remains visible without discarding the implementation', async (t) => {
   const f = await fixture(t, {
     reportFails: true,
@@ -340,4 +358,29 @@ test('startup recovery marks unfinished review records interrupted without repla
   assert.equal(recovered?.review?.status, 'interrupted');
   assert.equal(recovered?.review?.reports.at(-1)?.status, 'interrupted');
   assert.equal(f.requests.length, requests);
+});
+
+test('a continuation reuses the policy saved by the previous attempt', async (t) => {
+  const f = await fixture(t);
+  await f.app.settings.update({
+    review: { enabled: false },
+  });
+  const started = await f.app.runs.start({
+    taskId: f.task.id,
+    options: { instructions: 'House continuation policy' },
+  });
+  const first = (await f.app.runs.wait({
+    id: started.run!.id,
+  }))!;
+  const second = (await f.app.runs.retry({
+    id: first.id,
+  })).run!;
+  await f.app.runs.wait({
+    id: second.id,
+  });
+  const continued = await f.app.sessions.get({
+    id: second.sessionId,
+  });
+  assert.equal(continued?.policy, 'House continuation policy');
+  assert.equal(continued?.instructions, '');
 });

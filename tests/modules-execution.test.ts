@@ -906,6 +906,229 @@ test('a collaborator can use another model, return feedback and retain explicit 
   assert.equal(conversations.find((session) => session.parentId)?.modelId, 'helper');
 });
 
+test('run instructions become shared policy while a collaborator’s own instructions never inherit downward', async (t) => {
+  const f = await projectFixture(t);
+  const agents = new AgentService({
+    store: f.storage.records('agents'),
+    events: f.events,
+  });
+  for (const entry of sessionTools({
+    sessions: f.sessions,
+    models: f.models,
+    agents,
+    events: f.events,
+  }))
+    f.tools.register(entry);
+  let rootRequests = 0;
+  let helperRequests = 0;
+  f.model('root', async (input) => {
+    rootRequests++;
+    if (rootRequests === 1) {
+      assert.ok(input.messages[0].content.includes('<work_policy>\nHouse policy\n</work_policy>'));
+      return tool('session_start', {
+        input: 'Summarize the task',
+        modelId: 'helper',
+        instructions: 'Helper rules.',
+      });
+    }
+
+    const last = JSON.parse(input.messages.at(-1)!.content);
+    if (rootRequests === 2)
+      return tool('session_wait', {
+        sessionId: last.sessionId,
+      });
+
+    assert.equal(last.result, 'Helper done');
+    return reply('Root done');
+  });
+  f.model('helper', async (input) => {
+    helperRequests++;
+    if (helperRequests === 1) {
+      const system = input.messages[0].content;
+      assert.ok(system.includes('<work_policy>\nHouse policy\n</work_policy>'));
+      assert.ok(system.includes('Helper rules.'));
+      return tool('session_start', {
+        input: 'Draft a line',
+        modelId: 'grandchild',
+      });
+    }
+
+    const last = JSON.parse(input.messages.at(-1)!.content);
+    if (helperRequests === 2)
+      return tool('session_wait', {
+        sessionId: last.sessionId,
+      });
+
+    assert.equal(last.result, 'Grandchild done');
+    return reply('Helper done');
+  });
+  f.model('grandchild', async (input) => {
+    const system = input.messages[0].content;
+    assert.ok(system.includes('<work_policy>\nHouse policy\n</work_policy>'));
+    assert.ok(!system.includes('Helper rules.'));
+    return reply('Grandchild done');
+  });
+  const started = (await f.runs.start({
+    taskId: f.task.id,
+    options: { instructions: 'House policy' },
+  })).run!;
+  const finished = (await f.runs.wait({
+    id: started.id,
+  }))!;
+  assert.equal(finished.result, 'Root done');
+  const conversations = await f.sessions.list({
+    runId: started.id,
+  });
+  assert.equal(conversations.length, 3);
+  const main = conversations.find((session) => session.id === started.sessionId)!;
+  const helper = conversations.find((session) => session.parentId === main.id)!;
+  const grandchild = conversations.find((session) => session.parentId === helper.id)!;
+  assert.equal(main.policy, 'House policy');
+  assert.equal(main.instructions, '');
+  assert.equal(helper.policy, 'House policy');
+  assert.equal(helper.instructions, 'Helper rules.');
+  assert.equal(grandchild.policy, 'House policy');
+  assert.equal(grandchild.instructions, '');
+});
+
+test('a collaborator started from a saved agent description keeps its own instructions and the shared policy', async (t) => {
+  const f = await projectFixture(t);
+  const agents = new AgentService({
+    store: f.storage.records('agents'),
+    events: f.events,
+  });
+  for (const entry of sessionTools({
+    sessions: f.sessions,
+    models: f.models,
+    agents,
+    events: f.events,
+  }))
+    f.tools.register(entry);
+  const description = await agents.save({
+    name: 'Reviewer',
+    description: 'Reviews work',
+    instructions: 'Description rules.',
+  });
+  let rootRequests = 0;
+  f.model('root', async (input) => {
+    rootRequests++;
+    if (rootRequests === 1)
+      return tool('session_start', {
+        input: 'Review the task',
+        agentId: description.id,
+        modelId: 'helper',
+      });
+
+    const last = JSON.parse(input.messages.at(-1)!.content);
+    if (rootRequests === 2)
+      return tool('session_wait', {
+        sessionId: last.sessionId,
+      });
+
+    return reply('Root done');
+  });
+  f.model('helper', async (input) => {
+    const system = input.messages[0].content;
+    assert.ok(system.includes('<work_policy>\nHouse policy\n</work_policy>'));
+    assert.ok(system.includes('Description rules.'));
+    return reply('Review done');
+  });
+  const started = (await f.runs.start({
+    taskId: f.task.id,
+    options: { instructions: 'House policy' },
+  })).run!;
+  await f.runs.wait({
+    id: started.id,
+  });
+  const conversations = await f.sessions.list({
+    runId: started.id,
+  });
+  const child = conversations.find((session) => session.parentId === started.sessionId)!;
+  assert.equal(child.agentId, description.id);
+  assert.equal(child.instructions, 'Description rules.');
+  assert.equal(child.policy, 'House policy');
+});
+
+test('an explicit empty instructions override suppresses the application default policy', async (t) => {
+  const f = await projectFixture(t);
+  const settings = new SettingsService({
+    store: f.storage.records('settings'),
+    events: f.events,
+  });
+  await settings.update({
+    instructions: 'Application default policy',
+  });
+  f.model('local', async (input) => {
+    assert.ok(!input.messages[0].content.includes('Application default policy'));
+    return reply('Done');
+  });
+  const started = (await f.runs.start({
+    taskId: f.task.id,
+    options: { instructions: '' },
+  })).run!;
+  await f.runs.wait({
+    id: started.id,
+  });
+  assert.equal((await f.sessions.get({
+    id: started.sessionId,
+  }))!.policy, '');
+});
+
+test('application default instructions become the shared policy of every conversation in a run', async (t) => {
+  const f = await projectFixture(t);
+  const settings = new SettingsService({
+    store: f.storage.records('settings'),
+    events: f.events,
+  });
+  await settings.update({
+    instructions: 'Application default policy',
+  });
+  const agents = new AgentService({
+    store: f.storage.records('agents'),
+    events: f.events,
+  });
+  for (const entry of sessionTools({
+    sessions: f.sessions,
+    models: f.models,
+    agents,
+    events: f.events,
+  }))
+    f.tools.register(entry);
+  let rootRequests = 0;
+  f.model('root', async (input) => {
+    rootRequests++;
+    if (rootRequests === 1)
+      return tool('session_start', {
+        input: 'Summarize the task',
+        modelId: 'helper',
+      });
+
+    const last = JSON.parse(input.messages.at(-1)!.content);
+    if (rootRequests === 2)
+      return tool('session_wait', {
+        sessionId: last.sessionId,
+      });
+
+    return reply('Root done');
+  });
+  f.model('helper', async (input) => {
+    assert.ok(input.messages[0].content.includes('<work_policy>\nApplication default policy\n</work_policy>'));
+    return reply('Helper done');
+  });
+  const started = (await f.runs.start({
+    taskId: f.task.id,
+  })).run!;
+  await f.runs.wait({
+    id: started.id,
+  });
+  const conversations = await f.sessions.list({
+    runId: started.id,
+  });
+  const child = conversations.find((session) => session.parentId === started.sessionId)!;
+  assert.equal(child.policy, 'Application default policy');
+  assert.equal(child.instructions, '');
+});
+
 test('run completion stops background collaborators before declaring the attempt complete', async (t) => {
   const f = await projectFixture(t);
   const agents = new AgentService({

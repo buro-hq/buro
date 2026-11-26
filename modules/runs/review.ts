@@ -110,6 +110,7 @@ export const reviewRun = async (input: ReviewInput): Promise<ReviewOutcome> => {
           parentId: run.sessionId,
           modelId: participant.modelId ?? executor?.modelId,
           instructions: [instructions, participant.instructions].filter(Boolean).join('\n\n'),
+          policy: executor?.policy,
           access: { readOnly: run.options?.readOnly, tools: run.options?.tools },
         });
         if (!created.ok)

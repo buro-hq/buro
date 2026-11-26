@@ -150,11 +150,13 @@ export class RunService implements Runs {
     ]
       .filter(Boolean)
       .join('\n\n');
+    // Run-level instructions are the shared policy for every conversation in this attempt.
+    const policy = input.options?.instructions ?? history?.policy ?? settings.instructions;
     const created = await this.sessions.create({
       runId: id,
       context: prompt,
       modelId: input.options?.modelId ?? history?.modelId ?? settings.defaultModelId,
-      instructions: input.options?.instructions ?? history?.instructions ?? settings.instructions,
+      policy,
       access: { tools: input.options?.tools, readOnly: input.options?.readOnly },
       sourceSessionId: history?.id,
     });

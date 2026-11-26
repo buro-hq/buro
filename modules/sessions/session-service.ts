@@ -87,6 +87,7 @@ export class SessionService implements Sessions {
       agentId: input.agentId,
       modelId: model.id,
       instructions: input.instructions ?? '',
+      policy: input.policy,
       context: input.context,
       access: structuredClone(input.access),
       messages: [
