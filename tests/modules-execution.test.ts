@@ -14,6 +14,7 @@ import { ToolRegistry } from '../modules/tools/tool-registry.ts';
 import { ActivityLog } from '../modules/sessions/activity-log.ts';
 import { SessionService } from '../modules/sessions/session-service.ts';
 import { ConversationStore } from '../modules/sessions/conversation-store.ts';
+import { receiptTools, type ToolReceipt } from '../modules/sessions/receipts.ts';
 import { TaskService } from '../modules/tasks/task-service.ts';
 import { ProjectService } from '../modules/projects/project-service.ts';
 import { RunService } from '../modules/runs/run-service.ts';
@@ -65,12 +66,20 @@ function fixture(t: { after(callback: () => Promise<void>): void }) {
   const conversations = new ConversationStore({
     storage,
   });
+  const receipts = storage.records<ToolReceipt>('receipts', {
+    indexes: [['sessionId']],
+  });
+  for (const entry of receiptTools({
+    store: receipts,
+  }))
+    tools.register(entry);
   const sessions = new SessionService({
     store: conversations,
     models,
     tools,
     activity,
     events,
+    receipts,
   });
   t.after(() => storage.close());
   function model(id: string, complete: ModelProvider['complete']) {
@@ -85,7 +94,7 @@ function fixture(t: { after(callback: () => Promise<void>): void }) {
       }),
     });
   }
-  return { storage, conversations, models, tools, activity, sessions, observations, model, events };
+  return { storage, conversations, receipts, models, tools, activity, sessions, observations, model, events };
 }
 
 for (const backend of ['sqlite', 'json']) {
@@ -646,7 +655,9 @@ test('reported prompt usage calibrates later requests while preserving complete 
   assert.equal(result.ok, true);
   assert.equal(calls, 2);
   assert.equal(reads, 1);
-  assert.equal(saved?.messages.find((message) => message.role === 'tool')?.content, log);
+  const toolContent = saved?.messages.find((message) => message.role === 'tool')?.content;
+  const receiptId = JSON.parse(toolContent!).receipt;
+  assert.equal((await f.receipts.get(receiptId))?.content, log);
 });
 
 test('native aggregate usage is not treated as the size of one input prompt', async (t) => {
@@ -1127,6 +1138,157 @@ test('application default instructions become the shared policy of every convers
   const child = conversations.find((session) => session.parentId === started.sessionId)!;
   assert.equal(child.policy, 'Application default policy');
   assert.equal(child.instructions, '');
+});
+
+test('oversized tool output becomes a range-readable receipt while ordinary output stays inline', async (t) => {
+  const f = fixture(t);
+  const full = 'a'.repeat(20_000);
+  const small = 'Compact result';
+  let saveCalls = 0;
+  f.tools.register({
+    effect: 'write',
+    definition: { name: 'save', description: 'Save', parameters: {} },
+    async execute() {
+      saveCalls++;
+      return { content: saveCalls === 1 ? full : small };
+    },
+  });
+  let requests = 0;
+  let receiptId = '';
+  f.model('local', async (input) => {
+    requests++;
+    if (requests === 1)
+      return tool('save');
+
+    if (requests === 2) {
+      const message = input.messages.find((entry) => entry.role === 'tool')!;
+      const parsed = JSON.parse(message.content);
+      receiptId = parsed.receipt;
+      assert.equal(parsed.bytes, 20_000);
+      assert.equal(parsed.isError, undefined);
+      assert.ok(parsed.head.startsWith('aaa'));
+      assert.ok(parsed.tail.endsWith('aaa'));
+      return tool('receipt_read', {
+        receipt: receiptId,
+        offset: 19_990,
+        limit: 20,
+      });
+    }
+
+    if (requests === 3) {
+      const message = input.messages.at(-1)!;
+      assert.equal(message.role, 'tool');
+      const parsed = JSON.parse(message.content);
+      assert.equal(parsed.receipt, receiptId);
+      assert.equal(parsed.offset, 19_990);
+      assert.equal(parsed.total, 20_000);
+      assert.equal(parsed.content, 'a'.repeat(10));
+      return tool('save');
+    }
+
+    const message = input.messages.at(-1)!;
+    assert.equal(message.role, 'tool');
+    assert.equal(message.content, 'Compact result');
+    return reply('Done');
+  });
+  const created = await f.sessions.create();
+  const result = await f.sessions.run({
+    sessionId: created.sessionId,
+    input: 'Complete the task',
+    workspace: '/tmp',
+  });
+  assert.equal(result.text, 'Done');
+  const saved = await f.receipts.get(receiptId);
+  assert.equal(saved?.content, full);
+  assert.equal(saved?.sessionId, created.sessionId);
+});
+
+test('a failing oversized command keeps its exit code in the receipt and is readable again', async (t) => {
+  const f = fixture(t);
+  const output = JSON.stringify({
+    exitCode: 1,
+    stdout: '',
+    stderr: 'e'.repeat(20_000),
+  });
+  f.tools.register({
+    effect: 'command',
+    definition: { name: 'fail', description: 'Fail', parameters: {} },
+    async execute() {
+      return { content: output, isError: true, exitCode: 1 };
+    },
+  });
+  let requests = 0;
+  let receiptId = '';
+  f.model('local', async (input) => {
+    requests++;
+    if (requests === 1)
+      return tool('fail');
+
+    const message = input.messages.find((entry) => entry.role === 'tool')!;
+    const parsed = JSON.parse(message.content);
+    receiptId = parsed.receipt;
+    assert.equal(parsed.isError, true);
+    assert.equal(parsed.exitCode, 1);
+    assert.ok(parsed.tail.includes('eee'));
+    return reply('Noted the failure');
+  });
+  const created = await f.sessions.create();
+  const result = await f.sessions.run({
+    sessionId: created.sessionId,
+    input: 'Run the command',
+    workspace: '/tmp',
+  });
+  assert.equal(result.text, 'Noted the failure');
+  const read = await f.tools.execute({
+    name: 'receipt_read',
+    arguments: { receipt: receiptId, offset: 0, limit: 26 },
+    context: {
+      sessionId: created.sessionId,
+      workspace: '/tmp',
+      signal: new AbortController().signal,
+    },
+  });
+  assert.equal(read.isError, undefined);
+  assert.ok(read.content.includes('"exitCode":1'));
+});
+
+test('a receipt is readable only inside the conversation that produced it', async (t) => {
+  const f = fixture(t);
+  const full = 'z'.repeat(20_000);
+  let receiptId = '';
+  f.tools.register({
+    effect: 'write',
+    definition: { name: 'save', description: 'Save', parameters: {} },
+    async execute() {
+      return { content: full };
+    },
+  });
+  f.model('local', async (input) => {
+    if (!receiptId) {
+      const message = input.messages.find((entry) => entry.role === 'tool')!;
+      receiptId = JSON.parse(message.content).receipt;
+    }
+
+    return receiptId ? reply('Done') : tool('save');
+  });
+  const created = await f.sessions.create();
+  await f.sessions.run({
+    sessionId: created.sessionId,
+    input: 'Complete the task',
+    workspace: '/tmp',
+  });
+  const other = await f.sessions.create();
+  const denied = await f.tools.execute({
+    name: 'receipt_read',
+    arguments: { receipt: receiptId },
+    context: {
+      sessionId: other.sessionId,
+      workspace: '/tmp',
+      signal: new AbortController().signal,
+    },
+  });
+  assert.equal(denied.isError, true);
+  assert.equal(denied.content, 'No saved receipt with this id in this conversation.');
 });
 
 test('run completion stops background collaborators before declaring the attempt complete', async (t) => {

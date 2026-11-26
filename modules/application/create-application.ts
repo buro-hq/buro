@@ -21,6 +21,7 @@ import { GitChanges } from '../results/git-changes.ts';
 import { ActivityLog } from '../sessions/activity-log.ts';
 import { SessionService } from '../sessions/session-service.ts';
 import { ConversationStore } from '../sessions/conversation-store.ts';
+import { receiptTools, type ToolReceipt } from '../sessions/receipts.ts';
 import { SettingsService } from '../settings/settings-service.ts';
 import type { StorageEngine } from '../storage/record-store.ts';
 import { SqliteStorage } from '../storage/sqlite-storage.ts';
@@ -114,12 +115,16 @@ const composeApplication = async (scope: {
   const conversations = new ConversationStore({
     storage,
   });
+  const receipts = storage.records<ToolReceipt>('receipts', {
+    indexes: [['sessionId']],
+  });
   const sessions = new SessionService({
     store: conversations,
     models,
     tools,
     activity,
     events,
+    receipts,
   });
   const workspaces = new GitWorkspaces({
     directory: path.join(input.directory, 'workspaces'),
@@ -141,6 +146,9 @@ const composeApplication = async (scope: {
       models,
       agents,
       events,
+    }),
+    ...receiptTools({
+      store: receipts,
     }),
   ])
     tools.register(tool);

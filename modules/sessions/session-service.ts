@@ -7,6 +7,7 @@ import type { ToolContext, Tools, ToolResult } from '../tools/tool.ts';
 import type { ActivityHistory } from './activity.ts';
 import { conversationContext } from './context.ts';
 import { settledHistory } from './history.ts';
+import { compactToolResult, type ReceiptStore } from './receipts.ts';
 import type {
   Session,
   SessionConversation,
@@ -53,6 +54,7 @@ export class SessionService implements Sessions {
   private tools: Tools;
   private activity: ActivityHistory;
   private events: Notifications;
+  private receipts?: ReceiptStore;
   private active = new Map<string, ActiveSession>();
 
   /** Connects the module's own store to public model, tool and notification interfaces. */
@@ -62,12 +64,14 @@ export class SessionService implements Sessions {
     tools: Tools;
     activity: ActivityHistory;
     events: Notifications;
+    receipts?: ReceiptStore;
   }) {
     this.store = input.store;
     this.models = input.models;
     this.tools = input.tools;
     this.activity = input.activity;
     this.events = input.events;
+    this.receipts = input.receipts;
   }
 
   /** Creates a portable session without dispatching inference. */
@@ -608,6 +612,20 @@ export class SessionService implements Sessions {
       type: 'tool.completed',
       data: { actionId: action.id, call, result },
     });
+    // The saved receipt keeps the complete output addressable without crowding the conversation.
+    const receipts = this.receipts;
+    const { content, receipt } = receipts
+      ? compactToolResult({
+          id: action.id,
+          sessionId: session.id,
+          runId: session.runId,
+          toolName: call.name,
+          result,
+        })
+      : { content: result.content };
+    if (receipt && receipts)
+      await receipts.save(receipt);
+
     const next: SessionConversation = {
       ...session,
       messages: [
@@ -615,7 +633,7 @@ export class SessionService implements Sessions {
         {
           id: randomUUID(),
           role: 'tool',
-          content: result.content,
+          content,
           toolCallId: call.id,
           toolName: call.name,
         },
