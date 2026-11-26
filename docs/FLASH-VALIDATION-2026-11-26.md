@@ -9,11 +9,11 @@ $0.006/M cached input, $0.30/M uncached input, $1.20/M output.
 
 ## Attempts
 
-| Attempt | Condition | Outcome | Cost |
-| ------- | --------- | ------- | ---- |
-| 1 | Under the outer DSH file sandbox | Every file/command tool failed `sandbox-exec: sandbox_apply: Operation not permitted` (exit 71). Run cancelled. | ~$0.06 |
-| 2 | Unsandboxed host | 12.4 min, 7 sessions (main + 6 chained workers, depth 6), 20 file edits. Runner crashed on a `git diff` snapshot exceeding the 12 MB `maxBuffer` after the model copied the repository into `.pristine-check/`. | ~$0.49 |
-| 3 | Unsandboxed host, fixed runner | 3.6 min, main session worked solo (0 collaborators), 45 requests, 58 `read_file`, 13 `command`, 2 `receipt_read`. Failed on `MODEL_RESPONSE_LIMIT` — one model response exceeded 4 MB (`agent/providers/http.ts:265`) with `retries: 0`. | ~$0.13 |
+| Attempt | Condition                        | Outcome                                                                                                                                                                                                                                  | Cost   |
+| ------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1       | Under the outer DSH file sandbox | Every file/command tool failed `sandbox-exec: sandbox_apply: Operation not permitted` (exit 71). Run cancelled.                                                                                                                          | ~$0.06 |
+| 2       | Unsandboxed host                 | 12.4 min, 7 sessions (main + 6 chained workers, depth 6), 20 file edits. Runner crashed on a `git diff` snapshot exceeding the 12 MB `maxBuffer` after the model copied the repository into `.pristine-check/`.                          | ~$0.49 |
+| 3       | Unsandboxed host, fixed runner   | 3.6 min, main session worked solo (0 collaborators), 45 requests, 58 `read_file`, 13 `command`, 2 `receipt_read`. Failed on `MODEL_RESPONSE_LIMIT` — one model response exceeded 4 MB (`agent/providers/http.ts:265`) with `retries: 0`. | ~$0.13 |
 
 Total spend across the three attempts: about $0.68, below the intended budget.
 
