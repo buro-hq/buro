@@ -35,3 +35,7 @@ Report total wall time, execution/review/correction stages, requests, native tok
 | Tomorrow / next resumed session | Pro + Qwen on RTX                                   | Deferred           |
 
 Today uses no RTX and no Pro calls. Deferred variants are recorded, not automatically scheduled. Stop model work when actual weekly remaining capacity is at or below 5%, preserve interrupted results, finish a reviewable checkpoint, commit and push. This threshold supersedes earlier 7%, 10% and 20% floors.
+
+## Independent code review requested
+
+After both flows end or are interrupted, independently inspect each saved implementation against the same task and Desktop preferences. Review the actual patches, relevant module contracts and independent verification receipts without treating team reviewer claims as evidence of correctness. Record findings about functionality, architecture, simplicity, cleanliness and preference conformance with file references and representative code examples. Distinguish confirmed defects from optional improvements, source defects from environment limitations, and unfinished work from a completed failure. Add this assessment and its evidence to the comparative HTML report. This review is pending and separate from the three in-flow reviewers.
