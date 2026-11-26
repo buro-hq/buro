@@ -2,6 +2,8 @@ import type { ApiQueries } from '../../modules/api/contract.ts';
 import type { Notification } from '../../modules/events/notifications.ts';
 
 const topics: Record<keyof ApiQueries, readonly string[]> = {
+  'presets.list': ['preset'],
+  'presets.get': ['preset'],
   'projects.list': ['project'],
   'projects.get': ['project'],
   'previews.list': ['preview'],

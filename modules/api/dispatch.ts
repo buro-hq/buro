@@ -11,23 +11,28 @@ const task = z.object({
   title: z.string(),
   description: z.string(),
 });
-const review = z.object({
+const review = z.strictObject({
   enabled: z.boolean().optional(),
   maxRounds: z.number().int().positive().nullable().optional(),
-  participants: z.array(z.object({
+  participants: z.array(z.strictObject({
     name: z.string(),
     instructions: z.string(),
     modelId: z.string().nullable().optional(),
     tools: z.array(z.string()).optional(),
   })).optional(),
 });
-const runOptions = z.object({
+const launchOptions = z.strictObject({
   modelId: z.string().optional(),
   instructions: z.string().optional(),
+  review: review.optional(),
+});
+const runOptions = launchOptions.extend({
   tools: z.array(z.string()).optional(),
   readOnly: z.boolean().optional(),
   base: z.string().optional(),
-  review: review.optional(),
+});
+const presetId = z.strictObject({
+  id: z.string().trim().min(1),
 });
 const configuration = z.object({
   id: z.string().optional(),
@@ -60,6 +65,14 @@ const method = <P, R>(
 
 /** Validates untrusted command input once, at the application transport boundary. */
 export const apiMethods = (app: Application): ApiHandlers => ({
+  'presets.list': method(z.strictObject({}), (input) => app.presets.list(input)),
+  'presets.get': method(presetId, (input) => app.presets.get(input)),
+  'presets.save': method(z.strictObject({
+    id: presetId.shape.id.optional(),
+    name: z.string().trim().min(1),
+    options: launchOptions,
+  }), (input) => app.presets.save(input)),
+  'presets.delete': method(presetId, (input) => app.presets.delete(input)),
   'projects.list': method(empty, () => app.projects.list()),
   'projects.get': method(id, (input) => app.projects.get(input)),
   'projects.connect': method(

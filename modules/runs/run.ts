@@ -1,5 +1,5 @@
 import type { RecordStore } from '../storage/record-store.ts';
-import type { ReviewSettings, RunReviewState } from '#shared/contracts';
+import type { LaunchOptions, RunReviewState } from '#shared/contracts';
 
 /** One isolated attempt at a task. A restart creates a new run linked to this one. */
 export interface Run {
@@ -25,13 +25,10 @@ export interface Run {
 export interface RunStore extends RecordStore<Run> {}
 
 /** Explicit overrides of application defaults for one attempt. */
-export interface RunOptions {
-  modelId?: string;
-  instructions?: string;
+export interface RunOptions extends LaunchOptions {
   tools?: string[];
   readOnly?: boolean;
   base?: string;
-  review?: ReviewSettings;
 }
 
 /** Expected inability to start work is returned to the caller. */

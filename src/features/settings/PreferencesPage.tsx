@@ -16,7 +16,7 @@ import { ThemePreview, Panel, ErrorNotice, QueryFeedback } from '@/shared/ui';
 import { useAppearance } from '../../theme/AppearanceProvider.tsx';
 import { themePresets } from '../../theme/presets.ts';
 import { useOperation } from '@/shared/lib';
-import { ReviewEditor } from '@/features/run-review';
+import { ReviewEditor } from '@/entities/run';
 import type { ReviewSettings } from '#shared/contracts';
 
 const ReviewSettingsEditor = (input: { review: ReviewSettings }): ReactElement => {

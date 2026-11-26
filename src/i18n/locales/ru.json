@@ -206,5 +206,20 @@
   "No commands were observed in this review session.": "В этой сессии ревью команды не выполнялись.",
   "Open review conversation": "Открыть сессию ревью",
   "Enabled": "Включено",
-  "Disabled": "Выключено"
+  "Disabled": "Выключено",
+  "Launch presets": "Пресеты запуска",
+  "Launch preset": "Пресет запуска",
+  "No preset": "Без пресета",
+  "No launch presets yet": "Пресетов запуска пока нет",
+  "New launch preset": "Новый пресет запуска",
+  "Edit launch preset": "Редактировать пресет запуска",
+  "Preset name": "Название пресета",
+  "Save preset": "Сохранить пресет",
+  "Save launch settings, then copy and adjust them when starting a goal.": "Сохраните настройки запуска, затем скопируйте и измените их при запуске цели.",
+  "Override instructions": "Переопределить инструкции",
+  "Enable the override to use empty instructions instead of application defaults.": "Включите переопределение, чтобы использовать пустые инструкции вместо настроек приложения.",
+  "Use default review settings": "Использовать настройки ревью приложения",
+  "Customize review settings": "Настроить ревью",
+  "Clear preset": "Сбросить пресет",
+  "Preset not found.": "Пресет не найден."
 }

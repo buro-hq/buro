@@ -7,13 +7,25 @@ import { t } from '@/i18n/index.ts';
 /** Controlled team settings, shared by application defaults and explicit run overrides. */
 export interface ReviewEditorProps {
   value: ReviewSettings;
+  /** Displays inherited fields without copying untouched defaults into explicit overrides. */
+  defaults?: ReviewSettings;
   models: AvailableModel[];
   onChange(value: ReviewSettings): void;
 }
 
 /** Reviewer names and instructions are editable data, independent of execution roles. */
-export const ReviewEditor = ({ value, models, onChange }: ReviewEditorProps): ReactElement => {
-  const participants = value.participants ?? [];
+export const ReviewEditor = ({ value, defaults, models, onChange }: ReviewEditorProps): ReactElement => {
+  const participants = value.participants ?? defaults?.participants ?? [];
+  const rounds = value.maxRounds === undefined ? defaults?.maxRounds : value.maxRounds;
+  const modelChoices = (modelId?: string | null): { value: string; label: string }[] => {
+    const choices = models.map((model) => ({ value: model.id, label: model.name ?? model.id }));
+    const hasOverride = modelId !== undefined && modelId !== null;
+    const isAvailable = models.some((model) => model.id === modelId);
+    if (hasOverride && !isAvailable)
+      return [...choices, { value: modelId, label: modelId }];
+
+    return choices;
+  };
   const change = (index: number, changes: Partial<ReviewParticipant>): void => {
     onChange({
       ...value,
@@ -42,7 +54,7 @@ export const ReviewEditor = ({ value, models, onChange }: ReviewEditorProps): Re
               placeholder={t('Same model as executor')}
               clearable
               value={participant.modelId ?? null}
-              data={models.map((model) => ({ value: model.id, label: model.name ?? model.id }))}
+              data={modelChoices(participant.modelId)}
               onChange={(modelId) => change(index, {
                 modelId,
               })}
@@ -83,7 +95,7 @@ export const ReviewEditor = ({ value, models, onChange }: ReviewEditorProps): Re
       <NumberInput
         label={t('Maximum review rounds')}
         description={t('Optional. Leave empty to continue until there are no actionable findings.')}
-        value={value.maxRounds ?? ''}
+        value={rounds ?? ''}
         allowDecimal={false}
         min={1}
         onChange={(rounds) => onChange({

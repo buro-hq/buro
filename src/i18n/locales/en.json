@@ -206,5 +206,20 @@
   "No commands were observed in this review session.": "No commands were observed in this review session.",
   "Open review conversation": "Open review conversation",
   "Enabled": "Enabled",
-  "Disabled": "Disabled"
+  "Disabled": "Disabled",
+  "Launch presets": "Launch presets",
+  "Launch preset": "Launch preset",
+  "No preset": "No preset",
+  "No launch presets yet": "No launch presets yet",
+  "New launch preset": "New launch preset",
+  "Edit launch preset": "Edit launch preset",
+  "Preset name": "Preset name",
+  "Save preset": "Save preset",
+  "Save launch settings, then copy and adjust them when starting a goal.": "Save launch settings, then copy and adjust them when starting a goal.",
+  "Override instructions": "Override instructions",
+  "Enable the override to use empty instructions instead of application defaults.": "Enable the override to use empty instructions instead of application defaults.",
+  "Use default review settings": "Use default review settings",
+  "Customize review settings": "Customize review settings",
+  "Clear preset": "Clear preset",
+  "Preset not found.": "Preset not found."
 }

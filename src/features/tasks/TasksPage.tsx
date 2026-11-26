@@ -2,12 +2,9 @@ import {
   Button,
   Group,
   Paper,
-  Select,
   Stack,
   Text,
-  Textarea,
   Checkbox,
-  Collapse,
 } from '@mantine/core';
 import { useState, type ReactElement } from 'react';
 import type { Task } from '../../../modules/tasks/task.ts';
@@ -17,8 +14,9 @@ import { t } from '../../i18n/index.ts';
 import { Panel, ErrorNotice, QueryFeedback } from '@/shared/ui';
 import { useOperation } from '@/shared/lib';
 import { TaskEditor } from './TaskEditor.tsx';
-import { ReviewEditor } from '@/features/run-review';
-import type { ReviewSettings } from '#shared/contracts';
+import { LaunchOptionsEditor } from '@/entities/run';
+import { PresetSelector } from '@/entities/preset';
+import type { LaunchOptions } from '#shared/contracts';
 
 /** Owns task editing and explicit run options; it never reconstructs server state from events. */
 export const TasksPage = (input: { projectId: string; onRun(id: string): void }): ReactElement => {
@@ -30,23 +28,18 @@ export const TasksPage = (input: { projectId: string; onRun(id: string): void })
   const settings = useApiQuery('settings.get', {});
   const action = useOperation();
   const [editor, setEditor] = useState<{ task?: Task }>();
-  const [advanced, setAdvanced] = useState(false);
-  const [modelId, setModelId] = useState<string | null>(null);
-  const [instructions, setInstructions] = useState('');
+  const [presetId, setPresetId] = useState<string | null>(null);
+  const [options, setOptions] = useState<LaunchOptions>({});
   const [readOnly, setReadOnly] = useState(false);
-  const [reviewMode, setReviewMode] = useState<string | null>(null);
-  const [review, setReview] = useState<ReviewSettings>({});
   const start = async (taskId: string): Promise<void> => {
-    const options: RunOptions = {
-      ...(modelId ? { modelId } : {}),
-      ...(instructions ? { instructions } : {}),
+    const launch: RunOptions = {
+      ...options,
       ...(readOnly ? { readOnly: true } : {}),
-      ...(reviewMode ? { review: { ...review, enabled: reviewMode === 'enabled' } } : {}),
     };
     const result = await action.perform(async () => {
       const started = await client.call('runs.start', {
         taskId,
-        options,
+        options: launch,
       });
       return { ok: started.ok, value: started.run, error: started.error };
     });
@@ -60,55 +53,26 @@ export const TasksPage = (input: { projectId: string; onRun(id: string): void })
       aside={<Button onClick={() => setEditor({})}>{t('New goal')}</Button>}
     >
       <Stack>
-        <Group>
-          <Select
-            label={t('Model')}
-            placeholder={t('Application default')}
-            clearable
-            value={modelId}
-            onChange={setModelId}
-            data={(models.data ?? []).map((model) => ({ value: model.id, label: model.name }))}
-            miw={240}
-          />
-          <Button variant="subtle" mt="auto" onClick={() => setAdvanced((value) => !value)}>
-            {t('Run options')}
-          </Button>
-        </Group>
-        <Collapse in={advanced}>
-          <Stack>
-            <Textarea
-              label={t('Instructions override')}
-              description={t('Optional')}
-              value={instructions}
-              onChange={(event) => setInstructions(event.currentTarget.value)}
-              autosize
-              minRows={3}
-            />
-            <Checkbox
-              label={t('Read-only workspace')}
-              checked={readOnly}
-              onChange={(event) => setReadOnly(event.currentTarget.checked)}
-            />
-            <Select
-              label={t('Automatic team review')}
-              placeholder={t('Application default')}
-              clearable
-              value={reviewMode}
-              onChange={setReviewMode}
-              data={[
-                { value: 'enabled', label: t('Enabled') },
-                { value: 'disabled', label: t('Disabled') },
-              ]}
-            />
-            {reviewMode === 'enabled' && (
-              <ReviewEditor
-                value={{ ...settings.data?.review, ...review, enabled: true }}
-                models={models.data ?? []}
-                onChange={setReview}
-              />
-            )}
-          </Stack>
-        </Collapse>
+        <PresetSelector
+          value={presetId}
+          onChange={({ id, options: copied }) => {
+            setPresetId(id);
+            setOptions(copied);
+          }}
+        />
+        <QueryFeedback loading={models.loading || settings.loading} error={models.error ?? settings.error} />
+        <LaunchOptionsEditor
+          value={options}
+          models={models.data ?? []}
+          reviewDefaults={settings.data?.review}
+          onChange={setOptions}
+          collapsible
+        />
+        <Checkbox
+          label={t('Read-only workspace')}
+          checked={readOnly}
+          onChange={(event) => setReadOnly(event.currentTarget.checked)}
+        />
         <ErrorNotice error={action.error} />
         <QueryFeedback loading={tasks.loading} error={tasks.error} />
         {tasks.data?.length === 0 && <Text c="dimmed">{t('No goals yet')}</Text>}

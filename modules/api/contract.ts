@@ -1,4 +1,5 @@
 import type { Agent } from '../agents/agent.ts';
+import type { LaunchPreset, PresetInput, PresetResult } from '#shared/contracts';
 import type { Notification } from '../events/notifications.ts';
 import type {
   ModelConfigurationInput,
@@ -20,6 +21,8 @@ import type { Task, TaskInput } from '../tasks/task.ts';
 
 /** Read operations are safe to refresh after notifications or reconnecting. */
 export interface ApiQueries {
+  'presets.list': { params: {}; result: LaunchPreset[] };
+  'presets.get': { params: { id: string }; result: LaunchPreset | undefined };
   'projects.list': { params: {}; result: Project[] };
   'projects.get': { params: { id: string }; result: Project | undefined };
   'previews.list': { params: { runId?: string }; result: Preview[] };
@@ -50,6 +53,8 @@ export interface ApiQueries {
 
 /** Commands execute once; losing a connection never causes automatic mutation replay. */
 export interface ApiCommands {
+  'presets.save': { params: PresetInput; result: PresetResult };
+  'presets.delete': { params: { id: string }; result: void };
   'projects.connect': { params: { root: string; name?: string }; result: ProjectResult };
   'projects.disconnect': { params: { id: string }; result: void };
   'previews.start': {

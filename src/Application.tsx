@@ -9,6 +9,7 @@ import {
   History,
   Menu,
   Settings2,
+  BookCopy,
   Target,
 } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
@@ -22,6 +23,7 @@ import { RunsPage } from './features/runs/RunsPage.tsx';
 import { AgentsPage } from './features/agents/AgentsPage.tsx';
 import { ModelsPage } from './features/models/ModelsPage.tsx';
 import { MaterialsPage } from './features/materials/MaterialsPage.tsx';
+import { PresetsPage } from '@/pages/presets';
 import { PreferencesPage } from './features/settings/PreferencesPage.tsx';
 
 const navigation = [
@@ -31,6 +33,7 @@ const navigation = [
   { id: 'materials', label: 'Materials', icon: Files },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'models', label: 'Models', icon: Cpu },
+  { id: 'presets', label: 'Launch presets', icon: BookCopy },
   { id: 'settings', label: 'Settings', icon: Settings2 },
 ] as const;
 type Page = (typeof navigation)[number]['id'];
@@ -178,6 +181,7 @@ export const Application = (): ReactElement => {
               )}
               {page === 'agents' && <AgentsPage />}
               {page === 'models' && <ModelsPage />}
+              {page === 'presets' && <PresetsPage />}
               {page === 'settings' && <PreferencesPage />}
             </Stack>
             <footer className="workspace-footer">

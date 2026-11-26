@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { AgentService } from '../agents/agent-service.ts';
+import { PresetService } from '../presets/index.ts';
 import { sessionTools } from '../agents/session-tools.ts';
 import { commandTools } from '../commands/command-tools.ts';
 import { SandboxedCommands } from '../commands/sandboxed-commands.ts';
@@ -99,6 +100,10 @@ const composeApplication = async (scope: {
   });
   const agents = new AgentService({
     store: storage.records('agents'),
+    events,
+  });
+  const presets = new PresetService({
+    store: storage.records('presets'),
     events,
   });
   const materials = new MaterialService({
@@ -223,6 +228,7 @@ const composeApplication = async (scope: {
     }));
   return {
     agents,
+    presets,
     events,
     models,
     materials,

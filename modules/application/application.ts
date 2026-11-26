@@ -1,4 +1,5 @@
 import type { Agents } from '../agents/agent.ts';
+import type { Presets } from '#shared/contracts';
 import type { Notifications } from '../events/notifications.ts';
 import type { ModelConfigurations, ModelTransport } from '../models/model-configuration.ts';
 import type { Models } from '../models/model.ts';
@@ -29,6 +30,7 @@ export interface ApplicationOptions {
 /** The process composes independent feature APIs; it owns no mutable domain snapshot. */
 export interface Application {
   agents: Agents;
+  presets: Presets;
   events: Notifications;
   models: Models;
   materials: Materials;
