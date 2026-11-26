@@ -527,6 +527,10 @@ Choose a code change, command or review to inspect its evidence.</pre
             <h3>MiMo V2.6 Distill 9B</h3>
             <pre id="mimo-code"></pre>
           </article>
+          <article>
+            <h3>Bonsai 2.5 27B</h3>
+            <pre id="bonsai25-code"></pre>
+          </article>
         </div>
         <details>
           <summary>Full patches for the selected run</summary>
@@ -589,8 +593,10 @@ Choose a code change, command or review to inspect its evidence.</pre
           <a href="https://huggingface.co/prism-ml/Ternary-Bonsai-2.5-27B-GGUF">Bonsai 2.5 27B</a>
           (5.93 GB PTQ1_0 language weights, separate PrismML runtime) are the next GPU-fit
           candidates. Inkling 2 Mini, North Mini Code and Laguna XS 2.1 need hybrid GPU/RAM
-          placement at the selected 18–20 GB packages. New-candidate RTX speed and Buro quality are
-          unmeasured; no model loads interrupt the current Gemma comparison.
+          placement at the selected 18–20 GB packages. MiMo and Bonsai native speed/tool results are
+          recorded below; Bonsai Q2_0 uses the existing stock engine and its full Buro small task is
+          tracked separately. Other new-candidate RTX speed and Buro quality are unmeasured; no
+          model loads interrupt the current Gemma comparison.
         </p>
         <p>
           <a href="../LOCAL-MODEL-OPTIMIZATION-2026-11-25.md"
@@ -698,7 +704,7 @@ Choose a code change, command or review to inspect its evidence.</pre
     </main>
     <script id="data" type="application/json">
       {
-        "generatedAt": "2026-11-26T00:37:04.548029+00:00",
+        "generatedAt": "2026-11-26T00:59:47.258657+00:00",
         "cases": [
           {
             "id": "small-qwen",
@@ -21047,6 +21053,729 @@ Choose a code change, command or review to inspect its evidence.</pre
               "userChoiceReceived": false,
               "modelFailureClaimed": false
             }
+          },
+          {
+            "id": "small-bonsai25",
+            "task": "small",
+            "engine": "bonsai25",
+            "name": "Small / Bonsai 2.5 27B",
+            "complete": false,
+            "events": [
+              {
+                "seconds": 0.013203708000000007,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "state",
+                "title": "Executor idle",
+                "detail": "",
+                "allOnly": false
+              },
+              {
+                "seconds": 0.22977774999999998,
+                "actor": "orchestration",
+                "kind": "state",
+                "title": "Run running",
+                "detail": "Review pending",
+                "allOnly": false
+              },
+              {
+                "seconds": 0.23104349999999998,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "state",
+                "title": "Executor running",
+                "detail": "",
+                "allOnly": false
+              },
+              {
+                "seconds": 3.5420650830000002,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 7.6s",
+                "usage": { "inputTokens": 2730, "outputTokens": 71 },
+                "allOnly": true
+              },
+              {
+                "seconds": 11.106569833,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": ".",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "." },
+                "actionId": "634eb9b6-a23e-44af-bc5b-80b4efec5ee2"
+              },
+              {
+                "seconds": 11.164149625,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": ".",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "." },
+                "actionId": "634eb9b6-a23e-44af-bc5b-80b4efec5ee2"
+              },
+              {
+                "seconds": 11.164785208,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src" },
+                "actionId": "244dc211-7196-4415-9cd7-ca0cb6ee4462"
+              },
+              {
+                "seconds": 11.221532707999998,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src" },
+                "actionId": "244dc211-7196-4415-9cd7-ca0cb6ee4462"
+              },
+              {
+                "seconds": 11.222435458,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 5.1s",
+                "usage": { "inputTokens": 3195, "outputTokens": 130 },
+                "allOnly": true
+              },
+              {
+                "seconds": 16.302288207999997,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src/shared",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared" },
+                "actionId": "7b53e94b-b699-4003-ad7b-757579537314"
+              },
+              {
+                "seconds": 16.358816457999996,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src/shared",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared" },
+                "actionId": "7b53e94b-b699-4003-ad7b-757579537314"
+              },
+              {
+                "seconds": 16.359350958,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src/shared/lib",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib" },
+                "actionId": "4061ab1e-1f20-4fef-acb4-b1e23953153b"
+              },
+              {
+                "seconds": 16.411794374999996,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src/shared/lib",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib" },
+                "actionId": "4061ab1e-1f20-4fef-acb4-b1e23953153b"
+              },
+              {
+                "seconds": 16.412204374999998,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "tests",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests" },
+                "actionId": "e7a02ea6-5f6e-41c2-bdcd-f72ab51b505c"
+              },
+              {
+                "seconds": 16.465352125,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "tests",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests" },
+                "actionId": "e7a02ea6-5f6e-41c2-bdcd-f72ab51b505c"
+              },
+              {
+                "seconds": 16.465859042,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "docs/reviewers",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "docs/reviewers" },
+                "actionId": "b0fe0507-a24d-484d-b33c-19e48c7cdfcc"
+              },
+              {
+                "seconds": 16.518026792,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "docs/reviewers",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "docs/reviewers" },
+                "actionId": "b0fe0507-a24d-484d-b33c-19e48c7cdfcc"
+              },
+              {
+                "seconds": 16.5188775,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 6.1s",
+                "usage": { "inputTokens": 3746, "outputTokens": 159 },
+                "allOnly": true
+              },
+              {
+                "seconds": 22.66615525,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "src/shared/lib/index.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/index.ts" },
+                "actionId": "76c747ab-662a-417b-b394-c9beb023c5fa"
+              },
+              {
+                "seconds": 22.715914042,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "src/shared/lib/index.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/index.ts" },
+                "actionId": "76c747ab-662a-417b-b394-c9beb023c5fa"
+              },
+              {
+                "seconds": 22.716423917,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "src/shared/lib/use-operation.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/use-operation.ts" },
+                "actionId": "ac88a29e-de6e-493e-b383-3ba48971ef67"
+              },
+              {
+                "seconds": 22.760050417,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "src/shared/lib/use-operation.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/shared/lib/use-operation.ts" },
+                "actionId": "ac88a29e-de6e-493e-b383-3ba48971ef67"
+              },
+              {
+                "seconds": 22.760401583,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src/features",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features" },
+                "actionId": "21a13745-2e0c-4ff2-8b27-1b33a224d932"
+              },
+              {
+                "seconds": 22.810486958,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src/features",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features" },
+                "actionId": "21a13745-2e0c-4ff2-8b27-1b33a224d932"
+              },
+              {
+                "seconds": 22.810845625,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "tests/unit",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests/unit" },
+                "actionId": "305f756e-c4a6-4a5d-b056-ba597d7aad84"
+              },
+              {
+                "seconds": 22.853918583,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "tests/unit",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests/unit" },
+                "actionId": "305f756e-c4a6-4a5d-b056-ba597d7aad84"
+              },
+              {
+                "seconds": 22.854641792,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 5.0s",
+                "usage": { "inputTokens": 4575, "outputTokens": 108 },
+                "allOnly": true
+              },
+              {
+                "seconds": 27.898482,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "src/features/materials",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials" },
+                "actionId": "7b821d4d-2f10-44f7-b87d-00d996341294"
+              },
+              {
+                "seconds": 27.950982625,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "src/features/materials",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials" },
+                "actionId": "7b821d4d-2f10-44f7-b87d-00d996341294"
+              },
+              {
+                "seconds": 27.951440542,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "vite.config.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "vite.config.ts" },
+                "actionId": "ee3efb9c-345f-4afd-8a76-43560763a656"
+              },
+              {
+                "seconds": 27.999442542,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "vite.config.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "vite.config.ts" },
+                "actionId": "ee3efb9c-345f-4afd-8a76-43560763a656"
+              },
+              {
+                "seconds": 27.999884583,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "package.json",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "package.json" },
+                "actionId": "f80a32d5-25bc-474f-84a3-1545fa9b2fd0"
+              },
+              {
+                "seconds": 28.047645625,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "package.json",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "package.json" },
+                "actionId": "f80a32d5-25bc-474f-84a3-1545fa9b2fd0"
+              },
+              {
+                "seconds": 28.048946124999997,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 10.2s",
+                "usage": { "inputTokens": 6122, "outputTokens": 224 },
+                "allOnly": true
+              },
+              {
+                "seconds": 38.279099333000005,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files started",
+                "detail": "shared",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "shared" },
+                "actionId": "665606b2-06c9-412e-9383-a6670b41c878"
+              },
+              {
+                "seconds": 38.327426125,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "list_files completed",
+                "detail": "shared",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "shared" },
+                "actionId": "665606b2-06c9-412e-9383-a6670b41c878"
+              },
+              {
+                "seconds": 38.327778542,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "command started",
+                "detail": "grep -rn \"shared/lib\" src --include=\"*.ts\" --include=\"*.tsx\" | head -30",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": {
+                  "command": "grep -rn \"shared/lib\" src --include=\"*.ts\" --include=\"*.tsx\" | head -30"
+                },
+                "actionId": "1f184b3e-b6a9-4b4a-b58f-ebe95e009fb9"
+              },
+              {
+                "seconds": 38.360572542,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "code",
+                "title": "Diagnostic workspace changes after command",
+                "detail": "",
+                "failed": false,
+                "allOnly": false,
+                "receipt": "{\"stdout\":\"src/features/settings/PreferencesPage.tsx:18:import { useOperation } from '@/shared/lib';\\nsrc/features/tasks/TasksPage.tsx:18:import { useOperation } from '@/shared/lib';\\nsrc/features/tasks/TaskEditor.tsx:7:import { useOperation } from '@/shared/lib';\\nsrc/features/materials/MaterialsPage.tsx:6:import { useOperation } from '@/shared/lib';\\nsrc/features/projects/ProjectPicker.tsx:6:import { useOperation } from '@/shared/lib';\\nsrc/features/agents/AgentsPage.tsx:7:import { useOperation } from '@/shared/lib';\\nsrc/features/models/ModelsPage.tsx:7:import { useOperation } from '@/shared/lib';\\nsrc/features/models/ModelEditor.tsx:23:import { useOperation } from '@/shared/lib';\\nsrc/features/runs/PreviewsPanel.tsx:6:import { useOperation } from '@/shared/lib';\\nsrc/features/runs/DeliveriesPanel.tsx:17:import { useOperation } from '@/shared/lib';\\nsrc/features/runs/RunDetail.tsx:7:import { useOperation } from '@/shared/lib';\\nsrc/features/runs/SessionView.tsx:7:import { useOperation } from '@/shared/lib';\\n\",\"stderr\":\"\",\"exitCode\":0,\"interrupted\":false,\"truncated\":false}",
+                "arguments": {
+                  "command": "grep -rn \"shared/lib\" src --include=\"*.ts\" --include=\"*.tsx\" | head -30"
+                },
+                "actionId": "1f184b3e-b6a9-4b4a-b58f-ebe95e009fb9",
+                "patch": "",
+                "tree": "752f02637ec2a90f70fa529d61ba3d423f6cbc2e",
+                "diagnosticPatchBlocksOmitted": 0
+              },
+              {
+                "seconds": 38.488121375000006,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "command started",
+                "detail": "grep -rn \"#shared\" src tests --include=\"*.ts\" --include=\"*.tsx\" | head -40",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": {
+                  "command": "grep -rn \"#shared\" src tests --include=\"*.ts\" --include=\"*.tsx\" | head -40"
+                },
+                "actionId": "0181bc66-4dc7-4072-8e37-5501ca594e65"
+              },
+              {
+                "seconds": 38.514652583,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "command completed",
+                "detail": "grep -rn \"#shared\" src tests --include=\"*.ts\" --include=\"*.tsx\" | head -40",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "{\"stdout\":\"src/features/settings/PreferencesPage.tsx:20:import type { ReviewSettings } from '#shared/contracts';\\nsrc/features/tasks/TasksPage.tsx:21:import type { ReviewSettings } from '#shared/contracts';\\nsrc/features/run-review/ui/results.tsx:3:import type { RunReviewState } from '#shared/contracts';\\nsrc/features/run-review/ui/editor.tsx:3:import type { ReviewSettings, ReviewParticipant } from '#shared/contracts';\\ntests/run-review.test.ts:14:import type { ReviewSettings } from '#shared/contracts';\\n\",\"stderr\":\"\",\"exitCode\":0,\"interrupted\":false,\"truncated\":false}",
+                "arguments": {
+                  "command": "grep -rn \"#shared\" src tests --include=\"*.ts\" --include=\"*.tsx\" | head -40"
+                },
+                "actionId": "0181bc66-4dc7-4072-8e37-5501ca594e65"
+              },
+              {
+                "seconds": 38.629814875,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 7.3s",
+                "usage": { "inputTokens": 6843, "outputTokens": 186 },
+                "allOnly": true
+              },
+              {
+                "seconds": 45.969907125000006,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "tsconfig.json",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tsconfig.json" },
+                "actionId": "150b5a8f-7ca0-494c-896a-87eb956ea02f"
+              },
+              {
+                "seconds": 46.015724625000004,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "tsconfig.json",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tsconfig.json" },
+                "actionId": "150b5a8f-7ca0-494c-896a-87eb956ea02f"
+              },
+              {
+                "seconds": 46.016204375,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "command started",
+                "detail": "grep -rn \"shared\" tsconfig*.json vite.config.ts package.json 2>/dev/null",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": {
+                  "command": "grep -rn \"shared\" tsconfig*.json vite.config.ts package.json 2>/dev/null"
+                },
+                "actionId": "18bee824-288a-44c8-a3fb-ccd3afccafba"
+              },
+              {
+                "seconds": 46.035781583,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "command completed",
+                "detail": "grep -rn \"shared\" tsconfig*.json vite.config.ts package.json 2>/dev/null",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "{\"stdout\":\"package.json:59:    \\\"#shared/contracts\\\": \\\"./shared/contracts/index.ts\\\"\\n\",\"stderr\":\"\",\"exitCode\":0,\"interrupted\":false,\"truncated\":false}",
+                "arguments": {
+                  "command": "grep -rn \"shared\" tsconfig*.json vite.config.ts package.json 2>/dev/null"
+                },
+                "actionId": "18bee824-288a-44c8-a3fb-ccd3afccafba"
+              },
+              {
+                "seconds": 46.145977625,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 8.2s",
+                "usage": { "inputTokens": 7382, "outputTokens": 217 },
+                "allOnly": true
+              },
+              {
+                "seconds": 54.360823917000005,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "c4eaf1f5-5cea-4ef3-b08d-4cfbec74849e"
+              },
+              {
+                "seconds": 54.415047208000004,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "src/features/materials/MaterialsPage.tsx",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "src/features/materials/MaterialsPage.tsx" },
+                "actionId": "c4eaf1f5-5cea-4ef3-b08d-4cfbec74849e"
+              },
+              {
+                "seconds": 54.415734583,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "docs/reviewers/code-style.md",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "docs/reviewers/code-style.md" },
+                "actionId": "f07dc4f9-7068-4236-bb6d-279892bd9043"
+              },
+              {
+                "seconds": 54.4622905,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "docs/reviewers/code-style.md",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "docs/reviewers/code-style.md" },
+                "actionId": "f07dc4f9-7068-4236-bb6d-279892bd9043"
+              },
+              {
+                "seconds": 54.463527542,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "completed; 13.4s",
+                "usage": { "inputTokens": 10567, "outputTokens": 222 },
+                "allOnly": true
+              },
+              {
+                "seconds": 67.843121625,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "tests/unit/provider-schema.test.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests/unit/provider-schema.test.ts" },
+                "actionId": "b50d7a7c-6076-4cb3-9c51-3078a9636453"
+              },
+              {
+                "seconds": 67.895257667,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "tests/unit/provider-schema.test.ts",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "tests/unit/provider-schema.test.ts" },
+                "actionId": "b50d7a7c-6076-4cb3-9c51-3078a9636453"
+              },
+              {
+                "seconds": 67.89572787499999,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file started",
+                "detail": "docs/reviewers/architecture.md",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "docs/reviewers/architecture.md" },
+                "actionId": "13329488-f6e6-4449-afc6-fe5f1b6c7225"
+              },
+              {
+                "seconds": 67.94186983299998,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "tool",
+                "title": "read_file completed",
+                "detail": "docs/reviewers/architecture.md",
+                "failed": false,
+                "allOnly": true,
+                "receipt": "",
+                "arguments": { "path": "docs/reviewers/architecture.md" },
+                "actionId": "13329488-f6e6-4449-afc6-fe5f1b6c7225"
+              },
+              {
+                "seconds": 67.94300425,
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "kind": "request",
+                "title": "Model request: executor-after-0-reports",
+                "detail": "running; 0.0s",
+                "usage": null,
+                "allOnly": true
+              }
+            ],
+            "lanes": [
+              { "id": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6", "name": "Executor" },
+              { "id": "orchestration", "name": "Buro orchestration" }
+            ],
+            "code": { "initial": {}, "final": {} },
+            "patch": "",
+            "correctionPatch": "",
+            "verification": {},
+            "findings": [],
+            "status": "running",
+            "reviewStatus": "pending",
+            "wallSeconds": 70.246055333,
+            "requests": 9,
+            "reports": 0,
+            "snapshotSeconds": 0.34988999899999906,
+            "base": "0cb33ccfd06d6257b4496d1964ad33ad0527229a",
+            "runtimeRevision": "5107e4bef50ef09a1a8cc5881afa8f794ea3e870",
+            "runtimeCaveat": "Bonsai follow-up uses target 0cb33cc and runtime 5107e4b with calibrated context budgeting. Thinking/medium, 32K context, 8K output, stock llama.cpp b12359 Q2_0, min_p 0 and three autonomous reviewers. This is not a strict same-runtime comparison.",
+            "reviews": [],
+            "intervals": [
+              {
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "start": 3.5420650830000002,
+                "end": 11.1025035
+              },
+              {
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "start": 11.222435458,
+                "end": 16.299765583
+              },
+              {
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "start": 16.5188775,
+                "end": 22.6633145
+              },
+              {
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "start": 22.854641792,
+                "end": 27.896351416999998
+              },
+              {
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "start": 28.048946124999997,
+                "end": 38.274046083
+              },
+              {
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "start": 38.629814875,
+                "end": 45.966988291999996
+              },
+              {
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "start": 46.145977625,
+                "end": 54.358221042
+              },
+              {
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "start": 54.463527542,
+                "end": 67.839663125
+              },
+              {
+                "actor": "acaa04ad-1b1e-4a22-bea6-e5acad5634c6",
+                "start": 67.94300425,
+                "end": 70.246055333
+              }
+            ]
           },
           {
             "id": "medium-qwen",
@@ -51767,6 +52496,151 @@ Choose a code change, command or review to inspect its evidence.</pre
               }
             ],
             "runtimeEvidence": null
+          },
+          {
+            "label": "Bonsai 2.5 27B Q2_0",
+            "status": "completed native preflight; full Buro quality task not yet run; speed-only prompts capped at 256 output tokens, tool round trip allowed 8192; full small Buro run tracked separately",
+            "error": null,
+            "experiments": [],
+            "requests": [
+              {
+                "label": "cold",
+                "wallSeconds": 8.36361026763916,
+                "usage": {
+                  "completion_tokens": 256,
+                  "prompt_tokens": 61,
+                  "total_tokens": 317,
+                  "prompt_tokens_details": { "cached_tokens": 0 }
+                },
+                "timings": {
+                  "cache_n": 0,
+                  "prompt_n": 61,
+                  "prompt_ms": 500.784,
+                  "prompt_per_token_ms": 8.209573770491803,
+                  "prompt_per_second": 121.80900348253938,
+                  "predicted_n": 256,
+                  "predicted_ms": 7844.555,
+                  "predicted_per_token_ms": 30.762960784313726,
+                  "predicted_per_second": 32.50662402137533
+                },
+                "thinkingObserved": true,
+                "finishReason": "length",
+                "publicAnswer": "",
+                "nativeToolCalls": []
+              },
+              {
+                "label": "warm",
+                "wallSeconds": 8.079942226409912,
+                "usage": {
+                  "completion_tokens": 256,
+                  "prompt_tokens": 61,
+                  "total_tokens": 317,
+                  "prompt_tokens_details": { "cached_tokens": 57 }
+                },
+                "timings": {
+                  "cache_n": 57,
+                  "prompt_n": 4,
+                  "prompt_ms": 138.572,
+                  "prompt_per_token_ms": 34.643,
+                  "prompt_per_second": 28.86586034696764,
+                  "predicted_n": 256,
+                  "predicted_ms": 7852.487,
+                  "predicted_per_token_ms": 30.794066666666666,
+                  "predicted_per_second": 32.4737882405918
+                },
+                "thinkingObserved": true,
+                "finishReason": "length",
+                "publicAnswer": "",
+                "nativeToolCalls": []
+              },
+              {
+                "label": "context",
+                "wallSeconds": 11.33313512802124,
+                "usage": {
+                  "completion_tokens": 256,
+                  "prompt_tokens": 1827,
+                  "total_tokens": 2083,
+                  "prompt_tokens_details": { "cached_tokens": 0 }
+                },
+                "timings": {
+                  "cache_n": 0,
+                  "prompt_n": 1827,
+                  "prompt_ms": 3170.28,
+                  "prompt_per_token_ms": 1.7352380952380952,
+                  "prompt_per_second": 576.2897914379802,
+                  "predicted_n": 256,
+                  "predicted_ms": 8088.783,
+                  "predicted_per_token_ms": 31.720717647058827,
+                  "predicted_per_second": 31.52513795956697
+                },
+                "thinkingObserved": true,
+                "finishReason": "length",
+                "publicAnswer": "",
+                "nativeToolCalls": []
+              },
+              {
+                "label": "native tool call",
+                "wallSeconds": 2.899914026260376,
+                "usage": {
+                  "completion_tokens": 67,
+                  "prompt_tokens": 294,
+                  "total_tokens": 361,
+                  "prompt_tokens_details": { "cached_tokens": 0 }
+                },
+                "timings": {
+                  "cache_n": 0,
+                  "prompt_n": 294,
+                  "prompt_ms": 749.806,
+                  "prompt_per_token_ms": 2.5503605442176873,
+                  "prompt_per_second": 392.1014235682296,
+                  "predicted_n": 67,
+                  "predicted_ms": 2048.364,
+                  "predicted_per_token_ms": 31.035818181818183,
+                  "predicted_per_second": 32.22083574989601
+                },
+                "thinkingObserved": true,
+                "finishReason": "tool_calls",
+                "publicAnswer": "",
+                "nativeToolCalls": [
+                  {
+                    "type": "function",
+                    "function": { "name": "read_probe", "arguments": "{\"path\":\"sample.ts\"}" },
+                    "id": "u1lV7uNh8MNV8MAqWw3JMxWqY2CJ6AWS"
+                  }
+                ]
+              },
+              {
+                "label": "native tool result followup",
+                "wallSeconds": 15.697151899337769,
+                "usage": {
+                  "completion_tokens": 495,
+                  "prompt_tokens": 410,
+                  "total_tokens": 905,
+                  "prompt_tokens_details": { "cached_tokens": 360 }
+                },
+                "timings": {
+                  "cache_n": 360,
+                  "prompt_n": 50,
+                  "prompt_ms": 293.543,
+                  "prompt_per_token_ms": 5.87086,
+                  "prompt_per_second": 170.33279621724927,
+                  "predicted_n": 495,
+                  "predicted_ms": 15391.405,
+                  "predicted_per_token_ms": 31.15669028340081,
+                  "predicted_per_second": 32.0958353054838
+                },
+                "thinkingObserved": true,
+                "finishReason": "stop",
+                "publicAnswer": "I read the file. Here's its content:\n\n```ts\nexport const ratio = (done: number, total: number): number => done / total;\n// Required: ratio(0, 0) returns 0.\n```\n\n## The bug\n\nThe function divides unconditionally, so when `total` is `0` the result is not a number:\n\n- `ratio(0, 0)` → `0 / 0` → **`NaN`**, but the requirement says it must return `0`.\n- `ratio(5, 0)` → `5 / 0` → **`Infinity`**, which is also almost certainly unintended for a \"ratio\" function.\n\nIn other words, the function violates its own contract for the zero-division case.\n\n## Fix\n\nGuard against `total === 0` and return `0` in that case:\n\n```ts\nexport const ratio = (done: number, total: number): number =>\n  total === 0 ? 0 : done / total;\n```\n\nThis makes `ratio(0, 0)` return `0` as required, while preserving normal behavior for all other inputs (e.g., `ratio(3, 4)` → `0.75`).\n\nIf you'd rather be explicit about non-zero denominators in general (e.g., clamping instead of short-circuiting), you could also return `0` whenever `done === 0` — but the `total === 0` guard above is the minimal, correct fix for the stated requirement.",
+                "nativeToolCalls": []
+              }
+            ],
+            "nativeToolCallObserved": true,
+            "artifact": null,
+            "revision": null,
+            "parameters": null,
+            "toolProbeAttempts": [],
+            "runtimeEvidence": null
           }
         ],
         "schemaRepair": {
@@ -52138,7 +53012,7 @@ Choose a code change, command or review to inspect its evidence.</pre
         renderCode = () => {
           const phase = $('phase').value,
             path = $('file').value;
-          for (const engine of ['qwen', 'flash', 'gemma', 'mimo']) {
+          for (const engine of ['qwen', 'flash', 'gemma', 'mimo', 'bonsai25']) {
             const c = codeCases().find((c) => c.engine === engine);
             $(engine + '-code').textContent =
               c?.code[phase][path] || '(No changed file at this path in this snapshot.)';
@@ -52292,7 +53166,9 @@ Choose a code change, command or review to inspect its evidence.</pre
               'p',
               request.label +
                 ': ' +
-                (request.decodeTokensPerSecond?.toFixed(1) || 'not reported') +
+                ((request.decodeTokensPerSecond ?? request.timings?.predicted_per_second)?.toFixed(
+                  1,
+                ) || 'not reported') +
                 ' decode tokens/s, ' +
                 request.wallSeconds.toFixed(1) +
                 's wall',
