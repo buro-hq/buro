@@ -2,6 +2,34 @@
 
 Prepared November 26, 2026. This is a self-contained handoff, not a transcript. Answer the user in Russian; keep repository code, comments, documentation and identifiers in English. Russian localization and intentional Unicode test data are exceptions.
 
+## Local files and ready-to-paste instruction
+
+All handoff files are inside the project:
+
+- Repository: `/Users/redzumi/Desktop/projects/buro`
+- Main context: `/Users/redzumi/Desktop/projects/buro/docs/handoffs/buro-context-for-kimi-glm.md`
+- Source excerpts: `/Users/redzumi/Desktop/projects/buro/docs/handoffs/buro-source-excerpts-for-kimi-glm.md`
+- Complete handoff archive: `/Users/redzumi/Desktop/projects/buro/docs/handoffs/buro-kimi-glm-handoff-2026-11-26.zip`
+
+Ready-to-paste instruction:
+
+```text
+Review the Buro project independently.
+
+Repository: /Users/redzumi/Desktop/projects/buro
+First read: /Users/redzumi/Desktop/projects/buro/docs/handoffs/buro-context-for-kimi-glm.md
+Then read relevant code excerpts: /Users/redzumi/Desktop/projects/buro/docs/handoffs/buro-source-excerpts-for-kimi-glm.md
+Full selected source, experimental patches and evidence: /Users/redzumi/Desktop/projects/buro/docs/handoffs/buro-kimi-glm-handoff-2026-11-26.zip
+
+Assess the architecture, agent workflow, experiment validity, code quality, speed and cost. Separate observed facts from hypotheses and untested forecasts. Challenge the previous assistant's 81/98 scores and speedup estimates.
+
+Propose a minimal prioritized improvement plan. Preserve configurable models, instructions and teams rather than adding hardcoded roles or hidden limits. Initially provide analysis and a plan without starting paid model runs.
+
+Answer in Russian; project code and documentation remain English.
+```
+
+These are local Mac paths. A cloud chat without filesystem access cannot open them merely from the text: attach the named Markdown files or the archive. Do not claim to have read unavailable files.
+
 ## 1. What I want from you
 
 Independently assess this project and the evidence below. Challenge the previous assistant's conclusions, scoring and proposed changes. Do not merely repeat them. Separate observed facts, hypotheses, engineering preferences and untested estimates.
