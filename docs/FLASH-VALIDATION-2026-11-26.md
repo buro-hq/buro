@@ -14,16 +14,25 @@ $0.006/M cached input, $0.30/M uncached input, $1.20/M output.
 | 1       | Under the outer DSH file sandbox | Every file/command tool failed `sandbox-exec: sandbox_apply: Operation not permitted` (exit 71). Run cancelled.                                                                                                                          | ~$0.06 |
 | 2       | Unsandboxed host                 | 12.4 min, 7 sessions (main + 6 chained workers, depth 6), 20 file edits. Runner crashed on a `git diff` snapshot exceeding the 12 MB `maxBuffer` after the model copied the repository into `.pristine-check/`.                          | ~$0.49 |
 | 3       | Unsandboxed host, fixed runner   | 3.6 min, main session worked solo (0 collaborators), 45 requests, 58 `read_file`, 13 `command`, 2 `receipt_read`. Failed on `MODEL_RESPONSE_LIMIT` — one model response exceeded 4 MB (`agent/providers/http.ts:265`) with `retries: 0`. | ~$0.13 |
+| 4       | Unsandboxed host, fixed runner   | 85 s, failed on `MODEL_INVALID_RESPONSE` (malformed tool arguments) with `retries: 0`.                                                                                                                                                   | ~$0.03 |
+| 5       | Unsandboxed host, `retries: 2`   | 12.2 min, **2 sessions (main + 1 worker), max depth 1**, 9 files changed, no cascade. Interrupted by the $1.0 budget stop before the review cycle.                                                                                       | ~$1.00 |
 
-Total spend across the three attempts: about $0.68, below the intended budget.
+Total spend across the five attempts: about $1.72.
+
+Attempt 5 validates the fix under discussion. Note one confound: its source
+baseline is `ca054df`, which already contains the launch-presets feature merged
+earlier in this session, so the task is not byte-identical to the original
+`7738a09` run; this affects the quality comparison but not the cascade
+measurement, which is a property of the runtime.
 
 ## Confirmed findings
 
-1. **The P0 mechanism fix holds.** In attempt 3 the main session never inherited a
-   delegation mandate as an assignment: it did the work directly and used
-   `receipt_read` to page through large command output. No instruction-inheritance
-   cascade occurred. Attempt 3 is the first observation of the intended single-loop
-   behavior end to end.
+1. **The Fix #1 mechanism holds.** In attempts 3 and 5 the main session never
+   inherited a delegation mandate as an assignment. Attempt 5 is the decisive
+   observation: the main session delegated to exactly one `flash-worker` and that
+   worker implemented directly (max depth 1) instead of re-delegating. The
+   original run reached depth 13 with 38 worker sessions; attempt 5 reached depth
+   1 with 1 worker session. `receipt_read` was exercised with zero tool failures.
 
 2. **Receipts work under a real model.** `receipt_read` was exercised by the model in
    attempt 3 with zero tool failures; oversized tool output no longer floods the
