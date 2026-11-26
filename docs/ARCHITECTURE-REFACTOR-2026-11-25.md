@@ -39,7 +39,15 @@ The final DeepSeek Flash thinking runs passed all 3 public and 5 independent cas
 
 The remaining limitation is model efficiency: the explicit review scenario delegated more work than this small change needed. It completed correctly, and the runtime imposes no role count or mandatory review gate.
 
-Code and architecture preferences are saved on the user's Desktop in `buro-code-architecture-preferences.md`. The stopping threshold is actual weekly remaining capacity below 20%; before stopping, finish a tested checkpoint, commit and push it, and record outstanding work.
+Code and architecture preferences are saved on the user's Desktop in `buro-code-architecture-preferences.md`. The user updated the stopping threshold to actual weekly remaining capacity below 10%; before stopping, finish a tested checkpoint, commit and push it, and record outstanding work.
+
+## Request-context calibration: 26 November
+
+The MiMo task exposed a request-sizing defect: the fixed four-character estimate left only hundreds of tokens for responses configured to allow 8K. Sessions now measure UTF-8 bytes, reserve tool-definition and response-schema overhead, and calibrate input density from reported prompt usage. Each turn keeps its highest observed density separately for each model/backend revision. Calibration is opt-in through the backend's inputUsageScope: prompt contract; cumulative native-agent turn/thread counters are not interpreted as one prompt's size. Unknown usage retains the initial estimate; this is not an exact tokenizer or a guaranteed bound for every new input distribution.
+
+Context remains a temporary view. Saved history, complete captured tool results, private adapter continuation ownership and tool-call/result correlation remain intact. The loop still has no role/model-name branches or new completion gates. Regression scenarios exercise multibyte context, output/overhead reservation, reported-usage feedback and preservation of logs/private continuation. Lint, formatting, types, 135 tests and production build passed.
+
+A native MiMo input-size probe on the same saved interrupted history measured 31,096 prompt tokens with the old projection and 23,219 with the calibrated projection, leaving 9,549 tokens within 32K. Each diagnostic generated at most one token and executed no proposed tools; it does not establish completed-task quality. A preceding calibrated probe failed with a network timeout and is excluded from that measurement. The prior RTX server was restored after the probe. [Comparison and limits](PREFERENCE-REVIEW-COMPARISON-2026-11-25.md).
 
 ## Post-review improvements
 

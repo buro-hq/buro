@@ -306,6 +306,8 @@ export class SessionService implements Sessions {
       };
       await this.save(session);
       let requests = 0;
+      const densities = new Map<string, number>();
+
       while (true) {
         controller.signal.throwIfAborted();
         // A tool can explicitly select the next model; historical adapter state stays with its message.
@@ -338,6 +340,12 @@ export class SessionService implements Sessions {
           names: input.tools,
           readOnly: input.readOnly,
         });
+        const modelKey = JSON.stringify([model.id, model.backend.revision]);
+        const tokensPerByte = densities.get(modelKey) ?? 0.25;
+        const overheadBytes = Buffer.byteLength(JSON.stringify({
+          tools: definitions,
+          schema: input.schema,
+        }), 'utf8');
         const privateMessages = await this.models.context({
           sessionId: session.id,
           modelId: model.id,
@@ -348,8 +356,10 @@ export class SessionService implements Sessions {
           messages: privateMessages,
           contextTokens: model.contextTokens,
           outputTokens: model.outputTokens,
-          toolTokens: Math.ceil(JSON.stringify(definitions).length / 4),
+          overheadTokens: Math.ceil(overheadBytes * tokensPerByte),
+          tokensPerByte,
         });
+        const requestBytes = Buffer.byteLength(JSON.stringify(messages), 'utf8') + overheadBytes;
         const toolContext: ToolContext = {
           sessionId: session.id,
           runId: session.runId,
@@ -424,6 +434,15 @@ export class SessionService implements Sessions {
         } finally {
           await callbacks;
         }
+
+        const inputTokens = response.usage?.inputTokens;
+        const hasInputUsage = inputTokens !== undefined && inputTokens > 0;
+        const hasPromptUsage = model.backend.inputUsageScope === 'prompt';
+        const canCalibrate = hasInputUsage && hasPromptUsage;
+
+        if (canCalibrate)
+          densities.set(modelKey, Math.max(tokensPerByte, inputTokens / requestBytes));
+
         // Correlation IDs are a transport boundary, not an agent policy. Invalid batches
         // cannot be executed or appended as an ambiguous tool exchange.
         const calls = response.message.toolCalls ?? [];

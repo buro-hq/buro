@@ -562,6 +562,134 @@ test('oversized tool output cannot evict the current request and context project
   assert.equal(messages[3].content.length, 100000);
 });
 
+test('context projection reserves output and overhead using UTF-8 bytes without splitting tool exchanges', () => {
+  const messages = [
+    { role: 'system' as const, content: 'Instructions' },
+    { role: 'user' as const, content: 'Inspect the saved log' },
+    {
+      role: 'assistant' as const,
+      content: '',
+      toolCalls: [{ id: 'read', name: 'read', arguments: {} }],
+    },
+    { role: 'tool' as const, toolCallId: 'read', content: '界'.repeat(500) },
+  ];
+  const before = structuredClone(messages);
+  const context = conversationContext({
+    messages,
+    contextTokens: 2200,
+    outputTokens: 1000,
+    overheadTokens: 128,
+    tokensPerByte: 1,
+  });
+
+  assert.ok(Buffer.byteLength(JSON.stringify(context), 'utf8') + 128 <= 1200);
+  assert.ok(context.some((message) => message.role === 'assistant' && message.toolCalls?.[0].id === 'read'));
+  assert.ok(context.some((message) => message.role === 'tool' && message.toolCallId === 'read'));
+  assert.deepEqual(messages, before);
+});
+
+test('reported prompt usage calibrates later requests while preserving complete logs and private continuation', async (t) => {
+  const f = fixture(t);
+  const log = 'x'.repeat(70000);
+  const thinking = '界'.repeat(1000);
+  const schema = {
+    type: 'object',
+    properties: { value: { type: 'string', description: 'schema '.repeat(500) } },
+  };
+  let calls = 0;
+  let reads = 0;
+
+  f.tools.register({
+    effect: 'read',
+    definition: { name: 'read-log', description: 'log '.repeat(1500), parameters: {} },
+    async execute() {
+      reads++;
+      return { content: log };
+    },
+  });
+  f.model('dense', async (input) => {
+    calls++;
+    const inputTokens = Buffer.byteLength(JSON.stringify(input.messages), 'utf8') +
+      Buffer.byteLength(JSON.stringify({
+        tools: input.tools,
+        schema: input.schema,
+      }), 'utf8');
+
+    assert.ok(inputTokens + input.maxOutputTokens <= input.contextTokens, 'The next request must leave its output allowance available');
+
+    if (calls === 1) {
+      const response = tool('read-log');
+      response.message.continuation = { thinking };
+      return { ...response, usage: { inputTokens, outputTokens: 1 } };
+    }
+
+    const assistant = input.messages.find((message) => message.role === 'assistant');
+    const result = input.messages.find((message) => message.role === 'tool');
+
+    assert.deepEqual(assistant?.continuation, {
+      thinking,
+    });
+    assert.equal(result?.toolCallId, 'call-read-log');
+    assert.notEqual(result?.content, log);
+    return { ...reply('{"value":"done"}'), usage: { inputTokens, outputTokens: 1 } };
+  });
+  const created = await f.sessions.create();
+  const result = await f.sessions.run({
+    sessionId: created.sessionId,
+    input: 'Inspect the log without repeating the action',
+    workspace: '/tmp',
+    schema,
+    maxRequests: 3,
+  });
+  const saved = await f.conversations.load(created.sessionId);
+
+  assert.equal(result.ok, true);
+  assert.equal(calls, 2);
+  assert.equal(reads, 1);
+  assert.equal(saved?.messages.find((message) => message.role === 'tool')?.content, log);
+});
+
+test('native aggregate usage is not treated as the size of one input prompt', async (t) => {
+  const f = fixture(t);
+  let calls = 0;
+
+  f.tools.register({
+    effect: 'read',
+    definition: { name: 'read-log', description: 'Read', parameters: {} },
+    async execute() {
+      return { content: 'Observed result' };
+    },
+  });
+  f.models.register({
+    id: 'native',
+    name: 'Native agent',
+    model: 'native',
+    contextTokens: 32768,
+    outputTokens: 8192,
+    backend: {
+      id: 'agent',
+      revision: 'v1',
+      async complete() {
+        calls++;
+        return {
+          ...(calls === 1 ? tool('read-log') : reply('Done')),
+          usage: { inputTokens: 900000, outputTokens: 1 },
+        };
+      },
+    },
+  });
+  const session = await f.sessions.create();
+  const result = await f.sessions.run({
+    sessionId: session.sessionId,
+    input: 'Inspect saved state',
+    workspace: '/tmp',
+    maxRequests: 3,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(calls, 2);
+});
+
 test('ambiguous tool IDs are a response failure, never authority to perform actions', async (t) => {
   const f = fixture(t);
   let writes = 0;

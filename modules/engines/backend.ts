@@ -23,6 +23,8 @@ export interface BackendRequest extends ModelRequest {
 export interface SessionBackend {
   readonly id: string;
   readonly revision: string;
+  /** Opt in only when input usage describes this prompt, not a native turn/thread total. */
+  readonly inputUsageScope?: 'prompt';
   /** Reads model metadata without starting a generation. */
   listModels?(input: { signal: AbortSignal }): Promise<AvailableModel[]>;
   /** Completes a host request, optionally calling registered tools through the callback. */

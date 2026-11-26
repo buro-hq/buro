@@ -12,6 +12,7 @@ import { observer } from '../../agent/providers/http.ts';
 export class ModelBackend implements SessionBackend {
   readonly id: string;
   readonly revision: string;
+  readonly inputUsageScope = 'prompt' as const;
   private provider: ModelProvider;
   private retries: number;
   private retryDelayMs: number;
