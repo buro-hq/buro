@@ -26,13 +26,13 @@ Report total wall time, execution/review/correction stages, requests, native tok
 
 ## Run plan
 
-| Session                         | Flow                                                | State               |
-| ------------------------------- | --------------------------------------------------- | ------------------- |
-| Current                         | Buro Flash coordinator + Flash executor/reviewers   | Running             |
-| Current                         | Native Codex execution + same three review profiles | Running in parallel |
-| Tomorrow / next resumed session | Flash + Qwen on RTX                                 | Deferred            |
-| Tomorrow / next resumed session | Pro + Flash                                         | Deferred            |
-| Tomorrow / next resumed session | Pro + Qwen on RTX                                   | Deferred            |
+| Session                         | Flow                                                | State     |
+| ------------------------------- | --------------------------------------------------- | --------- |
+| Current                         | Buro Flash coordinator + Flash executor/reviewers   | Running   |
+| Current                         | Native Codex execution + same three review profiles | Completed |
+| Tomorrow / next resumed session | Flash + Qwen on RTX                                 | Deferred  |
+| Tomorrow / next resumed session | Pro + Flash                                         | Deferred  |
+| Tomorrow / next resumed session | Pro + Qwen on RTX                                   | Deferred  |
 
 Today uses no RTX and no Pro calls. Deferred variants are recorded, not automatically scheduled. Stop model work when actual weekly remaining capacity is at or below 5%, preserve interrupted results, finish a reviewable checkpoint, commit and push. This threshold supersedes earlier 7%, 10% and 20% floors.
 
@@ -45,3 +45,16 @@ After both flows end or are interrupted, independently inspect each saved implem
 At the user's request, native Codex now runs alongside Buro in a separate checkout. The existing Flash worker was adopted by a replacement controller without restarting or interrupting its model sessions. Flash had an initial solo stage; later host CPU/tool activity overlaps. Per-flow wall times therefore describe this practical parallel execution and are not isolated latency measurements. Independent final checks run after model work ends.
 
 The first native setup attempt failed during account-quota preflight because the harness stripped proxy environment variables needed by the normal Codex connection. It made zero model turns. Its files are archived separately, the native worker now preserves the host's network configuration, and the corrected native run has started. This setup failure is excluded from model-quality scoring.
+
+## Saved execution checkpoint
+
+Manager state: both parallel flows ended; independent assessment pending. This status describes execution, not an independent quality score.
+
+- buro-flash: completed, 7350 seconds. Independent checks: check passed, test passed, canonical-tests passed, build passed, independent-feature passed.
+- native-codex: completed, 1603 seconds. Independent checks: check passed, test passed, canonical-tests passed, build passed, independent-feature passed.
+
+Manual code/architecture/preference scores and any unrecorded browser validation remain pending; the report must not substitute model claims for those observations. No deferred Pro/Qwen variant has been started.
+
+## Independent assessment completed
+
+The [independent code review](LARGE-FLOW-INDEPENDENT-REVIEW-2026-11-26.md) records actual reproductions, code differences, team behavior and a subjective task-specific rubric: Flash 81/100, native Codex 98/100. Both full suites pass, but independent browser and concurrency checks exposed two remaining Flash defects. Flash took 2h02m30s and approximately $6.2255 of metered API usage; native Codex took 26m43s on account quota. The Flash team grew to 45 saved sessions with depth 13, including inherited coordinator instructions in nested workers. This is a material scenario confound, not a clean single-model speed ranking. Neither implementation has been applied to the main source tree.
