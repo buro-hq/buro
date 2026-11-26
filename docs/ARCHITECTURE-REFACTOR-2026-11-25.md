@@ -39,7 +39,7 @@ The final DeepSeek Flash thinking runs passed all 3 public and 5 independent cas
 
 The remaining limitation is model efficiency: the explicit review scenario delegated more work than this small change needed. It completed correctly, and the runtime imposes no role count or mandatory review gate.
 
-Code and architecture preferences are saved on the user's Desktop in `buro-code-architecture-preferences.md`. The user updated the stopping threshold to actual weekly remaining capacity below 10%; before stopping, finish a tested checkpoint, commit and push it, and record outstanding work.
+Code and architecture preferences are saved on the user's Desktop in `buro-code-architecture-preferences.md`. The user updated the stopping threshold to actual weekly remaining capacity below 7%; before stopping, finish a tested checkpoint, commit and push it, and record outstanding work.
 
 ## Request-context calibration: 26 November
 
