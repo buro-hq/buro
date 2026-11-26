@@ -28,6 +28,7 @@ export type OpenAICompatibleOptions = HttpOptions & {
   thinking?: 'enabled' | 'disabled';
   structuredToolMode?: 'combined' | 'separate-turn';
   sampling?: ModelSamplingSettings;
+  maxResponseBytes?: number;
 };
 type Options = OpenAICompatibleOptions;
 const failure = (
@@ -200,7 +201,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
       let inputTokens: number | undefined;
       let outputTokens: number | undefined;
       const calls = new Map<number, { id: string; name: string; arguments: string }>();
-      for await (const data of sse(response, input.onProgress)) {
+      for await (const data of sse(response, input.onProgress, this.options.maxResponseBytes)) {
         if (data.trim() === '[DONE]') {
           done = true;
           break;

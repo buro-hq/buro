@@ -21,6 +21,9 @@ export const observer = (callback: (() => void) | undefined): void => {
 const aborted = (outcome: 'not-dispatched' | 'unknown') =>
   failure('MODEL_ABORTED', 'Interrupted', outcome);
 
+/** Ceiling for one model response stream; oversized streams fail rather than grow unbounded. */
+export const defaultResponseBytes = 64 * 1024 * 1024;
+
 const isValidCapacity = (capacity: number): boolean => {
   const isWhole = Number.isSafeInteger(capacity);
   const isPositive = isWhole && capacity > 0;
@@ -227,7 +230,7 @@ export const request = async (options: HttpOptions, route: string, init: Request
 };
 
 /** Reads bounded UTF-8 lines and releases the response reader on completion or cancellation. */
-export const lines = async function* (response: Response, onProgress: () => void): AsyncGenerator<string> {
+export const lines = async function* (response: Response, onProgress: () => void, maxBytes = defaultResponseBytes): AsyncGenerator<string> {
   if (!response.body)
     throw failure('MODEL_INVALID_RESPONSE', 'The model response has no body.');
 
@@ -262,8 +265,8 @@ export const lines = async function* (response: Response, onProgress: () => void
       }
 
       size += chunk.value.byteLength;
-      if (size > 4 * 1024 * 1024)
-        throw failure('MODEL_RESPONSE_LIMIT', 'The model response exceeds 4 MB.');
+      if (size > maxBytes)
+        throw failure('MODEL_RESPONSE_LIMIT', 'The model response exceeds the response size limit.');
 
       observer(onProgress);
       buffer += decode(chunk.value, true);
@@ -325,9 +328,9 @@ export const parseJSON = (value: string): unknown => {
   }
 };
 /** Yields complete SSE data frames, preserving request cancellation and stream failures. */
-export const sse = async function* (response: Response, onProgress: () => void): AsyncGenerator<string> {
+export const sse = async function* (response: Response, onProgress: () => void, maxBytes?: number): AsyncGenerator<string> {
   let data: string[] = [];
-  for await (const line of lines(response, onProgress)) {
+  for await (const line of lines(response, onProgress, maxBytes)) {
     if (!line) {
       if (data.length)
         yield data.join('\n');

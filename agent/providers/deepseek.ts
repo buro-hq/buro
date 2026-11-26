@@ -3,7 +3,7 @@ import { endpointURL, type HttpOptions } from './http.ts';
 import { OpenAICompatibleProvider, type OpenAICompatibleOptions } from './openai-compatible.ts';
 
 export type DeepSeekOptions = HttpOptions
-  & Pick<OpenAICompatibleOptions, 'sampling' | 'reasoningBudgetTokens' | 'reasoningEffort'> & {
+  & Pick<OpenAICompatibleOptions, 'sampling' | 'reasoningBudgetTokens' | 'reasoningEffort' | 'maxResponseBytes'> & {
     id: string;
     revision: string;
     local: boolean;
