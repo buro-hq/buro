@@ -60,7 +60,7 @@ export class ModelBackend implements SessionBackend {
         const wasAborted = request.signal.aborted;
         const retriesExhausted = attempt >= this.retries;
         const isTemporaryFailure = isProviderFailure(error) &&
-          ['MODEL_STREAM_INTERRUPTED', 'MODEL_UNAVAILABLE', 'MODEL_RESPONSE_LIMIT'].includes(error.code);
+          ['MODEL_STREAM_INTERRUPTED', 'MODEL_UNAVAILABLE', 'MODEL_RESPONSE_LIMIT', 'MODEL_INVALID_RESPONSE'].includes(error.code);
         if (wasAborted || retriesExhausted || !isTemporaryFailure)
           throw error;
 
