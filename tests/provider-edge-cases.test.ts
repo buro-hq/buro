@@ -121,7 +121,7 @@ test('terminal completion cancels a still-open response and response bounds rele
   const response = new Response(
     new ReadableStream({
       start(controller) {
-        controller.enqueue(new Uint8Array(4 * 1024 * 1024 + 1));
+        controller.enqueue(new Uint8Array(2048));
       },
       cancel() {
         oversizedCancelled = true;
@@ -130,7 +130,8 @@ test('terminal completion cancels a still-open response and response bounds rele
   );
   await assert.rejects(
     async () => {
-      for await (const _line of lines(response, () => {})) {
+      // An explicit small bound exercises the mechanism without a huge fixture.
+      for await (const _line of lines(response, () => {}, 1024)) {
         // Consume until the malformed response is rejected.
       }
     },

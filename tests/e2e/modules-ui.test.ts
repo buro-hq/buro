@@ -7,9 +7,9 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium, expect } from '@playwright/test';
 import { createServer } from 'vite';
-import { createApplication } from '../modules/application/create-application.ts';
-import { startApiServer } from '../modules/api/server.ts';
-import { localPort } from './fixtures/local-port.ts';
+import { createApplication } from '../../modules/application/create-application.ts';
+import { startApiServer } from '../../modules/api/server.ts';
+import { localPort } from '../fixtures/local-port.ts';
 
 const exec = promisify(execFile);
 

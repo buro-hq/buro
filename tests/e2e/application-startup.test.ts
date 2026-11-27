@@ -6,9 +6,9 @@ import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium, expect } from '@playwright/test';
-import { apiCredential } from '../modules/api/credentials.ts';
-import { createApplication } from '../modules/application/create-application.ts';
-import { localPort } from './fixtures/local-port.ts';
+import { apiCredential } from '../../modules/api/credentials.ts';
+import { createApplication } from '../../modules/application/create-application.ts';
+import { localPort } from '../fixtures/local-port.ts';
 
 test(
   'the production launcher connects the real UI and CLI to a fresh service and releases ownership on shutdown',
