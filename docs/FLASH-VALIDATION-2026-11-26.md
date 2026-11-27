@@ -9,15 +9,40 @@ $0.006/M cached input, $0.30/M uncached input, $1.20/M output.
 
 ## Attempts
 
-| Attempt | Condition                        | Outcome                                                                                                                                                                                                                                  | Cost   |
-| ------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 1       | Under the outer DSH file sandbox | Every file/command tool failed `sandbox-exec: sandbox_apply: Operation not permitted` (exit 71). Run cancelled.                                                                                                                          | ~$0.06 |
-| 2       | Unsandboxed host                 | 12.4 min, 7 sessions (main + 6 chained workers, depth 6), 20 file edits. Runner crashed on a `git diff` snapshot exceeding the 12 MB `maxBuffer` after the model copied the repository into `.pristine-check/`.                          | ~$0.49 |
-| 3       | Unsandboxed host, fixed runner   | 3.6 min, main session worked solo (0 collaborators), 45 requests, 58 `read_file`, 13 `command`, 2 `receipt_read`. Failed on `MODEL_RESPONSE_LIMIT` — one model response exceeded 4 MB (`agent/providers/http.ts:265`) with `retries: 0`. | ~$0.13 |
-| 4       | Unsandboxed host, fixed runner   | 85 s, failed on `MODEL_INVALID_RESPONSE` (malformed tool arguments) with `retries: 0`.                                                                                                                                                   | ~$0.03 |
-| 5       | Unsandboxed host, `retries: 2`   | 12.2 min, **2 sessions (main + 1 worker), max depth 1**, 9 files changed, no cascade. Interrupted by the $1.0 budget stop before the review cycle.                                                                                       | ~$1.00 |
+| Attempt | Condition                                     | Outcome                                                                                                                                                                                                                                                                                                                       | Cost   |
+| ------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1       | Under the outer DSH file sandbox              | Every file/command tool failed `sandbox-exec: sandbox_apply: Operation not permitted` (exit 71). Run cancelled.                                                                                                                                                                                                               | ~$0.06 |
+| 2       | Unsandboxed host                              | 12.4 min, 7 sessions (main + 6 chained workers, depth 6), 20 file edits. Runner crashed on a `git diff` snapshot exceeding the 12 MB `maxBuffer` after the model copied the repository into `.pristine-check/`.                                                                                                               | ~$0.49 |
+| 3       | Unsandboxed host, fixed runner                | 3.6 min, main session worked solo (0 collaborators), 45 requests, 58 `read_file`, 13 `command`, 2 `receipt_read`. Failed on `MODEL_RESPONSE_LIMIT` — one model response exceeded 4 MB (`agent/providers/http.ts:265`) with `retries: 0`.                                                                                      | ~$0.13 |
+| 4       | Unsandboxed host, fixed runner                | 85 s, failed on `MODEL_INVALID_RESPONSE` (malformed tool arguments) with `retries: 0`.                                                                                                                                                                                                                                        | ~$0.03 |
+| 5       | Unsandboxed host, `retries: 2`                | 12.2 min, **2 sessions (main + 1 worker), max depth 1**, 9 files changed, no cascade. Interrupted by the $1.0 budget stop before the review cycle.                                                                                                                                                                            | ~$1.00 |
+| 6       | Clean baseline `490b765`, budget $3           | 18.8 min, 3 sessions, max depth 2, 24 files changed. Interrupted by the $3.0 budget stop before review. The saved workspace typechecks, lints and passes 146/147 tests.                                                                                                                                                       | ~$3.02 |
+| 7       | Continuation of 6 via `runs.retry`, budget $4 | **42.3 min, status completed, review completed.** 8 sessions, max depth 2, 24 files changed. Round 1: Code style found 2 real findings; main corrected them through the worker; round 2: all three profiles returned 0 findings. Final workspace: 0 typecheck errors, ESLint and Prettier clean, build passes, 146/147 tests. | ~$3.45 |
 
-Total spend across the five attempts: about $1.72.
+Total spend across the seven attempts: about $8.19.
+
+Attempt 7 is the first fully successful end-to-end cycle on the fixed runtime:
+implementation, autonomous review, correction and verification all completed.
+
+## Final comparison with the original run
+
+| Observation            | Original (pre-fix)     | Attempt 7 (fixed runtime) |
+| ---------------------- | ---------------------- | ------------------------- |
+| Wall time              | 2h02m                  | 42m (+19m prior attempt)  |
+| Session depth          | 13                     | 2                         |
+| Worker sessions        | 38                     | 1                         |
+| Review rounds          | 2 (2 findings, then 0) | 2 (2 findings, then 0)    |
+| Reported input tokens  | 84,039,175             | ~33.5M (attempt 7 alone)  |
+| Cache hit              | 81%                    | 71%                       |
+| Cost                   | $6.23                  | $3.45 (attempt 7)         |
+| Status                 | completed              | completed                 |
+| Post-run defects found | yes                    | none observed             |
+
+The attempt-6 spend is the same work re-done after interruption, so the whole
+task cost about $6.5 across attempts 6+7, comparable to the original $6.23, but
+with a clean review cycle and no post-run defects observed. The continuation
+mechanism (`runs.retry`) recovered the interrupted attempt's files and history
+rather than restarting from zero.
 
 Attempt 5 validates the fix under discussion. Note one confound: its source
 baseline is `ca054df`, which already contains the launch-presets feature merged
