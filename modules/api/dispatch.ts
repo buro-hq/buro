@@ -56,6 +56,14 @@ const configuration = z.object({
     })
     .nullable()
     .optional(),
+  pricing: z
+    .object({
+      cachedInputPerMillion: z.number().nonnegative().optional(),
+      inputPerMillion: z.number().nonnegative().optional(),
+      outputPerMillion: z.number().nonnegative().optional(),
+    })
+    .nullable()
+    .optional(),
 });
 
 const method = <P, R>(

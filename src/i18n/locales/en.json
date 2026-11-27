@@ -104,6 +104,8 @@
   "Read-only workspace": "Read-only workspace",
   "Remove saved key": "Remove saved key",
   "Reported tokens": "Reported tokens",
+  "Reported cost": "Reported cost",
+  "partial": "partial",
   "Elapsed": "Elapsed",
   "Conversations without reported usage": "Conversations without reported usage",
   "Run options": "Run options",

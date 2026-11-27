@@ -200,6 +200,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
       let reportedModel = input.model;
       let inputTokens: number | undefined;
       let outputTokens: number | undefined;
+      let cachedInputTokens: number | undefined;
       const calls = new Map<number, { id: string; name: string; arguments: string }>();
       for await (const data of sse(response, input.onProgress, this.options.maxResponseBytes)) {
         if (data.trim() === '[DONE]') {
@@ -217,6 +218,12 @@ export class OpenAICompatibleProvider implements ModelProvider {
         const usage = object(chunk.usage);
         inputTokens = tokenCount(usage.prompt_tokens) ?? inputTokens;
         outputTokens = tokenCount(usage.completion_tokens) ?? outputTokens;
+        // DeepSeek reports prompt_cache_hit_tokens; OpenAI reports prompt_tokens_details.cached_tokens.
+        const details = object(usage.prompt_tokens_details);
+        cachedInputTokens =
+          tokenCount(usage.prompt_cache_hit_tokens) ??
+          tokenCount(details.cached_tokens) ??
+          cachedInputTokens;
         const choices = Array.isArray(chunk.choices) ? chunk.choices.map(object) : [];
         const choice = choices.find((item) => item.index === 0);
         if (!choice)
@@ -310,7 +317,13 @@ export class OpenAICompatibleProvider implements ModelProvider {
           ...(reasoning ? { continuation: { reasoningContent: reasoning } } : {}),
         },
         ...(inputTokens !== undefined || outputTokens !== undefined
-          ? { usage: { inputTokens, outputTokens } }
+          ? {
+              usage: {
+                inputTokens,
+                outputTokens,
+                ...(cachedInputTokens === undefined ? {} : { cachedInputTokens }),
+              },
+            }
           : {}),
       };
       if (completion.usage)

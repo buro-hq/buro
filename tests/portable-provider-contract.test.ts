@@ -43,6 +43,43 @@ test('Ollama reports server timing in seconds and leaves absent or invalid durat
   }
 });
 
+test('cached input tokens are reported separately only when the endpoint provides them', async () => {
+  for (const sample of [
+    {
+      kind: 'deepseek' as const,
+      usage: { prompt_tokens: 10, completion_tokens: 2, prompt_cache_hit_tokens: 7 },
+      expected: { inputTokens: 10, outputTokens: 2, cachedInputTokens: 7 },
+    },
+    {
+      kind: 'openai-compatible' as const,
+      usage: { prompt_tokens: 10, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 4 } },
+      expected: { inputTokens: 10, outputTokens: 2, cachedInputTokens: 4 },
+    },
+    {
+      kind: 'deepseek' as const,
+      usage: { prompt_tokens: 10, completion_tokens: 2 },
+      expected: { inputTokens: 10, outputTokens: 2 },
+    },
+  ]) {
+    const transport = provider(sample.kind, async () => new Response(
+      'data: ' +
+      JSON.stringify({
+        choices: [{ index: 0, delta: { content: '{}' }, finish_reason: 'stop' }],
+      }) +
+      '\n\n' +
+      'data: ' +
+      JSON.stringify({
+        choices: [],
+        usage: sample.usage,
+      }) +
+      '\n\n' +
+      'data: [DONE]\n\n',
+    ));
+    const completion = await transport.complete(input());
+    assert.deepEqual(completion.usage, sample.expected);
+  }
+});
+
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((accept) => {

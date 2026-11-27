@@ -19,7 +19,15 @@ export interface ModelConfiguration {
   sampling?: ModelSamplingSettings;
   capacity?: number;
   retries?: number;
+  pricing?: ModelPricing;
   revision: string;
+}
+
+/** Optional user-supplied USD prices per one million tokens; unknown prices stay unset, never zero. */
+export interface ModelPricing {
+  cachedInputPerMillion?: number;
+  inputPerMillion?: number;
+  outputPerMillion?: number;
 }
 
 /** One atomic private record, never serialized into selectors or notifications. */
@@ -47,7 +55,7 @@ export interface ModelConfigurationView extends ModelConfiguration {
 export type ModelConfigurationDraft = Partial<
   Omit<
     ModelConfiguration,
-    'revision' | 'capacity' | 'retries' | 'reasoningEffort' | 'reasoningBudgetTokens' | 'sampling'
+    'revision' | 'capacity' | 'retries' | 'reasoningEffort' | 'reasoningBudgetTokens' | 'sampling' | 'pricing'
   >
 > & {
   capacity?: number | null;
@@ -55,6 +63,7 @@ export type ModelConfigurationDraft = Partial<
   reasoningEffort?: string | null;
   reasoningBudgetTokens?: number | null;
   sampling?: ModelSamplingSettings | null;
+  pricing?: ModelPricing | null;
 };
 
 /** Editable connection settings with working defaults. */

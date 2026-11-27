@@ -661,6 +661,10 @@ export class SessionService implements Sessions {
               previous: session.usage?.outputTokens,
               current: response.usage?.outputTokens,
             }),
+            cachedInputTokens: reportedTokens({
+              previous: session.usage?.cachedInputTokens,
+              current: response.usage?.cachedInputTokens,
+            }),
           }
         : undefined;
     const { continuation: _continuation, ...message } = response.message;

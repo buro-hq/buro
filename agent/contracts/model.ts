@@ -14,7 +14,7 @@ export type ModelMessage = {
   toolName?: string;
   continuation?: unknown;
 };
-export type ModelUsage = { inputTokens?: number; outputTokens?: number };
+export type ModelUsage = { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };
 /** Server-reported durations in seconds; absent fields are unknown, never client estimates. */
 export interface ModelTiming {
   totalSeconds?: number;

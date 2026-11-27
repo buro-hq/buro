@@ -1,6 +1,7 @@
 import { Badge, Button, Group, Paper, Select, Stack, Tabs, Text } from '@mantine/core';
 import { useState, type ReactElement } from 'react';
 import type { ChangedFile } from '../../../modules/results/result.ts';
+import type { ModelConfigurationView, ModelPricing } from '../../../modules/models/model-configuration.ts';
 import type { Run } from '../../../modules/runs/run.ts';
 import type { Session } from '../../../modules/sessions/session.ts';
 import { useApplication, useApiQuery } from '../../data/application.tsx';
@@ -36,13 +37,41 @@ const formatDuration = (ms: number): string => {
 
 const formatNumber = (value: number): string => value.toLocaleString(getFormattingLocale());
 
+const formatCost = (value: number): string => `$${value < 1 ? value.toFixed(4) : value.toFixed(2)}`;
+
+/** A session's cost from user-configured prices; unpriced usage stays unknown, never zero. */
+const sessionCost = (session: Session, models: ModelConfigurationView[]): number | undefined => {
+  const { usage } = session;
+  const pricing: ModelPricing | undefined = models.find((model) => model.id === session.modelId)?.pricing;
+  if (!usage || !pricing)
+    return undefined;
+
+  const { inputPerMillion, cachedInputPerMillion, outputPerMillion } = pricing;
+  if (inputPerMillion === undefined && outputPerMillion === undefined)
+    return undefined;
+
+  const cached = usage.cachedInputTokens ?? 0;
+  const uncached = Math.max(0, (usage.inputTokens ?? 0) - cached);
+
+  return uncached * (inputPerMillion ?? 0) / 1e6 +
+    cached * (cachedInputPerMillion ?? inputPerMillion ?? 0) / 1e6 +
+    (usage.outputTokens ?? 0) * (outputPerMillion ?? 0) / 1e6;
+};
+
 /** Aggregates reported token usage and elapsed time; unreported usage is stated, not zeroed. */
-const UsageSummary = (input: { run: Run; sessions: Session[] }): ReactElement | null => {
-  const { run, sessions } = input;
+const UsageSummary = (input: {
+  run: Run;
+  sessions: Session[];
+  models: ModelConfigurationView[];
+}): ReactElement | null => {
+  const { run, sessions, models } = input;
   const reported = sessions.filter((session) => session.usage);
   const inputTokens = reported.reduce((total, session) => total + (session.usage?.inputTokens ?? 0), 0);
   const outputTokens = reported.reduce((total, session) => total + (session.usage?.outputTokens ?? 0), 0);
   const unreported = sessions.length - reported.length;
+  const costs = sessions.map((session) => sessionCost(session, models)).filter((cost) => cost !== undefined);
+  const cost = costs.length ? costs.reduce((total, entry) => total + entry, 0) : undefined;
+  const partialCost = costs.length > 0 && costs.length < reported.length;
   const elapsed = run.finishedAt ? Date.parse(run.finishedAt) - Date.parse(run.createdAt) : undefined;
   if (!reported.length && elapsed === undefined)
     return null;
@@ -52,6 +81,12 @@ const UsageSummary = (input: { run: Run; sessions: Session[] }): ReactElement | 
       {reported.length > 0 && (
         <Text size="xs" c="dimmed">
           {t('Reported tokens')}: {t('Input')} {formatNumber(inputTokens)} · {t('Output')} {formatNumber(outputTokens)}
+        </Text>
+      )}
+      {cost !== undefined && (
+        <Text size="xs" c="dimmed">
+          {t('Reported cost')}: {formatCost(cost)}
+          {partialCost ? ` (${t('partial')})` : ''}
         </Text>
       )}
       {unreported > 0 && (
@@ -118,6 +153,7 @@ export const RunDetail = (input: {
   const sessions = useApiQuery('sessions.list', {
     runId: input.id,
   });
+  const models = useApiQuery('models.list', {});
   const action = useOperation();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [tab, setTab] = useState<string | null>('conversation');
@@ -173,7 +209,7 @@ export const RunDetail = (input: {
           <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
             {run.data.workspace}
           </Text>
-          {sessions.data && <UsageSummary run={run.data} sessions={sessions.data} />}
+          {sessions.data && <UsageSummary run={run.data} sessions={sessions.data} models={models.data ?? []} />}
           {run.data.result && <pre className="feature-pre">{run.data.result}</pre>}
         </Paper>
       )}
