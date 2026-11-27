@@ -105,7 +105,7 @@ export const sessionTools = (input: {
       definition: {
         name: 'session_start',
         description:
-          'Start a collaborator with the shared work policy and context and return its session ID immediately. Put the assignment in input. Omit agentId for an inline collaborator; use it only for an existing agents_list entry. The optional instructions are this collaborator’s own operating rules, not inherited by its own collaborators; the shared policy is. Choose a model when needed. Use session_wait to receive the result; writing collaborators share files, so coordinate edits.',
+          'Start a collaborator with the shared work policy and context and return its session ID immediately. Put the assignment in input together with the relevant file paths, observed facts and current state, so the collaborator does not have to rediscover them. Omit agentId for an inline collaborator; use it only for an existing agents_list entry. The optional instructions are this collaborator’s own operating rules, not inherited by its own collaborators; the shared policy is. Choose a model when needed. Use session_wait to receive the result; writing collaborators share files, so coordinate edits.',
         parameters: parameters(
           {
             input: string,
@@ -243,7 +243,7 @@ export const sessionTools = (input: {
       effect: 'read',
       definition: {
         name: 'session_send',
-        description: 'Send follow-up work to an idle collaborator and receive its next result.',
+        description: 'Send follow-up work to an idle collaborator and receive its next result. Include what changed since its last turn and the current state of the work, so it does not have to re-inspect everything.',
         parameters: parameters({
           sessionId: string,
           input: string,
